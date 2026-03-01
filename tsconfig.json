@@ -17,7 +17,7 @@
         "emitDecoratorMetadata": true,
         "experimentalDecorators": true,
         "allowSyntheticDefaultImports": true,
-        "declaration": false,
+        "declaration": true,
         "typeRoots": ["./node_modules/@types"]
     },
     "include": ["./src/**/*.ts"],
