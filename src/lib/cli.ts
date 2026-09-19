@@ -17,7 +17,7 @@ import { updateCmd } from './commands/update';
 import { watchCmd } from './commands/watch';
 import { migrateCmd } from './commands/migrate';
 import { modinfoCmd } from './commands/modinfo';
-import { cmd, processArgs, splitArgs, parseArgType } from './args';
+import { cmd, processArgs, splitArgs } from './args';
 import { clear, error, info, log, warn, verbose } from './logger';
 import { projectDir, migrateStoreDirIfNeeded } from './helper';
 import { migrateGlobalConfigIfNeeded } from './templateManager';
@@ -107,7 +107,9 @@ export async function runCLI(cmdName?: string, cmdArgs?: string[]) {
 
         const rawCmdArgs = cmdArgs ?? processArgs().slice(1);
         const { positionals } = splitArgs(rawCmdArgs);
-        const commandParams = positionals.map((a) => parseArgType(a));
+        // Positional args are kept as strings: mod ids like "12345" must not
+        // be coerced to numbers (ArgTypeError in expect()).
+        const commandParams: string[] = positionals;
 
         const command = {
             name: currentCmd,
