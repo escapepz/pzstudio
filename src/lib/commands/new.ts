@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { expect } from '../expect';
 import { addHelp } from '../help';
 import {
@@ -11,7 +11,7 @@ import {
     updateProjectConfig,
 } from '../helper';
 import { info, log, verbose } from '../logger';
-import { hasFlag } from '../cli';
+import { extractFlag, hasFlag } from '../cli';
 import {
     resolveTemplateDir,
     readGlobalConfig,
@@ -26,11 +26,12 @@ addHelp(
     Usages:
     pzstudio new <projectTitle>         - Create a new project with the given title and automatically formatted mod id.
     pzstudio new <projectTitle> <modId> - Create a new project with the given title and mod id.
-    
+
     Flags:
-    --offline        - Bypass network updates and use local cache or legacy templates.
-    --force-update   - Force refresh of cached templates from remote.
-    --symlinks       - Use directory junctions for template folders (if supported).`,
+    --offline              - Bypass network updates and use local cache or legacy templates.
+    --force-update         - Force refresh of cached templates from remote.
+    --symlinks             - Use directory junctions for template folders (if supported).
+    --path <destination>   - Create the project in the given directory instead of the current one.`,
 );
 
 export async function newCmd(projectTitle: string, modId?: string) {
@@ -41,12 +42,20 @@ export async function newCmd(projectTitle: string, modId?: string) {
     const isOffline = hasFlag('offline');
     const forceUpdate = hasFlag('force-update');
 
-    // Check if we are in a project directory
-    const existingProject = resolveProjectConfig();
-    if (existingProject) {
-        throw new Error(
-            'You cannot execute this command within a project directory!',
-        );
+    // Destination: --path wins over the current working directory (issue #43)
+    const destFlag = extractFlag('path');
+    const destDir = destFlag ? resolve(destFlag) : projectDir();
+    verbose(`Project destination directory: ${destDir}`);
+
+    // The "inside a project" guard only applies to cwd-based creation;
+    // with an explicit --path the user already chose the destination.
+    if (!destFlag) {
+        const existingProject = resolveProjectConfig();
+        if (existingProject) {
+            throw new Error(
+                'You cannot execute this command within a project directory!',
+            );
+        }
     }
 
     const useSymlinks =
@@ -62,7 +71,7 @@ export async function newCmd(projectTitle: string, modId?: string) {
     modId = formatTitleToId(modId || projectTitle);
 
     // Check if project already exists
-    const projectPath = join(projectDir(), modId);
+    const projectPath = join(destDir, modId);
     if (existsSync(projectPath)) {
         throw new Error(
             `The project '${projectTitle}' dir '${modId}' already exists!`,
@@ -150,6 +159,11 @@ export async function newCmd(projectTitle: string, modId?: string) {
     log(`- Updating project config...`);
     const newProjectConfigPath = join(projectPath, 'project.json');
     const newProjectConfig = readProjectConfig(newProjectConfigPath);
+    if (!newProjectConfig) {
+        throw new Error(
+            `The project template did not produce a valid '${newProjectConfigPath}'.`,
+        );
+    }
     newProjectConfig.workshop.title = projectTitle;
     newProjectConfig.mods[modId] = {
         name: projectTitle,
