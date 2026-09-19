@@ -16,7 +16,7 @@ import {
     TemplateCategory,
     ITemplateConfig,
 } from './project';
-import { error, log, warn, verbose } from './logger';
+import { log, warn, verbose } from './logger';
 import {
     GlobalConfig,
     readGlobalConfig,
@@ -190,10 +190,11 @@ export function readProjectConfig(
         const context = new ValidationContext(basename(configPath));
         validateProject(config, context);
         if (context.hasErrors()) {
-            error(
+            // Throw instead of process.exit(): library code must not kill
+            // the host process (the VS Code extension runs it in-process).
+            throw new Error(
                 `Validation failed for ${basename(configPath)}:\n${context.formatErrors()}`,
             );
-            process.exit(1);
         }
     }
 
