@@ -20,6 +20,7 @@ import type {
 } from './project';
 import { DEFAULT_TEMPLATES } from './constants';
 import { getVsCodeSettings } from './helper';
+import { TemplateResolutionError } from './errors/TemplateResolutionError';
 
 export type { TemplateCategory, GlobalConfig, ITemplateConfig };
 
@@ -274,6 +275,41 @@ function isDirNonEmpty(dir: string): boolean {
 }
 
 /**
+ * Git URL must be a full https URL, or a plain user/repo shorthand.
+ * Blocks shell metacharacters (spawn is run without a shell, but this also
+ * protects against malformed config values producing confusing git errors).
+ */
+const GIT_URL_RE = /^https:\/\/[A-Za-z0-9._~:/?#[\]@!$'()*+,;=%-]+$/;
+const GIT_SHORT_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+const GIT_REF_RE = /^[A-Za-z0-9._/-]+$/;
+const GIT_SPAWN_TIMEOUT_MS = 120_000;
+
+function validateGitUrl(url: string) {
+    if (!GIT_URL_RE.test(url) && !GIT_SHORT_RE.test(url)) {
+        throw new TemplateResolutionError(
+            `Invalid template url '${url}': expected an https URL or user/repo shorthand.`,
+        );
+    }
+}
+
+function validateGitRef(ref?: string) {
+    if (ref && ref !== 'default' && !GIT_REF_RE.test(ref)) {
+        throw new TemplateResolutionError(
+            `Invalid template ref '${ref}': only letters, digits, '.', '_', '-' and '/' are allowed.`,
+        );
+    }
+}
+
+function gitResultError(result: { stderr?: string | Buffer }) {
+    const stderr =
+        typeof result.stderr === 'string'
+            ? result.stderr
+            : (result.stderr?.toString('utf8') ?? '');
+    const trimmed = stderr.trim();
+    return trimmed ? `\n${trimmed}` : '';
+}
+
+/**
  * Clones a remote template from a GitHub repository.
  * @param url The repository URL or user/repo shorthand
  * @param dest The destination directory
@@ -285,10 +321,12 @@ export function cloneRemoteTemplate(
     dest: string,
     ref?: string,
 ): boolean {
-    const fullUrl =
-        url.includes('/') && !url.startsWith('http')
-            ? `https://github.com/${url}.git`
-            : url;
+    validateGitUrl(url);
+    validateGitRef(ref);
+
+    const fullUrl = GIT_SHORT_RE.test(url)
+        ? `https://github.com/${url}.git`
+        : url;
 
     log(`- Cloning template from ${fullUrl}${ref ? ` (ref: ${ref})` : ''}...`);
 
@@ -304,8 +342,23 @@ export function cloneRemoteTemplate(
     }
     args.push(fullUrl, dest);
 
-    const result = spawnSync('git', args, { shell: true, stdio: 'pipe' });
-    return result.status === 0;
+    const result = spawnSync('git', args, {
+        stdio: 'pipe',
+        timeout: GIT_SPAWN_TIMEOUT_MS,
+    });
+    if (result.error) {
+        warn(
+            `- Failed to run git: ${result.error.message}${(result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT' ? ' (timed out)' : ''}`,
+        );
+        return false;
+    }
+    if (result.status !== 0) {
+        warn(
+            `- git clone failed (exit ${result.status}).${gitResultError(result)}`,
+        );
+        return false;
+    }
+    return true;
 }
 
 /**
@@ -315,16 +368,34 @@ export function cloneRemoteTemplate(
  * @returns True if the refresh was successful
  */
 export function refreshCachedTemplate(dir: string, ref?: string): boolean {
+    validateGitRef(ref);
+
     log(`- Refreshing template cache at ${dir}...`);
     const git = (args: string[]) =>
         spawnSync('git', args, {
             cwd: dir,
-            shell: true,
             stdio: 'pipe',
+            timeout: GIT_SPAWN_TIMEOUT_MS,
         });
 
+    const ok = (result: ReturnType<typeof spawnSync>, what: string) => {
+        if (result.error) {
+            warn(
+                `- Failed to run git ${what}: ${result.error.message}${(result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT' ? ' (timed out)' : ''}`,
+            );
+            return false;
+        }
+        if (result.status !== 0) {
+            warn(
+                `- git ${what} failed (exit ${result.status}).${gitResultError(result)}`,
+            );
+            return false;
+        }
+        return true;
+    };
+
     // 1. git fetch --all (include tags so tag-based refs can be refreshed too)
-    if (git(['fetch', '--all', '--tags']).status !== 0) return false;
+    if (!ok(git(['fetch', '--all', '--tags']), 'fetch')) return false;
 
     // 2. Reset to the requested ref.
     // Branch refs live under origin/<ref>, but some templates use tags.
@@ -336,7 +407,8 @@ export function refreshCachedTemplate(dir: string, ref?: string): boolean {
 
     let resetSucceeded = false;
     for (const target of resetTargets) {
-        if (git(['reset', '--hard', target]).status === 0) {
+        const result = git(['reset', '--hard', target]);
+        if (result.status === 0) {
             if (target !== resetTargets[0]) {
                 log(`  - Refreshed using ${target}.`);
             }
@@ -344,17 +416,22 @@ export function refreshCachedTemplate(dir: string, ref?: string): boolean {
             break;
         }
     }
-    if (!resetSucceeded) return false;
+    if (!resetSucceeded) {
+        warn(`- git reset failed: no matching ref for '${ref}'.`);
+        return false;
+    }
 
     // 3. git submodule update --init --recursive --force
     if (
-        git(['submodule', 'update', '--init', '--recursive', '--force'])
-            .status !== 0
+        !ok(
+            git(['submodule', 'update', '--init', '--recursive', '--force']),
+            'submodule update',
+        )
     )
         return false;
 
     // 4. git clean -fdx
-    if (git(['clean', '-fdx']).status !== 0) return false;
+    if (!ok(git(['clean', '-fdx']), 'clean')) return false;
 
     return true;
 }
