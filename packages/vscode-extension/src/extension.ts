@@ -123,7 +123,11 @@ export function activate(context: vscode.ExtensionContext) {
         return flags;
     }
 
-    const executePZCommand = async (command: string, ...args: string[]) => {
+    const executePZCommand = async (
+        command: string,
+        args: string[] = [],
+        extraFlags: string[] = [],
+    ) => {
         outputChannel.show();
 
         if (
@@ -135,7 +139,9 @@ export function activate(context: vscode.ExtensionContext) {
             setProjectDir(undefined);
         }
 
-        const flags = resolveFlags(command);
+        // extraFlags (e.g. --path) go on process.argv because the CLI reads
+        // flags with hasFlag/extractFlag, which parse process.argv.
+        const flags = [...resolveFlags(command), ...extraFlags];
         const savedArgv = process.argv;
         process.argv = [...savedArgv, ...flags];
 
@@ -174,7 +180,50 @@ export function activate(context: vscode.ExtensionContext) {
                 placeHolder: 'my_awesome_mod',
             });
 
-            await executePZCommand('new', projectTitle, modId || '');
+            // Issue #43: let the user pick where the project is created,
+            // instead of always using the current workspace folder.
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
+            const lastUsed = context.workspaceState.get<string>(
+                'pzstudio.lastNewProjectDestination',
+            );
+            const defaultUri =
+                workspaceFolder ??
+                (lastUsed ? vscode.Uri.file(lastUsed) : undefined);
+
+            const picked = await vscode.window.showOpenDialog({
+                canSelectFiles: false,
+                canSelectFolders: true,
+                canSelectMany: false,
+                openLabel: 'Select Destination Folder',
+                title: `Create project '${projectTitle}' in...`,
+                defaultUri,
+            });
+
+            // A selection wins; cancelling falls back to the default
+            // (workspace folder or last used destination)
+            let destination: string | undefined;
+            if (picked && picked.length > 0) {
+                destination = picked[0].fsPath;
+                context.workspaceState.update(
+                    'pzstudio.lastNewProjectDestination',
+                    destination,
+                );
+            } else if (defaultUri) {
+                destination = defaultUri.fsPath;
+            }
+
+            if (!destination) {
+                vscode.window.showWarningMessage(
+                    'PZStudio: No destination folder selected, project creation cancelled.',
+                );
+                return;
+            }
+
+            await executePZCommand(
+                'new',
+                [projectTitle, modId || ''],
+                ['--path', destination],
+            );
         }),
 
         vscode.commands.registerCommand('pzstudio.add', async () => {
@@ -189,7 +238,7 @@ export function activate(context: vscode.ExtensionContext) {
                 placeHolder: 'my_new_mod',
             });
 
-            await executePZCommand('add', modName, modId || '');
+            await executePZCommand('add', [modName, modId || '']);
         }),
 
         vscode.commands.registerCommand('pzstudio.delete', async () => {
@@ -205,7 +254,7 @@ export function activate(context: vscode.ExtensionContext) {
             );
             if (confirm !== 'Yes') return;
 
-            await executePZCommand('delete', modId);
+            await executePZCommand('delete', [modId]);
         }),
 
         vscode.commands.registerCommand('pzstudio.rename', async () => {
@@ -219,7 +268,7 @@ export function activate(context: vscode.ExtensionContext) {
             });
             if (!newName) return;
 
-            await executePZCommand('rename', modId, newName);
+            await executePZCommand('rename', [modId, newName]);
         }),
 
         vscode.commands.registerCommand('pzstudio.lang', async () => {
@@ -233,7 +282,7 @@ export function activate(context: vscode.ExtensionContext) {
             });
             if (!language) return;
 
-            await executePZCommand('lang', language, modId);
+            await executePZCommand('lang', [modId, language]);
         }),
 
         vscode.commands.registerCommand(
@@ -244,11 +293,10 @@ export function activate(context: vscode.ExtensionContext) {
                     placeHolder: 'my_mod',
                 });
 
-                await executePZCommand(
-                    'modinfo',
+                await executePZCommand('modinfo', [
                     'generate',
                     ...(modId ? [modId] : []),
-                );
+                ]);
             },
         ),
     ];
