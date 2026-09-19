@@ -1,7 +1,8 @@
-import { join } from 'path';
+import { join, extname } from 'path';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { expect } from '../expect';
 import { addHelp } from '../help';
+import { BINARY_FILE_EXTENSIONS } from '../constants';
 import {
     getFilesRecursively,
     projectDir,
@@ -63,6 +64,12 @@ export function renameCmd(oldModId: string, newModId: string) {
     []
         .concat(getFilesRecursively(join(projectPath, newModId)))
         .forEach((file) => {
+            // Binary files would get corrupted by a utf-8 read/replace/write cycle
+            if (BINARY_FILE_EXTENSIONS.has(extname(file).toLowerCase())) {
+                verbose(`Skipping binary file: ${file}`);
+                return;
+            }
+
             const content = readFileSync(file, 'utf-8');
             const newContent = content.replaceAll(oldModId, newModId);
             if (content !== newContent) {

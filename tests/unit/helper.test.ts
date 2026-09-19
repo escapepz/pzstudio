@@ -10,7 +10,6 @@ import {
     migrateStoreDirIfNeeded,
     updateExperimentalScripts,
     setProjectDir,
-    workingDir,
     applyProjectDefaults,
     getStoreDir,
     parseModInfoText,
@@ -68,11 +67,13 @@ describe('Helper Library', () => {
             expect(readProjectConfig()).toBeUndefined();
         });
 
-        it('should return undefined if project.json is malformed JSON', () => {
+        it('should throw a descriptive error if project.json is malformed JSON', () => {
             vi.mocked(fs.existsSync).mockReturnValue(true);
             vi.mocked(fs.readFileSync).mockReturnValue('invalid json');
 
-            expect(readProjectConfig()).toBeUndefined();
+            expect(() => readProjectConfig()).toThrow(
+                /Failed to parse 'project\.json'/,
+            );
         });
 
         it('should exit with error if project.json is valid JSON but invalid schema', () => {
@@ -84,8 +85,8 @@ describe('Helper Library', () => {
                 throw new Error('exit');
             });
 
-            // It will return undefined because of the try-catch in readProjectConfig catching the 'exit' error
-            expect(readProjectConfig()).toBeUndefined();
+            // process.exit is intercepted and rethrown as an Error('exit')
+            expect(() => readProjectConfig()).toThrow('exit');
             expect(logger.error).toHaveBeenCalled();
             expect(exitSpy).toHaveBeenCalledWith(1);
         });
@@ -218,13 +219,6 @@ describe('Helper Library', () => {
             setProjectDir('/custom/path');
             // Reset so it doesn't leak into other tests
             setProjectDir(undefined);
-        });
-    });
-
-    describe('workingDir', () => {
-        it('should return a path ending in lib when not running from dist', () => {
-            const dir = workingDir();
-            expect(dir).toMatch(/lib$/);
         });
     });
 

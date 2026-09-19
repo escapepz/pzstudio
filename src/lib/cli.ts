@@ -154,6 +154,7 @@ export async function runCLI(cmdName?: string, cmdArgs?: string[]) {
                 await langCmd(
                     command.params[0] as string,
                     command.params[1] as string,
+                    command.params[2] as string,
                 );
                 break;
 

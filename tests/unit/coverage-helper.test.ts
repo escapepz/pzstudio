@@ -15,29 +15,6 @@ describe('Helper Coverage Gaps', () => {
         vi.restoreAllMocks();
     });
 
-    it('workingDir should return __dirname when running from dist', async () => {
-        let capturedDirname: string = '';
-        vi.doMock('path', async (importOriginal) => {
-            const actual = await importOriginal<typeof import('path')>();
-            return {
-                ...actual,
-                basename: (p: string) => {
-                    if (p.includes('lib') || p.includes('src')) {
-                        capturedDirname = p;
-                        return 'dist';
-                    }
-                    return actual.basename(p);
-                },
-            };
-        });
-
-        const { workingDir } = await import('../../src/lib/helper');
-        const dir = workingDir();
-
-        expect(dir).toBe(capturedDirname);
-        expect(dir).toBeDefined();
-    });
-
     it('updateExperimentalScripts should use dist path and handle missing functions', async () => {
         vi.doMock('fs', async (importOriginal) => {
             const actual = await importOriginal<typeof import('fs')>();
