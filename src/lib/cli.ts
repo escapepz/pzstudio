@@ -17,7 +17,7 @@ import { updateCmd } from './commands/update';
 import { watchCmd } from './commands/watch';
 import { migrateCmd } from './commands/migrate';
 import { modinfoCmd } from './commands/modinfo';
-import { cmd, processArgs, splitArgs } from './args';
+import { cmd, processArgs, splitArgs, setProcessArgsOverride } from './args';
 import { clear, error, info, log, warn, verbose } from './logger';
 import { projectDir, migrateStoreDirIfNeeded } from './helper';
 import { migrateGlobalConfigIfNeeded } from './templateManager';
@@ -51,7 +51,27 @@ export function hasFlag(name: string): boolean {
 
 import { setVerbose } from './logger';
 
-export async function runCLI(cmdName?: string, cmdArgs?: string[]) {
+export interface RunCLIOptions {
+    /**
+     * Flags to use instead of process.argv (e.g. ['--verbose', '--path', 'C:\\dir']).
+     * Lets API callers pass flags without mutating process.argv.
+     */
+    flags?: string[];
+}
+
+export async function runCLI(
+    cmdName?: string,
+    cmdArgs?: string[],
+    options?: RunCLIOptions,
+) {
+    if (options?.flags) {
+        setProcessArgsOverride([
+            cmdName ?? '',
+            ...(cmdArgs ?? []),
+            ...options.flags,
+        ]);
+    }
+
     // Handle SIGINT for clean cleanup
     if (process.listenerCount('SIGINT') === 0) {
         process.on('SIGINT', () => {
@@ -217,6 +237,10 @@ export async function runCLI(cmdName?: string, cmdArgs?: string[]) {
     } catch (e) {
         error(e);
         process.exit(1);
+    } finally {
+        if (options?.flags) {
+            setProcessArgsOverride(undefined);
+        }
     }
 
     log('\n');

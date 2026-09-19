@@ -49,8 +49,20 @@ export function arg(index: number, argv: string[] = process.argv) {
     return args(argv)[index];
 }
 
+let processArgsOverride: string[] | undefined;
+
+/**
+ * Overrides the args used by processArgs()/hasFlag()/extractFlag().
+ * Lets API callers (e.g. the VS Code extension) pass flags explicitly
+ * instead of mutating process.argv.
+ * @param args Already-sliced args (without node/script), or undefined to restore argv parsing
+ */
+export function setProcessArgsOverride(args: string[] | undefined) {
+    processArgsOverride = args;
+}
+
 export function processArgs(argv: string[] = process.argv) {
-    return argv.slice(2);
+    return processArgsOverride ?? argv.slice(2);
 }
 
 /**
