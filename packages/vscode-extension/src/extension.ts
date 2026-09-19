@@ -139,18 +139,13 @@ export function activate(context: vscode.ExtensionContext) {
             setProjectDir(undefined);
         }
 
-        // extraFlags (e.g. --path) go on process.argv because the CLI reads
-        // flags with hasFlag/extractFlag, which parse process.argv.
+        // Flags are passed explicitly to runCLI — no process.argv mutation.
         const flags = [...resolveFlags(command), ...extraFlags];
-        const savedArgv = process.argv;
-        process.argv = [...savedArgv, ...flags];
 
         try {
-            await runCLI(command, args);
+            await runCLI(command, args, { flags });
         } catch (e) {
             // Already handled by logger.error
-        } finally {
-            process.argv = savedArgv;
         }
     };
 
@@ -163,9 +158,6 @@ export function activate(context: vscode.ExtensionContext) {
         ),
         vscode.commands.registerCommand('pzstudio.update', () =>
             executePZCommand('update'),
-        ),
-        vscode.commands.registerCommand('pzstudio.watch', () =>
-            executePZCommand('watch'),
         ),
 
         vscode.commands.registerCommand('pzstudio.new', async () => {
