@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { runCLI } from '../../src/lib/cli';
 
 vi.mock('../../src/lib/cli', () => ({
-    runCLI: vi.fn(),
+    runCLI: vi.fn(() => Promise.resolve()),
 }));
 
 describe('Index Entry Point', () => {

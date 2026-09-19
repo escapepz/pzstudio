@@ -76,19 +76,17 @@ describe('Helper Library', () => {
             );
         });
 
-        it('should exit with error if project.json is valid JSON but invalid schema', () => {
+        it('should throw if project.json is valid JSON but invalid schema', () => {
             vi.mocked(fs.existsSync).mockReturnValue(true);
             vi.mocked(fs.readFileSync).mockReturnValue(
                 JSON.stringify({ title: 123 }),
             );
-            const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
-                throw new Error('exit');
-            });
 
-            // process.exit is intercepted and rethrown as an Error('exit')
-            expect(() => readProjectConfig()).toThrow('exit');
-            expect(logger.error).toHaveBeenCalled();
-            expect(exitSpy).toHaveBeenCalledWith(1);
+            // Library code throws instead of process.exit (VS Code extension
+            // runs it in-process).
+            expect(() => readProjectConfig()).toThrow(
+                /Validation failed for project\.json/,
+            );
         });
 
         it('should warn and continue if a real legacy shape is detected', () => {

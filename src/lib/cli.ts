@@ -77,7 +77,7 @@ export async function runCLI(
         process.on('SIGINT', () => {
             log('\n');
             warn('Process interrupted by user (SIGINT).');
-            process.exit(130);
+            process.exitCode = 130;
         });
     }
 
@@ -236,7 +236,10 @@ export async function runCLI(
         }
     } catch (e) {
         error(e);
-        process.exit(1);
+        // Rethrow instead of process.exit(): this is a library entry point
+        // (the VS Code extension bundles and calls it in-process). The bin
+        // entry (src/index.ts) is responsible for setting the exit code.
+        throw e;
     } finally {
         if (options?.flags) {
             setProcessArgsOverride(undefined);
