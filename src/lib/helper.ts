@@ -1,18 +1,17 @@
 import { homedir } from 'os';
-import { spawnSync } from 'child_process';
 import { basename, dirname, join, resolve } from 'path';
 import {
     existsSync,
     mkdirSync,
     readFileSync,
     readdirSync,
+    renameSync,
     rmSync,
     statSync,
     writeFileSync,
 } from 'fs';
 import {
     IProjectConfig,
-    IModConfig,
     IVsCodeSettings,
     TemplateCategory,
     ITemplateConfig,
@@ -148,16 +147,6 @@ export function projectDir() {
     return externalProjectDir ?? findProjectRoot(process.cwd());
 }
 
-/**
- * Returns the current working directory
- * @returns {string} The current working directory
- */
-export function workingDir() {
-    return basename(__dirname) === 'dist'
-        ? __dirname
-        : join(dirname(__dirname), 'lib');
-}
-
 import { ValidationContext, validateProject } from './validation';
 import { migration } from './migration';
 
@@ -172,37 +161,43 @@ export function readProjectConfig(
     path?: string,
     validate: boolean = true,
 ): IProjectConfig | undefined {
+    const configPath = path ?? join(projectDir(), 'project.json');
+    if (!existsSync(configPath)) return undefined;
+
+    const content = readFileSync(configPath, 'utf8');
+    let config: any;
     try {
-        const configPath = path ?? join(projectDir(), 'project.json');
-        if (!existsSync(configPath)) return undefined;
+        config = JSON.parse(content);
+    } catch (err) {
+        // A corrupt file is NOT the same as a missing file: surface it
+        // instead of letting callers report "not in a project directory".
+        throw new Error(
+            `Failed to parse '${basename(configPath)}': ${(err as Error).message}. Fix the JSON syntax and try again.`,
+            { cause: err },
+        );
+    }
 
-        const content = readFileSync(configPath, 'utf8');
-        let config = JSON.parse(content);
-
-        if (validate) {
-            // Apply migration FIRST so we validate the modern shape
-            const migrationCheck = migration.checkProject(config);
-            if (migrationCheck.needsMigration) {
-                warn(
-                    `[MIGRATION] ${basename(configPath)} needs migration: ${migrationCheck.reason}`,
-                );
-                config = migration.upgradeProject(config);
-            }
-
-            const context = new ValidationContext(basename(configPath));
-            validateProject(config, context);
-            if (context.hasErrors()) {
-                error(
-                    `Validation failed for ${basename(configPath)}:\n${context.formatErrors()}`,
-                );
-                process.exit(1);
-            }
+    if (validate) {
+        // Apply migration FIRST so we validate the modern shape
+        const migrationCheck = migration.checkProject(config);
+        if (migrationCheck.needsMigration) {
+            warn(
+                `[MIGRATION] ${basename(configPath)} needs migration: ${migrationCheck.reason}`,
+            );
+            config = migration.upgradeProject(config);
         }
 
-        return applyProjectDefaults(config);
-    } catch (_err) {
-        return undefined;
+        const context = new ValidationContext(basename(configPath));
+        validateProject(config, context);
+        if (context.hasErrors()) {
+            error(
+                `Validation failed for ${basename(configPath)}:\n${context.formatErrors()}`,
+            );
+            process.exit(1);
+        }
     }
+
+    return applyProjectDefaults(config);
 }
 
 /**
@@ -277,19 +272,15 @@ export function atomicWriteJson(
 
     try {
         writeFileSync(tempPath, content, 'utf8');
-        rmSync(filePath, { force: true });
-        spawnSync(
-            'powershell',
-            [
-                '-Command',
-                `Move-Item -Path "${tempPath}" -Destination "${filePath}" -Force`,
-            ],
-            { shell: true },
-        );
-        // Fallback for non-powershell or if Move-Item fails (though we are on Windows)
-        if (existsSync(tempPath)) {
-            writeFileSync(filePath, content, 'utf8');
+        try {
+            // Atomic on the same volume; renameSync overwrites on POSIX
+            // but not on Windows, so remove the target first.
+            rmSync(filePath, { force: true });
+            renameSync(tempPath, filePath);
+        } catch (_e) {
+            // Cross-volume or locked target: fall back to a direct write
             rmSync(tempPath, { force: true });
+            writeFileSync(filePath, content, 'utf8');
         }
     } catch (_e) {
         // Fallback to direct write if atomic fails
@@ -627,130 +618,21 @@ export function generateModInfoText(
 
 /**
  * Parses mod.info text into a partial IModConfig.
- * @param content The mod.info file content
- * @returns {Partial<IModConfig>} The parsed mod config
+ * Re-exported from modInfoParser.ts (single source of truth, shared with migration).
  */
-export function parseModInfoText(
-    content: string,
-): Partial<IModConfig> & { id?: string } {
-    const lines = content.split('\n');
-    const result: any = {
-        description: [],
-        poster: [],
-        require: [],
-        incompatible: [],
-        loadModAfter: [],
-        loadModBefore: [],
-        pack: [],
-        tiledef: [],
-    };
-
-    for (let line of lines) {
-        line = line.trim();
-        if (!line || line.startsWith('//') || line.startsWith('#')) continue;
-
-        const eqIndex = line.indexOf('=');
-        if (eqIndex === -1) continue;
-
-        const key = line.substring(0, eqIndex).trim();
-        const value = line.substring(eqIndex + 1).trim();
-
-        switch (key) {
-            case 'id':
-                result[key] = value;
-                break;
-            case 'name':
-                result[key] = value;
-                break;
-            case 'author':
-                result[key] = value;
-                break;
-            case 'modversion':
-                result[key] = value;
-                break;
-            case 'icon':
-                result[key] = value;
-                break;
-            case 'category':
-                result[key] = value;
-                break;
-            case 'url':
-                result[key] = value;
-                break;
-            case 'versionMin':
-                result[key] = value;
-                break;
-            case 'versionMax':
-                result[key] = value;
-                break;
-            case 'description':
-                result.description.push(value);
-                break;
-            case 'pack': {
-                result.pack.push(value);
-                break;
-            }
-            case 'tiledef': {
-                result.tiledef.push(value);
-                break;
-            }
-            case 'poster':
-                result.poster.push(value);
-                break;
-            case 'require':
-                result.require.push(...value.split(',').map((s) => s.trim()));
-                break;
-            case 'incompatible':
-                result.incompatible.push(
-                    ...value.split(',').map((s) => s.trim()),
-                );
-                break;
-            case 'loadModAfter':
-                result.loadModAfter.push(
-                    ...value.split(',').map((s) => s.trim()),
-                );
-                break;
-            case 'loadModBefore':
-                result.loadModBefore.push(
-                    ...value.split(',').map((s) => s.trim()),
-                );
-                break;
-            default:
-                // Preserve unknown fields for forward compatibility
-                result[key] = value;
-                break;
-        }
-    }
-
-    // Clean up empty arrays
-    if (result.description.length === 0) delete result.description;
-    else if (result.description.length === 1)
-        result.description = result.description[0];
-
-    if (result.poster.length === 0) delete result.poster;
-    else if (result.poster.length === 1) result.poster = result.poster[0];
-
-    if (result.require.length === 0) delete result.require;
-    if (result.incompatible.length === 0) delete result.incompatible;
-    if (result.loadModAfter.length === 0) delete result.loadModAfter;
-    if (result.loadModBefore.length === 0) delete result.loadModBefore;
-
-    if (result.pack.length === 0) delete result.pack;
-    else if (result.pack.length === 1) result.pack = result.pack[0];
-
-    if (result.tiledef.length === 0) delete result.tiledef;
-    else if (result.tiledef.length === 1) result.tiledef = result.tiledef[0];
-
-    return result;
-}
+export { parseModInfoText } from './modInfoParser';
 
 /**
  * Returns the branch folders (direct subdirectories) of a mod.
  * @param modId The mod id
+ * @param baseDir The directory containing the mod folder (defaults to projectDir())
  * @returns {string[]} An array of absolute paths to branch folders
  */
-export function getModBranchFolders(modId: string): string[] {
-    const modDir = join(projectDir(), modId);
+export function getModBranchFolders(
+    modId: string,
+    baseDir: string = projectDir(),
+): string[] {
+    const modDir = join(baseDir, modId);
     if (!existsSync(modDir)) return [];
 
     try {
@@ -767,11 +649,15 @@ export function getModBranchFolders(modId: string): string[] {
  * Following Build 42 rules:
  * 1. Only existing nested folders that contain a 'media' directory.
  * 2. Root-level mod.info is NOT a target for Build 42 generation.
- * @param modId The mod id
+ * @param modId The mod id (folder name inside baseDir)
+ * @param baseDir The directory containing the mod folder (defaults to projectDir())
  * @returns {string[]} An array of absolute paths to valid branch folders
  */
-export function resolveModInfoTargets(modId: string): string[] {
-    const branchFolders = getModBranchFolders(modId);
+export function resolveModInfoTargets(
+    modId: string,
+    baseDir: string = projectDir(),
+): string[] {
+    const branchFolders = getModBranchFolders(modId, baseDir);
     return branchFolders.filter((folder) => {
         const mediaPath = join(folder, 'media');
         return existsSync(mediaPath) && statSync(mediaPath).isDirectory();

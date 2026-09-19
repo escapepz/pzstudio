@@ -1,13 +1,5 @@
 import { join } from 'path';
-import {
-    cpSync,
-    existsSync,
-    mkdirSync,
-    readdirSync,
-    rmSync,
-    statSync,
-    writeFileSync,
-} from 'fs';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { addHelp } from '../help';
 import { processArgs } from '../args';
 import {
@@ -16,6 +8,7 @@ import {
     projectDir,
     resolveProjectConfig,
     resolveBuildOutputPath,
+    resolveModInfoTargets,
 } from '../helper';
 import { info, log, warn, verbose } from '../logger';
 import { resolveTemplateDir, scaffoldProject } from '../templateManager';
@@ -93,18 +86,13 @@ async function buildWorkshop(
                 `- Skipping '${modId}' mod.info generation (build.modInfo: "skip")...`,
             );
         } else {
-            // Resolve Build 42 branch folders in the output directory
-            const branchTargets = existsSync(outModsPath)
-                ? readdirSync(outModsPath)
-                      .map((child) => join(outModsPath, child))
-                      .filter(
-                          (childPath) =>
-                              statSync(childPath).isDirectory() &&
-                              existsSync(join(childPath, 'media')),
-                      )
-                : [];
-
-            // If branch folders with media/ exist, place mod.info in each; otherwise fall back to mod root
+            // Resolve Build 42 branch folders (folders with media/) in the output;
+            // fall back to the mod root when none exist (Build 41 layout)
+            const outModsBase = join(outPath, 'Contents', 'mods');
+            const branchTargets = resolveModInfoTargets(
+                prefixedModId,
+                outModsBase,
+            );
             const modInfoTargets =
                 branchTargets.length > 0 ? branchTargets : [outModsPath];
 

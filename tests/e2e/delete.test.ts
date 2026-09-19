@@ -96,7 +96,7 @@ describe('delete command e2e', () => {
         expect(config.mods[modId]).toBeUndefined();
     });
 
-    it('should log error if mod is missing from config but still try to delete directory', async () => {
+    it('should fail fast if mod is missing from config and keep the directory', async () => {
         const modId = 'missing_config';
         workspace.write(
             'project.json',
@@ -110,13 +110,14 @@ describe('delete command e2e', () => {
 
         const result = await workspace.run('delete', [modId]);
 
-        workspace.assertSuccess(result);
+        workspace.assertFailure(result);
         workspace.assertStderr(
             result,
             `Mod '${modId}' not found in project.json`,
         );
 
-        expect(workspace.exists(modId)).toBe(false);
+        // Fail-fast: nothing on disk is touched
+        expect(workspace.exists(modId)).toBe(true);
     });
 
     it('should fail with an error when no modId argument is provided', async () => {
