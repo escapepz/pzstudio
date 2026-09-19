@@ -148,10 +148,6 @@
                 "title": "PZStudio: Update"
             },
             {
-                "command": "pzstudio.watch",
-                "title": "PZStudio: Watch"
-            },
-            {
                 "command": "pzstudio.modinfoGenerate",
                 "title": "PZStudio: ModInfo Generate"
             }
