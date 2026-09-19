@@ -459,7 +459,8 @@ export function generateWorkshopText(
     );
     if (existsSync(workshopDescriptionPath)) {
         readFileSync(workshopDescriptionPath, { encoding: 'utf-8' })
-            .split('\n')
+            // split(/\r?\n/) so CRLF files (Windows) don't leave trailing \r
+            .split(/\r?\n/)
             .forEach((line) => {
                 lines.push(`description=${line}`);
             });
