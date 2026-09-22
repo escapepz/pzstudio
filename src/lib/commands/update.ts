@@ -13,7 +13,8 @@ addHelp(
         pzstudio update - Refresh all global template caches from their remote sources.
     
     Flags:
-        --verbose        - Enable diagnostic output.`,
+        --verbose        - Enable diagnostic output.
+        --transport <git|fetch> - Template download method (default: git when available, else fetch).`,
 );
 
 export async function updateCmd() {

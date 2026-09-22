@@ -10,6 +10,7 @@ import './commands/build';
 import './commands/clean';
 import './commands/delete';
 import './commands/lang';
+import './commands/list';
 import './commands/new';
 import './commands/outdir';
 import './commands/rename';
@@ -24,8 +25,14 @@ import {
     splitArgs,
     setProcessArgsOverride,
     hasFlag,
+    extractFlag,
 } from './args';
 import { getCommand } from './registry';
+import {
+    setTemplateTransport,
+    GitTransport,
+    FetchTransport,
+} from './transport';
 import { clear, error, info, log, warn, verbose } from './logger';
 import { projectDir, migrateStoreDirIfNeeded } from './helper';
 import { migrateGlobalConfigIfNeeded } from './templateManager';
@@ -69,6 +76,18 @@ export async function runCLI(
     // Initialize verbose mode early
     if (hasFlag('verbose')) {
         setVerbose(true);
+    }
+
+    // Transport override: 'git' or 'fetch' (default: git when available)
+    const transportFlag = extractFlag('transport');
+    if (transportFlag === 'git' || transportFlag === 'fetch') {
+        setTemplateTransport(
+            transportFlag === 'git' ? new GitTransport() : new FetchTransport(),
+        );
+    } else if (transportFlag !== undefined) {
+        throw new Error(
+            `Invalid --transport value '${transportFlag}' (expected 'git' or 'fetch').`,
+        );
     }
 
     try {

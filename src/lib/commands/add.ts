@@ -30,6 +30,7 @@ addHelp(
     --offline        - Bypass network updates and use local cache or legacy templates.
     --force-update   - Force refresh of cached templates from remote.
     --symlinks       - Use directory junctions for template folders (if supported).
+    --transport <git|fetch> - Template download method (default: git when available, else fetch).
     --verbose        - Enable diagnostic output.`,
 );
 
