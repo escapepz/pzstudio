@@ -428,6 +428,7 @@ export function resolveBuildOutputPath(
  * @returns {string} The sanitized directory name
  */
 export function sanitizeFolderName(name: string): string {
+    // eslint-disable-next-line no-control-regex
     const sanitized = name.replace(/[\u0000-\u001f<>:"/\\|?*]+/g, '_').trim();
     return sanitized || '_';
 }

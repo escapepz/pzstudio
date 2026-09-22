@@ -9,6 +9,6 @@ addHelp(
         pzstudio lang <modId> <lang> <toLang> - Copy a translation language to an other language.`,
 );
 
-export function langCmd(modId: string, lang: string, toLang?: string) {
+export function langCmd(_modId: string, _lang: string, _toLang?: string) {
     throw new Error('Not implemented yet!');
 }
