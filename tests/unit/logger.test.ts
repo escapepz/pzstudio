@@ -10,18 +10,6 @@ import {
     setLogger,
 } from '../../src/lib/logger';
 
-vi.mock('terminal-kit', () => {
-    return {
-        terminal: {
-            white: (msg: string) => console.log(msg),
-            brightCyan: (msg: string) => console.log(msg),
-            yellow: (msg: string) => console.log(msg),
-            red: (msg: string) => console.error(msg),
-            gray: (msg: string) => console.log(msg),
-        },
-    };
-});
-
 describe('Logger', () => {
     let mockLogger: any;
 

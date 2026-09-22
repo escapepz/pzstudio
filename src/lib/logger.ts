@@ -1,3 +1,5 @@
+import * as pc from 'picocolors';
+
 export interface ILogger {
     log(message: string): void;
     info(message: string): void;
@@ -11,42 +13,10 @@ let externalLogger: ILogger | undefined;
 let verboseEnabled = false;
 
 /**
- * Strips ANSI escape codes from a string.
- */
-function stripAnsi(str: string): string {
-    return str.replace(
-        // eslint-disable-next-line no-control-regex
-        /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g,
-        '',
-    );
-}
-
-/**
  * Checks if the output destination is a TTY.
  */
 function isTTY(): boolean {
     return process.stdout.isTTY;
-}
-
-function getTerminal() {
-    try {
-        const terminal = require('terminal-kit').terminal;
-        return terminal;
-    } catch (_e) {
-        const fallback = (msg: string) => {
-            console.log(isTTY() ? msg : stripAnsi(msg));
-        };
-        const fallbackError = (msg: string) => {
-            console.error(isTTY() ? msg : stripAnsi(msg));
-        };
-        return {
-            white: fallback,
-            brightCyan: fallback,
-            yellow: fallback,
-            red: fallbackError,
-            gray: fallback,
-        };
-    }
 }
 
 function getTimestamp() {
@@ -80,6 +50,15 @@ export function clear() {
         externalLogger.clear();
         return;
     }
+    process.stdout.write('\u001b[2J\u001b[H');
+}
+
+/**
+ * Ensures the output ends with exactly one newline, regardless of whether
+ * the message already carries trailing newline(s).
+ */
+function withNewline(msg: string): string {
+    return msg.replace(/\n+$/, '') + '\n';
 }
 
 /**
@@ -92,9 +71,9 @@ export function log(message: any) {
         externalLogger.log(msg);
         return;
     }
-    const term = getTerminal();
-    const output = isTTY() ? msg : stripAnsi(msg);
-    term.white(output, '\n');
+    process.stdout.write(
+        isTTY() ? pc.white(withNewline(msg)) : withNewline(msg),
+    );
 }
 
 /**
@@ -107,9 +86,10 @@ export function info(message: any) {
         externalLogger.info(msg);
         return;
     }
-    const term = getTerminal();
     const output = `[${getTimestamp()}] [INFO] ${msg}`;
-    term.brightCyan(isTTY() ? output : stripAnsi(output), '\n');
+    process.stdout.write(
+        isTTY() ? pc.cyan(withNewline(output)) : withNewline(output),
+    );
 }
 
 /**
@@ -122,9 +102,10 @@ export function warn(message: any) {
         externalLogger.warn(msg);
         return;
     }
-    const term = getTerminal();
     const output = `[${getTimestamp()}] [WARN] ${msg}`;
-    term.yellow(isTTY() ? output : stripAnsi(output), '\n');
+    process.stdout.write(
+        isTTY() ? pc.yellow(withNewline(output)) : withNewline(output),
+    );
 }
 
 /**
@@ -138,9 +119,10 @@ export function error(error: any) {
         externalLogger.error(error);
         return;
     }
-    const term = getTerminal();
     const output = `[${getTimestamp()}] [ERROR] ${msg}`;
-    term.red(isTTY() ? output : stripAnsi(output), '\n');
+    process.stderr.write(
+        isTTY() ? pc.red(withNewline(output)) : withNewline(output),
+    );
 }
 
 /**
@@ -154,11 +136,8 @@ export function verbose(message: any) {
         externalLogger.verbose(msg);
         return;
     }
-    const term = getTerminal();
     const output = `[${getTimestamp()}] [DEBUG] ${msg}`;
-    if (term.gray) {
-        term.gray(isTTY() ? output : stripAnsi(output), '\n');
-    } else {
-        term.white(isTTY() ? output : stripAnsi(output), '\n');
-    }
+    process.stdout.write(
+        isTTY() ? pc.gray(withNewline(output)) : withNewline(output),
+    );
 }
