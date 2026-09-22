@@ -123,6 +123,43 @@ export function activate(context: vscode.ExtensionContext) {
         return flags;
     }
 
+    /**
+     * Reads the mod ids from project.json in the workspace folder.
+     * Returns an empty list when there is no project or the file is unreadable.
+     */
+    async function getModIds(): Promise<string[]> {
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) {
+            return [];
+        }
+        try {
+            const fileUri = vscode.Uri.joinPath(folder.uri, 'project.json');
+            const content = new TextDecoder().decode(
+                await vscode.workspace.fs.readFile(fileUri),
+            );
+            const config = JSON.parse(content);
+            return Object.keys(config?.mods ?? {});
+        } catch {
+            return [];
+        }
+    }
+
+    /**
+     * Asks for a mod id via a quick-pick of the project's mods, falling back
+     * to a free-text input when the project has no mods or project.json is
+     * missing.
+     */
+    async function pickModId(prompt: string): Promise<string | undefined> {
+        const modIds = await getModIds();
+        if (modIds.length > 0) {
+            const picked = await vscode.window.showQuickPick(modIds, {
+                placeHolder: prompt,
+            });
+            return picked;
+        }
+        return vscode.window.showInputBox({ prompt });
+    }
+
     const executePZCommand = async (
         command: string,
         args: string[] = [],
@@ -234,9 +271,7 @@ export function activate(context: vscode.ExtensionContext) {
         }),
 
         vscode.commands.registerCommand('pzstudio.delete', async () => {
-            const modId = await vscode.window.showInputBox({
-                prompt: 'Enter Mod ID to delete',
-            });
+            const modId = await pickModId('Select mod to delete');
             if (!modId) return;
 
             const confirm = await vscode.window.showWarningMessage(
@@ -250,9 +285,7 @@ export function activate(context: vscode.ExtensionContext) {
         }),
 
         vscode.commands.registerCommand('pzstudio.rename', async () => {
-            const modId = await vscode.window.showInputBox({
-                prompt: 'Enter current Mod ID',
-            });
+            const modId = await pickModId('Select mod to rename');
             if (!modId) return;
 
             const newName = await vscode.window.showInputBox({
@@ -264,9 +297,7 @@ export function activate(context: vscode.ExtensionContext) {
         }),
 
         vscode.commands.registerCommand('pzstudio.lang', async () => {
-            const modId = await vscode.window.showInputBox({
-                prompt: 'Enter Mod ID',
-            });
+            const modId = await pickModId('Select mod');
             if (!modId) return;
 
             const language = await vscode.window.showInputBox({
@@ -280,10 +311,9 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand(
             'pzstudio.modinfoGenerate',
             async () => {
-                const modId = await vscode.window.showInputBox({
-                    prompt: 'Enter Mod ID (Optional, leave blank for all mods)',
-                    placeHolder: 'my_mod',
-                });
+                const modId = await pickModId(
+                    'Select mod to generate mod.info for',
+                );
 
                 await executePZCommand('modinfo', [
                     'generate',

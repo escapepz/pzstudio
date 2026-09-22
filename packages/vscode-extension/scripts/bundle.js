@@ -4,29 +4,6 @@ const path = require('path');
 
 const isWatch = process.argv.includes('--watch');
 
-/**
- * Copy a folder recursively
- * @param {string} from The source folder
- * @param {string} to The destination folder
- */
-function copyFolderSync(from, to) {
-    if (!fs.existsSync(to)) {
-        fs.mkdirSync(to, { recursive: true });
-    }
-    const files = fs.readdirSync(from);
-    for (const file of files) {
-        const current = fs.lstatSync(path.join(from, file));
-        if (current.isDirectory()) {
-            copyFolderSync(path.join(from, file), path.join(to, file));
-        } else if (current.isSymbolicLink()) {
-            const symlink = fs.readlinkSync(path.join(from, file));
-            fs.writeFileSync(path.join(to, file), symlink);
-        } else {
-            fs.copyFileSync(path.join(from, file), path.join(to, file));
-        }
-    }
-}
-
 async function run() {
     const ctx = await esbuild.context({
         entryPoints: ['src/extension.ts'],
@@ -51,7 +28,6 @@ async function run() {
             const templates = [
                 '.template-language',
                 '.template-mod',
-                '.template-mod-simple',
                 '.template-project',
                 '.template-workshop',
             ];
@@ -72,9 +48,25 @@ async function run() {
 
                 if (fs.existsSync(from)) {
                     console.log(`Syncing ${template}...`);
-                    copyFolderSync(from, to);
+                    // dereference: follow symlinks instead of writing the
+                    // link target as a plain text file
+                    fs.cpSync(from, to, { recursive: true, dereference: true });
                 }
             }
+
+            // Copy JSON schemas used by the jsonValidation contribution
+            const schemasDir = path.join(__dirname, '../schemas');
+            fs.mkdirSync(schemasDir, { recursive: true });
+            for (const schema of [
+                'pzstudio.schema.json',
+                'workshop.schema.json',
+            ]) {
+                fs.copyFileSync(
+                    path.join(__dirname, '../../../', schema),
+                    path.join(schemasDir, schema),
+                );
+            }
+            console.log('Syncing schemas...');
         } catch (err) {
             console.error('Build failed:', err);
             process.exit(1);
