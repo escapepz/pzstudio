@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { addHelp } from '../help';
-import { processArgs } from '../args';
+import { hasFlag } from '../cli';
 import {
     generateModInfoText,
     generateWorkshopText,
@@ -12,13 +12,6 @@ import {
 } from '../helper';
 import { info, log, warn, verbose } from '../logger';
 import { resolveTemplateDir, scaffoldProject } from '../templateManager';
-
-/**
- * Check if a flag exists in command arguments
- */
-function hasFlag(name: string): boolean {
-    return processArgs().some((a) => a === `--${name}`);
-}
 
 addHelp(
     'build',

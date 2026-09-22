@@ -334,10 +334,6 @@ export function getFilesRecursively(dir: string, filelist: string[] = []) {
 }
 
 /**
- * Returns the store directory
- * @returns {string} The store directory
- */
-/**
  * Migrate legacy file-based store to directory-based store
  */
 export function migrateStoreDirIfNeeded() {
@@ -704,8 +700,6 @@ export function updateExperimentalScripts(
             return;
         }
 
-        // Clear cache to allow modifications without rebuild
-        // delete require.cache[require.resolve(scriptPath)];
         const script = require(scriptPath);
 
         switch (action) {
