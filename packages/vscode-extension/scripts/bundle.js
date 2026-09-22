@@ -9,7 +9,7 @@ async function run() {
         entryPoints: ['src/extension.ts'],
         bundle: true,
         outfile: 'dist/extension.js',
-        external: ['vscode', 'terminal-kit'],
+        external: ['vscode'],
         format: 'cjs',
         platform: 'node',
         sourcemap: true,
