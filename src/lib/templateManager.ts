@@ -206,10 +206,6 @@ export function getConfigPath(): string {
     return join(getConfigDir(), 'config.json');
 }
 
-// function getTemplateCacheDir(category: TemplateCategory): string {
-//     return join(getConfigDir(), 'templates', category);
-// }
-
 function bootstrapLegacyTemplates(): void {
     const globalLegacyDir = join(getConfigDir(), '.template-legacy');
     if (existsSync(globalLegacyDir) && isDirNonEmpty(globalLegacyDir)) {
