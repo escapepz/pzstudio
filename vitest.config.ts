@@ -9,11 +9,7 @@ export default defineConfig({
         coverage: {
             provider: 'v8',
             reporter: ['text', 'json', 'html'],
-            include: [
-                'src/lib/args.ts',
-                'src/lib/expect.ts',
-                'src/lib/helper.ts',
-            ],
+            include: ['src/**/*.ts'],
         },
         sequence: {
             concurrent: false,

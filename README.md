@@ -66,7 +66,7 @@ pnpm run test:watch
 pnpm run test:coverage
 ```
 
-The automated test suite currently covers deterministic library logic including argument parsing, expectation validation, and shared helper utilities. Manual verification remains required for terminal UI, file watching, and integration-heavy command flows.
+The automated test suite includes unit tests for library logic (argument parsing, validation, shared helpers) and end-to-end tests covering every command. Coverage measurement spans the whole `src/` tree; see `tests/` for details. Manual verification remains required for real git-based template cloning and game-side integration.
 
 ---
 
@@ -76,7 +76,7 @@ This project is a TypeScript CLI tool. While it uses some workspace features, yo
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v16+)
+- [Node.js](https://nodejs.org/) (v20+)
 - [pnpm](https://pnpm.io/)
 
 ### 1. Install Dependencies
