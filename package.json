@@ -99,7 +99,6 @@
         "vitest": "^4.1.4"
     },
     "dependencies": {
-        "chokidar": "^3.5.3",
         "terminal-kit": "^3.0.0"
     }
 }
