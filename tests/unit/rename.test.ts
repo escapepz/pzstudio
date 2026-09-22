@@ -46,9 +46,10 @@ describe('renameCmd', () => {
             '/proj/new_mod/media/texture.png',
         ] as any);
 
-        // Only the old mod directory "exists"
+        // Only the old mod directory "exists" (normalize separators: join()
+        // produces backslashes on Windows)
         vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-            return String(p) === '/proj/old_mod';
+            return String(p).replace(/\\/g, '/').endsWith('/old_mod');
         });
     });
 

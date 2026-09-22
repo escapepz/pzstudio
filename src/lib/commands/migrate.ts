@@ -26,7 +26,28 @@ export async function migrateCmd() {
 
     const readConfigJsonOrEmpty = (filePath: string) => {
         const content = readFileSync(filePath, 'utf8');
-        return content.trim() ? JSON.parse(content) : {};
+        try {
+            return content.trim() ? JSON.parse(content) : {};
+        } catch (err) {
+            throw new Error(
+                `Failed to parse '${filePath}': ${(err as Error).message}. Fix the JSON syntax and run 'pzstudio migrate' again.`,
+                { cause: err },
+            );
+        }
+    };
+
+    // An empty project.json is NOT a valid project config (unlike an empty
+    // config.json), so it must fail loudly instead of parsing as {}.
+    const readProjectJsonStrict = (filePath: string) => {
+        const content = readFileSync(filePath, 'utf8');
+        try {
+            return JSON.parse(content);
+        } catch (err) {
+            throw new Error(
+                `Failed to parse '${filePath}': ${(err as Error).message}. Fix the JSON syntax and run 'pzstudio migrate' again.`,
+                { cause: err },
+            );
+        }
     };
 
     // 1. Migrate config.json
@@ -47,7 +68,7 @@ export async function migrateCmd() {
     // 2. Migrate project.json (if it exists)
     const projectPath = join(projectDir(), 'project.json');
     let project = existsSync(projectPath)
-        ? JSON.parse(readFileSync(projectPath, 'utf8'))
+        ? readProjectJsonStrict(projectPath)
         : undefined;
 
     if (project) {

@@ -49,9 +49,17 @@ export function renameCmd(oldModId: string, newModId: string) {
         throw new Error(`A mod with id '${newModId}' already exists!`);
     }
 
-    // Rename mod
+    // The mod folder is required to rewrite occurrences of the old id in the
+    // mod's files; a config-only entry has nothing to rewrite.
     const oldPath = join(projectPath, oldModId);
     const newPath = join(projectPath, newModId);
+    if (!existsSync(oldPath) && !existsSync(newPath)) {
+        throw new Error(
+            `Mod folder '${oldModId}' was not found on disk. Remove it from project.json instead (edit the file directly) or restore the folder before renaming.`,
+        );
+    }
+
+    // Rename mod
     if (existsSync(oldPath)) {
         log(`- Renaming mod '${oldModId}' to '${newModId}'...`);
         verbose(`Copying ${oldPath} to ${newPath}`);
@@ -61,22 +69,20 @@ export function renameCmd(oldModId: string, newModId: string) {
     }
 
     // Update code
-    []
-        .concat(getFilesRecursively(join(projectPath, newModId)))
-        .forEach((file) => {
-            // Binary files would get corrupted by a utf-8 read/replace/write cycle
-            if (BINARY_FILE_EXTENSIONS.has(extname(file).toLowerCase())) {
-                verbose(`Skipping binary file: ${file}`);
-                return;
-            }
+    getFilesRecursively(newPath).forEach((file) => {
+        // Binary files would get corrupted by a utf-8 read/replace/write cycle
+        if (BINARY_FILE_EXTENSIONS.has(extname(file).toLowerCase())) {
+            verbose(`Skipping binary file: ${file}`);
+            return;
+        }
 
-            const content = readFileSync(file, 'utf-8');
-            const newContent = content.replaceAll(oldModId, newModId);
-            if (content !== newContent) {
-                writeFileSync(file, newContent, { encoding: 'utf-8' });
-                log(`- Updated file ${file} with new mod id '${newModId}'`);
-            }
-        });
+        const content = readFileSync(file, 'utf-8');
+        const newContent = content.replaceAll(oldModId, newModId);
+        if (content !== newContent) {
+            writeFileSync(file, newContent, { encoding: 'utf-8' });
+            log(`- Updated file ${file} with new mod id '${newModId}'`);
+        }
+    });
 
     // Update config
     projectConfig.mods[newModId] = projectConfig.mods[oldModId];

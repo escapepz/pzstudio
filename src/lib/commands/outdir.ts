@@ -1,5 +1,5 @@
 import { resolve } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { expect } from '../expect';
 import { addHelp } from '../help';
 import { log, verbose } from '../logger';
@@ -25,10 +25,14 @@ export function outdirCmd(newOutDir: string) {
     newOutDir = resolve(newOutDir);
     verbose(`Resolved outdir path: ${newOutDir}`);
 
-    // check if the new path exists
+    // check if the new path exists and is a directory
     if (!existsSync(newOutDir)) {
         verbose(`Validation failed: Path ${newOutDir} does not exist.`);
         throw new Error(`The output directory "${newOutDir}" does not exist.`);
+    }
+    if (!statSync(newOutDir).isDirectory()) {
+        verbose(`Validation failed: Path ${newOutDir} is not a directory.`);
+        throw new Error(`"${newOutDir}" is not a directory.`);
     }
 
     const config = readGlobalConfig();
