@@ -420,9 +420,20 @@ export function resolveBuildOutputPath(
     const outDir = config.outdir!;
     const title = config.workshop.title;
     if (variant === 'development') {
-        return join(outDir, `${title} - dev_branch`);
+        return join(outDir, `${sanitizeFolderName(title)} - dev_branch`);
     }
-    return join(outDir, title);
+    return join(outDir, sanitizeFolderName(title));
+}
+
+/**
+ * Sanitizes a string for use as a directory name, replacing characters that
+ * are illegal on Windows filesystems (: ? * " < > | and control chars).
+ * @param name The desired directory name
+ * @returns {string} The sanitized directory name
+ */
+export function sanitizeFolderName(name: string): string {
+    const sanitized = name.replace(/[\u0000-\u001f<>:"/\\|?*]+/g, '_').trim();
+    return sanitized || '_';
 }
 
 /**

@@ -69,6 +69,11 @@ export async function newCmd(projectTitle: string, modId?: string) {
 
     // Prepare mod id
     modId = formatTitleToId(modId || projectTitle);
+    if (!modId) {
+        throw new Error(
+            `Cannot derive a valid mod id from '${modId || projectTitle}': it must contain at least one letter or digit.`,
+        );
+    }
 
     // Check if project already exists
     const projectPath = join(destDir, modId);
