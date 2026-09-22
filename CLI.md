@@ -334,7 +334,7 @@ pzstudio delete <modId> --verbose
 ### Output
 
 - Logs separate messages for folder deletion and config deletion.
-- Logs an error if the mod folder or config entry is missing.
+- Fails with an error if the mod id is not present in `project.json`; warns if the mod folder is missing on disk.
 
 ## `pzstudio rename`
 
@@ -489,8 +489,8 @@ Translation language helper.
 ### Usage
 
 ```bash
-pzstudio lang <lang>
-pzstudio lang <lang> <toLang>
+pzstudio lang <modId> <lang>
+pzstudio lang <modId> <lang> <toLang>
 ```
 
 ### Status
