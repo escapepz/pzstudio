@@ -151,3 +151,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# extension build-time copies (schemas are synced by the bundle script)
+packages/*/schemas/
