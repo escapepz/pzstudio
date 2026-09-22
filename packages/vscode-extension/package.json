@@ -15,6 +15,12 @@
     "icon": "icon.png",
     "activationEvents": [],
     "contributes": {
+        "jsonValidation": [
+            {
+                "fileMatch": "project.json",
+                "url": "./schemas/pzstudio.schema.json"
+            }
+        ],
         "configuration": {
             "title": "Project Zomboid Studio",
             "properties": {
