@@ -1,4 +1,5 @@
 import { addHelp } from '../help';
+import { registerCommand } from '../registry';
 
 addHelp(
     'lang',
@@ -12,3 +13,10 @@ addHelp(
 export function langCmd(_modId: string, _lang: string, _toLang?: string) {
     throw new Error('Not implemented yet!');
 }
+
+registerCommand({
+    name: 'lang',
+    summary: 'Add or copy a translation language.',
+    run: (ctx) =>
+        langCmd(ctx.positionals[0], ctx.positionals[1], ctx.positionals[2]),
+});

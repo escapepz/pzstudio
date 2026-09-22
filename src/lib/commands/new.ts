@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 import { expect } from '../expect';
 import { addHelp } from '../help';
+import { registerCommand } from '../registry';
 import {
     formatTitleToId,
     projectDir,
@@ -11,7 +12,7 @@ import {
     updateProjectConfig,
 } from '../helper';
 import { info, log, verbose } from '../logger';
-import { extractFlag, hasFlag } from '../cli';
+import { extractFlag, hasFlag } from '../args';
 import {
     resolveTemplateDir,
     readGlobalConfig,
@@ -183,3 +184,9 @@ export async function newCmd(projectTitle: string, modId?: string) {
     // Done
     info(`The project '${projectTitle}' has been created at '${projectPath}'`);
 }
+
+registerCommand({
+    name: 'new',
+    summary: 'Create a new project.',
+    run: (ctx) => newCmd(ctx.positionals[0], ctx.positionals[1]),
+});

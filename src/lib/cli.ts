@@ -4,50 +4,35 @@ import { version, branch } from '../../package.json';
 /* eslint-enable @typescript-eslint/ban-ts-comment */
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { addCmd } from './commands/add';
-import { buildCmd } from './commands/build';
-import { cleanCmd } from './commands/clean';
-import { deleteCmd } from './commands/delete';
+// Command files self-register into the registry at import time.
+import './commands/add';
+import './commands/build';
+import './commands/clean';
+import './commands/delete';
+import './commands/lang';
+import './commands/new';
+import './commands/outdir';
+import './commands/rename';
+import './commands/update';
+import './commands/watch';
+import './commands/migrate';
+import './commands/modinfo';
 import { helpCmd } from './commands/help';
-import { langCmd } from './commands/lang';
-import { newCmd } from './commands/new';
-import { outdirCmd } from './commands/outdir';
-import { renameCmd } from './commands/rename';
-import { updateCmd } from './commands/update';
-import { watchCmd } from './commands/watch';
-import { migrateCmd } from './commands/migrate';
-import { modinfoCmd } from './commands/modinfo';
-import { cmd, processArgs, splitArgs, setProcessArgsOverride } from './args';
+import {
+    cmd,
+    processArgs,
+    splitArgs,
+    setProcessArgsOverride,
+    hasFlag,
+} from './args';
+import { getCommand } from './registry';
 import { clear, error, info, log, warn, verbose } from './logger';
 import { projectDir, migrateStoreDirIfNeeded } from './helper';
 import { migrateGlobalConfigIfNeeded } from './templateManager';
 
-/**
- * Extract a flag value from command arguments
- * @param name The flag name (without dashes)
- * @returns The flag value or undefined
- */
-export function extractFlag(name: string): string | undefined {
-    const allArgs = processArgs();
-    const flagIndex = allArgs.findIndex((a) => a === `--${name}`);
-    if (flagIndex !== -1 && flagIndex + 1 < allArgs.length) {
-        const val = allArgs[flagIndex + 1];
-        if (val.startsWith('--')) {
-            return undefined;
-        }
-        return val;
-    }
-    return undefined;
-}
-
-/**
- * Check if a flag exists in command arguments
- * @param name The flag name (without dashes)
- * @returns True if the flag exists
- */
-export function hasFlag(name: string): boolean {
-    return processArgs().some((a) => a === `--${name}`);
-}
+// Backward-compatible re-exports: flags used to live here and external
+// code (tests, templates) may import them from this module.
+export { hasFlag, extractFlag } from './args';
 
 import { setVerbose } from './logger';
 
@@ -131,108 +116,29 @@ export async function runCLI(
         // be coerced to numbers (ArgTypeError in expect()).
         const commandParams: string[] = positionals;
 
-        const command = {
-            name: currentCmd,
-            params: commandParams,
-        };
+        const registered = currentCmd ? getCommand(currentCmd) : undefined;
 
         verbose('Project Dir:  ' + projectDir());
 
         verbose(
-            `Executing command [${command.name}] ${command.params.length ? `with params [${command.params.join(', ')}]` : ''}`,
+            `Executing command [${currentCmd}] ${commandParams.length ? `with params [${commandParams.join(', ')}]` : ''}`,
         );
 
         // Handle --help for specific command BEFORE executing it (allows help even outside projects)
-        if (hasFlag('help') && command.name) {
-            await helpCmd(command.name);
+        if (hasFlag('help') && currentCmd) {
+            await helpCmd(currentCmd);
             return;
         }
 
-        switch (command.name) {
-            case 'add':
-                await addCmd(
-                    command.params[0] as string,
-                    command.params[1] as string,
-                );
-                break;
-
-            case 'build':
-                await buildCmd();
-                break;
-
-            case 'clean':
-                await cleanCmd();
-                break;
-
-            case 'delete':
-                await deleteCmd(command.params[0] as string);
-                break;
-
-            case 'help':
-                await helpCmd(positionals[0]);
-                break;
-
-            case 'lang':
-                await langCmd(
-                    command.params[0] as string,
-                    command.params[1] as string,
-                    command.params[2] as string,
-                );
-                break;
-
-            case 'new':
-                await newCmd(
-                    command.params[0] as string,
-                    command.params[1] as string,
-                );
-                break;
-
-            case 'outdir':
-                await outdirCmd(command.params[0] as string);
-                break;
-
-            case 'rename':
-                await renameCmd(
-                    command.params[0] as string,
-                    command.params[1] as string,
-                );
-                break;
-
-            case 'update':
-                await updateCmd();
-                break;
-
-            case 'watch':
-                await watchCmd();
-                break;
-
-            case 'migrate':
-                await migrateCmd();
-                break;
-
-            case 'modinfo':
-                await modinfoCmd(
-                    command.params[0] as string,
-                    command.params[1] as string,
-                );
-                break;
-
-            case undefined:
-                await helpCmd();
-                break;
-
-            default:
-                throw new Error(`Unknown command [${command.name}]`);
-        }
-
-        if (
-            command.name !== 'build' &&
-            command.name !== 'clean' &&
-            command.name !== 'help' &&
-            command.name !== 'modinfo' &&
-            command.name !== undefined
-        ) {
-            info(`Command [${command.name}] completed.`);
+        if (currentCmd === undefined) {
+            await helpCmd();
+        } else if (registered) {
+            await registered.run({ positionals: commandParams });
+            if (!registered.silent) {
+                info(`Command [${registered.name}] completed.`);
+            }
+        } else {
+            throw new Error(`Unknown command [${currentCmd}]`);
         }
     } catch (e) {
         error(e);

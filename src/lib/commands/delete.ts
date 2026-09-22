@@ -2,6 +2,7 @@ import { join } from 'path';
 import { existsSync, rmSync } from 'fs';
 import { expect } from '../expect';
 import { addHelp } from '../help';
+import { registerCommand } from '../registry';
 import { info, log, verbose, warn } from '../logger';
 import {
     projectDir,
@@ -64,3 +65,9 @@ export function deleteCmd(modId: string) {
     // Run experimental scripts
     updateExperimentalScripts('removeMod', projectPath, modId);
 }
+
+registerCommand({
+    name: 'delete',
+    summary: 'Delete a mod from your project.',
+    run: (ctx) => deleteCmd(ctx.positionals[0]),
+});

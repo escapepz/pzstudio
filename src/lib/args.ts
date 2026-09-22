@@ -66,6 +66,33 @@ export function processArgs(argv: string[] = process.argv) {
 }
 
 /**
+ * Extract a flag value from the raw argument tokens
+ * @param name The flag name (without dashes)
+ * @returns The flag value or undefined
+ */
+export function extractFlag(name: string): string | undefined {
+    const allArgs = processArgs();
+    const flagIndex = allArgs.findIndex((a) => a === `--${name}`);
+    if (flagIndex !== -1 && flagIndex + 1 < allArgs.length) {
+        const val = allArgs[flagIndex + 1];
+        if (val.startsWith('--')) {
+            return undefined;
+        }
+        return val;
+    }
+    return undefined;
+}
+
+/**
+ * Check if a flag exists in the raw argument tokens
+ * @param name The flag name (without dashes)
+ * @returns True if the flag exists
+ */
+export function hasFlag(name: string): boolean {
+    return processArgs().some((a) => a === `--${name}`);
+}
+
+/**
  * Separates flags from positional arguments.
  * @param rawArgs The raw arguments to process
  * @returns An object containing the separated flags and positionals

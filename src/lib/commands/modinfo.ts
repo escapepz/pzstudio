@@ -2,6 +2,7 @@ import { existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { expect } from '../expect';
 import { addHelp } from '../help';
+import { registerCommand } from '../registry';
 import { log, verbose } from '../logger';
 import {
     generateModInfoText,
@@ -119,3 +120,10 @@ async function generateForAll(projectConfig: any) {
         await generateForMod(modId, projectConfig);
     }
 }
+
+registerCommand({
+    name: 'modinfo',
+    summary: 'Generate mod.info files for your mods.',
+    silent: true,
+    run: (ctx) => modinfoCmd(ctx.positionals[0], ctx.positionals[1]),
+});

@@ -1,4 +1,5 @@
 import { addHelp } from '../help';
+import { registerCommand } from '../registry';
 import { info, log, verbose } from '../logger';
 import {
     updateProjectConfig,
@@ -148,3 +149,9 @@ export async function migrateCmd() {
 
     info('\nMigration complete.');
 }
+
+registerCommand({
+    name: 'migrate',
+    summary: 'Upgrade legacy config.json and project.json files.',
+    run: () => migrateCmd(),
+});

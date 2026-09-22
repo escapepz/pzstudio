@@ -2,6 +2,7 @@ import { join, extname } from 'path';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { expect } from '../expect';
 import { addHelp } from '../help';
+import { registerCommand } from '../registry';
 import { BINARY_FILE_EXTENSIONS } from '../constants';
 import {
     getFilesRecursively,
@@ -93,3 +94,9 @@ export function renameCmd(oldModId: string, newModId: string) {
     // Update experimental package scripts
     updateExperimentalScripts('renameMod', projectPath, oldModId, newModId);
 }
+
+registerCommand({
+    name: 'rename',
+    summary: 'Rename a mod from your project.',
+    run: (ctx) => renameCmd(ctx.positionals[0], ctx.positionals[1]),
+});

@@ -1,7 +1,8 @@
 import { join } from 'path';
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { addHelp } from '../help';
-import { hasFlag } from '../cli';
+import { registerCommand } from '../registry';
+import { hasFlag } from '../args';
 import {
     generateModInfoText,
     generateWorkshopText,
@@ -195,3 +196,10 @@ export async function buildCmd() {
     const endTime = performance.now();
     info(`Build complete in ${((endTime - startTime) / 1000).toFixed(2)}s!`);
 }
+
+registerCommand({
+    name: 'build',
+    summary: 'Build your project and package it for the workshop.',
+    silent: true,
+    run: () => buildCmd(),
+});

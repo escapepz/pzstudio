@@ -15,11 +15,11 @@ import {
     scaffoldProject,
     scaffoldTemplateFolder,
 } from '../../src/lib/templateManager';
-import { hasFlag, extractFlag } from '../../src/lib/cli';
+import { hasFlag, extractFlag } from '../../src/lib/args';
 
 vi.mock('fs');
 vi.mock('../../src/lib/logger');
-vi.mock('../../src/lib/cli');
+vi.mock('../../src/lib/args');
 vi.mock('../../src/lib/templateManager');
 vi.mock('../../src/lib/helper', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../src/lib/helper')>()),
