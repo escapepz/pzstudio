@@ -25,6 +25,9 @@
         }
     },
     "type": "commonjs",
+    "engines": {
+        "node": ">=20"
+    },
     "bin": {
         "pzstudio": "./dist/index.js"
     },
@@ -98,6 +101,7 @@
         "vitest": "^4.1.4"
     },
     "dependencies": {
+        "fflate": "^0.8.3",
         "picocolors": "^1.1.1"
     }
 }

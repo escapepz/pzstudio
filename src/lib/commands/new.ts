@@ -32,7 +32,8 @@ addHelp(
     --offline              - Bypass network updates and use local cache or legacy templates.
     --force-update         - Force refresh of cached templates from remote.
     --symlinks             - Use directory junctions for template folders (if supported).
-    --path <destination>   - Create the project in the given directory instead of the current one.`,
+    --path <destination>   - Create the project in the given directory instead of the current one.
+    --transport <git|fetch> - Template download method (default: git when available, else fetch).`,
 );
 
 export async function newCmd(projectTitle: string, modId?: string) {

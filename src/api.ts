@@ -6,3 +6,9 @@ export {
     cloneRemoteTemplate,
     scaffoldProject,
 } from './lib/templateManager';
+export {
+    setTemplateTransport,
+    TemplateTransport,
+    GitTransport,
+    FetchTransport,
+} from './lib/transport';
