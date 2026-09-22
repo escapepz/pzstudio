@@ -1,4 +1,5 @@
 import { addHelp } from '../help';
+import { registerCommand } from '../registry';
 import { info, log, verbose, warn } from '../logger';
 import { resolveTemplateDir, TemplateCategory } from '../templateManager';
 
@@ -48,3 +49,9 @@ export async function updateCmd() {
         warn('\nFailed to refresh template caches.');
     }
 }
+
+registerCommand({
+    name: 'update',
+    summary: 'Refresh the cached template repositories.',
+    run: () => updateCmd(),
+});

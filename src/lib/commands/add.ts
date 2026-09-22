@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { expect } from '../expect';
 import { addHelp } from '../help';
+import { registerCommand } from '../registry';
 import {
     formatTitleToId,
     projectDir,
@@ -10,7 +11,7 @@ import {
     updateProjectConfig,
 } from '../helper';
 import { log, verbose } from '../logger';
-import { hasFlag } from '../cli';
+import { hasFlag } from '../args';
 import {
     readGlobalConfig,
     resolveTemplateDir,
@@ -119,3 +120,9 @@ export function addCmd(modName: string, modId?: string) {
     // Done
     log(`Added mod '${modName}' with id '${modId}'`);
 }
+
+registerCommand({
+    name: 'add',
+    summary: 'Add a mod to your project.',
+    run: (ctx) => addCmd(ctx.positionals[0], ctx.positionals[1]),
+});

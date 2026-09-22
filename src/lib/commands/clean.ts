@@ -1,5 +1,6 @@
 import { existsSync, rmSync } from 'fs';
 import { addHelp } from '../help';
+import { registerCommand } from '../registry';
 import { resolveProjectConfig, resolveBuildOutputPath } from '../helper';
 import { log, verbose } from '../logger';
 
@@ -54,3 +55,10 @@ export function cleanCmd() {
     const endTime = performance.now();
     log(`Clean complete in ${((endTime - startTime) / 1000).toFixed(2)}s!`);
 }
+
+registerCommand({
+    name: 'clean',
+    summary: 'Clean your output directory from the current built project.',
+    silent: true,
+    run: () => cleanCmd(),
+});

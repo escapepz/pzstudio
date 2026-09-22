@@ -2,6 +2,7 @@ import { resolve } from 'path';
 import { existsSync, statSync } from 'fs';
 import { expect } from '../expect';
 import { addHelp } from '../help';
+import { registerCommand } from '../registry';
 import { log, verbose } from '../logger';
 import { readGlobalConfig, writeGlobalConfig } from '../templateManager';
 
@@ -50,3 +51,9 @@ export function outdirCmd(newOutDir: string) {
     writeGlobalConfig(config);
     log(`The output directory has been changed to "${newOutDir}".`);
 }
+
+registerCommand({
+    name: 'outdir',
+    summary: 'Set your output directory.',
+    run: (ctx) => outdirCmd(ctx.positionals[0]),
+});

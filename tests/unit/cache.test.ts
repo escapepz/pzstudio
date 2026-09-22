@@ -18,16 +18,15 @@ vi.mock('../../src/lib/helper', () => ({
 vi.mock('../../src/lib/templateManager');
 vi.mock('fs');
 vi.mock('../../src/lib/logger');
-vi.mock('../../src/lib/cli', () => ({
-    extractFlag: vi.fn(() => undefined),
-    hasFlag: vi.fn(() => false),
-}));
 vi.mock('../../src/lib/args', () => ({
     processArgs: vi.fn(() => []),
     cmd: vi.fn(),
     splitArgs: vi.fn(() => ({ positionals: [], flags: [] })),
     parseArgType: vi.fn((a) => a),
     arg: vi.fn(),
+    extractFlag: vi.fn(() => undefined),
+    hasFlag: vi.fn(() => false),
+    setProcessArgsOverride: vi.fn(),
 }));
 
 describe('Local Template Cache (US2)', () => {
