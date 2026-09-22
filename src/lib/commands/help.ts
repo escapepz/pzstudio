@@ -4,16 +4,17 @@ import { log } from '../logger';
 
 const fullHelp = `Available commands:
     add            - Add a mod to your project.
-    build          - Build your project and update your output directory with your project.
+    build          - Build your project and package it for the workshop.
     clean          - Clean your output directory from the current built project.
     delete         - Delete a mod from your project.
     help           - Displays help information.
     lang           - Add or copy a translation language.
+    migrate        - Upgrade legacy config.json and project.json files.
     modinfo        - Generate mod.info files for your mods.
     new            - Create a new project.
     outdir         - Set your output directory.
     rename         - Rename a mod from your project.
-    update         - Update your project with the latest version of PZStudio.
+    update         - Refresh the cached template repositories.
     watch          - Watch for changes and keep your output directory synced.`;
 
 addHelp(
