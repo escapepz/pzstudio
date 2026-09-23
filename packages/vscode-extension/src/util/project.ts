@@ -147,6 +147,69 @@ export async function findEnclosingProjectDir(
     return undefined;
 }
 
+export interface ModConfigSnapshot {
+    /** Simple mod fields (string or string-array values) keyed by name. */
+    fields: Record<string, string | string[]>;
+    /** build.modInfo value when set. */
+    modInfo?: string;
+    /** Resolved build state (excluded > dev only > included). */
+    state: 'included' | 'dev only' | 'excluded';
+}
+
+/**
+ * Reads one mod's configuration from project.json tolerantly: returns
+ * undefined when the project file or the mod entry is missing/unreadable.
+ */
+export async function readModConfig(
+    projectDir: vscode.Uri,
+    modId: string,
+): Promise<ModConfigSnapshot | undefined> {
+    try {
+        const content = new TextDecoder().decode(
+            await vscode.workspace.fs.readFile(
+                vscode.Uri.joinPath(projectDir, 'project.json'),
+            ),
+        );
+        const config = JSON.parse(content);
+        const mod = config?.mods?.[modId];
+        if (!mod || typeof mod !== 'object') {
+            return undefined;
+        }
+
+        const excludes: string[] = Array.isArray(config.excludes)
+            ? config.excludes
+            : [];
+        const state: ModConfigSnapshot['state'] = excludes.includes(modId)
+            ? 'excluded'
+            : mod.build?.devOnly === true
+              ? 'dev only'
+              : 'included';
+
+        const fields: Record<string, string | string[]> = {};
+        for (const [key, value] of Object.entries(mod)) {
+            if (key === 'build') {
+                continue;
+            }
+            if (typeof value === 'string') {
+                fields[key] = value;
+            } else if (
+                Array.isArray(value) &&
+                value.every((item) => typeof item === 'string')
+            ) {
+                fields[key] = value as string[];
+            }
+        }
+
+        const modInfo =
+            typeof mod.build?.modInfo === 'string'
+                ? mod.build.modInfo
+                : undefined;
+        return { fields, modInfo, state };
+    } catch {
+        return undefined;
+    }
+}
+
 /**
  * Resolves the project a command should run against, without the caller
  * having to know the workspace layout:
