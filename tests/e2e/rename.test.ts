@@ -229,4 +229,36 @@ describe('rename command e2e', () => {
             "Expected param [newModId] to be 'string', but got 'undefined'",
         );
     });
+
+    it('should keep an excluded mod excluded under its new id and leave name untouched', async () => {
+        const oldModId = 'excluded_mod';
+        const newModId = 'renamed_mod';
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: { title: 'P', visibility: 'public', tags: [] },
+                mods: {
+                    [oldModId]: { name: 'Display Name', description: 'D' },
+                },
+                excludes: [oldModId],
+            }),
+        );
+        workspace.write(
+            `${oldModId}/mod.info`,
+            `id=${oldModId}\nname=Display Name`,
+        );
+
+        const result = await workspace.run('rename', [oldModId, newModId]);
+        workspace.assertSuccess(result);
+
+        const config = workspace.readJson('project.json');
+        expect(config.excludes).toEqual([newModId]);
+        expect(config.excludes).not.toContain(oldModId);
+        // The display name is a separate field and must not be renamed
+        expect(config.mods[newModId].name).toBe('Display Name');
+
+        const modInfo = workspace.read(`${newModId}/mod.info`);
+        expect(modInfo).toContain(`id=${newModId}`);
+        expect(modInfo).toContain('name=Display Name');
+    });
 });

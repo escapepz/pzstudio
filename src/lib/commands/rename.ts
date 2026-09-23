@@ -16,10 +16,12 @@ import { scaffoldProject } from '../templateManager';
 
 addHelp(
     'rename',
-    `Rename a mod in your project.
+    `Rename a mod id in your project (folder + project.json key).
+
+    The mod's "name" field is left untouched — this renames the id only.
 
     Usages:
-        pzstudio rename <oldModId> <newModId> - Rename a mod in your project.`,
+        pzstudio rename <oldModId> <newModId> - Rename a mod id in your project.`,
 );
 
 export function renameCmd(oldModId: string, newModId: string) {
@@ -88,6 +90,13 @@ export function renameCmd(oldModId: string, newModId: string) {
     // Update config
     projectConfig.mods[newModId] = projectConfig.mods[oldModId];
     delete projectConfig.mods[oldModId];
+    // Keep the build state consistent: an excluded mod stays excluded
+    // under its new id.
+    if (projectConfig.excludes.includes(oldModId)) {
+        projectConfig.excludes = projectConfig.excludes.map((id) =>
+            id === oldModId ? newModId : id,
+        );
+    }
     updateProjectConfig(join(projectPath, 'project.json'), projectConfig);
     log(`- Mod '${oldModId}' updated to '${newModId}' in project.json!`);
 
@@ -97,6 +106,6 @@ export function renameCmd(oldModId: string, newModId: string) {
 
 registerCommand({
     name: 'rename',
-    summary: 'Rename a mod from your project.',
+    summary: 'Rename a mod id from your project.',
     run: (ctx) => renameCmd(ctx.positionals[0], ctx.positionals[1]),
 });
