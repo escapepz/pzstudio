@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { runCLI, setProjectDir } from 'pzstudio-cli/api';
 import { resolveFlags } from './flags';
-import { pickProjectFolder } from './project';
+import { resolveProjectDir } from './project';
 
 export interface ExecuteOptions {
     /**
@@ -39,8 +39,17 @@ export function createCommandRunner(
             if (options.projectDir) {
                 setProjectDir(options.projectDir);
             } else {
-                const folder = await pickProjectFolder();
-                setProjectDir(folder?.uri.fsPath);
+                // F1 / keybinding entry points have no tree context: detect
+                // from the active editor, else quick-pick. No project at all
+                // → warn instead of surfacing the raw CLI error.
+                const dir = await resolveProjectDir(command);
+                if (!dir) {
+                    vscode.window.showWarningMessage(
+                        `PZStudio: no PZ project (project.json) found in this workspace — nothing to ${command}. Use 'PZStudio: New Project' to create one.`,
+                    );
+                    return;
+                }
+                setProjectDir(dir.fsPath);
             }
 
             // Flags are passed explicitly to runCLI — no process.argv mutation.

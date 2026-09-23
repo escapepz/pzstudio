@@ -13,6 +13,31 @@ interface ProjectConfig {
     excludes?: string[];
 }
 
+/**
+ * Files at the project root worth showing by default — everything the
+ * tooling reads. Anything else is only listed after toggling "show all
+ * files"; subfolders are never filtered.
+ */
+const PROJECT_ROOT_FILES = new Set(['project.json', '.emmyrc.json']);
+
+/** Maps file names to ThemeIcons, mirroring VS Code's file-type conventions. */
+const FILE_TYPE_ICONS: ReadonlyArray<[RegExp, string]> = [
+    [/\.lua$/i, 'file-code'],
+    [/\.json$/i, 'json'],
+    [/\.txt$|\.info$/i, 'file-text'],
+    [/\.md$/i, 'markdown'],
+    [/\.(png|jpe?g|gif|tga|dds|webp|bmp)$/i, 'file-media'],
+];
+
+function fileTypeIcon(label: string): vscode.ThemeIcon {
+    for (const [pattern, id] of FILE_TYPE_ICONS) {
+        if (pattern.test(label)) {
+            return new vscode.ThemeIcon(id);
+        }
+    }
+    return new vscode.ThemeIcon('file');
+}
+
 interface TreeElement {
     kind: 'project' | 'directory' | 'file' | 'missing-mod' | 'placeholder';
     /** Directory or file this node mirrors; synthetic nodes reuse the parent. */
@@ -24,6 +49,24 @@ interface TreeElement {
     description?: string;
     /** Set when this node is a mod folder known to project.json. */
     modId?: string;
+}
+
+/**
+ * Extracts the project context attached to a project tree item by
+ * getTreeItem, so per-project buttons (build/clean) run against exactly the
+ * row they sit on — no quick-pick, no ambiguity.
+ */
+export function asProjectNode(
+    node: unknown,
+): { projectDir: vscode.Uri } | undefined {
+    if (!node || typeof node !== 'object') {
+        return undefined;
+    }
+    const item = node as { projectDir?: unknown };
+    if (item.projectDir instanceof vscode.Uri) {
+        return { projectDir: item.projectDir };
+    }
+    return undefined;
 }
 
 /**
@@ -62,6 +105,21 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
     private refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    private showAllFiles = false;
+
+    /**
+     * Whether the project root also shows non-essential files. Subfolders
+     * always list everything; the toggle only curates the project root.
+     */
+    toggleShowAllFiles(): void {
+        this.showAllFiles = !this.showAllFiles;
+        void vscode.commands.executeCommand(
+            'setContext',
+            'pzstudioExplorer.showAllFiles',
+            this.showAllFiles,
+        );
+        this.refresh();
+    }
 
     refresh(): void {
         this._onDidChangeTreeData.fire();
@@ -89,6 +147,14 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         switch (element.kind) {
             case 'project':
                 item.iconPath = new vscode.ThemeIcon('folder-library');
+                // Inline build/clean buttons on the row target exactly this
+                // project; the attached context is read via asProjectNode().
+                (
+                    item as vscode.TreeItem & {
+                        projectDir?: vscode.Uri;
+                    }
+                ).projectDir = element.projectDir;
+                item.contextValue = 'project';
                 break;
             case 'directory':
                 item.iconPath = new vscode.ThemeIcon('folder');
@@ -119,6 +185,7 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                 ).projectDir = element.projectDir;
                 break;
             case 'file':
+                item.iconPath = fileTypeIcon(element.label);
                 item.command = {
                     command: 'vscode.open',
                     title: 'Open File',
@@ -223,7 +290,7 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                             : 'included'
                         : undefined,
                 });
-            } else {
+            } else if (this.showAllFiles || PROJECT_ROOT_FILES.has(name)) {
                 files.push({
                     kind: 'file',
                     uri: childUri,
