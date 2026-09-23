@@ -1,7 +1,8 @@
 import { existsSync, rmSync } from 'fs';
+import { resolveBuildOutputPath } from '../core/buildplan';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
-import { resolveProjectConfig, resolveBuildOutputPath } from '../helper';
+import { resolveProjectConfig } from '../helper';
 import { log, verbose } from '../logger';
 
 addHelp(
