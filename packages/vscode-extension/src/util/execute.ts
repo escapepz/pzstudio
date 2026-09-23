@@ -3,20 +3,30 @@ import { runCLI, setProjectDir } from 'pzstudio-cli/api';
 import { resolveFlags } from './flags';
 import { pickProjectFolder } from './project';
 
+export interface ExecuteOptions {
+    /**
+     * Project directory to run against (fsPath). When set — e.g. from a tree
+     * view context menu — the folder picker is skipped entirely.
+     */
+    projectDir?: string;
+}
+
 export type ExecutePZCommand = (
     command: string,
     args?: string[],
     extraFlags?: string[],
+    options?: ExecuteOptions,
 ) => Promise<void>;
 
 export function createCommandRunner(
     outputChannel: vscode.OutputChannel,
+    onFinished?: () => void,
 ): ExecutePZCommand {
     // One command at a time: runCLI is not reentrant (shared global state
     // for project dir/settings), so overlap would mis-parse flags.
     const busyCommands = new Set<string>();
 
-    return async (command, args = [], extraFlags = []) => {
+    return async (command, args = [], extraFlags = [], options = {}) => {
         if (busyCommands.has(command)) {
             vscode.window.showWarningMessage(
                 `PZStudio: command '${command}' is already running.`,
@@ -26,8 +36,12 @@ export function createCommandRunner(
         busyCommands.add(command);
 
         try {
-            const folder = await pickProjectFolder();
-            setProjectDir(folder?.uri.fsPath);
+            if (options.projectDir) {
+                setProjectDir(options.projectDir);
+            } else {
+                const folder = await pickProjectFolder();
+                setProjectDir(folder?.uri.fsPath);
+            }
 
             // Flags are passed explicitly to runCLI — no process.argv mutation.
             const flags = [...resolveFlags(command), ...extraFlags];
@@ -53,6 +67,7 @@ export function createCommandRunner(
             }
         } finally {
             busyCommands.delete(command);
+            onFinished?.();
         }
     };
 }
