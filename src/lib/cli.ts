@@ -17,6 +17,7 @@ import './commands/rename';
 import './commands/update';
 import './commands/watch';
 import './commands/migrate';
+import './commands/modconfig';
 import './commands/modinfo';
 import { helpCmd } from './commands/help';
 import {
