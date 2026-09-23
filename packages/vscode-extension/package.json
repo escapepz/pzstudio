@@ -265,7 +265,7 @@
             {
                 "command": "pzstudio.modDevOnly",
                 "title": "PZStudio: Build Mod in dev_branch Only",
-                "icon": "$(beaker)"
+                "icon": "media/eye-dim.svg"
             },
             {
                 "command": "pzstudio.modExclude",
@@ -279,7 +279,8 @@
             },
             {
                 "command": "pzstudio.delete",
-                "title": "PZStudio: Delete Mod"
+                "title": "PZStudio: Delete Mod",
+                "icon": "$(trash)"
             },
             {
                 "command": "pzstudio.lang",
@@ -287,7 +288,8 @@
             },
             {
                 "command": "pzstudio.rename",
-                "title": "PZStudio: Rename Mod"
+                "title": "PZStudio: Rename Mod",
+                "icon": "$(edit)"
             },
             {
                 "command": "pzstudio.update",
@@ -295,7 +297,8 @@
             },
             {
                 "command": "pzstudio.modinfoGenerate",
-                "title": "PZStudio: ModInfo Generate"
+                "title": "PZStudio: ModInfo Generate",
+                "icon": "$(note)"
             },
             {
                 "command": "pzstudio.explorer.refresh",
