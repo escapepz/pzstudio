@@ -1,17 +1,21 @@
-import { join } from 'path';
+import { basename, join } from 'path';
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { hasFlag } from '../args';
 import {
-    generateModInfoText,
-    generateWorkshopText,
+    FileOperation,
+    ModSourceState,
+    PlanBuildInput,
+    planBuild,
+} from '../core/buildplan';
+import {
     projectDir,
-    resolveProjectConfig,
-    resolveBuildOutputPath,
+    readWorkshopDescriptionLines,
     resolveModInfoTargets,
+    resolveProjectConfig,
 } from '../helper';
-import { info, log, warn, verbose } from '../logger';
+import { info, log, verbose, warn } from '../logger';
 import { resolveTemplateDir, scaffoldProject } from '../templateManager';
 
 addHelp(
@@ -28,116 +32,62 @@ addHelp(
         pzstudio build --verbose     - Enable diagnostic output.`,
 );
 
-async function buildWorkshop(
-    projectConfig: any,
-    outPath: string,
-    modIdPrefix: string = '',
-    overrideVisibility?: string,
-    excludeId: boolean = false,
-    titleSuffix?: string,
-) {
-    const projectPath = projectDir();
-    verbose(`Resolving workshop template...`);
-    const templateWorkshopPath = resolveTemplateDir('workshop');
-    verbose(`Workshop template path: ${templateWorkshopPath}`);
-
-    // Remove the output directory
-    rmSync(outPath, { recursive: true, force: true });
-
-    // Create the output directory
-    mkdirSync(outPath, { recursive: true });
-
-    // Copy the workshop template
-    log(`- Copying workshop template...`);
-    scaffoldProject(templateWorkshopPath, outPath, false, false, {
-        excludeIgnoreFile: true,
-        ignoreDotFiles: true,
-    });
-
-    // Copy the mods
-    for (const modId of Object.keys(projectConfig.mods).filter(
-        (modId: string) => !projectConfig.excludes.includes(modId),
-    )) {
-        const prefixedModId = modIdPrefix ? `${modId}${modIdPrefix}` : modId;
-        // Copy the mod
-        const outModsPath = join(outPath, 'Contents', 'mods', prefixedModId);
-        log(`- Copying mod '${modId}'...`);
-        verbose(`Mod source: ${join(projectPath, modId)}`);
-        verbose(`Mod destination: ${outModsPath}`);
-        const modSrcPath = join(projectPath, modId);
-        scaffoldProject(modSrcPath, outModsPath, false, false, {
-            excludeIgnoreFile: true,
-            ignoreDotFiles: true,
-            ignoreItems: projectConfig.excludes,
-        });
-
-        // Generate the mod.info
-        const modInfoFlag = projectConfig.mods[modId].build?.modInfo;
-        const effectiveModInfoFlag = modInfoFlag ?? 'auto-if-missing';
-
-        if (effectiveModInfoFlag === 'skip') {
-            log(
-                `- Skipping '${modId}' mod.info generation (build.modInfo: "skip")...`,
-            );
-        } else {
-            // Resolve Build 42 branch folders (folders with media/) in the output;
-            // fall back to the mod root when none exist (Build 41 layout)
-            const outModsBase = join(outPath, 'Contents', 'mods');
-            const branchTargets = resolveModInfoTargets(
-                prefixedModId,
-                outModsBase,
-            );
-            const modInfoTargets =
-                branchTargets.length > 0 ? branchTargets : [outModsPath];
-
-            for (const targetDir of modInfoTargets) {
-                const modInfoPath = join(targetDir, 'mod.info');
-
-                if (
-                    effectiveModInfoFlag === 'auto-if-missing' &&
-                    existsSync(modInfoPath)
-                ) {
-                    log(
-                        `- Skipping '${modId}' mod.info generation (already exists, build.modInfo: "auto-if-missing")...`,
-                    );
-                } else {
-                    log(`- Generating '${modId}' mod.info...`);
-                    writeFileSync(
-                        modInfoPath,
-                        generateModInfoText(
-                            modId,
-                            projectConfig,
-                            prefixedModId,
-                        ),
-                    );
-                }
-            }
+/**
+ * Executes the operations produced by planBuild. This is the only I/O layer of
+ * the build: everything above it is pure planning.
+ */
+function executeBuildPlan(operations: FileOperation[]) {
+    for (const operation of operations) {
+        switch (operation.type) {
+            case 'log':
+                if (operation.level === 'warn') warn(operation.message);
+                else if (operation.level === 'verbose')
+                    verbose(operation.message);
+                else log(operation.message);
+                break;
+            case 'removeDir':
+                rmSync(operation.path, { recursive: true, force: true });
+                break;
+            case 'makeDir':
+                mkdirSync(operation.path, { recursive: true });
+                break;
+            case 'copyTree':
+                scaffoldProject(operation.from, operation.to, false, false, {
+                    excludeIgnoreFile: operation.excludeIgnoreFile,
+                    ignoreDotFiles: operation.ignoreDotFiles,
+                    ignoreItems: operation.ignoreItems,
+                });
+                break;
+            case 'writeFile':
+                writeFileSync(operation.path, operation.content);
+                break;
+            case 'copyFile':
+                cpSync(operation.from, operation.to);
+                break;
         }
     }
+}
 
-    // Copy the workshop preview.png
-    const projectPreviewPath = join(projectPath, 'workshop', 'preview.png');
-    if (existsSync(projectPreviewPath)) {
-        log(`- Copying workshop 'preview.png'...`);
-        cpSync(
-            join(projectDir(), 'workshop', 'preview.png'),
-            join(outPath, 'preview.png'),
+/**
+ * Snapshots the source tree of a mod so the planner can decide mod.info
+ * targeting without touching the filesystem. The output is a fresh copy of
+ * this tree, so source decisions match the ones previously made on the output.
+ */
+function gatherModSourceState(
+    projectPath: string,
+    modId: string,
+): ModSourceState {
+    const state: ModSourceState = { branchFolders: [], modInfoExists: {} };
+
+    state.modInfoExists[''] = existsSync(join(projectPath, modId, 'mod.info'));
+    for (const branchPath of resolveModInfoTargets(modId, projectPath)) {
+        const branchName = basename(branchPath);
+        state.branchFolders.push(branchName);
+        state.modInfoExists[branchName] = existsSync(
+            join(branchPath, 'mod.info'),
         );
-    } else {
-        warn(`- No workshop 'preview.png' found as '${projectPreviewPath}'...`);
     }
-
-    // Generate the workshop.txt
-    log(`- Generating 'workshop.txt'...`);
-    writeFileSync(
-        join(outPath, 'workshop.txt'),
-        generateWorkshopText(
-            projectConfig,
-            overrideVisibility,
-            excludeId,
-            titleSuffix,
-        ),
-    );
+    return state;
 }
 
 export async function buildCmd() {
@@ -172,25 +122,38 @@ export async function buildCmd() {
 
     const noFlags = !isProduction && !isDevelopment;
 
+    verbose(`Resolving workshop template...`);
+    const templateWorkshopPath = resolveTemplateDir('workshop');
+    verbose(`Workshop template path: ${templateWorkshopPath}`);
+
+    // Snapshot the source tree once; every fs decision below is derived from
+    // it by the pure planner.
+    const modSourceStates: Record<string, ModSourceState> = {};
+    for (const modId of Object.keys(projectConfig.mods)) {
+        modSourceStates[modId] = gatherModSourceState(projectPath, modId);
+    }
+
+    const planInput: Omit<PlanBuildInput, 'variant'> = {
+        config: projectConfig,
+        workshopTemplateDir: templateWorkshopPath,
+        projectDir: projectPath,
+        modSourceStates,
+        descriptionLines: readWorkshopDescriptionLines(projectPath),
+        previewPngExists: existsSync(
+            join(projectPath, 'workshop', 'preview.png'),
+        ),
+    };
+
     // Build main workshop (Default or explicit --production)
     if (noFlags || isProduction) {
         log(`\nBuilding main workshop...`);
-        const mainOutPath = resolveBuildOutputPath(projectConfig, 'main');
-        await buildWorkshop(projectConfig, mainOutPath);
+        executeBuildPlan(planBuild({ ...planInput, variant: 'main' }));
     }
 
     // Build dev_branch workshop (Only if --development is specified)
     if (isDevelopment) {
         log(`\nBuilding dev_branch workshop...`);
-        const devOutPath = resolveBuildOutputPath(projectConfig, 'development');
-        await buildWorkshop(
-            projectConfig,
-            devOutPath,
-            '_dev',
-            'unlisted',
-            true,
-            ' - dev_branch',
-        );
+        executeBuildPlan(planBuild({ ...planInput, variant: 'development' }));
     }
 
     const endTime = performance.now();

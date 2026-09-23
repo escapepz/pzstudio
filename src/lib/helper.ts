@@ -404,33 +404,22 @@ export function getOutDir(project?: IProjectConfig, config?: GlobalConfig) {
 }
 
 /**
- * Resolves the build output path for a given variant.
- * @param config The project configuration
- * @param variant The build variant ('main' or 'development')
- * @returns {string} The absolute path to the build output
+ * Reads workshop/description.txt from the project and returns its lines
+ * (CRLF-safe). Returns an empty array when the file does not exist.
+ * @param projectPath The project root directory
+ * @returns {string[]} The description lines
  */
-export function resolveBuildOutputPath(
-    config: IProjectConfig,
-    variant: 'main' | 'development',
-): string {
-    const outDir = config.outdir!;
-    const title = config.workshop.title;
-    if (variant === 'development') {
-        return join(outDir, `${sanitizeFolderName(title)} - dev_branch`);
-    }
-    return join(outDir, sanitizeFolderName(title));
-}
-
-/**
- * Sanitizes a string for use as a directory name, replacing characters that
- * are illegal on Windows filesystems (: ? * " < > | and control chars).
- * @param name The desired directory name
- * @returns {string} The sanitized directory name
- */
-export function sanitizeFolderName(name: string): string {
-    // eslint-disable-next-line no-control-regex
-    const sanitized = name.replace(/[\u0000-\u001f<>:"/\\|?*]+/g, '_').trim();
-    return sanitized || '_';
+export function readWorkshopDescriptionLines(projectPath: string): string[] {
+    const workshopDescriptionPath = join(
+        projectPath,
+        'workshop',
+        'description.txt',
+    );
+    if (!existsSync(workshopDescriptionPath)) return [];
+    // split(/\r?\n/) so CRLF files (Windows) don't leave trailing \r
+    return readFileSync(workshopDescriptionPath, {
+        encoding: 'utf-8',
+    }).split(/\r?\n/);
 }
 
 /**
@@ -447,21 +436,8 @@ export function generateWorkshopText(
     excludeId: boolean = false,
     titleSuffix?: string,
 ) {
-    const workshopDescriptionPath = join(
-        projectDir(),
-        'workshop',
-        'description.txt',
-    );
-    let descriptionLines: string[] = [];
-    if (existsSync(workshopDescriptionPath)) {
-        // split(/\r?\n/) so CRLF files (Windows) don't leave trailing \r
-        descriptionLines = readFileSync(workshopDescriptionPath, {
-            encoding: 'utf-8',
-        }).split(/\r?\n/);
-    }
-
     return workshopText(config, {
-        descriptionLines,
+        descriptionLines: readWorkshopDescriptionLines(projectDir()),
         overrideVisibility,
         excludeId,
         titleSuffix,
