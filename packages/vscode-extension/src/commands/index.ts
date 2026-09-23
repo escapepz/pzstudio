@@ -10,6 +10,7 @@ import { registerRenameCommand } from './rename';
 import { registerLangCommand } from './lang';
 import { registerModinfoCommand } from './modinfo';
 import { registerModStateCommands } from './modstate';
+import { registerConfigureCommand } from './configure';
 
 export function registerAllCommands(
     context: vscode.ExtensionContext,
@@ -26,5 +27,6 @@ export function registerAllCommands(
         registerLangCommand(execute),
         registerModinfoCommand(execute),
         ...registerModStateCommands(execute),
+        registerConfigureCommand(execute),
     ];
 }

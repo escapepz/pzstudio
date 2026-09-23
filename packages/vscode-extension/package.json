@@ -87,6 +87,11 @@
                     "group": "inline@6"
                 },
                 {
+                    "command": "pzstudio.modConfigure",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod/",
+                    "group": "0_mod@1"
+                },
+                {
                     "command": "pzstudio.modinfoGenerate",
                     "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod/",
                     "group": "1_mod@1"
@@ -266,6 +271,11 @@
                 "command": "pzstudio.modExclude",
                 "title": "PZStudio: Exclude Mod from Build",
                 "icon": "$(eye-closed)"
+            },
+            {
+                "command": "pzstudio.modConfigure",
+                "title": "PZStudio: Edit Mod Configuration",
+                "icon": "$(settings-gear)"
             },
             {
                 "command": "pzstudio.delete",
