@@ -68,6 +68,25 @@
                 }
             ]
         },
+        "taskDefinitions": [
+            {
+                "type": "pzstudio",
+                "required": [
+                    "target"
+                ],
+                "properties": {
+                    "target": {
+                        "type": "string",
+                        "enum": [
+                            "production",
+                            "development",
+                            "clean"
+                        ],
+                        "description": "Build target (production/development) or clean"
+                    }
+                }
+            }
+        ],
         "jsonValidation": [
             {
                 "fileMatch": "project.json",

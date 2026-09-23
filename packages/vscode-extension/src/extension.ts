@@ -12,6 +12,7 @@ import {
     PROJECT_EXPLORER_VIEW_ID,
     ProjectExplorerProvider,
 } from './providers/projectExplorer';
+import { BuildTaskProvider, PZ_TASK_TYPE } from './providers/buildTaskProvider';
 
 export function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel(
@@ -46,6 +47,10 @@ export function activate(context: vscode.ExtensionContext) {
         treeView,
         projectJsonWatcher,
         registerExplorerRefreshCommand(projectExplorer),
+        vscode.tasks.registerTaskProvider(
+            PZ_TASK_TYPE,
+            new BuildTaskProvider(),
+        ),
     );
 }
 
