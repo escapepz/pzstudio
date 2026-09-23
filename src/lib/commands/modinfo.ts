@@ -3,6 +3,7 @@ import { join } from 'path';
 import { expect } from '../expect';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
+import { hasFlag } from '../args';
 import { log, verbose } from '../logger';
 import {
     generateModInfoText,
@@ -19,6 +20,7 @@ addHelp(
         pzstudio modinfo generate <modId> - Generate mod.info for a specific mod.
     
     Flags:
+        --force          - Overwrite existing mod.info files (default: skip files that already exist).
         --verbose        - Enable diagnostic output.`,
 );
 
@@ -80,14 +82,17 @@ async function generateForMod(modId: string, projectConfig: any) {
     }
 
     verbose(`Found targets for '${modId}': ${targets.join(', ')}`);
+    // --force overwrites existing files regardless of the auto-if-missing
+    // default; build.modInfo "auto" already means overwrite.
+    const overwrite = hasFlag('force') || modInfoFlag === 'auto';
     for (const targetDir of targets) {
         const modInfoPath = join(targetDir, 'mod.info');
-        if (modInfoFlag === 'auto-if-missing' && existsSync(modInfoPath)) {
+        if (!overwrite && existsSync(modInfoPath)) {
             verbose(
                 `Mod '${modId}' already has mod.info in '${targetDir}'. Skipping...`,
             );
             log(
-                `- Skipping '${modId}' mod.info in '${targetDir}' (already exists, build.modInfo: "auto-if-missing")...`,
+                `- Skipping '${modId}' mod.info in '${targetDir}' (already exists, use --force to overwrite)...`,
             );
             continue;
         }

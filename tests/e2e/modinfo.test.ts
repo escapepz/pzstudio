@@ -373,4 +373,46 @@ describe('modinfo command e2e', () => {
         );
         expect(currentContent).toBe(existingContent);
     });
+
+    it('should overwrite an existing mod.info with --force', async () => {
+        const modId = 'default_mod';
+
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: {
+                    title: 'Test Project',
+                    visibility: 'public',
+                    tags: [],
+                },
+                mods: {
+                    [modId]: {
+                        name: 'Forced Mod',
+                        description: 'Desc',
+                        // build.modInfo omitted: default auto-if-missing
+                    },
+                },
+            }),
+        );
+
+        const modInfoDir = path.join(workspace.dir, modId, 'common');
+        fs.mkdirSync(path.join(modInfoDir, 'media'), { recursive: true });
+
+        const existingContent = 'VERSION=EXISTING';
+        fs.writeFileSync(path.join(modInfoDir, 'mod.info'), existingContent);
+
+        const result = await workspace.run('modinfo', [
+            'generate',
+            modId,
+            '--force',
+        ]);
+        workspace.assertSuccess(result);
+
+        const currentContent = fs.readFileSync(
+            path.join(modInfoDir, 'mod.info'),
+            'utf8',
+        );
+        expect(currentContent).not.toBe(existingContent);
+        expect(currentContent).toContain('name=Forced Mod');
+    });
 });
