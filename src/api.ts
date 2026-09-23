@@ -1,6 +1,10 @@
 export { runCLI, RunCLIOptions } from './lib/cli';
 export { setLogger, ILogger } from './lib/logger';
-export { setProjectDir, setVsCodeSettings } from './lib/helper';
+export {
+    resolveModInfoTargets,
+    setProjectDir,
+    setVsCodeSettings,
+} from './lib/helper';
 export {
     planBuild,
     resolveBuildOutputPath,
