@@ -9,6 +9,7 @@ import { registerDeleteCommand } from './delete';
 import { registerRenameCommand } from './rename';
 import { registerLangCommand } from './lang';
 import { registerModinfoCommand } from './modinfo';
+import { registerModStateCommands } from './modstate';
 
 export function registerAllCommands(
     context: vscode.ExtensionContext,
@@ -24,5 +25,6 @@ export function registerAllCommands(
         registerRenameCommand(execute),
         registerLangCommand(execute),
         registerModinfoCommand(execute),
+        ...registerModStateCommands(execute),
     ];
 }

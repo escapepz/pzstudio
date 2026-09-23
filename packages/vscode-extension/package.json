@@ -57,18 +57,48 @@
                     "group": "inline@2"
                 },
                 {
+                    "command": "pzstudio.modExclude",
+                    "when": "view == pzstudio.projectExplorer && (viewItem == mod-included || viewItem == mod-devonly)",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "pzstudio.modDevOnly",
+                    "when": "view == pzstudio.projectExplorer && (viewItem == mod-included || viewItem == mod-excluded)",
+                    "group": "inline@2"
+                },
+                {
+                    "command": "pzstudio.modInclude",
+                    "when": "view == pzstudio.projectExplorer && (viewItem == mod-devonly || viewItem == mod-excluded)",
+                    "group": "inline@3"
+                },
+                {
                     "command": "pzstudio.modinfoGenerate",
-                    "when": "view == pzstudio.projectExplorer && viewItem == mod",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod-(included|devonly|excluded)$/",
+                    "group": "inline@4"
+                },
+                {
+                    "command": "pzstudio.rename",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod-(included|devonly|excluded)$/",
+                    "group": "inline@5"
+                },
+                {
+                    "command": "pzstudio.delete",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod-(included|devonly|excluded)$/",
+                    "group": "inline@6"
+                },
+                {
+                    "command": "pzstudio.modinfoGenerate",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod/",
                     "group": "1_mod@1"
                 },
                 {
                     "command": "pzstudio.rename",
-                    "when": "view == pzstudio.projectExplorer && viewItem == mod",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod/",
                     "group": "2_mod@1"
                 },
                 {
                     "command": "pzstudio.delete",
-                    "when": "view == pzstudio.projectExplorer && viewItem == mod",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod/",
                     "group": "3_mod"
                 }
             ]
@@ -194,6 +224,12 @@
                     "description": "Build target mode. Controls whether to build the main or dev_branch workshop output.",
                     "scope": "resource",
                     "default": "default"
+                },
+                "pzstudio.confirmBeforeRun": {
+                    "type": "boolean",
+                    "description": "Ask for confirmation before running Build or Clean (protects against misclicks while the game is debugging the output).",
+                    "scope": "resource",
+                    "default": true
                 }
             }
         },
@@ -215,6 +251,21 @@
                 "command": "pzstudio.clean",
                 "title": "PZStudio: Clean",
                 "icon": "$(clear-all)"
+            },
+            {
+                "command": "pzstudio.modInclude",
+                "title": "PZStudio: Include Mod in Build",
+                "icon": "$(eye)"
+            },
+            {
+                "command": "pzstudio.modDevOnly",
+                "title": "PZStudio: Build Mod in dev_branch Only",
+                "icon": "$(beaker)"
+            },
+            {
+                "command": "pzstudio.modExclude",
+                "title": "PZStudio: Exclude Mod from Build",
+                "icon": "$(eye-closed)"
             },
             {
                 "command": "pzstudio.delete",

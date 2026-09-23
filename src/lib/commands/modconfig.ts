@@ -265,7 +265,8 @@ export async function modconfigCmd(positionals: string[]) {
     const { path, config } = readRawProjectConfig();
     getModOrThrow(config, modId);
 
-    let changed = false;
+    // 'show' returns above; every other branch assigns before reading.
+    let changed: boolean;
     switch (action) {
         case 'show':
             showMod(config, modId);
