@@ -9,8 +9,34 @@ export const REFRESH_DEBOUNCE_MS = 500;
 
 interface ProjectConfig {
     workshop?: { title?: string; id?: string | number };
-    mods?: Record<string, unknown>;
+    mods?: Record<string, { build?: { devOnly?: boolean } } | undefined>;
     excludes?: string[];
+}
+
+type ModBuildState = 'included' | 'devonly' | 'excluded';
+
+const MOD_STATE_DESCRIPTIONS: Record<ModBuildState, string> = {
+    included: 'included',
+    devonly: 'dev builds only',
+    excluded: 'excluded from build',
+};
+
+/**
+ * Resolves the mod's build state: excluded wins over dev-only, which wins
+ * over included (same precedence as planBuild).
+ */
+function modBuildState(
+    project: ProjectConfig,
+    modId: string,
+    excludes: string[],
+): ModBuildState {
+    if (excludes.includes(modId)) {
+        return 'excluded';
+    }
+    if (project.mods?.[modId]?.build?.devOnly === true) {
+        return 'devonly';
+    }
+    return 'included';
 }
 
 /**
@@ -49,6 +75,8 @@ interface TreeElement {
     description?: string;
     /** Set when this node is a mod folder known to project.json. */
     modId?: string;
+    /** Build state of a mod folder, mirrored into its contextValue. */
+    modState?: ModBuildState;
 }
 
 /**
@@ -172,12 +200,16 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                             projectDir?: vscode.Uri;
                         }
                     ).projectDir = element.projectDir;
-                    item.contextValue = 'mod';
+                    // State-suffixed contextValue drives the per-state inline
+                    // buttons (include/dev-only/exclude toggles).
+                    item.contextValue = element.modState
+                        ? `mod-${element.modState}`
+                        : 'mod';
                 }
                 break;
             case 'missing-mod':
                 item.iconPath = new vscode.ThemeIcon('warning');
-                item.contextValue = 'mod';
+                item.contextValue = 'mod-missing';
                 (item as vscode.TreeItem & { modId?: string }).modId =
                     element.modId;
                 (
@@ -277,6 +309,9 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                 if (isMod) {
                     seenModDirs.add(name);
                 }
+                const state = isMod
+                    ? modBuildState(project, name, excludes)
+                    : undefined;
                 directories.push({
                     kind: 'directory',
                     uri: childUri,
@@ -284,11 +319,11 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                     label: name,
                     collapsible: vscode.TreeItemCollapsibleState.Collapsed,
                     modId: isMod ? name : undefined,
-                    description: isMod
-                        ? excludes.includes(name)
-                            ? 'excluded from build'
-                            : 'included'
-                        : undefined,
+                    modState: state,
+                    description:
+                        isMod && state
+                            ? MOD_STATE_DESCRIPTIONS[state]
+                            : undefined,
                 });
             } else if (this.showAllFiles || PROJECT_ROOT_FILES.has(name)) {
                 files.push({
