@@ -63,6 +63,11 @@
                             "description": "Controls whether mod.info is auto-generated from project.json.\n- \"skip\" (default) — never generate; use whatever file exists in the mod folder\n- \"auto\" — generate mod.info from project.json\n- \"auto-if-missing\" — generate only if mod.info is not already present in the output",
                             "enum": ["auto", "skip", "auto-if-missing"],
                             "type": "string"
+                        },
+                        "devOnly": {
+                            "default": false,
+                            "description": "Build this mod in the development (dev_branch) output only; the production (main) build skips it.",
+                            "type": "boolean"
                         }
                     },
                     "type": "object"

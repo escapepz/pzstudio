@@ -62,4 +62,31 @@ describe('list command (E2E)', () => {
         workspace.assertStdout(result, 'ghost_mod');
         workspace.assertStdout(result, 'missing on disk');
     });
+
+    it('should report the dev-only status for mods with build.devOnly', async () => {
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: { title: 'P', visibility: 'public', tags: [] },
+                mods: {
+                    normal_mod: { name: 'A', description: '' },
+                    dev_mod: {
+                        name: 'B',
+                        description: '',
+                        build: { devOnly: true },
+                    },
+                },
+                excludes: [],
+            }),
+        );
+        workspace.write('normal_mod/.gitkeep', '');
+        workspace.write('dev_mod/.gitkeep', '');
+
+        const result = await workspace.run('list');
+        workspace.assertSuccess(result);
+        workspace.assertStdout(result, 'normal_mod');
+        workspace.assertStdout(result, 'on disk, included');
+        workspace.assertStdout(result, 'dev_mod');
+        workspace.assertStdout(result, 'on disk, dev builds only');
+    });
 });

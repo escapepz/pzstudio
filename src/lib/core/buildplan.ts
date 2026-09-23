@@ -152,10 +152,17 @@ export function planBuild(input: PlanBuildInput): FileOperation[] {
         ignoreDotFiles: true,
     });
 
-    // Copy the mods
-    const includedModIds = Object.keys(config.mods).filter(
-        (modId) => !excludes.includes(modId),
-    );
+    // Copy the mods. Dev-only mods (build.devOnly) ship in the development
+    // output only; the main (production) build skips them.
+    const includedModIds = Object.keys(config.mods).filter((modId) => {
+        if (excludes.includes(modId)) {
+            return false;
+        }
+        if (variant === 'main' && config.mods[modId].build?.devOnly) {
+            return false;
+        }
+        return true;
+    });
     for (const modId of includedModIds) {
         const prefixedModId = variantOptions.modIdSuffix
             ? `${modId}${variantOptions.modIdSuffix}`

@@ -359,15 +359,27 @@ export function validateProject(config: any, context: ValidationContext): void {
                         'Field "build" must be an object',
                         'Add build settings for this mod',
                     );
-                } else if (
-                    mod.build.modInfo !== undefined &&
-                    !guards.isString(mod.build.modInfo)
-                ) {
-                    context.addError(
-                        formatFieldPath('mods', modId, 'build.modInfo'),
-                        'Field "modInfo" must be a string (e.g., "auto", "skip", "auto-if-missing")',
-                        'Set how mod.info is handled during build',
-                    );
+                } else {
+                    if (
+                        mod.build.modInfo !== undefined &&
+                        !guards.isString(mod.build.modInfo)
+                    ) {
+                        context.addError(
+                            formatFieldPath('mods', modId, 'build.modInfo'),
+                            'Field "modInfo" must be a string (e.g., "auto", "skip", "auto-if-missing")',
+                            'Set how mod.info is handled during build',
+                        );
+                    }
+                    if (
+                        mod.build.devOnly !== undefined &&
+                        !guards.isBoolean(mod.build.devOnly)
+                    ) {
+                        context.addError(
+                            formatFieldPath('mods', modId, 'build.devOnly'),
+                            'Field "devOnly" must be a boolean',
+                            'Set true to build this mod in the development output only',
+                        );
+                    }
                 }
             }
         }
