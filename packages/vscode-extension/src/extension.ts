@@ -7,7 +7,7 @@ import {
 } from './util/settings';
 import { createCommandRunner } from './util/execute';
 import { registerAllCommands } from './commands';
-import { registerExplorerRefreshCommand } from './commands/explorer';
+import { registerExplorerCommands } from './commands/explorer';
 import {
     PROJECT_EXPLORER_VIEW_ID,
     ProjectExplorerProvider,
@@ -46,7 +46,7 @@ export function activate(context: vscode.ExtensionContext) {
         ...registerAllCommands(context, executePZCommand),
         treeView,
         projectJsonWatcher,
-        registerExplorerRefreshCommand(projectExplorer),
+        ...registerExplorerCommands(projectExplorer),
         vscode.tasks.registerTaskProvider(
             PZ_TASK_TYPE,
             new BuildTaskProvider(),

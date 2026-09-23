@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { runCLI, setProjectDir } from 'pzstudio-cli/api';
 import { resolveFlags } from '../util/flags';
-import { pickProjectFolder } from '../util/project';
+import { resolveProjectDir } from '../util/project';
 
 export const PZ_TASK_TYPE = 'pzstudio';
 
@@ -39,8 +39,14 @@ class PZTaskTerminal implements vscode.Pseudoterminal {
         this.writeLine(`pzstudio ${command} started...`);
 
         try {
-            const folder = await pickProjectFolder();
-            setProjectDir(folder?.uri.fsPath);
+            const dir = await resolveProjectDir(command);
+            if (!dir) {
+                this.writeLine(
+                    `pzstudio ${command} skipped: no PZ project (project.json) found in this workspace.`,
+                );
+                return;
+            }
+            setProjectDir(dir.fsPath);
 
             const flags = [...resolveFlags(command)];
             if (this.target === 'production') {

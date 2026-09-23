@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { TextDecoder } from 'util';
+import path from 'path';
 
 /**
  * Reads the mod ids from project.json in the workspace folder.
@@ -113,35 +114,74 @@ export async function findProjectDirs(): Promise<{
 }
 
 /**
- * Picks the project folder: the first workspace folder containing
- * project.json; when several (or none) match, ask the user.
+ * Finds the nearest enclosing directory with a project.json, walking up
+ * from the given path (e.g. the active editor's file) and stopping at
+ * workspace roots. Returns undefined when no project.json is found on the
+ * way up.
  */
-export async function pickProjectFolder(): Promise<
-    vscode.WorkspaceFolder | undefined
-> {
-    const folders = vscode.workspace.workspaceFolders ?? [];
-    if (folders.length === 0) {
-        return undefined;
-    }
-    const withProject: vscode.WorkspaceFolder[] = [];
-    for (const folder of folders) {
+export async function findEnclosingProjectDir(
+    startPath: string,
+): Promise<vscode.Uri | undefined> {
+    const roots = (vscode.workspace.workspaceFolders ?? []).map(
+        (f) => f.uri.fsPath,
+    );
+    const isInsideWorkspace = (p: string) =>
+        roots.some((root) => p === root || p.startsWith(root + path.sep));
+
+    let dir = path.dirname(startPath);
+    while (isInsideWorkspace(dir)) {
         try {
             await vscode.workspace.fs.stat(
-                vscode.Uri.joinPath(folder.uri, 'project.json'),
+                vscode.Uri.joinPath(vscode.Uri.file(dir), 'project.json'),
             );
-            withProject.push(folder);
+            return vscode.Uri.file(dir);
         } catch {
-            // no project.json in this folder
+            // keep walking up
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) {
+            break;
+        }
+        dir = parent;
+    }
+    return undefined;
+}
+
+/**
+ * Resolves the project a command should run against, without the caller
+ * having to know the workspace layout:
+ * 1. the project containing the active editor's file (most intent, no UI),
+ * 2. the only discovered project, auto-selected,
+ * 3. a quick-pick of every discovered project (workspace roots and
+ *    depth-1 subfolders — the same discovery the tree view uses).
+ * Returns undefined when the workspace has no project at all; callers
+ * show a friendly warning instead of running the CLI.
+ */
+export async function resolveProjectDir(
+    action: string,
+): Promise<vscode.Uri | undefined> {
+    const activeFile = vscode.window.activeTextEditor?.document.uri.fsPath;
+    if (activeFile) {
+        const enclosing = await findEnclosingProjectDir(activeFile);
+        if (enclosing) {
+            return enclosing;
         }
     }
-    if (withProject.length === 1) {
-        return withProject[0];
+
+    const { dirs } = await findProjectDirs();
+    if (dirs.length === 1) {
+        return dirs[0];
     }
-    const choices = (withProject.length > 0 ? withProject : folders).map(
-        (f) => f.name,
-    );
-    const picked = await vscode.window.showQuickPick(choices, {
-        placeHolder: 'Select the project folder',
-    });
-    return folders.find((f) => f.name === picked);
+    if (dirs.length > 1) {
+        const picked = await vscode.window.showQuickPick(
+            dirs.map((dir) => ({
+                label: dir.path.split('/').pop() ?? dir.path,
+                detail: dir.fsPath,
+                dir,
+            })),
+            { placeHolder: `Select the project to ${action}` },
+        );
+        return picked?.dir;
+    }
+    return undefined;
 }
