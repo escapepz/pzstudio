@@ -385,11 +385,34 @@ export function validateProject(config: any, context: ValidationContext): void {
         validateOutdirField(config.outdir, context);
     }
 
+    if (config.pzBuildCompatibility !== undefined) {
+        validatePzBuildCompatibilityField(config.pzBuildCompatibility, context);
+    }
+
     if (config.templates !== undefined) {
         context.addError(
             'templates',
             'Field "templates" is no longer supported in project.json',
             'Move this configuration to your global config.json at ~/.pzstudio/config.json',
+        );
+    }
+}
+
+/**
+ * Validates the optional pzBuildCompatibility field.
+ * @param pzBuildCompatibility The PZ build compatibility string (e.g. "42.x")
+ * @param context The validation context to add errors to
+ */
+export function validatePzBuildCompatibilityField(
+    pzBuildCompatibility: any,
+    context: ValidationContext,
+    pathPrefix: string = 'pzBuildCompatibility',
+): void {
+    if (!guards.isString(pzBuildCompatibility)) {
+        context.addError(
+            pathPrefix,
+            'Field "pzBuildCompatibility" must be a string',
+            'Specify the Project Zomboid build line this project targets (e.g. "42.x")',
         );
     }
 }

@@ -2,7 +2,7 @@
     "name": "pzstudio",
     "displayName": "Project Zomboid Studio",
     "publisher": "escapepz",
-    "version": "2.242170.0",
+    "version": "0.42200.0",
     "description": "Effortlessly create and maintain Lua mods for Project Zomboid with intuitive structuring.",
     "main": "./dist/extension.js",
     "type": "commonjs",
