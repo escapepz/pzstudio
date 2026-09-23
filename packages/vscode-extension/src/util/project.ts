@@ -38,6 +38,80 @@ export async function pickModId(prompt: string): Promise<string | undefined> {
     return vscode.window.showInputBox({ prompt });
 }
 
+/** Scan limits: keep the discovery cheap even in huge workspaces. */
+export const PROJECT_SCAN_LIMITS = {
+    /** Max projects found directly in a workspace root. */
+    maxRootProjects: 10,
+    /** Max projects found in depth-1 subfolders (pzstudio new creates /root/<project_id>). */
+    maxSubfolderProjects: 10,
+};
+
+const SKIPPED_DIR_NAMES = new Set(['node_modules', 'dist']);
+
+/**
+ * Discovers project directories: every workspace root containing
+ * project.json plus every direct subfolder containing one. The scan stops
+ * early once the limits are reached to stay fast in huge workspaces;
+ * `truncated` reports that more projects exist than were scanned.
+ */
+export async function findProjectDirs(): Promise<{
+    dirs: vscode.Uri[];
+    truncated: boolean;
+}> {
+    const dirs: vscode.Uri[] = [];
+    let truncated = false;
+
+    let rootBudget = PROJECT_SCAN_LIMITS.maxRootProjects;
+    let subfolderBudget = PROJECT_SCAN_LIMITS.maxSubfolderProjects;
+
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+        // Workspace roots themselves
+        try {
+            await vscode.workspace.fs.stat(
+                vscode.Uri.joinPath(folder.uri, 'project.json'),
+            );
+            if (rootBudget > 0) {
+                dirs.push(folder.uri);
+                rootBudget--;
+            } else {
+                truncated = true;
+            }
+        } catch {
+            // no project.json in this root
+        }
+
+        // Direct subfolders (pzstudio new creates <root>/<project_id>)
+        let entries: [string, vscode.FileType][] = [];
+        try {
+            entries = await vscode.workspace.fs.readDirectory(folder.uri);
+        } catch {
+            continue;
+        }
+        for (const [name, type] of entries) {
+            if (
+                subfolderBudget <= 0 ||
+                name.startsWith('.') ||
+                SKIPPED_DIR_NAMES.has(name) ||
+                type !== vscode.FileType.Directory
+            ) {
+                continue;
+            }
+            const subUri = vscode.Uri.joinPath(folder.uri, name);
+            try {
+                await vscode.workspace.fs.stat(
+                    vscode.Uri.joinPath(subUri, 'project.json'),
+                );
+                dirs.push(subUri);
+                subfolderBudget--;
+            } catch {
+                // no project.json in this subfolder
+            }
+        }
+    }
+
+    return { dirs, truncated };
+}
+
 /**
  * Picks the project folder: the first workspace folder containing
  * project.json; when several (or none) match, ask the user.

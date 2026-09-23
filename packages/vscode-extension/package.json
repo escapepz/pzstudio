@@ -15,6 +15,59 @@
     "icon": "icon.png",
     "activationEvents": [],
     "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "pzstudio-container",
+                    "title": "PZ Studio",
+                    "icon": "media/pzstudio.svg"
+                }
+            ]
+        },
+        "views": {
+            "pzstudio-container": [
+                {
+                    "id": "pzstudio.projectExplorer",
+                    "name": "PZ Project Explorer"
+                }
+            ]
+        },
+        "menus": {
+            "view/title": [
+                {
+                    "command": "pzstudio.build",
+                    "when": "view == pzstudio.projectExplorer",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "pzstudio.clean",
+                    "when": "view == pzstudio.projectExplorer",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "pzstudio.explorer.refresh",
+                    "when": "view == pzstudio.projectExplorer",
+                    "group": "navigation@3"
+                }
+            ],
+            "view/item/context": [
+                {
+                    "command": "pzstudio.modinfoGenerate",
+                    "when": "view == pzstudio.projectExplorer && viewItem == mod",
+                    "group": "1_mod@1"
+                },
+                {
+                    "command": "pzstudio.rename",
+                    "when": "view == pzstudio.projectExplorer && viewItem == mod",
+                    "group": "2_mod@1"
+                },
+                {
+                    "command": "pzstudio.delete",
+                    "when": "view == pzstudio.projectExplorer && viewItem == mod",
+                    "group": "3_mod"
+                }
+            ]
+        },
         "jsonValidation": [
             {
                 "fileMatch": "project.json",
@@ -131,11 +184,13 @@
             },
             {
                 "command": "pzstudio.build",
-                "title": "PZStudio: Build"
+                "title": "PZStudio: Build",
+                "icon": "$(play)"
             },
             {
                 "command": "pzstudio.clean",
-                "title": "PZStudio: Clean"
+                "title": "PZStudio: Clean",
+                "icon": "$(clear-all)"
             },
             {
                 "command": "pzstudio.delete",
@@ -156,6 +211,11 @@
             {
                 "command": "pzstudio.modinfoGenerate",
                 "title": "PZStudio: ModInfo Generate"
+            },
+            {
+                "command": "pzstudio.explorer.refresh",
+                "title": "PZStudio: Refresh Project Explorer",
+                "icon": "$(refresh)"
             }
         ]
     },
