@@ -12,6 +12,10 @@
             "description": "The output directory for generated workshop files.",
             "type": "string"
         },
+        "pzBuildCompatibility": {
+            "description": "The Project Zomboid build line this project targets (e.g. \"42.x\").",
+            "type": "string"
+        },
         "workshop": {
             "description": "Workshop metadata for the project.",
             "properties": {

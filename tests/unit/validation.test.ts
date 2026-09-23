@@ -4,6 +4,7 @@ import {
     validateProject,
     validateConfig,
     validateOutdirField,
+    validatePzBuildCompatibilityField,
     validateTemplatesField,
     validateUseSymlinksField,
 } from '../../src/lib/validation';
@@ -322,6 +323,58 @@ describe('Validation', () => {
         it('should report error for non-boolean', () => {
             validateUseSymlinksField('yes', context);
             expect(context.hasErrors()).toBe(true);
+        });
+    });
+
+    describe('validatePzBuildCompatibilityField', () => {
+        it('should accept a valid build compatibility string', () => {
+            validatePzBuildCompatibilityField('42.x', context);
+            expect(context.hasErrors()).toBe(false);
+        });
+
+        it('should report error for non-string', () => {
+            validatePzBuildCompatibilityField(42, context);
+            expect(context.hasErrors()).toBe(true);
+            expect(context.getErrors()[0].location).toContain(
+                'pzBuildCompatibility',
+            );
+        });
+
+        it('should accept the field in project config validation', () => {
+            validateProject(
+                {
+                    workshop: {
+                        title: 'T',
+                        visibility: 'public',
+                        tags: [],
+                    },
+                    mods: {},
+                    excludes: [],
+                    pzBuildCompatibility: '42.x',
+                },
+                context,
+            );
+            expect(context.hasErrors()).toBe(false);
+        });
+
+        it('should report error for an invalid field in project config', () => {
+            validateProject(
+                {
+                    workshop: {
+                        title: 'T',
+                        visibility: 'public',
+                        tags: [],
+                    },
+                    mods: {},
+                    excludes: [],
+                    pzBuildCompatibility: 42,
+                },
+                context,
+            );
+            expect(context.hasErrors()).toBe(true);
+            expect(context.getErrors()[0].location).toContain(
+                'pzBuildCompatibility',
+            );
         });
     });
 });

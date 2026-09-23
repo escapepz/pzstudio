@@ -15,7 +15,7 @@ This is a CLI tool for creating and maintaining Lua mods for Project Zomboid wit
 
 ## Key Changes in This Branch
 
-- **Compatibility in this branch: Project Zomboid b42.17.0 MP**
+- **Compatibility in this branch: Project Zomboid Build 42 (`pzBuildCompatibility: "42.x"`)**
 - Added AGENTS.md with build commands, architecture overview, and code style guidelines
 - Updated mod ID formatting to be Unix-compatible (Windows and Linux):
     - Spaces converted to underscores: "Teleportal Prototype" → `teleportal_prototype`
@@ -45,7 +45,12 @@ This is a CLI tool for creating and maintaining Lua mods for Project Zomboid wit
     - Stubbed experimental `watch` command as "Not implemented yet!" to avoid instability.
 - Updated documentation to reference original project repository
 
-### 4. Quality Workflows
+### 4. Versioning
+
+- Tool releases follow a semver-shaped scheme: `0.<gameBuild>.<patch>`, where the minor encodes the supported Project Zomboid build (e.g. build 42.20.0 → minor `42200`) and the patch is bumped for tool-only fixes.
+- Game build compatibility is declared separately in `pzBuildCompatibility` (e.g. `"42.x"`) — in `package.json` for the tool and extension, and as an optional field in `project.json` (validated and covered by the JSON schema).
+
+### 5. Quality Workflows
 
 Maintain code quality using the following commands:
 
