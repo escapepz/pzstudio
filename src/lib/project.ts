@@ -76,6 +76,12 @@ export interface IModConfig {
          * - "skip"                      — never generate; use whatever file exists in the mod folder
          */
         modInfo?: 'auto' | 'skip' | 'auto-if-missing';
+        /**
+         * Marks the mod as a development-only mod: it is copied into the
+         * development (dev_branch) workshop output but skipped by the
+         * production (main) build.
+         */
+        devOnly?: boolean;
     };
 }
 

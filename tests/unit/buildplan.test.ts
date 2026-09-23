@@ -102,6 +102,40 @@ describe('planBuild (pure)', () => {
         expect(logs.join('\n')).not.toContain('other_mod');
     });
 
+    it('should skip dev-only mods in the main variant but keep them in development', () => {
+        const config = baseInput().config;
+        config.mods.dev_mod = {
+            name: 'Dev Mod',
+            description: 'Dev only.',
+            build: { devOnly: true },
+        } as any;
+
+        const mainOperations = planBuild(baseInput({ config }));
+        const mainCopies = mainOperations.filter(
+            (op) => op.type === 'copyTree',
+        ) as any[];
+        expect(
+            mainCopies.find((op) => op.from === '/proj/dev_mod'),
+        ).toBeUndefined();
+        // the normal mod is still built
+        expect(
+            mainCopies.find((op) => op.from === '/proj/my_mod'),
+        ).toBeDefined();
+
+        const devOperations = planBuild(
+            baseInput({
+                config: JSON.parse(JSON.stringify(config)),
+                variant: 'development',
+            }),
+        );
+        const devCopies = devOperations.filter(
+            (op) => op.type === 'copyTree',
+        ) as any[];
+        expect(
+            devCopies.find((op) => op.from === '/proj/dev_mod'),
+        ).toBeDefined();
+    });
+
     it('should generate mod.info at the mod root by default', () => {
         const operations = planBuild(baseInput());
         const writes = modInfoWrites(operations);

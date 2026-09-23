@@ -253,6 +253,41 @@ describe('Validation', () => {
                     .some((e) => e.location.includes('build.modInfo')),
             ).toBe(true);
         });
+
+        it('should pass when build.devOnly is a boolean', () => {
+            const config = {
+                workshop: { title: 'Test', visibility: 'public', tags: [] },
+                mods: {
+                    mod1: {
+                        name: 'Mod 1',
+                        description: 'Desc',
+                        build: { devOnly: true },
+                    },
+                },
+            };
+            validateProject(config, context);
+            expect(context.hasErrors()).toBe(false);
+        });
+
+        it('should report error when build.devOnly is not a boolean', () => {
+            const config = {
+                workshop: { title: 'Test', visibility: 'public', tags: [] },
+                mods: {
+                    mod1: {
+                        name: 'Mod 1',
+                        description: 'Desc',
+                        build: { devOnly: 'yes' },
+                    },
+                },
+            };
+            validateProject(config, context);
+            expect(context.hasErrors()).toBe(true);
+            expect(
+                context
+                    .getErrors()
+                    .some((e) => e.location.includes('build.devOnly')),
+            ).toBe(true);
+        });
     });
 
     describe('validateConfig', () => {

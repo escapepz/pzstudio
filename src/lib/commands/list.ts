@@ -33,13 +33,19 @@ export function listCmd() {
     for (const modId of modIds) {
         const onDisk = existsSync(join(projectDir(), modId));
         const excluded = projectConfig.excludes.includes(modId);
-        verbose(`Mod '${modId}': onDisk=${onDisk}, excluded=${excluded}`);
+        const devOnly =
+            !excluded && projectConfig.mods[modId].build?.devOnly === true;
+        verbose(
+            `Mod '${modId}': onDisk=${onDisk}, excluded=${excluded}, devOnly=${devOnly}`,
+        );
 
         const status = !onDisk
             ? 'missing on disk'
             : excluded
               ? 'on disk, excluded from workshop build'
-              : 'on disk, included';
+              : devOnly
+                ? 'on disk, dev builds only'
+                : 'on disk, included';
         log(`    ${modId.padEnd(20)} ${status}`);
     }
 }
