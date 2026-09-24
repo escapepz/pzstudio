@@ -29,7 +29,10 @@ export function createCommandRunner(
     return async (command, args = [], extraFlags = [], options = {}) => {
         if (busyCommands.has(command)) {
             vscode.window.showWarningMessage(
-                `PZStudio: command '${command}' is already running.`,
+                vscode.l10n.t(
+                    "PZStudio: command '{0}' is already running.",
+                    command,
+                ),
             );
             return;
         }
@@ -45,7 +48,10 @@ export function createCommandRunner(
                 const dir = await resolveProjectDir(command);
                 if (!dir) {
                     vscode.window.showWarningMessage(
-                        `PZStudio: no PZ project (project.json) found in this workspace — nothing to ${command}. Use 'PZStudio: New Project' to create one.`,
+                        vscode.l10n.t(
+                            "PZStudio: no PZ project (project.json) found in this workspace — nothing to {0}. Use 'PZStudio: New Project' to create one.",
+                            command,
+                        ),
                     );
                     return;
                 }
@@ -59,7 +65,7 @@ export function createCommandRunner(
             await vscode.window.withProgress(
                 {
                     location: vscode.ProgressLocation.Notification,
-                    title: `PZStudio: ${command}`,
+                    title: vscode.l10n.t('PZStudio: {0}', command),
                     cancellable: false,
                 },
                 async () => {

@@ -29,7 +29,10 @@ export function createPZLogger(outputChannel: vscode.OutputChannel): ILogger {
                 outputChannel.appendLine(`[${timestamp}] [ERROR] ${err}`);
             }
             vscode.window.showErrorMessage(
-                `PZStudio Error: ${err instanceof Error ? err.message : err}`,
+                vscode.l10n.t(
+                    'PZStudio Error: {0}',
+                    err instanceof Error ? err.message : err,
+                ),
             );
         },
         clear: () => outputChannel.clear(),

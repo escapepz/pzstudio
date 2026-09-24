@@ -30,6 +30,14 @@ const vscodeMock = vi.hoisted(() => {
             fire = vi.fn();
             dispose = vi.fn();
         },
+        l10n: {
+            // Pass-through: assertions compare against the English keys.
+            t: (message: string, ...args: (string | number)[]): string =>
+                args.reduce(
+                    (acc, arg, i) => acc.replaceAll(`{${i}}`, String(arg)),
+                    message,
+                ),
+        },
         workspace: { fs: {} },
     };
 });
@@ -254,6 +262,18 @@ describe('constants and manifest', () => {
     const PKG = JSON.parse(
         fs.readFileSync(path.join(EXT_ROOT, 'package.json'), 'utf8'),
     );
+    const NLS_EN = JSON.parse(
+        fs.readFileSync(path.join(EXT_ROOT, 'package.nls.json'), 'utf8'),
+    );
+    const NLS_VI = JSON.parse(
+        fs.readFileSync(path.join(EXT_ROOT, 'package.nls.vi.json'), 'utf8'),
+    );
+
+    /** Resolves a %key% NLS reference against the English table. */
+    const nls = (value: string): string =>
+        value.startsWith('%') && value.endsWith('%')
+            ? (NLS_EN[value.slice(1, -1)] as string)
+            : value;
 
     it('project folder icons point at bundled theme variants', () => {
         expect(PROJECT_FOLDER_ICON_LIGHT).toBe(
@@ -294,8 +314,38 @@ describe('constants and manifest', () => {
         expect(MOD_BRANCH_ICON_FILE).toBe('icon.png');
     });
 
-    it('displayName is PZ Studio', () => {
-        expect(PKG.displayName).toBe('PZ Studio');
+    it('displayName is PZ Studio (resolved through NLS)', () => {
+        expect(nls(PKG.displayName)).toBe('PZ Studio');
+    });
+
+    it('every %key% in the manifest resolves in en and vi NLS tables', () => {
+        const keys = (JSON.stringify(PKG).match(/"%[^"]+%"/g) || []).map((m) =>
+            m.slice(2, -2),
+        );
+        expect(keys.length).toBeGreaterThan(30);
+        for (const key of keys) {
+            expect(NLS_EN[key], `missing en key: ${key}`).toBeDefined();
+            expect(NLS_VI[key], `missing vi key: ${key}`).toBeDefined();
+        }
+    });
+
+    it('l10n bundles share the same key set in en and vi', () => {
+        const bundleEn = JSON.parse(
+            fs.readFileSync(
+                path.join(EXT_ROOT, 'l10n/bundle.l10n.json'),
+                'utf8',
+            ),
+        );
+        const bundleVi = JSON.parse(
+            fs.readFileSync(
+                path.join(EXT_ROOT, 'l10n/bundle.l10n.vi.json'),
+                'utf8',
+            ),
+        );
+        expect(Object.keys(bundleEn).sort()).toEqual(
+            Object.keys(bundleVi).sort(),
+        );
+        expect(Object.keys(bundleEn).length).toBeGreaterThan(30);
     });
 
     it('Activity Bar icon uses resources/icons and exists on disk', () => {

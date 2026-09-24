@@ -7,13 +7,15 @@ export function registerNewCommand(
 ): vscode.Disposable {
     return vscode.commands.registerCommand('pzstudio.new', async () => {
         const projectTitle = await vscode.window.showInputBox({
-            prompt: 'Enter Project Title',
-            placeHolder: 'My Awesome Mod',
+            prompt: vscode.l10n.t('Enter Project Title'),
+            placeHolder: vscode.l10n.t('My Awesome Mod'),
         });
         if (!projectTitle) return;
 
         const modId = await vscode.window.showInputBox({
-            prompt: 'Enter Mod ID (Optional, leave blank for auto-generated)',
+            prompt: vscode.l10n.t(
+                'Enter Mod ID (Optional, leave blank for auto-generated)',
+            ),
             placeHolder: 'my_awesome_mod',
         });
 
@@ -31,8 +33,8 @@ export function registerNewCommand(
             canSelectFiles: false,
             canSelectFolders: true,
             canSelectMany: false,
-            openLabel: 'Select Destination Folder',
-            title: `Create project '${projectTitle}' in...`,
+            openLabel: vscode.l10n.t('Select Destination Folder'),
+            title: vscode.l10n.t("Create project '{0}' in...", projectTitle),
             defaultUri,
         });
 
@@ -51,7 +53,9 @@ export function registerNewCommand(
 
         if (!destination) {
             vscode.window.showWarningMessage(
-                'PZStudio: No destination folder selected, project creation cancelled.',
+                vscode.l10n.t(
+                    'PZStudio: No destination folder selected, project creation cancelled.',
+                ),
             );
             return;
         }

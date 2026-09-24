@@ -36,9 +36,9 @@ export const MOD_BRANCH_INFO_FILE = 'mod.info';
 export const MOD_BRANCH_ICON_FILE = 'icon.png';
 
 const MOD_STATE_DESCRIPTIONS: Record<ModBuildState, string> = {
-    included: 'included',
-    devonly: 'dev builds only',
-    excluded: 'excluded from build',
+    included: vscode.l10n.t('included'),
+    devonly: vscode.l10n.t('dev builds only'),
+    excluded: vscode.l10n.t('excluded from build'),
 };
 
 /**
@@ -347,7 +347,9 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
     private async getProjectNodes(): Promise<TreeElement[]> {
         const { dirs, truncated } = await findProjectDirs();
         if (dirs.length === 0) {
-            return [infoNode('No project found in the workspace.')];
+            return [
+                infoNode(vscode.l10n.t('No project found in the workspace.')),
+            ];
         }
 
         const nodes: TreeElement[] = [];
@@ -372,7 +374,11 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
             });
         }
         if (truncated) {
-            nodes.push(infoNode('More projects not shown (scan limit 20).'));
+            nodes.push(
+                infoNode(
+                    vscode.l10n.t('More projects not shown (scan limit 20).'),
+                ),
+            );
         }
         return nodes;
     }
@@ -382,7 +388,13 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
     ): Promise<TreeElement[]> {
         const project = await readProjectConfig(element.uri);
         if (!project) {
-            return [infoNode('Failed to read project.json — check the file.')];
+            return [
+                infoNode(
+                    vscode.l10n.t(
+                        'Failed to read project.json — check the file.',
+                    ),
+                ),
+            ];
         }
         const excludes = Array.isArray(project.excludes)
             ? project.excludes
@@ -392,7 +404,9 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         try {
             entries = await vscode.workspace.fs.readDirectory(element.uri);
         } catch {
-            return [infoNode('Failed to read the project folder.')];
+            return [
+                infoNode(vscode.l10n.t('Failed to read the project folder.')),
+            ];
         }
 
         const directories: TreeElement[] = [];
@@ -459,7 +473,7 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                     label: modId,
                     collapsible: vscode.TreeItemCollapsibleState.None,
                     modId,
-                    description: 'missing on disk',
+                    description: vscode.l10n.t('missing on disk'),
                 }),
             );
 

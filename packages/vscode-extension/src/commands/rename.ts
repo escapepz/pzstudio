@@ -11,11 +11,15 @@ export function registerRenameCommand(
         async (node?: unknown) => {
             const modNode = asModNode(node);
             const modId =
-                modNode?.modId ?? (await pickModId('Select mod to rename'));
+                modNode?.modId ??
+                (await pickModId(vscode.l10n.t('Select mod to rename')));
             if (!modId) return;
 
             const newName = await vscode.window.showInputBox({
-                prompt: `Enter new mod ID for '${modId}' (renames the folder and the project.json key, not the mod's display name)`,
+                prompt: vscode.l10n.t(
+                    "Enter new mod ID for '{0}' (renames the folder and the project.json key, not the mod's display name)",
+                    modId,
+                ),
             });
             if (!newName) return;
 

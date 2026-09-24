@@ -6,11 +6,11 @@ export function registerLangCommand(
     execute: ExecutePZCommand,
 ): vscode.Disposable {
     return vscode.commands.registerCommand('pzstudio.lang', async () => {
-        const modId = await pickModId('Select mod');
+        const modId = await pickModId(vscode.l10n.t('Select mod'));
         if (!modId) return;
 
         const language = await vscode.window.showInputBox({
-            prompt: 'Enter language code (e.g. EN, FR, PTBR)',
+            prompt: vscode.l10n.t('Enter language code (e.g. EN, FR, PTBR)'),
         });
         if (!language) return;
 
