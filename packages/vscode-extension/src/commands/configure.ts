@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ExecutePZCommand } from '../util/execute';
 import { asModNode } from '../providers/projectExplorer';
 import { pickModId, readModConfig, resolveProjectDir } from '../util/project';
+import { t } from '../util/l10n';
 
 /** Editable mod fields, in menu order (mirrors the modconfig whitelist). */
 const FIELD_KEYS = [
@@ -25,14 +26,17 @@ const FIELD_KEYS = [
 
 const MODINFO_VALUES = ['auto', 'skip', 'auto-if-missing'] as const;
 
-const STATE_CHOICES: Array<{
+/** Build-inclusion choices; a function so labels re-translate on language change. */
+function getStateChoices(): Array<{
     label: string;
     action: 'include' | 'devonly' | 'exclude';
-}> = [
-    { label: vscode.l10n.t('Include in all builds'), action: 'include' },
-    { label: vscode.l10n.t('Build in dev_branch only'), action: 'devonly' },
-    { label: vscode.l10n.t('Exclude from build'), action: 'exclude' },
-];
+}> {
+    return [
+        { label: t('Include in all builds'), action: 'include' },
+        { label: t('Build in dev_branch only'), action: 'devonly' },
+        { label: t('Exclude from build'), action: 'exclude' },
+    ];
+}
 
 function fieldValueToString(
     value: string | string[] | undefined,
@@ -52,7 +56,7 @@ export function registerConfigureCommand(
             const modNode = asModNode(node);
             const modId =
                 modNode?.modId ??
-                (await pickModId(vscode.l10n.t('Select mod to configure')));
+                (await pickModId(t('Select mod to configure')));
             if (!modId) {
                 return;
             }
@@ -67,7 +71,7 @@ export function registerConfigureCommand(
             const snapshot = await readModConfig(projectDir, modId);
             if (!snapshot) {
                 vscode.window.showWarningMessage(
-                    vscode.l10n.t(
+                    t(
                         "Cannot read the configuration of mod '{0}' — check project.json.",
                         modId,
                     ),
@@ -82,15 +86,14 @@ export function registerConfigureCommand(
 
             const items: ConfigureItem[] = [
                 {
-                    label: vscode.l10n.t('$(gear) Build inclusion…'),
+                    label: t('$(gear) Build inclusion…'),
                     description: snapshot.state,
                     pick: 'inclusion',
                 },
                 {
-                    label: vscode.l10n.t('$(note) build.modInfo…'),
+                    label: t('$(note) build.modInfo…'),
                     description:
-                        snapshot.modInfo ??
-                        vscode.l10n.t('auto-if-missing (default)'),
+                        snapshot.modInfo ?? t('auto-if-missing (default)'),
                     pick: 'modInfo',
                 },
                 ...FIELD_KEYS.map(
@@ -104,7 +107,7 @@ export function registerConfigureCommand(
             ];
 
             const picked = await vscode.window.showQuickPick(items, {
-                placeHolder: vscode.l10n.t(
+                placeHolder: t(
                     "Configure mod '{0}' — pick a field to edit",
                     modId,
                 ),
@@ -115,9 +118,9 @@ export function registerConfigureCommand(
 
             if (picked.pick === 'inclusion') {
                 const choice = await vscode.window.showQuickPick(
-                    STATE_CHOICES,
+                    getStateChoices(),
                     {
-                        placeHolder: vscode.l10n.t(
+                        placeHolder: t(
                             "Build inclusion of '{0}' (currently: {1})",
                             modId,
                             snapshot.state,
@@ -134,11 +137,10 @@ export function registerConfigureCommand(
                 const choice = await vscode.window.showQuickPick(
                     [...MODINFO_VALUES],
                     {
-                        placeHolder: vscode.l10n.t(
+                        placeHolder: t(
                             "build.modInfo of '{0}' (currently: {1})",
                             modId,
-                            snapshot.modInfo ??
-                                vscode.l10n.t('auto-if-missing (default)'),
+                            snapshot.modInfo ?? t('auto-if-missing (default)'),
                         ),
                     },
                 );
@@ -156,7 +158,7 @@ export function registerConfigureCommand(
             const key = picked.key!;
             const current = fieldValueToString(snapshot.fields[key]) ?? '';
             const value = await vscode.window.showInputBox({
-                prompt: vscode.l10n.t(
+                prompt: t(
                     "New value for '{0}' of mod '{1}' (array fields are comma-separated; clear the input to remove the field)",
                     key,
                     modId,

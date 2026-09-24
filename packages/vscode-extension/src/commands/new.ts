@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ExecutePZCommand } from '../util/execute';
+import { t } from '../util/l10n';
 
 export function registerNewCommand(
     context: vscode.ExtensionContext,
@@ -7,13 +8,13 @@ export function registerNewCommand(
 ): vscode.Disposable {
     return vscode.commands.registerCommand('pzstudio.new', async () => {
         const projectTitle = await vscode.window.showInputBox({
-            prompt: vscode.l10n.t('Enter Project Title'),
-            placeHolder: vscode.l10n.t('My Awesome Mod'),
+            prompt: t('Enter Project Title'),
+            placeHolder: t('My Awesome Mod'),
         });
         if (!projectTitle) return;
 
         const modId = await vscode.window.showInputBox({
-            prompt: vscode.l10n.t(
+            prompt: t(
                 'Enter Mod ID (Optional, leave blank for auto-generated)',
             ),
             placeHolder: 'my_awesome_mod',
@@ -33,8 +34,8 @@ export function registerNewCommand(
             canSelectFiles: false,
             canSelectFolders: true,
             canSelectMany: false,
-            openLabel: vscode.l10n.t('Select Destination Folder'),
-            title: vscode.l10n.t("Create project '{0}' in...", projectTitle),
+            openLabel: t('Select Destination Folder'),
+            title: t("Create project '{0}' in...", projectTitle),
             defaultUri,
         });
 
@@ -53,7 +54,7 @@ export function registerNewCommand(
 
         if (!destination) {
             vscode.window.showWarningMessage(
-                vscode.l10n.t(
+                t(
                     'PZStudio: No destination folder selected, project creation cancelled.',
                 ),
             );

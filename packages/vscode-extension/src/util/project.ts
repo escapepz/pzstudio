@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { TextDecoder } from 'util';
 import path from 'path';
+import { t } from './l10n';
 
 /**
  * Reads the mod ids from project.json in the workspace folder.
@@ -242,7 +243,7 @@ export async function resolveProjectDir(
                 detail: dir.fsPath,
                 dir,
             })),
-            { placeHolder: vscode.l10n.t('Select the project to {0}', action) },
+            { placeHolder: t('Select the project to {0}', action) },
         );
         return picked?.dir;
     }
