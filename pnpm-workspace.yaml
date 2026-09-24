@@ -1,8 +1,8 @@
 packages:
     - 'packages/*'
 
-onlyBuiltDependencies:
-    - '@vscode/vsce-sign'
-    - esbuild
-    - keytar
-    - lefthook
+allowBuilds:
+    '@vscode/vsce-sign': true
+    esbuild: true
+    keytar: true
+    lefthook: true
