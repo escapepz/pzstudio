@@ -25,6 +25,9 @@ export const PROJECT_FOLDER_ICON_LIGHT =
 export const PROJECT_FOLDER_ICON_DARK =
     'resources/icons/pzstudio-project-explorer-dark.svg';
 
+/** When-clause key exposing the show-all-files toggle state to menus. */
+export const SHOW_ALL_FILES_CONTEXT_KEY = 'pzstudioExplorer.showAllFiles';
+
 /**
  * A mod folder's icon comes from its first branch subfolder that both
  * looks like a mod branch (contains mod.info) and carries an icon.png.
@@ -226,12 +229,17 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
      */
     toggleShowAllFiles(): void {
         this.showAllFiles = !this.showAllFiles;
+        this.syncShowAllFilesContext();
+        this.refresh();
+    }
+
+    /** Publishes the toggle state for the eye/eye-closed title button. */
+    syncShowAllFilesContext(): void {
         void vscode.commands.executeCommand(
             'setContext',
-            'pzstudioExplorer.showAllFiles',
+            SHOW_ALL_FILES_CONTEXT_KEY,
             this.showAllFiles,
         );
-        this.refresh();
     }
 
     refresh(): void {
@@ -455,8 +463,8 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                 }),
             );
 
-        directories.sort((a, b) => a.label.localeCompare(b.label));
-        files.sort((a, b) => a.label.localeCompare(b.label));
+        directories.sort((a, b) => naturalCompare(a.label, b.label));
+        files.sort((a, b) => naturalCompare(a.label, b.label));
         return [...directories, ...missingNodes, ...files];
     }
 
@@ -487,8 +495,20 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                         : vscode.TreeItemCollapsibleState.None,
             });
         }
-        children.sort((a, b) => a.label.localeCompare(b.label));
-        return children;
+        // VS Code Explorer convention: folders first, then files, each
+        // alphabetically (natural order so "9" precedes "10").
+        const directories: TreeElement[] = [];
+        const files: TreeElement[] = [];
+        for (const child of children) {
+            if (child.kind === 'directory') {
+                directories.push(child);
+            } else {
+                files.push(child);
+            }
+        }
+        directories.sort((a, b) => naturalCompare(a.label, b.label));
+        files.sort((a, b) => naturalCompare(a.label, b.label));
+        return [...directories, ...files];
     }
 }
 
