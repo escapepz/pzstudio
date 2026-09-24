@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { runCLI, setProjectDir } from 'pzstudio-cli/api';
 import { resolveFlags } from './flags';
 import { resolveProjectDir } from './project';
+import { t } from './l10n';
 
 export interface ExecuteOptions {
     /**
@@ -29,10 +30,7 @@ export function createCommandRunner(
     return async (command, args = [], extraFlags = [], options = {}) => {
         if (busyCommands.has(command)) {
             vscode.window.showWarningMessage(
-                vscode.l10n.t(
-                    "PZStudio: command '{0}' is already running.",
-                    command,
-                ),
+                t("PZStudio: command '{0}' is already running.", command),
             );
             return;
         }
@@ -48,7 +46,7 @@ export function createCommandRunner(
                 const dir = await resolveProjectDir(command);
                 if (!dir) {
                     vscode.window.showWarningMessage(
-                        vscode.l10n.t(
+                        t(
                             "PZStudio: no PZ project (project.json) found in this workspace — nothing to {0}. Use 'PZStudio: New Project' to create one.",
                             command,
                         ),
@@ -65,7 +63,7 @@ export function createCommandRunner(
             await vscode.window.withProgress(
                 {
                     location: vscode.ProgressLocation.Notification,
-                    title: vscode.l10n.t('PZStudio: {0}', command),
+                    title: t('PZStudio: {0}', command),
                     cancellable: false,
                 },
                 async () => {

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { TextDecoder } from 'util';
 import { findProjectDirs } from '../util/project';
+import { t } from '../util/l10n';
 
 export const PROJECT_EXPLORER_VIEW_ID = 'pzstudio.projectExplorer';
 
@@ -35,11 +36,15 @@ export const SHOW_ALL_FILES_CONTEXT_KEY = 'pzstudioExplorer.showAllFiles';
 export const MOD_BRANCH_INFO_FILE = 'mod.info';
 export const MOD_BRANCH_ICON_FILE = 'icon.png';
 
-const MOD_STATE_DESCRIPTIONS: Record<ModBuildState, string> = {
-    included: vscode.l10n.t('included'),
-    devonly: vscode.l10n.t('dev builds only'),
-    excluded: vscode.l10n.t('excluded from build'),
-};
+/** A function so the state labels re-translate when the language changes. */
+function modStateDescription(state: ModBuildState): string {
+    const descriptions: Record<ModBuildState, string> = {
+        included: t('included'),
+        devonly: t('dev builds only'),
+        excluded: t('excluded from build'),
+    };
+    return descriptions[state];
+}
 
 /**
  * Resolves the mod's build state: excluded wins over dev-only, which wins
@@ -347,9 +352,7 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
     private async getProjectNodes(): Promise<TreeElement[]> {
         const { dirs, truncated } = await findProjectDirs();
         if (dirs.length === 0) {
-            return [
-                infoNode(vscode.l10n.t('No project found in the workspace.')),
-            ];
+            return [infoNode(t('No project found in the workspace.'))];
         }
 
         const nodes: TreeElement[] = [];
@@ -374,11 +377,7 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
             });
         }
         if (truncated) {
-            nodes.push(
-                infoNode(
-                    vscode.l10n.t('More projects not shown (scan limit 20).'),
-                ),
-            );
+            nodes.push(infoNode(t('More projects not shown (scan limit 20).')));
         }
         return nodes;
     }
@@ -389,11 +388,7 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         const project = await readProjectConfig(element.uri);
         if (!project) {
             return [
-                infoNode(
-                    vscode.l10n.t(
-                        'Failed to read project.json — check the file.',
-                    ),
-                ),
+                infoNode(t('Failed to read project.json — check the file.')),
             ];
         }
         const excludes = Array.isArray(project.excludes)
@@ -404,9 +399,7 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         try {
             entries = await vscode.workspace.fs.readDirectory(element.uri);
         } catch {
-            return [
-                infoNode(vscode.l10n.t('Failed to read the project folder.')),
-            ];
+            return [infoNode(t('Failed to read the project folder.'))];
         }
 
         const directories: TreeElement[] = [];
@@ -448,7 +441,7 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                     // the special states to keep rows clean.
                     description:
                         isMod && state && state !== 'included'
-                            ? MOD_STATE_DESCRIPTIONS[state]
+                            ? modStateDescription(state)
                             : undefined,
                 });
             } else if (this.showAllFiles || PROJECT_ROOT_FILES.has(name)) {
@@ -473,7 +466,7 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                     label: modId,
                     collapsible: vscode.TreeItemCollapsibleState.None,
                     modId,
-                    description: vscode.l10n.t('missing on disk'),
+                    description: t('missing on disk'),
                 }),
             );
 

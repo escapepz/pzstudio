@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ILogger } from 'pzstudio-cli/api';
+import { t } from './l10n';
 
 export function getTimestamp(): string {
     const now = new Date();
@@ -29,7 +30,7 @@ export function createPZLogger(outputChannel: vscode.OutputChannel): ILogger {
                 outputChannel.appendLine(`[${timestamp}] [ERROR] ${err}`);
             }
             vscode.window.showErrorMessage(
-                vscode.l10n.t(
+                t(
                     'PZStudio Error: {0}',
                     err instanceof Error ? err.message : err,
                 ),

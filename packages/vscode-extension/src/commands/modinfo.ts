@@ -5,6 +5,7 @@ import { join } from 'path';
 import { ExecutePZCommand } from '../util/execute';
 import { asModNode } from '../providers/projectExplorer';
 import { pickModId, resolveProjectDir } from '../util/project';
+import { t } from '../util/l10n';
 
 export function registerModinfoCommand(
     execute: ExecutePZCommand,
@@ -15,9 +16,7 @@ export function registerModinfoCommand(
             const modNode = asModNode(node);
             const modId =
                 modNode?.modId ??
-                (await pickModId(
-                    vscode.l10n.t('Select mod to generate mod.info for'),
-                ));
+                (await pickModId(t('Select mod to generate mod.info for')));
             if (!modId) {
                 return;
             }
@@ -36,15 +35,15 @@ export function registerModinfoCommand(
                 );
                 if (existing.length > 0) {
                     const overwrite = await vscode.window.showWarningMessage(
-                        vscode.l10n.t(
+                        t(
                             "mod.info already exists in {0} branch folder(s) of '{1}'. Overwrite?",
                             String(existing.length),
                             modId,
                         ),
                         { modal: true },
-                        vscode.l10n.t('Overwrite'),
+                        t('Overwrite'),
                     );
-                    if (overwrite !== vscode.l10n.t('Overwrite')) {
+                    if (overwrite !== t('Overwrite')) {
                         return;
                     }
                     extraFlags = ['--force'];

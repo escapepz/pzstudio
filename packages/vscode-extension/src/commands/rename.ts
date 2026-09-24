@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ExecutePZCommand } from '../util/execute';
 import { asModNode } from '../providers/projectExplorer';
 import { pickModId } from '../util/project';
+import { t } from '../util/l10n';
 
 export function registerRenameCommand(
     execute: ExecutePZCommand,
@@ -11,12 +12,11 @@ export function registerRenameCommand(
         async (node?: unknown) => {
             const modNode = asModNode(node);
             const modId =
-                modNode?.modId ??
-                (await pickModId(vscode.l10n.t('Select mod to rename')));
+                modNode?.modId ?? (await pickModId(t('Select mod to rename')));
             if (!modId) return;
 
             const newName = await vscode.window.showInputBox({
-                prompt: vscode.l10n.t(
+                prompt: t(
                     "Enter new mod ID for '{0}' (renames the folder and the project.json key, not the mod's display name)",
                     modId,
                 ),

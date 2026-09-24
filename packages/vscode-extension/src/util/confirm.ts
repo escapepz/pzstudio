@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { t } from './l10n';
 
 export type ConfirmDecision = 'yes' | 'never' | 'cancel';
 
@@ -19,15 +20,14 @@ export async function confirmBeforeRun(
         return 'yes';
     }
 
-    const verb =
-        action === 'build' ? vscode.l10n.t('Build') : vscode.l10n.t('Clean');
+    const verb = action === 'build' ? t('Build') : t('Clean');
     const message =
         action === 'build'
-            ? vscode.l10n.t(
+            ? t(
                   "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.",
                   projectName,
               )
-            : vscode.l10n.t(
+            : t(
                   "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.",
                   projectName,
               );
@@ -36,12 +36,12 @@ export async function confirmBeforeRun(
         message,
         { modal: true },
         verb,
-        vscode.l10n.t("Don't Ask Again"),
+        t("Don't Ask Again"),
     );
     if (choice === undefined) {
         return 'cancel';
     }
-    if (choice === vscode.l10n.t("Don't Ask Again")) {
+    if (choice === t("Don't Ask Again")) {
         return 'never';
     }
     return 'yes';
