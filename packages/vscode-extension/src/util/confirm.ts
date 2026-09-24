@@ -19,22 +19,29 @@ export async function confirmBeforeRun(
         return 'yes';
     }
 
-    const verb = action === 'build' ? 'Build' : 'Clean';
+    const verb =
+        action === 'build' ? vscode.l10n.t('Build') : vscode.l10n.t('Clean');
     const message =
         action === 'build'
-            ? `Run build for project '${projectName}'?\n\nBuilding while the game is running can leave the output in a broken state.`
-            : `Clean build output of project '${projectName}'?\n\nThis deletes the generated workshop output folder.`;
+            ? vscode.l10n.t(
+                  "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.",
+                  projectName,
+              )
+            : vscode.l10n.t(
+                  "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.",
+                  projectName,
+              );
 
     const choice = await vscode.window.showWarningMessage(
         message,
         { modal: true },
         verb,
-        "Don't Ask Again",
+        vscode.l10n.t("Don't Ask Again"),
     );
     if (choice === undefined) {
         return 'cancel';
     }
-    if (choice === "Don't Ask Again") {
+    if (choice === vscode.l10n.t("Don't Ask Again")) {
         return 'never';
     }
     return 'yes';

@@ -15,7 +15,9 @@ export function registerModinfoCommand(
             const modNode = asModNode(node);
             const modId =
                 modNode?.modId ??
-                (await pickModId('Select mod to generate mod.info for'));
+                (await pickModId(
+                    vscode.l10n.t('Select mod to generate mod.info for'),
+                ));
             if (!modId) {
                 return;
             }
@@ -34,11 +36,15 @@ export function registerModinfoCommand(
                 );
                 if (existing.length > 0) {
                     const overwrite = await vscode.window.showWarningMessage(
-                        `mod.info already exists in ${existing.length} branch folder(s) of '${modId}'. Overwrite?`,
+                        vscode.l10n.t(
+                            "mod.info already exists in {0} branch folder(s) of '{1}'. Overwrite?",
+                            String(existing.length),
+                            modId,
+                        ),
                         { modal: true },
-                        'Overwrite',
+                        vscode.l10n.t('Overwrite'),
                     );
-                    if (overwrite !== 'Overwrite') {
+                    if (overwrite !== vscode.l10n.t('Overwrite')) {
                         return;
                     }
                     extraFlags = ['--force'];

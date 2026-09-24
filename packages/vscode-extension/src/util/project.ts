@@ -242,7 +242,7 @@ export async function resolveProjectDir(
                 detail: dir.fsPath,
                 dir,
             })),
-            { placeHolder: `Select the project to ${action}` },
+            { placeHolder: vscode.l10n.t('Select the project to {0}', action) },
         );
         return picked?.dir;
     }
