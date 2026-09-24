@@ -320,8 +320,10 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                     collapsible: vscode.TreeItemCollapsibleState.Collapsed,
                     modId: isMod ? name : undefined,
                     modState: state,
+                    // 'included' is the unremarkable default — only annotate
+                    // the special states to keep rows clean.
                     description:
-                        isMod && state
+                        isMod && state && state !== 'included'
                             ? MOD_STATE_DESCRIPTIONS[state]
                             : undefined,
                 });

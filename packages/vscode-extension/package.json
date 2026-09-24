@@ -57,19 +57,24 @@
                     "group": "inline@2"
                 },
                 {
-                    "command": "pzstudio.modExclude",
+                    "command": "pzstudio.modIncluded",
                     "when": "view == pzstudio.projectExplorer && (viewItem == mod-included || viewItem == mod-devonly)",
                     "group": "inline@1"
                 },
                 {
-                    "command": "pzstudio.modDevOnly",
+                    "command": "pzstudio.modExcluded",
+                    "when": "view == pzstudio.projectExplorer && viewItem == mod-excluded",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "pzstudio.modDevOnly.dim",
                     "when": "view == pzstudio.projectExplorer && (viewItem == mod-included || viewItem == mod-excluded)",
                     "group": "inline@2"
                 },
                 {
-                    "command": "pzstudio.modInclude",
-                    "when": "view == pzstudio.projectExplorer && (viewItem == mod-devonly || viewItem == mod-excluded)",
-                    "group": "inline@3"
+                    "command": "pzstudio.modDevOnly",
+                    "when": "view == pzstudio.projectExplorer && viewItem == mod-devonly",
+                    "group": "inline@2"
                 },
                 {
                     "command": "pzstudio.modinfoGenerate",
@@ -125,6 +130,24 @@
                         "description": "Build target (production/development) or clean"
                     }
                 }
+            }
+        ],
+        "commandPalette": [
+            {
+                "command": "pzstudio.modIncluded",
+                "when": "false"
+            },
+            {
+                "command": "pzstudio.modExcluded",
+                "when": "false"
+            },
+            {
+                "command": "pzstudio.modDevOnly",
+                "when": "false"
+            },
+            {
+                "command": "pzstudio.modDevOnly.dim",
+                "when": "false"
             }
         ],
         "jsonValidation": [
@@ -258,18 +281,23 @@
                 "icon": "$(clear-all)"
             },
             {
-                "command": "pzstudio.modInclude",
-                "title": "PZStudio: Include Mod in Build",
+                "command": "pzstudio.modIncluded",
+                "title": "PZStudio: Included in Build (click to exclude)",
                 "icon": "$(eye)"
             },
             {
                 "command": "pzstudio.modDevOnly",
-                "title": "PZStudio: Build Mod in dev_branch Only",
-                "icon": "media/eye-dim.svg"
+                "title": "PZStudio: dev_branch-only Build (click to turn off)",
+                "icon": "$(beaker)"
             },
             {
-                "command": "pzstudio.modExclude",
-                "title": "PZStudio: Exclude Mod from Build",
+                "command": "pzstudio.modDevOnly.dim",
+                "title": "PZStudio: Build Mod in dev_branch Only",
+                "icon": "media/beaker-dim.svg"
+            },
+            {
+                "command": "pzstudio.modExcluded",
+                "title": "PZStudio: Excluded from Build (click to include)",
                 "icon": "$(eye-closed)"
             },
             {
@@ -288,7 +316,7 @@
             },
             {
                 "command": "pzstudio.rename",
-                "title": "PZStudio: Rename Mod",
+                "title": "PZStudio: Rename Mod ID",
                 "icon": "$(edit)"
             },
             {
