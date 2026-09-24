@@ -15,9 +15,7 @@ import {
 import { BuildTaskProvider, PZ_TASK_TYPE } from './providers/buildTaskProvider';
 
 export function activate(context: vscode.ExtensionContext) {
-    const outputChannel = vscode.window.createOutputChannel(
-        'Project Zomboid Studio',
-    );
+    const outputChannel = vscode.window.createOutputChannel('PZ Studio');
 
     setLogger(createPZLogger(outputChannel));
 

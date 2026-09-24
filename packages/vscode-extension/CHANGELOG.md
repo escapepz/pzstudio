@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the **Project Zomboid Studio** VSCode extension will be documented in this file.
+All notable changes to the **PZ Studio** VSCode extension will be documented in this file.
 
 ## [2.242170.0-nightly-2] - 2026-04-24
 
