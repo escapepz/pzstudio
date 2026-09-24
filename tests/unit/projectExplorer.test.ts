@@ -329,23 +329,44 @@ describe('constants and manifest', () => {
         }
     });
 
-    it('l10n bundles share the same key set in en and vi', () => {
-        const bundleEn = JSON.parse(
-            fs.readFileSync(
-                path.join(EXT_ROOT, 'l10n/bundle.l10n.json'),
-                'utf8',
+    it('l10n bundles share the same key set across every locale', () => {
+        const bundleDir = path.join(EXT_ROOT, 'l10n');
+        const bundleFiles = fs
+            .readdirSync(bundleDir)
+            .filter((f) => /^bundle\.l10n(\..+)?\.json$/.test(f));
+        // 25 PZ game languages: unsuffixed en + 24 locale files.
+        expect(bundleFiles.length).toBe(25);
+
+        const enKeys = Object.keys(
+            JSON.parse(
+                fs.readFileSync(
+                    path.join(bundleDir, 'bundle.l10n.json'),
+                    'utf8',
+                ),
             ),
+        ).sort();
+        for (const file of bundleFiles) {
+            const parsed = JSON.parse(
+                fs.readFileSync(path.join(bundleDir, file), 'utf8'),
+            );
+            expect(Object.keys(parsed).sort(), file).toEqual(enKeys);
+        }
+    });
+
+    it('nls tables share the same key set across every locale', () => {
+        const extFiles = fs.readdirSync(EXT_ROOT);
+        const nlsFiles = extFiles.filter((f) =>
+            /^package\.nls(\..+)?\.json$/.test(f),
         );
-        const bundleVi = JSON.parse(
-            fs.readFileSync(
-                path.join(EXT_ROOT, 'l10n/bundle.l10n.vi.json'),
-                'utf8',
-            ),
-        );
-        expect(Object.keys(bundleEn).sort()).toEqual(
-            Object.keys(bundleVi).sort(),
-        );
-        expect(Object.keys(bundleEn).length).toBeGreaterThan(30);
+        expect(nlsFiles.length).toBe(25);
+
+        const enKeys = Object.keys(NLS_EN).sort();
+        for (const file of nlsFiles) {
+            const parsed = JSON.parse(
+                fs.readFileSync(path.join(EXT_ROOT, file), 'utf8'),
+            );
+            expect(Object.keys(parsed).sort(), file).toEqual(enKeys);
+        }
     });
 
     it('Activity Bar icon uses resources/icons and exists on disk', () => {
