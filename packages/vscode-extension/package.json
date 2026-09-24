@@ -270,6 +270,40 @@
                     "description": "%config.confirmBeforeRun.description%",
                     "scope": "resource",
                     "default": true
+                },
+                "pzstudio.language": {
+                    "type": "string",
+                    "enum": [
+                        "auto",
+                        "cs",
+                        "da",
+                        "de",
+                        "en",
+                        "es",
+                        "es-419",
+                        "fi",
+                        "fr",
+                        "hu",
+                        "id",
+                        "it",
+                        "ja",
+                        "ko",
+                        "nl",
+                        "no",
+                        "pl",
+                        "pt",
+                        "pt-br",
+                        "ru",
+                        "th",
+                        "tr",
+                        "uk",
+                        "vi",
+                        "zh-cn",
+                        "zh-tw"
+                    ],
+                    "description": "%config.language.description%",
+                    "scope": "window",
+                    "default": "auto"
                 }
             }
         },

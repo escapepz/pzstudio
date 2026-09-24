@@ -23,6 +23,7 @@
     "config.build.target.enumDescriptions.production": "Membangun keluaran workshop utama (--production)",
     "config.build.target.enumDescriptions.development": "Membangun keluaran workshop dev_branch (--development)",
     "config.confirmBeforeRun.description": "Minta konfirmasi sebelum menjalankan Build atau Clean (melindungi dari salah klik saat permainan sedang membaca keluaran).",
+    "config.language.description": "Bahasa tampilan untuk UI PZ Studio (pohon explorer, prompt, dan notifikasi). 'auto' mengikuti bahasa tampilan VS Code. Judul perintah dan deskripsi pengaturan yang ditampilkan oleh VS Code selalu mengikuti bahasa tampilan VS Code.",
     "command.new.title": "PZStudio: Proyek Baru",
     "command.add.title": "PZStudio: Tambah Mod",
     "command.build.title": "PZStudio: Build",

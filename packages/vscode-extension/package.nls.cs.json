@@ -23,6 +23,7 @@
     "config.build.target.enumDescriptions.production": "Buildovat hlavní výstup workshopu (--production)",
     "config.build.target.enumDescriptions.development": "Buildovat výstup workshopu dev_branch (--development)",
     "config.confirmBeforeRun.description": "Před spuštěním Build nebo Clean požádat o potvrzení (chrání před omyly, když hraje čte výstup).",
+    "config.language.description": "Zobrazovací jazyk uživatelského rozhraní PZ Studia (strom průzkumníka, výzvy a oznámení). Hodnota 'auto' následuje zobrazovací jazyk VS Code. Názvy příkazů a popisy nastavení zobrazované samotným VS Code vždy následují zobrazovací jazyk VS Code.",
     "command.new.title": "PZStudio: Nový projekt",
     "command.add.title": "PZStudio: Přidat mod",
     "command.build.title": "PZStudio: Build",

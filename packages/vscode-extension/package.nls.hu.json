@@ -23,6 +23,7 @@
     "config.build.target.enumDescriptions.production": "Fő workshop-kimenet buildelése (--production)",
     "config.build.target.enumDescriptions.development": "dev_branch workshop-kimenet buildelése (--development)",
     "config.confirmBeforeRun.description": "Megerősítés kérése Build vagy Clean futtatása előtt (véd a téves kattintások ellen, amíg a játék olvassa a kimenetet).",
+    "config.language.description": "A PZ Studio felhasználói felületének megjelenítési nyelve (projektböngésző fa, kérések és értesítések). Az 'auto' a VS Code megjelenítési nyelvét követi. A VS Code által megjelenített parancscímek és beállításleírások mindig a VS Code megjelenítési nyelvét követik.",
     "command.new.title": "PZStudio: Új projekt",
     "command.add.title": "PZStudio: Mod hozzáadása",
     "command.build.title": "PZStudio: Build",

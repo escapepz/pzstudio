@@ -23,6 +23,7 @@
     "config.build.target.enumDescriptions.production": "Byg hovedworkshopoutputtet (--production)",
     "config.build.target.enumDescriptions.development": "Byg dev_branch-workshopoutputtet (--development)",
     "config.confirmBeforeRun.description": "Bed om bekræftelse før Build eller Clean (beskytter mod forkerte klik, mens spillet læser outputtet).",
+    "config.language.description": "Visningssprog for PZ Studio-brugerfladen (explorer-træet, prompts og meddelelser). 'auto' følger VS Codes visningssprog. Kommandotitler og indstillingsbeskrivelser, som VS Code selv viser, følger altid VS Codes visningssprog.",
     "command.new.title": "PZStudio: Nyt projekt",
     "command.add.title": "PZStudio: Tilføj mod",
     "command.build.title": "PZStudio: Build",

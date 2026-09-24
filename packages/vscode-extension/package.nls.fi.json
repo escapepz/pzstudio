@@ -23,6 +23,7 @@
     "config.build.target.enumDescriptions.production": "Käännä pääworkshop-tuloste (--production)",
     "config.build.target.enumDescriptions.development": "Käännä dev_branch-workshop-tuloste (--development)",
     "config.confirmBeforeRun.description": "Pyydä vahvistus ennen Build- tai Clean-suoritusta (suojaa harhaklikkeilta, kun peli lukee tulostetta).",
+    "config.language.description": "PZ Studion käyttöliittymän näyttökieli (resurssienhallinnan puu, kehotteet ja ilmoitukset). 'auto' noudattaa VS Coden näyttökieltä. VS Coden itse näyttämät komentojen otsikot ja asetusten kuvaukset noudattavat aina VS Coden näyttökieltä.",
     "command.new.title": "PZStudio: Uusi projekti",
     "command.add.title": "PZStudio: Lisää modi",
     "command.build.title": "PZStudio: Build",

@@ -51,12 +51,19 @@ You can configure PZ Studio directly through VS Code settings (`settings.json`).
 | `pzstudio.templates.workshop.ref` | Git ref (branch, tag, or commit) for the workshop template. |
 | `pzstudio.templates.language.url` | Repository URL for the default language template (overrides global config). |
 | `pzstudio.templates.language.ref` | Git ref (branch, tag, or commit) for the language template. |
+| `pzstudio.language` | Display language for the extension UI. `auto` (default) follows the VS Code display language. |
 
 **Precedence Order**:
 1. `project.json` (Project-specific, highest precedence)
 2. VS Code Workspace Settings (`.vscode/settings.json`)
 3. VS Code User Settings
 4. Global CLI Config (`~/.pzstudio/config.json`, lowest precedence)
+
+## 🌐 Language
+
+The extension UI (explorer tree, prompts, notifications) ships in 25 languages. By default it follows the VS Code display language; set `pzstudio.language` to a specific language code (e.g. `vi`, `ja`, `zh-cn`) to override it independently of VS Code. The setting applies live — no window reload needed.
+
+> Command titles and setting descriptions rendered by VS Code itself (Command Palette, Settings UI) always follow the VS Code display language — the VS Code extension API does not allow an extension to localize manifest strings independently.
 
 ## 📂 Project Structure
 

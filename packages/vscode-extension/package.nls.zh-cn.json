@@ -23,6 +23,7 @@
     "config.build.target.enumDescriptions.production": "构建主工作坊输出（--production）",
     "config.build.target.enumDescriptions.development": "构建 dev_branch 工作坊输出（--development）",
     "config.confirmBeforeRun.description": "在运行 Build 或 Clean 前请求确认（防止游戏正在读取输出时误点）。",
+    "config.language.description": "PZ Studio 界面的显示语言（资源管理器树、输入提示和通知）。'auto' 表示跟随 VS Code 的显示语言。由 VS Code 自身显示的命令标题和设置说明始终跟随 VS Code 的显示语言。",
     "command.new.title": "PZStudio: 新建项目",
     "command.add.title": "PZStudio: 添加模组",
     "command.build.title": "PZStudio: Build",

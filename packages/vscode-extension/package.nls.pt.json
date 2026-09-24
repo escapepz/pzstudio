@@ -23,6 +23,7 @@
     "config.build.target.enumDescriptions.production": "Compilar a saída principal do workshop (--production)",
     "config.build.target.enumDescriptions.development": "Compilar a saída do workshop dev_branch (--development)",
     "config.confirmBeforeRun.description": "Pedir confirmação antes de executar Build ou Clean (protege contra cliques acidentais enquanto o jogo está a ler a saída).",
+    "config.language.description": "Idioma de exibição da interface do PZ Studio (árvore do explorador, pedidos e notificações). 'auto' segue o idioma de exibição do VS Code. Os títulos dos comandos e as descrições das definições apresentados pelo próprio VS Code seguem sempre o idioma de exibição do VS Code.",
     "command.new.title": "PZStudio: Novo projeto",
     "command.add.title": "PZStudio: Adicionar mod",
     "command.build.title": "PZStudio: Build",

@@ -23,6 +23,7 @@
     "config.build.target.enumDescriptions.production": "Build output workshop main (--production)",
     "config.build.target.enumDescriptions.development": "Build output workshop dev_branch (--development)",
     "config.confirmBeforeRun.description": "Hỏi xác nhận trước khi chạy Build hoặc Clean (tránh bấm nhầm khi game đang debug output).",
+    "config.language.description": "Ngôn ngữ hiển thị cho giao diện PZ Studio (cây explorer, hộp thoại nhập và thông báo). 'auto' theo ngôn ngữ hiển thị của VS Code. Tiêu đề lệnh và mô tả cài đặt do VS Code tự hiển thị luôn theo ngôn ngữ hiển thị của VS Code.",
     "command.new.title": "PZStudio: Project mới",
     "command.add.title": "PZStudio: Thêm Mod",
     "command.build.title": "PZStudio: Build",
