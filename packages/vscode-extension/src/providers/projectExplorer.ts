@@ -46,24 +46,6 @@ function modBuildState(
  */
 const PROJECT_ROOT_FILES = new Set(['project.json', '.emmyrc.json']);
 
-/** Maps file names to ThemeIcons, mirroring VS Code's file-type conventions. */
-const FILE_TYPE_ICONS: ReadonlyArray<[RegExp, string]> = [
-    [/\.lua$/i, 'file-code'],
-    [/\.json$/i, 'json'],
-    [/\.txt$|\.info$/i, 'file-text'],
-    [/\.md$/i, 'markdown'],
-    [/\.(png|jpe?g|gif|tga|dds|webp|bmp)$/i, 'file-media'],
-];
-
-function fileTypeIcon(label: string): vscode.ThemeIcon {
-    for (const [pattern, id] of FILE_TYPE_ICONS) {
-        if (pattern.test(label)) {
-            return new vscode.ThemeIcon(id);
-        }
-    }
-    return new vscode.ThemeIcon('file');
-}
-
 interface TreeElement {
     kind: 'project' | 'directory' | 'file' | 'missing-mod' | 'placeholder';
     /** Directory or file this node mirrors; synthetic nodes reuse the parent. */
@@ -217,7 +199,9 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                 ).projectDir = element.projectDir;
                 break;
             case 'file':
-                item.iconPath = fileTypeIcon(element.label);
+                // No iconPath: with resourceUri set, the user's file icon
+                // theme renders the icon, matching the Explorer.
+                item.resourceUri = element.uri;
                 item.command = {
                     command: 'vscode.open',
                     title: 'Open File',
