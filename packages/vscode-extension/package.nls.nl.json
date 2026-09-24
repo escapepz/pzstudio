@@ -23,6 +23,7 @@
     "config.build.target.enumDescriptions.production": "Hoofdworkshopuitvoer bouwen (--production)",
     "config.build.target.enumDescriptions.development": "dev_branch-workshopuitvoer bouwen (--development)",
     "config.confirmBeforeRun.description": "Om bevestiging vragen vóór Build of Clean (beschermt tegen mis klikken terwijl het spel de uitvoer leest).",
+    "config.language.description": "Weergavetaal van de PZ Studio-gebruikersinterface (explorerboom, prompts en meldingen). 'auto' volgt de weergavetaal van VS Code. Opdrachttitels en instellingenbeschrijvingen die VS Code zelf toont, volgen altijd de weergavetaal van VS Code.",
     "command.new.title": "PZStudio: Nieuw project",
     "command.add.title": "PZStudio: Mod toevoegen",
     "command.build.title": "PZStudio: Build",

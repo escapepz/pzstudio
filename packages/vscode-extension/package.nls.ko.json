@@ -23,6 +23,7 @@
     "config.build.target.enumDescriptions.production": "기본 워크숍 출력 빌드 (--production)",
     "config.build.target.enumDescriptions.development": "dev_branch 워크숍 출력 빌드 (--development)",
     "config.confirmBeforeRun.description": "Build 또는 Clean 실행 전 확인 요청 (게임이 출력을 읽는 동안 오클릭 방지).",
+    "config.language.description": "PZ Studio UI의 표시 언어입니다(탐색기 트리, 프롬프트, 알림). 'auto'는 VS Code의 표시 언어를 따릅니다. VS Code 자체에서 표시하는 명령 제목과 설정 설명은 항상 VS Code의 표시 언어를 따릅니다.",
     "command.new.title": "PZStudio: 새 프로젝트",
     "command.add.title": "PZStudio: 모드 추가",
     "command.build.title": "PZStudio: Build",

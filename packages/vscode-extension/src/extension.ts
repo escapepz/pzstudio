@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { setLogger, setProjectDir, setVsCodeSettings } from 'pzstudio-cli/api';
 import { createPZLogger } from './util/logger';
+import { initExtensionL10n } from './util/l10n';
 import {
     subscribeToConfigurationChanges,
     updateVsCodeSettings,
@@ -15,7 +16,10 @@ import {
 } from './providers/projectExplorer';
 import { BuildTaskProvider, PZ_TASK_TYPE } from './providers/buildTaskProvider';
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
+    // Load the display-language override before any UI string is produced.
+    await initExtensionL10n(context);
+
     const outputChannel = vscode.window.createOutputChannel('PZ Studio');
 
     setLogger(createPZLogger(outputChannel));
@@ -53,6 +57,13 @@ export function activate(context: vscode.ExtensionContext) {
             PZ_TASK_TYPE,
             new BuildTaskProvider(),
         ),
+        // Re-read pzstudio.language and repaint the tree when it changes.
+        vscode.workspace.onDidChangeConfiguration(async (e) => {
+            if (e.affectsConfiguration('pzstudio.language')) {
+                await initExtensionL10n(context);
+                projectExplorer.refresh();
+            }
+        }),
     );
 }
 

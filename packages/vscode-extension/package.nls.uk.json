@@ -23,6 +23,7 @@
     "config.build.target.enumDescriptions.production": "Збирати головний вивід майстерні (--production)",
     "config.build.target.enumDescriptions.development": "Збирати вивід майстерні dev_branch (--development)",
     "config.confirmBeforeRun.description": "Запитувати підтвердження перед виконанням Build або Clean (захист від випадкових кліків, поки гра читає вивід).",
+    "config.language.description": "Мова відображення інтерфейсу PZ Studio (дерево провідника, запити та повідомлення). Значення 'auto' слідує мові відображення VS Code. Заголовки команд та описи налаштувань, що показує сам VS Code, завжди слідують мові відображення VS Code.",
     "command.new.title": "PZStudio: Новий проєкт",
     "command.add.title": "PZStudio: Додати мод",
     "command.build.title": "PZStudio: Build",

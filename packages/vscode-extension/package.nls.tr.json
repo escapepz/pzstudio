@@ -23,6 +23,7 @@
     "config.build.target.enumDescriptions.production": "Ana atölye çıktısını derle (--production)",
     "config.build.target.enumDescriptions.development": "dev_branch atölye çıktısını derle (--development)",
     "config.confirmBeforeRun.description": "Build veya Clean çalıştırmadan önce onay isteyin (oyun çıktıyı okurken yanlış tıklamalara karşı korur).",
+    "config.language.description": "PZ Studio arayüzünün görüntüleme dili (gezinme ağacı, istemler ve bildirimler). 'auto', VS Code'un görüntüleme dilini izler. VS Code'un kendisi tarafından gösterilen komut başlıkları ve ayar açıklamaları her zaman VS Code'un görüntüleme dilini izler.",
     "command.new.title": "PZStudio: Yeni Proje",
     "command.add.title": "PZStudio: Mod Ekle",
     "command.build.title": "PZStudio: Build",

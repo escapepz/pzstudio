@@ -23,6 +23,7 @@
     "config.build.target.enumDescriptions.production": "メインのワークショップ出力をビルド（--production）",
     "config.build.target.enumDescriptions.development": "dev_branch のワークショップ出力をビルド（--development）",
     "config.confirmBeforeRun.description": "Build または Clean の実行前に確認を求める（ゲームが読み込み中の出力を壊す誤操作を防止）。",
+    "config.language.description": "PZ Studio UI の表示言語（エクスプローラーツリー、プロンプト、通知）。'auto' は VS Code の表示言語に従います。VS Code 自身が表示するコマンドタイトルや設定の説明は、常に VS Code の表示言語に従います。",
     "command.new.title": "PZStudio: 新規プロジェクト",
     "command.add.title": "PZStudio: Mod を追加",
     "command.build.title": "PZStudio: Build",
