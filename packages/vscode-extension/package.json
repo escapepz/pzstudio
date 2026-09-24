@@ -20,7 +20,7 @@
                 {
                     "id": "pzstudio-container",
                     "title": "PZ Studio",
-                    "icon": "media/pzstudio.png"
+                    "icon": "resources/icons/pzstudio-icon.svg"
                 }
             ]
         },
@@ -28,7 +28,8 @@
             "pzstudio-container": [
                 {
                     "id": "pzstudio.projectExplorer",
-                    "name": "PZ Project Explorer"
+                    "name": "PZ Project Explorer",
+                    "icon": "resources/icons/pzstudio-icon.svg"
                 }
             ]
         },
@@ -293,7 +294,7 @@
             {
                 "command": "pzstudio.modDevOnly.dim",
                 "title": "PZStudio: Build Mod in dev_branch Only",
-                "icon": "media/beaker-dim.svg"
+                "icon": "resources/icons/beaker-dim.svg"
             },
             {
                 "command": "pzstudio.modExcluded",
