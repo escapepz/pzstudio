@@ -11,6 +11,7 @@ import { registerExplorerCommands } from './commands/explorer';
 import {
     PROJECT_EXPLORER_VIEW_ID,
     ProjectExplorerProvider,
+    SHOW_ALL_FILES_CONTEXT_KEY,
 } from './providers/projectExplorer';
 import { BuildTaskProvider, PZ_TASK_TYPE } from './providers/buildTaskProvider';
 
@@ -23,6 +24,9 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(subscribeToConfigurationChanges());
 
     const projectExplorer = new ProjectExplorerProvider(context.extensionUri);
+    // Publish the toggle state up front so the eye/eye-closed title button
+    // resolves its when-clause before the first click.
+    projectExplorer.syncShowAllFilesContext();
     const treeView = vscode.window.createTreeView(PROJECT_EXPLORER_VIEW_ID, {
         treeDataProvider: projectExplorer,
     });

@@ -24,6 +24,12 @@ const vscodeMock = vi.hoisted(() => {
             },
         },
         FileType: { File: 1, Directory: 2, SymbolicLink: 64 },
+        TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+        EventEmitter: class {
+            event = vi.fn();
+            fire = vi.fn();
+            dispose = vi.fn();
+        },
         workspace: { fs: {} },
     };
 });
@@ -34,6 +40,8 @@ vi.mock('vscode', () => ({ ...vscodeMock, default: vscodeMock }));
 import {
     naturalCompare,
     resolveModFolderIcon,
+    ProjectExplorerProvider,
+    SHOW_ALL_FILES_CONTEXT_KEY,
     PROJECT_FOLDER_ICON_LIGHT,
     PROJECT_FOLDER_ICON_DARK,
     MOD_BRANCH_INFO_FILE,
@@ -205,6 +213,42 @@ describe('resolveModFolderIcon', () => {
     });
 });
 
+describe('directory children ordering', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('lists folders before files, each in natural order', async () => {
+        vscodeMock.workspace.fs.readDirectory = vi.fn(
+            async () =>
+                [
+                    ['icon.png', FileType.File],
+                    ['media', FileType.Directory],
+                    ['10', FileType.Directory],
+                    ['9', FileType.Directory],
+                    ['readme.md', FileType.File],
+                ] as Entry[],
+        );
+
+        const provider = new ProjectExplorerProvider(asUri('ext'));
+        const children = await provider.getChildren({
+            kind: 'directory',
+            uri: asUri('ee42'),
+            projectDir: asUri('proj'),
+            label: '42',
+            collapsible: 0,
+        });
+
+        expect(children.map((c) => c.label)).toEqual([
+            '9',
+            '10',
+            'media',
+            'icon.png',
+            'readme.md',
+        ]);
+    });
+});
+
 describe('constants and manifest', () => {
     const EXT_ROOT = path.resolve(__dirname, '../../packages/vscode-extension');
     const PKG = JSON.parse(
@@ -277,5 +321,46 @@ describe('constants and manifest', () => {
             (c: { command: string }) => c.command === 'pzstudio.build',
         );
         expect(cmd).toBeDefined();
+    });
+
+    it('exposes eye/eye-closed toggle pair driven by the context key', () => {
+        const titleMenu = PKG.contributes.menus['view/title'];
+        const showAll = titleMenu.find(
+            (m: { command: string }) =>
+                m.command === 'pzstudio.explorer.toggleFiles',
+        );
+        const showEssential = titleMenu.find(
+            (m: { command: string }) =>
+                m.command === 'pzstudio.explorer.toggleFiles.hidden',
+        );
+        expect(showAll.when).toBe(
+            `view == pzstudio.projectExplorer && ${SHOW_ALL_FILES_CONTEXT_KEY}`,
+        );
+        expect(showEssential.when).toBe(
+            `view == pzstudio.projectExplorer && !${SHOW_ALL_FILES_CONTEXT_KEY}`,
+        );
+
+        const commands = PKG.contributes.commands;
+        expect(
+            commands.find(
+                (c: { command: string }) =>
+                    c.command === 'pzstudio.explorer.toggleFiles',
+            ).icon,
+        ).toBe('$(eye)');
+        expect(
+            commands.find(
+                (c: { command: string }) =>
+                    c.command === 'pzstudio.explorer.toggleFiles.hidden',
+            ).icon,
+        ).toBe('$(eye-closed)');
+
+        const palette = PKG.contributes.commandPalette;
+        expect(
+            palette.some(
+                (p: { command: string; when?: string }) =>
+                    p.command === 'pzstudio.explorer.toggleFiles.hidden' &&
+                    p.when === 'false',
+            ),
+        ).toBe(true);
     });
 });

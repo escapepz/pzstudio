@@ -1,5 +1,5 @@
 {
-    "name": "pzstudio",
+    "name": "pzstudio42",
     "displayName": "PZ Studio",
     "publisher": "escapepz",
     "version": "0.42200.0",
@@ -37,7 +37,12 @@
             "view/title": [
                 {
                     "command": "pzstudio.explorer.toggleFiles",
-                    "when": "view == pzstudio.projectExplorer",
+                    "when": "view == pzstudio.projectExplorer && pzstudioExplorer.showAllFiles",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "pzstudio.explorer.toggleFiles.hidden",
+                    "when": "view == pzstudio.projectExplorer && !pzstudioExplorer.showAllFiles",
                     "group": "navigation@1"
                 },
                 {
@@ -148,6 +153,10 @@
             },
             {
                 "command": "pzstudio.modDevOnly.dim",
+                "when": "false"
+            },
+            {
+                "command": "pzstudio.explorer.toggleFiles.hidden",
                 "when": "false"
             }
         ],
@@ -338,6 +347,12 @@
                 "command": "pzstudio.explorer.toggleFiles",
                 "title": "PZStudio: Toggle All/Essential Files in Explorer",
                 "icon": "$(eye)",
+                "enablement": "view == pzstudio.projectExplorer"
+            },
+            {
+                "command": "pzstudio.explorer.toggleFiles.hidden",
+                "title": "PZStudio: Toggle All/Essential Files in Explorer",
+                "icon": "$(eye-closed)",
                 "enablement": "view == pzstudio.projectExplorer"
             }
         ]
