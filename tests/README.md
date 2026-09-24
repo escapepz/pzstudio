@@ -7,6 +7,7 @@ This directory contains the test suite for Project Zomboid Studio.
 - `helpers/`: Shared test utilities and fixtures.
   - `test-fixtures.ts`: Unit test helpers and static project fixtures.
   - `e2e-fixtures.ts`: End-to-end test workspace and CLI invocation helpers.
+  - `vscode-mock.ts`: Shared `vscode` module mock for extension unit tests.
 - `unit/`: Unit tests for pure logic, parsing, and validation.
 - `e2e/`: End-to-end tests organized by command.
 - `setup/`: Vitest global setup configuration.
@@ -46,6 +47,19 @@ describe('new command', () => {
     });
 });
 ```
+
+## Extension Unit Testing (vscode mock)
+
+Extension sources (`packages/vscode-extension/src/`) are unit-tested with the shared vscode mock — no VS Code instance is launched. To import extension code with the mock active:
+
+```typescript
+vi.mock('vscode', async () =>
+    (await import('../helpers/vscode-mock')).createVscodeMock(),
+);
+import * as vscode from 'vscode';
+```
+
+The factory result IS the mocked module: reach the `vi.fn()` stubs directly through the imported namespace (`vscode.window.showInputBox`, `vscode.workspace.fs.readFile`, ...). URIs are segment-based (`new (vscode.Uri as ...)(['proj', 'media'])`) and `fsPath` mirrors the platform separator, so `path.dirname`/`startsWith` logic behaves the same on every OS. `l10n.t` is a pass-through that substitutes `{0}`-style args, so assertions compare against the English bundle keys. External extension dependencies (`pzstudio-cli/api`) are mocked per test file with `vi.mock('pzstudio-cli/api', ...)`.
 
 ## Running Tests
 
