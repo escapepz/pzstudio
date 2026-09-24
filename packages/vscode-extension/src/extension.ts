@@ -22,7 +22,7 @@ export function activate(context: vscode.ExtensionContext) {
     updateVsCodeSettings();
     context.subscriptions.push(subscribeToConfigurationChanges());
 
-    const projectExplorer = new ProjectExplorerProvider();
+    const projectExplorer = new ProjectExplorerProvider(context.extensionUri);
     const treeView = vscode.window.createTreeView(PROJECT_EXPLORER_VIEW_ID, {
         treeDataProvider: projectExplorer,
     });

@@ -15,6 +15,9 @@ interface ProjectConfig {
 
 type ModBuildState = 'included' | 'devonly' | 'excluded';
 
+/** Bundled icon shown for mod folders that have no icon.png of their own. */
+export const MOD_FOLDER_FALLBACK_ICON = 'media/mod-folder.png';
+
 const MOD_STATE_DESCRIPTIONS: Record<ModBuildState, string> = {
     included: 'included',
     devonly: 'dev builds only',
@@ -40,6 +43,27 @@ function modBuildState(
 }
 
 /**
+ * Resolves a mod folder's own icon: `<modDir>/icon.png` when the file
+ * exists. Missing, unreadable, or non-file icons yield undefined so the
+ * caller can fall back to the bundled mod-folder icon.
+ */
+export async function resolveModFolderIcon(
+    modDir: vscode.Uri,
+    stat: (uri: vscode.Uri) => PromiseLike<{ type: vscode.FileType }>,
+): Promise<vscode.Uri | undefined> {
+    const iconUri = vscode.Uri.joinPath(modDir, 'icon.png');
+    try {
+        const info = await stat(iconUri);
+        if (info.type & vscode.FileType.File) {
+            return iconUri;
+        }
+    } catch {
+        // no readable icon.png — caller falls back
+    }
+    return undefined;
+}
+
+/**
  * Files at the project root worth showing by default — everything the
  * tooling reads. Anything else is only listed after toggling "show all
  * files"; subfolders are never filtered.
@@ -59,6 +83,8 @@ interface TreeElement {
     modId?: string;
     /** Build state of a mod folder, mirrored into its contextValue. */
     modState?: ModBuildState;
+    /** icon.png found inside a mod folder, shown as its folder icon. */
+    iconUri?: vscode.Uri;
 }
 
 /**
@@ -116,6 +142,14 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
 
     private refreshTimer: ReturnType<typeof setTimeout> | undefined;
     private showAllFiles = false;
+    private readonly fallbackModIcon: vscode.Uri;
+
+    constructor(extensionUri: vscode.Uri) {
+        this.fallbackModIcon = vscode.Uri.joinPath(
+            extensionUri,
+            MOD_FOLDER_FALLBACK_ICON,
+        );
+    }
 
     /**
      * Whether the project root also shows non-essential files. Subfolders
@@ -167,8 +201,10 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                 item.contextValue = 'project';
                 break;
             case 'directory':
-                item.iconPath = new vscode.ThemeIcon('folder');
                 if (element.modId) {
+                    // Mod folders show their own icon.png when present,
+                    // otherwise the bundled mod-folder icon.
+                    item.iconPath = element.iconUri ?? this.fallbackModIcon;
                     // Context-menu commands receive this item back; the
                     // attached mod context is read via asModNode().
                     (
@@ -187,6 +223,8 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                     item.contextValue = element.modState
                         ? `mod-${element.modState}`
                         : 'mod';
+                } else {
+                    item.iconPath = new vscode.ThemeIcon('folder');
                 }
                 break;
             case 'missing-mod':
@@ -304,6 +342,13 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                     collapsible: vscode.TreeItemCollapsibleState.Collapsed,
                     modId: isMod ? name : undefined,
                     modState: state,
+                    // Mod rows carry their own icon.png when the folder has
+                    // one; the tree item falls back to the bundled icon.
+                    iconUri: isMod
+                        ? await resolveModFolderIcon(childUri, (iconUri) =>
+                              vscode.workspace.fs.stat(iconUri),
+                          )
+                        : undefined,
                     // 'included' is the unremarkable default — only annotate
                     // the special states to keep rows clean.
                     description:
