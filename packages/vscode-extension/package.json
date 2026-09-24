@@ -1,6 +1,6 @@
 {
     "name": "pzstudio",
-    "displayName": "Project Zomboid Studio",
+    "displayName": "PZ Studio",
     "publisher": "escapepz",
     "version": "0.42200.0",
     "description": "Effortlessly create and maintain Lua mods for Project Zomboid with intuitive structuring.",
@@ -157,7 +157,7 @@
             }
         ],
         "configuration": {
-            "title": "Project Zomboid Studio",
+            "title": "PZ Studio",
             "properties": {
                 "pzstudio.templates.project.url": {
                     "type": "string",
