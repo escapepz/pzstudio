@@ -15,8 +15,22 @@ interface ProjectConfig {
 
 type ModBuildState = 'included' | 'devonly' | 'excluded';
 
-/** Bundled icon shown for mod folders that have no icon.png of their own. */
-export const MOD_FOLDER_FALLBACK_ICON = 'media/mod-folder.png';
+/**
+ * Bundled icon shown for project folders in the explorer tree. Tree rows
+ * render file icons as-is (no theme recoloring), so each theme variant
+ * carries its own explicit color instead of currentColor.
+ */
+export const PROJECT_FOLDER_ICON_LIGHT =
+    'resources/icons/pzstudio-project-explorer-light.svg';
+export const PROJECT_FOLDER_ICON_DARK =
+    'resources/icons/pzstudio-project-explorer-dark.svg';
+
+/**
+ * A mod folder's icon comes from its first branch subfolder that both
+ * looks like a mod branch (contains mod.info) and carries an icon.png.
+ */
+export const MOD_BRANCH_INFO_FILE = 'mod.info';
+export const MOD_BRANCH_ICON_FILE = 'icon.png';
 
 const MOD_STATE_DESCRIPTIONS: Record<ModBuildState, string> = {
     included: 'included',
@@ -43,22 +57,74 @@ function modBuildState(
 }
 
 /**
- * Resolves a mod folder's own icon: `<modDir>/icon.png` when the file
- * exists. Missing, unreadable, or non-file icons yield undefined so the
- * caller can fall back to the bundled mod-folder icon.
+ * Numeric-alphabet compare: digit runs compare by value ("9" before
+ * "10"), everything else falls back to localeCompare ("42" before
+ * "common").
+ */
+export function naturalCompare(a: string, b: string): number {
+    const chunksA = a.match(/\d+|\D+/g) ?? [];
+    const chunksB = b.match(/\d+|\D+/g) ?? [];
+    const len = Math.min(chunksA.length, chunksB.length);
+    for (let i = 0; i < len; i++) {
+        const ca = chunksA[i];
+        const cb = chunksB[i];
+        if (ca !== cb) {
+            if (/^\d/.test(ca) && /^\d/.test(cb)) {
+                return Number(ca) - Number(cb);
+            }
+            return ca.localeCompare(cb);
+        }
+    }
+    return chunksA.length - chunksB.length;
+}
+
+/**
+ * Resolves a mod folder's display icon by scanning its level-1 subfolders
+ * in numeric-alphabet order. A subfolder only qualifies when it holds a
+ * mod.info (i.e. it is a real mod branch); the first such branch that
+ * also carries an icon.png wins and the scan stops there. Folders that
+ * never qualify yield undefined so the tree keeps the theme folder icon.
  */
 export async function resolveModFolderIcon(
     modDir: vscode.Uri,
+    listDir: (dir: vscode.Uri) => PromiseLike<[string, vscode.FileType][]>,
     stat: (uri: vscode.Uri) => PromiseLike<{ type: vscode.FileType }>,
 ): Promise<vscode.Uri | undefined> {
-    const iconUri = vscode.Uri.joinPath(modDir, 'icon.png');
+    let entries: [string, vscode.FileType][];
     try {
-        const info = await stat(iconUri);
-        if (info.type & vscode.FileType.File) {
-            return iconUri;
-        }
+        entries = await listDir(modDir);
     } catch {
-        // no readable icon.png — caller falls back
+        return undefined;
+    }
+
+    const branches = entries
+        .filter(
+            ([name, type]) =>
+                !name.startsWith('.') && type & vscode.FileType.Directory,
+        )
+        .map(([name]) => name)
+        .sort(naturalCompare);
+
+    for (const branch of branches) {
+        const branchDir = vscode.Uri.joinPath(modDir, branch);
+        const infoUri = vscode.Uri.joinPath(branchDir, MOD_BRANCH_INFO_FILE);
+        try {
+            const info = await stat(infoUri);
+            if (!(info.type & vscode.FileType.File)) {
+                continue;
+            }
+        } catch {
+            continue;
+        }
+        const iconUri = vscode.Uri.joinPath(branchDir, MOD_BRANCH_ICON_FILE);
+        try {
+            const icon = await stat(iconUri);
+            if (icon.type & vscode.FileType.File) {
+                return iconUri;
+            }
+        } catch {
+            // valid branch without an icon — keep scanning
+        }
     }
     return undefined;
 }
@@ -83,7 +149,7 @@ interface TreeElement {
     modId?: string;
     /** Build state of a mod folder, mirrored into its contextValue. */
     modState?: ModBuildState;
-    /** icon.png found inside a mod folder, shown as its folder icon. */
+    /** icon.png of the mod's first qualifying branch subfolder. */
     iconUri?: vscode.Uri;
 }
 
@@ -142,13 +208,16 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
 
     private refreshTimer: ReturnType<typeof setTimeout> | undefined;
     private showAllFiles = false;
-    private readonly fallbackModIcon: vscode.Uri;
+    private readonly projectIcon: {
+        light: vscode.Uri;
+        dark: vscode.Uri;
+    };
 
     constructor(extensionUri: vscode.Uri) {
-        this.fallbackModIcon = vscode.Uri.joinPath(
-            extensionUri,
-            MOD_FOLDER_FALLBACK_ICON,
-        );
+        this.projectIcon = {
+            light: vscode.Uri.joinPath(extensionUri, PROJECT_FOLDER_ICON_LIGHT),
+            dark: vscode.Uri.joinPath(extensionUri, PROJECT_FOLDER_ICON_DARK),
+        };
     }
 
     /**
@@ -190,7 +259,7 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         }
         switch (element.kind) {
             case 'project':
-                item.iconPath = new vscode.ThemeIcon('folder-library');
+                item.iconPath = this.projectIcon;
                 // Inline build/clean buttons on the row target exactly this
                 // project; the attached context is read via asProjectNode().
                 (
@@ -202,9 +271,10 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                 break;
             case 'directory':
                 if (element.modId) {
-                    // Mod folders show their own icon.png when present,
-                    // otherwise the bundled mod-folder icon.
-                    item.iconPath = element.iconUri ?? this.fallbackModIcon;
+                    // Mod folders show their first qualifying branch's
+                    // icon.png when one exists; other folders stay themed.
+                    item.iconPath =
+                        element.iconUri ?? new vscode.ThemeIcon('folder');
                     // Context-menu commands receive this item back; the
                     // attached mod context is read via asModNode().
                     (
@@ -342,11 +412,14 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                     collapsible: vscode.TreeItemCollapsibleState.Collapsed,
                     modId: isMod ? name : undefined,
                     modState: state,
-                    // Mod rows carry their own icon.png when the folder has
-                    // one; the tree item falls back to the bundled icon.
+                    // Mod rows carry the icon.png of their first qualifying
+                    // branch subfolder (mod.info + icon.png, natural order,
+                    // first hit wins); the tree item falls back to the theme.
                     iconUri: isMod
-                        ? await resolveModFolderIcon(childUri, (iconUri) =>
-                              vscode.workspace.fs.stat(iconUri),
+                        ? await resolveModFolderIcon(
+                              childUri,
+                              (dir) => vscode.workspace.fs.readDirectory(dir),
+                              (fileUri) => vscode.workspace.fs.stat(fileUri),
                           )
                         : undefined,
                     // 'included' is the unremarkable default — only annotate
