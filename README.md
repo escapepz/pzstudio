@@ -110,7 +110,7 @@ pnpm run test
 After the CLI project is built, you can build the extension:
 
 ```bash
-pnpm --filter pzstudio build
+pnpm --filter pzstudio42 build
 ```
 
 The extension bundle will be available at `packages/vscode-extension/dist/extension.js`.
@@ -120,5 +120,5 @@ The extension bundle will be available at `packages/vscode-extension/dist/extens
 To generate a `.vsix` file for local installation or publishing:
 
 ```bash
-pnpm --filter pzstudio vsce:package
+pnpm --filter pzstudio42 vsce:package
 ```
