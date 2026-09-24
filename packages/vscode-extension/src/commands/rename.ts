@@ -15,7 +15,7 @@ export function registerRenameCommand(
             if (!modId) return;
 
             const newName = await vscode.window.showInputBox({
-                prompt: 'Enter new Mod Name',
+                prompt: `Enter new mod ID for '${modId}' (renames the folder and the project.json key, not the mod's display name)`,
             });
             if (!newName) return;
 
