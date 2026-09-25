@@ -5,7 +5,6 @@
     "Enter Project Title": "Zadejte název projektu",
     "My Awesome Mod": "Můj skvělý mod",
     "Select Destination Folder": "Vyberte cílovou složku",
-    "Create project '{0}' in...": "Vytvořit projekt '{0}' v...",
     "PZStudio: No destination folder selected, project creation cancelled.": "PZStudio: Nebyla vybrána cílová složka, vytváření projektu bylo zrušeno.",
     "Select mod": "Vyberte mod",
     "Enter language code (e.g. EN, FR, PTBR)": "Zadejte kód jazyka (např. EN, FR, PTBR)",
@@ -45,5 +44,8 @@
     "missing on disk": "chybí na disku",
     "included": "zahrnuto",
     "dev builds only": "pouze dev buildy",
-    "excluded from build": "vyloučeno z buildu"
+    "excluded from build": "vyloučeno z buildu",
+    "Create project in...": "Vytvořit projekt v...",
+    "Select the workspace folder for the new project": "Vyberte složku pracovního prostoru pro nový projekt",
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Před vytvořením projektu zde nejprve otevřete složku pracovního prostoru."
 }

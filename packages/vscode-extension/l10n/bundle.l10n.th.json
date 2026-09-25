@@ -5,7 +5,6 @@
     "Enter Project Title": "ป้อนชื่อโปรเจกต์",
     "My Awesome Mod": "มอดสุดเจ๋งของฉัน",
     "Select Destination Folder": "เลือกโฟลเดอร์ปลายทาง",
-    "Create project '{0}' in...": "สร้างโปรเจกต์ '{0}' ที่...",
     "PZStudio: No destination folder selected, project creation cancelled.": "PZStudio: ยังไม่ได้เลือกโฟลเดอร์ปลายทาง ยกเลิกการสร้างโปรเจกต์",
     "Select mod": "เลือกมอด",
     "Enter language code (e.g. EN, FR, PTBR)": "ป้อนรหัสภาษา (เช่น EN, FR, PTBR)",
@@ -45,5 +44,8 @@
     "missing on disk": "ไม่มีบนดิสก์",
     "included": "รวมอยู่",
     "dev builds only": "เฉพาะบิลด์ dev",
-    "excluded from build": "ยกเว้นจากการบิลด์"
+    "excluded from build": "ยกเว้นจากการบิลด์",
+    "Create project in...": "สร้างโปรเจกต์ที่...",
+    "Select the workspace folder for the new project": "เลือกโฟลเดอร์ workspace สำหรับโปรเจกต์ใหม่",
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: เปิดโฟลเดอร์ workspace ก่อนสร้างโปรเจกต์ที่นี่"
 }

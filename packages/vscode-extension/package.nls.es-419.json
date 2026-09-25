@@ -40,5 +40,7 @@
     "command.modinfoGenerate.title": "PZStudio: Generar ModInfo",
     "command.explorer.refresh.title": "PZStudio: Actualizar Project Explorer",
     "command.explorer.toggleFiles.title": "PZStudio: Alternar todos/archivos esenciales en el Explorador",
-    "command.explorer.toggleFiles.hidden.title": "PZStudio: Alternar todos/archivos esenciales en el Explorador"
+    "command.explorer.toggleFiles.hidden.title": "PZStudio: Alternar todos/archivos esenciales en el Explorador",
+    "command.newHere.title": "PZStudio: Nuevo proyecto aquí",
+    "config.newProject.defaultLocation.description": "Carpeta predeterminada preferida para nuevos proyectos. El selector de New Project abre aquí y, si se cancela, se usa esta carpeta."
 }

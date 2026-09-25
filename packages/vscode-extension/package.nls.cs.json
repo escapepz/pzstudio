@@ -40,5 +40,7 @@
     "command.modinfoGenerate.title": "PZStudio: Vygenerovat ModInfo",
     "command.explorer.refresh.title": "PZStudio: Obnovit Project Explorer",
     "command.explorer.toggleFiles.title": "PZStudio: Přepnout všechny/základní soubory v Průzkumníku",
-    "command.explorer.toggleFiles.hidden.title": "PZStudio: Přepnout všechny/základní soubory v Průzkumníku"
+    "command.explorer.toggleFiles.hidden.title": "PZStudio: Přepnout všechny/základní soubory v Průzkumníku",
+    "command.newHere.title": "PZStudio: Nový projekt tady",
+    "config.newProject.defaultLocation.description": "Upřednostňovaná výchozí složka pro nové projekty. Výběr Nový projekt zde začíná a jeho zrušení se vrátí k této složce."
 }

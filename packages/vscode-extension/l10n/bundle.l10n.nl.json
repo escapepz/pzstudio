@@ -5,7 +5,6 @@
     "Enter Project Title": "Voer de projecttitel in",
     "My Awesome Mod": "Mijn geweldige mod",
     "Select Destination Folder": "Selecteer de doelmap",
-    "Create project '{0}' in...": "Project '{0}' maken in...",
     "PZStudio: No destination folder selected, project creation cancelled.": "PZStudio: Geen doelmap geselecteerd, het maken van het project is geannuleerd.",
     "Select mod": "Selecteer een mod",
     "Enter language code (e.g. EN, FR, PTBR)": "Voer de taalcode in (bijv. EN, FR, PTBR)",
@@ -45,5 +44,8 @@
     "missing on disk": "ontbreekt op schijf",
     "included": "opgenomen",
     "dev builds only": "alleen dev-builds",
-    "excluded from build": "uitgesloten van build"
+    "excluded from build": "uitgesloten van build",
+    "Create project in...": "Project maken in...",
+    "Select the workspace folder for the new project": "Selecteer de werkruimtemap voor het nieuwe project",
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Open een werkruimtemap voordat u hier een project maakt."
 }

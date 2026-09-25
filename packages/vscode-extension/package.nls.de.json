@@ -40,5 +40,7 @@
     "command.modinfoGenerate.title": "PZStudio: ModInfo generieren",
     "command.explorer.refresh.title": "PZStudio: Project Explorer aktualisieren",
     "command.explorer.toggleFiles.title": "PZStudio: Alle/wesentliche Dateien im Explorer umschalten",
-    "command.explorer.toggleFiles.hidden.title": "PZStudio: Alle/wesentliche Dateien im Explorer umschalten"
+    "command.explorer.toggleFiles.hidden.title": "PZStudio: Alle/wesentliche Dateien im Explorer umschalten",
+    "command.newHere.title": "PZStudio: Neues Projekt hier",
+    "config.newProject.defaultLocation.description": "Bevorzugter Standardordner für neue Projekte. Der New-Project-Auswahldialog beginnt hier; beim Abbrechen wird dieser Ordner verwendet."
 }

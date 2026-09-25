@@ -3,7 +3,7 @@ import { ExecutePZCommand } from '../util/execute';
 import { registerBuildCommand } from './build';
 import { registerCleanCommand } from './clean';
 import { registerUpdateCommand } from './update';
-import { registerNewCommand } from './new';
+import { registerNewCommands } from './new';
 import { registerAddCommand } from './add';
 import { registerDeleteCommand } from './delete';
 import { registerRenameCommand } from './rename';
@@ -20,7 +20,7 @@ export function registerAllCommands(
         registerBuildCommand(execute),
         registerCleanCommand(execute),
         registerUpdateCommand(execute),
-        registerNewCommand(context, execute),
+        ...registerNewCommands(context, execute),
         registerAddCommand(execute),
         registerDeleteCommand(execute),
         registerRenameCommand(execute),

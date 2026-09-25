@@ -5,7 +5,6 @@
     "Enter Project Title": "프로젝트 제목 입력",
     "My Awesome Mod": "내 멋진 모드",
     "Select Destination Folder": "대상 폴더 선택",
-    "Create project '{0}' in...": "'{0}' 프로젝트를 다음 위치에 생성...",
     "PZStudio: No destination folder selected, project creation cancelled.": "PZStudio: 대상 폴더가 선택되지 않아 프로젝트 생성이 취소되었습니다.",
     "Select mod": "모드 선택",
     "Enter language code (e.g. EN, FR, PTBR)": "언어 코드 입력 (예: EN, FR, PTBR)",
@@ -45,5 +44,8 @@
     "missing on disk": "디스크에 없음",
     "included": "포함됨",
     "dev builds only": "개발 빌드 전용",
-    "excluded from build": "빌드에서 제외됨"
+    "excluded from build": "빌드에서 제외됨",
+    "Create project in...": "프로젝트를 만들 위치...",
+    "Select the workspace folder for the new project": "새 프로젝트의 워크스페이스 폴더를 선택하세요",
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: 여기에서 프로젝트를 만들기 전에 워크스페이스 폴더를 여세요."
 }

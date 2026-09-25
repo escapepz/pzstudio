@@ -5,7 +5,6 @@
     "Enter Project Title": "输入项目标题",
     "My Awesome Mod": "我的超棒模组",
     "Select Destination Folder": "选择目标文件夹",
-    "Create project '{0}' in...": "在...创建项目 '{0}'",
     "PZStudio: No destination folder selected, project creation cancelled.": "PZStudio: 未选择目标文件夹，项目创建已取消。",
     "Select mod": "选择模组",
     "Enter language code (e.g. EN, FR, PTBR)": "输入语言代码（例如 EN、FR、PTBR）",
@@ -45,5 +44,8 @@
     "missing on disk": "磁盘上缺失",
     "included": "已包含",
     "dev builds only": "仅开发构建",
-    "excluded from build": "已从构建排除"
+    "excluded from build": "已从构建排除",
+    "Create project in...": "在以下位置创建项目...",
+    "Select the workspace folder for the new project": "为新项目选择工作区文件夹",
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio：请先打开一个工作区文件夹，再在此处创建项目。"
 }

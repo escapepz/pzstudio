@@ -5,7 +5,6 @@
     "Enter Project Title": "Wpisz tytuł projektu",
     "My Awesome Mod": "Mój świetny mod",
     "Select Destination Folder": "Wybierz folder docelowy",
-    "Create project '{0}' in...": "Utwórz projekt '{0}' w...",
     "PZStudio: No destination folder selected, project creation cancelled.": "PZStudio: Nie wybrano folderu docelowego, tworzenie projektu anulowano.",
     "Select mod": "Wybierz mod",
     "Enter language code (e.g. EN, FR, PTBR)": "Wpisz kod języka (np. EN, FR, PTBR)",
@@ -45,5 +44,8 @@
     "missing on disk": "brak na dysku",
     "included": "zawarty",
     "dev builds only": "tylko kompilacje dev",
-    "excluded from build": "wykluczony z kompilacji"
+    "excluded from build": "wykluczony z kompilacji",
+    "Create project in...": "Utwórz projekt w...",
+    "Select the workspace folder for the new project": "Wybierz folder obszaru roboczego dla nowego projektu",
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Przed utworzeniem projektu w tym miejscu otwórz folder obszaru roboczego."
 }

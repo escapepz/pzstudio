@@ -40,5 +40,7 @@
     "command.modinfoGenerate.title": "PZStudio: 產生 ModInfo",
     "command.explorer.refresh.title": "PZStudio: 重新整理 Project Explorer",
     "command.explorer.toggleFiles.title": "PZStudio: 在檔案總管中切換全部/必要檔案",
-    "command.explorer.toggleFiles.hidden.title": "PZStudio: 在檔案總管中切換全部/必要檔案"
+    "command.explorer.toggleFiles.hidden.title": "PZStudio: 在檔案總管中切換全部/必要檔案",
+    "command.newHere.title": "PZStudio: 於此處建立新專案",
+    "config.newProject.defaultLocation.description": "新專案的首選預設資料夾。New Project 的選擇器從此處開啟，取消選擇時也會回退到該資料夾。"
 }

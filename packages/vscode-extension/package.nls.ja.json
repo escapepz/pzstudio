@@ -40,5 +40,7 @@
     "command.modinfoGenerate.title": "PZStudio: ModInfo を生成",
     "command.explorer.refresh.title": "PZStudio: Project Explorer を更新",
     "command.explorer.toggleFiles.title": "PZStudio: エクスプローラーの全ファイル/必須ファイルを切り替え",
-    "command.explorer.toggleFiles.hidden.title": "PZStudio: エクスプローラーの全ファイル/必須ファイルを切り替え"
+    "command.explorer.toggleFiles.hidden.title": "PZStudio: エクスプローラーの全ファイル/必須ファイルを切り替え",
+    "command.newHere.title": "PZStudio: ここに新規プロジェクト",
+    "config.newProject.defaultLocation.description": "新しいプロジェクトの優先既定フォルダー。New Project のピッカーはここから開き、キャンセルした場合はこのフォルダーへフォールバックします。"
 }
