@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "Repository-URL für die Standard-Sprachvorlage",
     "config.templates.language.ref.description": "Git-Referenz (Branch, Tag oder Commit) für die Sprachvorlage",
     "config.outdir.description": "Standard-Ausgabeverzeichnis für Builds",
-    "config.useSymlinks.description": "Beim Build symbolische Links statt Kopien verwenden",
+    "config.useSymlinks.description": "Verzeichnisjunctions statt Kopien der gemeinsamen Vorlagenordner (.libraries, .template-*) beim Ausführen von New Project verwenden (--symlinks). Die Build-Ausgabe ist nicht betroffen.",
     "config.verbose.description": "Ausführliche/Diagnose-Ausgabe für alle Befehle aktivieren (--verbose)",
     "config.offline.description": "Remote-Template-Aktualisierung überspringen und zwischengespeicherte/Legacy-Daten verwenden (--offline). Gilt für New Project und Add Mod.",
     "config.forceUpdate.description": "Aktualisierung der zwischengespeicherten Vorlagen erzwingen (--force-update). Gilt für New Project und Add Mod.",

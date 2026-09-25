@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "預設語言範本的儲存庫 URL",
     "config.templates.language.ref.description": "語言範本的 Git 參考（分支、標籤或提交）",
     "config.outdir.description": "預設的建置輸出目錄",
-    "config.useSymlinks.description": "建置時使用符號連結取代複製",
+    "config.useSymlinks.description": "執行 New Project 時，對共用範本資料夾（.libraries、.template-*）使用目錄聯接（junction）而非複製（--symlinks）。不影響 build 輸出。",
     "config.verbose.description": "為所有命令啟用詳細/診斷輸出（--verbose）",
     "config.offline.description": "略過遠端範本重新整理，使用快取/舊版資料（--offline）。適用於 New Project 與 Add Mod。",
     "config.forceUpdate.description": "強制重新整理快取的範本（--force-update）。適用於 New Project 與 Add Mod。",

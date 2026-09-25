@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "Repository-URL for standard språkmal",
     "config.templates.language.ref.description": "Git-referanse (branch, tag eller commit) for språkmalen",
     "config.outdir.description": "Standard byggeutdatamappe",
-    "config.useSymlinks.description": "Bruk symbolske lenker i stedet for kopiering under bygging",
+    "config.useSymlinks.description": "Bruk katalogjunksjoner i stedet for å kopiere delte malmapper (.libraries, .template-*) ved New Project (--symlinks). Byggeutdata påvirkes ikke.",
     "config.verbose.description": "Aktiver detaljert/diagnostisk utdata for alle kommandoer (--verbose)",
     "config.offline.description": "Hopp over ekstern maloppdatering og bruk hurtigbufret/legacy-data (--offline). Gjelder New Project og Add Mod.",
     "config.forceUpdate.description": "Tving oppdatering av hurtigbufrede maler (--force-update). Gjelder New Project og Add Mod.",

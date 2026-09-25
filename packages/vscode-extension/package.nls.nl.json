@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "Repository-URL voor de standaardtaaljabloon",
     "config.templates.language.ref.description": "Git-referentie (branch, tag of commit) voor de taaljabloon",
     "config.outdir.description": "Standaard build-uitvoermap",
-    "config.useSymlinks.description": "Symbolische koppelingen gebruiken in plaats van kopiëren tijdens de build",
+    "config.useSymlinks.description": "Gebruik directory-junctions in plaats van het kopiëren van gedeelde sjabloonmappen (.libraries, .template-*) bij New Project (--symlinks). Build-output wordt niet beïnvloed.",
     "config.verbose.description": "Gedetailleerde/diagnostische uitvoer voor alle opdrachten inschakelen (--verbose)",
     "config.offline.description": "Remote-sjabloonvernieuwing overslaan en cache/legacy-gegevens gebruiken (--offline). Van toepassing op New Project en Add Mod.",
     "config.forceUpdate.description": "Vernieuwen van gecachte sjablonen forceren (--force-update). Van toepassing op New Project en Add Mod.",

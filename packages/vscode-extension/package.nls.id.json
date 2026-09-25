@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "URL repositori untuk templat bahasa bawaan",
     "config.templates.language.ref.description": "Referensi Git (branch, tag, atau commit) untuk templat bahasa",
     "config.outdir.description": "Direktori keluaran build bawaan",
-    "config.useSymlinks.description": "Gunakan tautan simbolis alih-alih menyalin saat build",
+    "config.useSymlinks.description": "Gunakan directory junction alih-alih menyalin folder template bersama (.libraries, .template-*) saat menjalankan New Project (--symlinks). Output build tidak terpengaruh.",
     "config.verbose.description": "Aktifkan keluaran terperinci/diagnostik untuk semua perintah (--verbose)",
     "config.offline.description": "Lewati penyegaran templat jarak jauh dan gunakan data cache/legacy (--offline). Berlaku untuk New Project dan Add Mod.",
     "config.forceUpdate.description": "Paksa penyegaran templat yang di-cache (--force-update). Berlaku untuk New Project dan Add Mod.",

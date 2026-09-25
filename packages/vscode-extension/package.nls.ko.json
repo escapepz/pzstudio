@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "기본 언어 템플릿의 저장소 URL",
     "config.templates.language.ref.description": "언어 템플릿의 Git 참조 (브랜치, 태그 또는 커밋)",
     "config.outdir.description": "기본 빌드 출력 디렉터리",
-    "config.useSymlinks.description": "빌드 시 복사 대신 심볼릭 링크 사용",
+    "config.useSymlinks.description": "New Project 실행 시 공유 템플릿 폴더(.libraries, .template-*)를 복사하지 않고 디렉터리 junction을 사용합니다(--symlinks). 빌드 출력에는 영향을 주지 않습니다.",
     "config.verbose.description": "모든 명령에 상세/진단 출력 활성화 (--verbose)",
     "config.offline.description": "원격 템플릿 새로 고침을 건너뛰고 캐시/레거시 데이터 사용 (--offline). New Project 및 Add Mod에 적용됩니다.",
     "config.forceUpdate.description": "캐시된 템플릿 새로 고침 강제 (--force-update). New Project 및 Add Mod에 적용됩니다.",

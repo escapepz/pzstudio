@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "URL repository cho template ngôn ngữ mặc định",
     "config.templates.language.ref.description": "Git ref (branch, tag hoặc commit) cho template ngôn ngữ",
     "config.outdir.description": "Thư mục output build mặc định",
-    "config.useSymlinks.description": "Dùng symlink thay vì copy khi build",
+    "config.useSymlinks.description": "Dùng directory junction thay vì copy các folder template dùng chung (.libraries, .template-*) khi chạy New Project (--symlinks). Không ảnh hưởng output build.",
     "config.verbose.description": "Bật output chi tiết/chẩn đoán cho mọi lệnh (--verbose)",
     "config.offline.description": "Bỏ refresh template từ remote, dùng dữ liệu cache/legacy (--offline). Áp dụng cho New Project và Add Mod.",
     "config.forceUpdate.description": "Ép refresh template cache (--force-update). Áp dụng cho New Project và Add Mod.",

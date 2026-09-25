@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "Repository URL for the default language template",
     "config.templates.language.ref.description": "Git ref (branch, tag, or commit) for the language template",
     "config.outdir.description": "Default build output directory",
-    "config.useSymlinks.description": "Whether to use symlinks instead of copying during build",
+    "config.useSymlinks.description": "Use directory junctions instead of copying shared template folders (.libraries, .template-*) when running New Project (--symlinks). Build output is not affected.",
     "config.verbose.description": "Enable verbose/diagnostic output for all commands (--verbose)",
     "config.offline.description": "Skip remote template refresh and use cached/legacy data (--offline). Applies to New Project and Add Mod.",
     "config.forceUpdate.description": "Force refresh of cached templates (--force-update). Applies to New Project and Add Mod.",
