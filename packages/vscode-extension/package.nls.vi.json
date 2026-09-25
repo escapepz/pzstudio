@@ -40,5 +40,7 @@
     "command.modinfoGenerate.title": "PZStudio: Sinh ModInfo",
     "command.explorer.refresh.title": "PZStudio: Làm mới Project Explorer",
     "command.explorer.toggleFiles.title": "PZStudio: Ẩn/hiện mọi file trong Explorer",
-    "command.explorer.toggleFiles.hidden.title": "PZStudio: Ẩn/hiện mọi file trong Explorer"
+    "command.explorer.toggleFiles.hidden.title": "PZStudio: Ẩn/hiện mọi file trong Explorer",
+    "command.newHere.title": "PZStudio: Project mới tại đây",
+    "config.newProject.defaultLocation.description": "Folder mặc định ưu tiên cho project mới. Picker của New Project sẽ mở tại đây, và nếu bỏ qua picker thì dùng luôn folder này."
 }

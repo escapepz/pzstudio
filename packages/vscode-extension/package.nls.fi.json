@@ -40,5 +40,7 @@
     "command.modinfoGenerate.title": "PZStudio: Luo ModInfo",
     "command.explorer.refresh.title": "PZStudio: Päivitä Project Explorer",
     "command.explorer.toggleFiles.title": "PZStudio: Vaihda kaikki/olennaiset tiedostot Explorerissa",
-    "command.explorer.toggleFiles.hidden.title": "PZStudio: Vaihda kaikki/olennaiset tiedostot Explorerissa"
+    "command.explorer.toggleFiles.hidden.title": "PZStudio: Vaihda kaikki/olennaiset tiedostot Explorerissa",
+    "command.newHere.title": "PZStudio: Uusi projekti tähän",
+    "config.newProject.defaultLocation.description": "Ensisijainen oletuskansio uusille projekteille. New Project -valitsin avautuu tähän, ja peruttessa käytetään tätä kansiota."
 }

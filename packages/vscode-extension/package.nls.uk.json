@@ -40,5 +40,7 @@
     "command.modinfoGenerate.title": "PZStudio: Згенерувати ModInfo",
     "command.explorer.refresh.title": "PZStudio: Оновити Project Explorer",
     "command.explorer.toggleFiles.title": "PZStudio: Перемкнути всі/суттєві файли в Провіднику",
-    "command.explorer.toggleFiles.hidden.title": "PZStudio: Перемкнути всі/суттєві файли в Провіднику"
+    "command.explorer.toggleFiles.hidden.title": "PZStudio: Перемкнути всі/суттєві файли в Провіднику",
+    "command.newHere.title": "PZStudio: Новий проєкт тут",
+    "config.newProject.defaultLocation.description": "Бажана типова папка для нових проєктів. Вибір у New Project починається тут, а при скасуванні використовується ця папка."
 }

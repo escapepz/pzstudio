@@ -5,7 +5,6 @@
     "Enter Project Title": "Proje başlığını girin",
     "My Awesome Mod": "Harika modum",
     "Select Destination Folder": "Hedef klasörü seçin",
-    "Create project '{0}' in...": "'{0}' projesini şuraya oluştur...",
     "PZStudio: No destination folder selected, project creation cancelled.": "PZStudio: Hedef klasör seçilmedi, proje oluşturma iptal edildi.",
     "Select mod": "Mod seçin",
     "Enter language code (e.g. EN, FR, PTBR)": "Dil kodunu girin (örn. EN, FR, PTBR)",
@@ -45,5 +44,8 @@
     "missing on disk": "diskte eksik",
     "included": "dahil",
     "dev builds only": "yalnızca geliştirme derlemeleri",
-    "excluded from build": "derlemeden hariç"
+    "excluded from build": "derlemeden hariç",
+    "Create project in...": "Projeyi şurada oluştur...",
+    "Select the workspace folder for the new project": "Yeni proje için çalışma alanı klasörünü seçin",
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Burada proje oluşturmadan önce bir çalışma alanı klasörü açın."
 }

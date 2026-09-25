@@ -304,6 +304,12 @@
                     "description": "%config.language.description%",
                     "scope": "window",
                     "default": "auto"
+                },
+                "pzstudio.newProject.defaultLocation": {
+                    "type": "string",
+                    "description": "%config.newProject.defaultLocation.description%",
+                    "scope": "machine",
+                    "default": ""
                 }
             }
         },
@@ -311,6 +317,10 @@
             {
                 "command": "pzstudio.new",
                 "title": "%command.new.title%"
+            },
+            {
+                "command": "pzstudio.newHere",
+                "title": "%command.newHere.title%"
             },
             {
                 "command": "pzstudio.add",

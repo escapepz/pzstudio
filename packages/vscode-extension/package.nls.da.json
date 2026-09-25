@@ -40,5 +40,7 @@
     "command.modinfoGenerate.title": "PZStudio: Generér ModInfo",
     "command.explorer.refresh.title": "PZStudio: Opdater Project Explorer",
     "command.explorer.toggleFiles.title": "PZStudio: Skift alle/essentielle filer i Explorer",
-    "command.explorer.toggleFiles.hidden.title": "PZStudio: Skift alle/essentielle filer i Explorer"
+    "command.explorer.toggleFiles.hidden.title": "PZStudio: Skift alle/essentielle filer i Explorer",
+    "command.newHere.title": "PZStudio: Nyt projekt her",
+    "config.newProject.defaultLocation.description": "Foretrukken standardmappe for nye projekter. Nyt projekt-vælgeren starter her, og annullering falder tilbage til denne mappe."
 }

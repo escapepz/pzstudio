@@ -40,5 +40,7 @@
     "command.modinfoGenerate.title": "PZStudio: Gerar ModInfo",
     "command.explorer.refresh.title": "PZStudio: Atualizar Project Explorer",
     "command.explorer.toggleFiles.title": "PZStudio: Alternar todos/arquivos essenciais no Explorer",
-    "command.explorer.toggleFiles.hidden.title": "PZStudio: Alternar todos/arquivos essenciais no Explorer"
+    "command.explorer.toggleFiles.hidden.title": "PZStudio: Alternar todos/arquivos essenciais no Explorer",
+    "command.newHere.title": "PZStudio: Novo projeto aqui",
+    "config.newProject.defaultLocation.description": "Pasta padrão preferencial para novos projetos. O seletor de New Project abre aqui e, ao cancelar, esta pasta é usada."
 }

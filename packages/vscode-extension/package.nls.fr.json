@@ -40,5 +40,7 @@
     "command.modinfoGenerate.title": "PZStudio : Générer ModInfo",
     "command.explorer.refresh.title": "PZStudio : Actualiser Project Explorer",
     "command.explorer.toggleFiles.title": "PZStudio : Basculer tous/fichiers essentiels dans l'Explorer",
-    "command.explorer.toggleFiles.hidden.title": "PZStudio : Basculer tous/fichiers essentiels dans l'Explorer"
+    "command.explorer.toggleFiles.hidden.title": "PZStudio : Basculer tous/fichiers essentiels dans l'Explorer",
+    "command.newHere.title": "PZStudio: Nouveau projet ici",
+    "config.newProject.defaultLocation.description": "Dossier par défaut préféré pour les nouveaux projets. Le sélecteur de New Project s'ouvre ici et, en cas d'annulation, ce dossier est utilisé."
 }

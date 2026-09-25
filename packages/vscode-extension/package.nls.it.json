@@ -40,5 +40,7 @@
     "command.modinfoGenerate.title": "PZStudio: Genera ModInfo",
     "command.explorer.refresh.title": "PZStudio: Aggiorna Project Explorer",
     "command.explorer.toggleFiles.title": "PZStudio: Attiva/disattiva tutti/file essenziali nell'Explorer",
-    "command.explorer.toggleFiles.hidden.title": "PZStudio: Attiva/disattiva tutti/file essenziali nell'Explorer"
+    "command.explorer.toggleFiles.hidden.title": "PZStudio: Attiva/disattiva tutti/file essenziali nell'Explorer",
+    "command.newHere.title": "PZStudio: Nuovo progetto qui",
+    "config.newProject.defaultLocation.description": "Cartella predefinita preferita per i nuovi progetti. Il selettore di New Project si apre qui e, se annullato, viene usata questa cartella."
 }

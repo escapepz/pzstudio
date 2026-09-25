@@ -5,7 +5,6 @@
     "Enter Project Title": "プロジェクトタイトルを入力",
     "My Awesome Mod": "すごい Mod",
     "Select Destination Folder": "保存先フォルダーを選択",
-    "Create project '{0}' in...": "プロジェクト '{0}' を作成する場所...",
     "PZStudio: No destination folder selected, project creation cancelled.": "PZStudio: 保存先フォルダーが選択されていないため、プロジェクトの作成を取り消しました。",
     "Select mod": "Mod を選択",
     "Enter language code (e.g. EN, FR, PTBR)": "言語コードを入力（例: EN, FR, PTBR）",
@@ -45,5 +44,8 @@
     "missing on disk": "ディスクに存在しない",
     "included": "含める",
     "dev builds only": "dev ビルドのみ",
-    "excluded from build": "除外"
+    "excluded from build": "除外",
+    "Create project in...": "プロジェクトの作成先...",
+    "Select the workspace folder for the new project": "新しいプロジェクトのワークスペース フォルダーを選択してください",
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: ここでプロジェクトを作成する前に、ワークスペース フォルダーを開いてください。"
 }

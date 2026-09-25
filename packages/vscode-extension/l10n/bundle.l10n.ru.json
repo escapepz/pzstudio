@@ -5,7 +5,6 @@
     "Enter Project Title": "Введите название проекта",
     "My Awesome Mod": "Мой отличный мод",
     "Select Destination Folder": "Выберите папку назначения",
-    "Create project '{0}' in...": "Создать проект '{0}' в...",
     "PZStudio: No destination folder selected, project creation cancelled.": "PZStudio: Папка назначения не выбрана, создание проекта отменено.",
     "Select mod": "Выберите мод",
     "Enter language code (e.g. EN, FR, PTBR)": "Введите код языка (напр. EN, FR, PTBR)",
@@ -45,5 +44,8 @@
     "missing on disk": "отсутствует на диске",
     "included": "включён",
     "dev builds only": "только dev-сборки",
-    "excluded from build": "исключён из сборки"
+    "excluded from build": "исключён из сборки",
+    "Create project in...": "Создать проект в...",
+    "Select the workspace folder for the new project": "Выберите папку рабочей области для нового проекта",
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Перед созданием проекта здесь откройте папку рабочей области."
 }

@@ -5,7 +5,6 @@
     "Enter Project Title": "Adja meg a projekt címét",
     "My Awesome Mod": "A remek modom",
     "Select Destination Folder": "Válassza a célmappát",
-    "Create project '{0}' in...": "Projekt '{0}' létrehozása itt...",
     "PZStudio: No destination folder selected, project creation cancelled.": "PZStudio: Nincs célmappa kiválasztva, a projekt létrehozása megszakítva.",
     "Select mod": "Válasszon modot",
     "Enter language code (e.g. EN, FR, PTBR)": "Adja meg a nyelvi kódot (pl. EN, FR, PTBR)",
@@ -45,5 +44,8 @@
     "missing on disk": "hiányzik a lemezről",
     "included": "bele foglalva",
     "dev builds only": "csak dev build",
-    "excluded from build": "kizárva a buildből"
+    "excluded from build": "kizárva a buildből",
+    "Create project in...": "Projekt létrehozása itt...",
+    "Select the workspace folder for the new project": "Válassza ki az új projekt munkaterület-mappáját",
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Nyisson meg egy munkaterület-mappát, mielőtt itt hozna létre projektet."
 }

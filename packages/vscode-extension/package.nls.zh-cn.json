@@ -40,5 +40,7 @@
     "command.modinfoGenerate.title": "PZStudio: 生成 ModInfo",
     "command.explorer.refresh.title": "PZStudio: 刷新 Project Explorer",
     "command.explorer.toggleFiles.title": "PZStudio: 在资源管理器中切换全部/必要文件",
-    "command.explorer.toggleFiles.hidden.title": "PZStudio: 在资源管理器中切换全部/必要文件"
+    "command.explorer.toggleFiles.hidden.title": "PZStudio: 在资源管理器中切换全部/必要文件",
+    "command.newHere.title": "PZStudio: 在此处新建项目",
+    "config.newProject.defaultLocation.description": "新项目的首选默认文件夹。New Project 的选择器从此处打开，取消选择时也会回退到该文件夹。"
 }

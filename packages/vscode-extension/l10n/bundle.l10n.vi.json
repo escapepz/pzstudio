@@ -5,7 +5,6 @@
     "Enter Project Title": "Nhập tiêu đề project",
     "My Awesome Mod": "Mod tuyệt vời của tôi",
     "Select Destination Folder": "Chọn thư mục đích",
-    "Create project '{0}' in...": "Tạo project '{0}' tại...",
     "PZStudio: No destination folder selected, project creation cancelled.": "PZStudio: Chưa chọn thư mục đích, đã huỷ tạo project.",
     "Select mod": "Chọn mod",
     "Enter language code (e.g. EN, FR, PTBR)": "Nhập mã ngôn ngữ (vd. EN, FR, PTBR)",
@@ -45,5 +44,8 @@
     "missing on disk": "không có trên đĩa",
     "included": "được build",
     "dev builds only": "chỉ dev build",
-    "excluded from build": "loại khỏi build"
+    "excluded from build": "loại khỏi build",
+    "Create project in...": "Tạo project tại...",
+    "Select the workspace folder for the new project": "Chọn workspace folder cho project mới",
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Hãy mở một workspace folder trước khi tạo project tại đây."
 }

@@ -5,7 +5,6 @@
     "Enter Project Title": "Indtast projekttitel",
     "My Awesome Mod": "Min fede mod",
     "Select Destination Folder": "Vælg destinationsmappe",
-    "Create project '{0}' in...": "Opret projektet '{0}' i...",
     "PZStudio: No destination folder selected, project creation cancelled.": "PZStudio: Ingen destinationsmappe valgt, projektoprettelse annulleret.",
     "Select mod": "Vælg en mod",
     "Enter language code (e.g. EN, FR, PTBR)": "Indtast sprogkode (f.eks. EN, FR, PTBR)",
@@ -45,5 +44,8 @@
     "missing on disk": "mangler på disken",
     "included": "medtaget",
     "dev builds only": "kun dev-builds",
-    "excluded from build": "udeladt fra build"
+    "excluded from build": "udeladt fra build",
+    "Create project in...": "Opret projekt i...",
+    "Select the workspace folder for the new project": "Vælg workspace-mappen til det nye projekt",
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Åbn en workspace-mappe, før du opretter et projekt her."
 }

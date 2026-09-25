@@ -5,7 +5,6 @@
     "Enter Project Title": "Syöt projektin otsikko",
     "My Awesome Mod": "Mahtava modini",
     "Select Destination Folder": "Valitse kohdekansio",
-    "Create project '{0}' in...": "Luo projekti '{0}' kohteeseen...",
     "PZStudio: No destination folder selected, project creation cancelled.": "PZStudio: Kohdekansiota ei valittu, projektin luonti peruutettiin.",
     "Select mod": "Valitse modi",
     "Enter language code (e.g. EN, FR, PTBR)": "Syötä kielikoodi (esim. EN, FR, PTBR)",
@@ -45,5 +44,8 @@
     "missing on disk": "puuttuu levyltä",
     "included": "sisältyy",
     "dev builds only": "vain dev-käännökset",
-    "excluded from build": "suljettu pois käännöksestä"
+    "excluded from build": "suljettu pois käännöksestä",
+    "Create project in...": "Luo projekti kohteeseen...",
+    "Select the workspace folder for the new project": "Valitse uuden projektin työtilan kansio",
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Avaa työtilan kansio ennen projektin luomista tähän."
 }
