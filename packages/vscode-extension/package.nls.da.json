@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "Repository-URL til standardskabelonen for sprog",
     "config.templates.language.ref.description": "Git-reference (branch, tag eller commit) til sprogskabelonen",
     "config.outdir.description": "Standardoutputmappe til builds",
-    "config.useSymlinks.description": "Brug symbolske links i stedet for kopiering under build",
+    "config.useSymlinks.description": "Brug directory-junctions i stedet for at kopiere delte skabelonmapper (.libraries, .template-*) ved New Project (--symlinks). Build-output påvirkes ikke.",
     "config.verbose.description": "Aktiver detaljeret/diagnostisk output for alle kommandoer (--verbose)",
     "config.offline.description": "Spring fjernopdatering af skabeloner over og brug cachet/legacy-data (--offline). Gælder for New Project og Add Mod.",
     "config.forceUpdate.description": "Gennemtving opdatering af cachet skabeloner (--force-update). Gælder for New Project og Add Mod.",

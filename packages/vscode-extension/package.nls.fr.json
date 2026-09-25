@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "URL du dépôt pour le template de langue par défaut",
     "config.templates.language.ref.description": "Référence Git (branche, tag ou commit) pour le template de langue",
     "config.outdir.description": "Répertoire de sortie de build par défaut",
-    "config.useSymlinks.description": "Utiliser des liens symboliques au lieu de copier pendant le build",
+    "config.useSymlinks.description": "Utiliser des junctions de répertoires au lieu de copier les dossiers de modèles partagés (.libraries, .template-*) lors de l'exécution de New Project (--symlinks). La sortie de build n'est pas affectée.",
     "config.verbose.description": "Activer la sortie détaillée/diagnostique pour toutes les commandes (--verbose)",
     "config.offline.description": "Ignorer l'actualisation des templates distants et utiliser les données en cache/legacy (--offline). S'applique à New Project et Add Mod.",
     "config.forceUpdate.description": "Forcer l'actualisation des templates en cache (--force-update). S'applique à New Project et Add Mod.",

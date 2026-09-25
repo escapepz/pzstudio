@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "默认语言模板的仓库 URL",
     "config.templates.language.ref.description": "语言模板的 Git 引用（分支、标签或提交）",
     "config.outdir.description": "默认的构建输出目录",
-    "config.useSymlinks.description": "构建时使用符号链接代替复制",
+    "config.useSymlinks.description": "运行 New Project 时，对共享模板文件夹（.libraries、.template-*）使用目录联接（junction）而非复制（--symlinks）。不影响 build 输出。",
     "config.verbose.description": "为所有命令启用详细/诊断输出（--verbose）",
     "config.offline.description": "跳过远程模板刷新，使用缓存/旧版数据（--offline）。适用于 New Project 和 Add Mod。",
     "config.forceUpdate.description": "强制刷新缓存的模板（--force-update）。适用于 New Project 和 Add Mod。",

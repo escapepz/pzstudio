@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "URL ของรีโปสำหรับเทมเพลตภาษาเริ่มต้น",
     "config.templates.language.ref.description": "การอ้างอิง Git (branch, tag หรือ commit) สำหรับเทมเพลตภาษา",
     "config.outdir.description": "ไดเรกทอรีเอาต์พุตการบิลด์เริ่มต้น",
-    "config.useSymlinks.description": "ใช้ symbolic link แทนการคัดลอกระหว่างการบิลด์",
+    "config.useSymlinks.description": "ใช้ directory junction แทนการคัดลอกโฟลเดอร์เทมเพลตที่ใช้ร่วมกัน (.libraries, .template-*) เมื่อรัน New Project (--symlinks) ผลลัพธ์ build ไม่ได้รับผลกระทบ",
     "config.verbose.description": "เปิดใช้เอาต์พุตโดยละเอียด/วินิจฉัยสำหรับทุกคำสั่ง (--verbose)",
     "config.offline.description": "ข้ามการรีเฟรชเทมเพลตจากระยะไกล และใช้ข้อมูลแคช/เดิม (--offline) ใช้กับ New Project และ Add Mod",
     "config.forceUpdate.description": "บังคับรีเฟรชเทมเพลตที่แคชไว้ (--force-update) ใช้กับ New Project และ Add Mod",

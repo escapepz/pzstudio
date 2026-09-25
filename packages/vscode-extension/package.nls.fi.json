@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "Säilön URL oletuskielipohjalle",
     "config.templates.language.ref.description": "Git-viite (haara, tunniste tai committo) kielipohjalle",
     "config.outdir.description": "Oletus käännöstulosteen hakemisto",
-    "config.useSymlinks.description": "Käytä symbolisia linkkejä kopiointi sijaan käännöksen aikana",
+    "config.useSymlinks.description": "Käytä hakemistojunctioneja jaettujen mallikansioiden (.libraries, .template-*) kopioimisen sijaan New Project -komennossa (--symlinks). Build-tuotos ei muutu.",
     "config.verbose.description": "Ota käyttöön yksityiskohtainen/diagnostinen tuloste kaikille komennoille (--verbose)",
     "config.offline.description": "Ohita etäpohjien päivitys ja käytä välimuistissa olevia/legacy-tietoja (--offline). Koskee New Project- ja Add Mod -komentoja.",
     "config.forceUpdate.description": "Pakota välimuistissa olevien pohjien päivitys (--force-update). Koskee New Project- ja Add Mod -komentoja.",

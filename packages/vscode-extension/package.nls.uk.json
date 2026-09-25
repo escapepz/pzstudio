@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "URL репозиторію для типового мовного шаблону",
     "config.templates.language.ref.description": "Посилання Git (гілка, тег або коміт) для мовного шаблону",
     "config.outdir.description": "Типовий вихідний каталог збірки",
-    "config.useSymlinks.description": "Використовувати символічні посилання замість копіювання під час збірки",
+    "config.useSymlinks.description": "Використовувати з'єднання каталогів (junction) замість копіювання спільних папок шаблонів (.libraries, .template-*) під час виконання New Project (--symlinks). Вивід build не змінюється.",
     "config.verbose.description": "Увімкнути детальне/діагностичне виведення для всіх команд (--verbose)",
     "config.offline.description": "Пропустити віддалене оновлення шаблонів і використати кешовані/застарілі дані (--offline). Стосується New Project та Add Mod.",
     "config.forceUpdate.description": "Примусово оновити кешовані шаблони (--force-update). Стосується New Project та Add Mod.",

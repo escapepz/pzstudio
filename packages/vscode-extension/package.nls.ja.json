@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "デフォルトの言語テンプレートのリポジトリ URL",
     "config.templates.language.ref.description": "言語テンプレートの Git リファレンス（ブランチ、タグ、コミット）",
     "config.outdir.description": "既定のビルド出力ディレクトリ",
-    "config.useSymlinks.description": "ビルド時にコピーの代わりにシンボリックリンクを使用する",
+    "config.useSymlinks.description": "New Project の実行時に共有テンプレート フォルダー (.libraries、.template-*) をコピーせずディレクトリ ジャンクションを使用します (--symlinks)。ビルド出力には影響しません。",
     "config.verbose.description": "すべてのコマンドで詳細/診断出力を有効にする（--verbose）",
     "config.offline.description": "リモートのテンプレート更新を省略し、キャッシュ/レガシーデータを使用する（--offline）。New Project と Add Mod に適用されます。",
     "config.forceUpdate.description": "キャッシュされたテンプレートの更新を強制する（--force-update）。New Project と Add Mod に適用されます。",

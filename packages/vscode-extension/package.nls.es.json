@@ -14,7 +14,7 @@
     "config.templates.language.url.description": "URL del repositorio para la plantilla de idioma predeterminada",
     "config.templates.language.ref.description": "Referencia de Git (rama, etiqueta o commit) para la plantilla de idioma",
     "config.outdir.description": "Directorio de salida de compilación predeterminado",
-    "config.useSymlinks.description": "Usar enlaces simbólicos en lugar de copiar durante la compilación",
+    "config.useSymlinks.description": "Usar uniones de directorios en lugar de copiar las carpetas de plantillas compartidas (.libraries, .template-*) al ejecutar New Project (--symlinks). La salida de build no se ve afectada.",
     "config.verbose.description": "Habilitar salida detallada/diagnóstica para todos los comandos (--verbose)",
     "config.offline.description": "Omitir la actualización remota de plantillas y usar datos en caché/legacy (--offline). Aplica a New Project y Add Mod.",
     "config.forceUpdate.description": "Forzar la actualización de las plantillas en caché (--force-update). Aplica a New Project y Add Mod.",
