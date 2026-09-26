@@ -1,5 +1,5 @@
 import { basename, join } from 'path';
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
+import { cpSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { hasFlag } from '../args';
@@ -13,6 +13,7 @@ import {
 import {
     projectDir,
     readWorkshopDescriptionLines,
+    removeDirRecursive,
     resolveModInfoTargets,
     resolveProjectConfig,
 } from '../helper';
@@ -48,7 +49,7 @@ function executeBuildPlan(operations: FileOperation[]) {
                 else log(operation.message);
                 break;
             case 'removeDir':
-                rmSync(operation.path, { recursive: true, force: true });
+                removeDirRecursive(operation.path);
                 break;
             case 'makeDir':
                 mkdirSync(operation.path, { recursive: true });
@@ -173,42 +174,61 @@ export async function buildCmd() {
         ),
     };
 
+    // Each variant is isolated: a locked output folder in one target must
+    // not prevent the other target from being built (--both).
+    const variantErrors: string[] = [];
+
     // Build main workshop (Default/project.json target or explicit --production)
     if (buildMain) {
-        const mainModIds = collectIncludedModIds(projectConfig, 'main');
-        if (mainModIds.length === 0) {
-            warn(
-                'All mods are dev-only or excluded — nothing to build for the main workshop output. Use --development to build the dev_branch output.',
-            );
-        } else {
-            const devOnlyModIds = Object.keys(projectConfig.mods).filter(
-                (modId) =>
-                    !(projectConfig.excludes ?? []).includes(modId) &&
-                    projectConfig.mods[modId].build?.devOnly,
-            );
-            if (devOnlyModIds.length > 0) {
+        try {
+            const mainModIds = collectIncludedModIds(projectConfig, 'main');
+            if (mainModIds.length === 0) {
                 warn(
-                    `Dev-only mods skipped in the main build: ${devOnlyModIds.join(', ')} — they are built into the dev_branch output (--development).`,
+                    'All mods are dev-only or excluded — nothing to build for the main workshop output. Use --development to build the dev_branch output.',
                 );
+            } else {
+                const devOnlyModIds = Object.keys(projectConfig.mods).filter(
+                    (modId) =>
+                        !(projectConfig.excludes ?? []).includes(modId) &&
+                        projectConfig.mods[modId].build?.devOnly,
+                );
+                if (devOnlyModIds.length > 0) {
+                    warn(
+                        `Dev-only mods skipped in the main build: ${devOnlyModIds.join(', ')} — they are built into the dev_branch output (--development).`,
+                    );
+                }
+                log(`\nBuilding main workshop...`);
+                executeBuildPlan(planBuild({ ...planInput, variant: 'main' }));
             }
-            log(`\nBuilding main workshop...`);
-            executeBuildPlan(planBuild({ ...planInput, variant: 'main' }));
+        } catch (e) {
+            variantErrors.push(e instanceof Error ? e.message : String(e));
         }
     }
 
     // Build dev_branch workshop (project.json target, --development or --both)
     if (buildDev) {
-        const devModIds = collectIncludedModIds(projectConfig, 'development');
-        if (devModIds.length === 0) {
-            warn(
-                'All mods are excluded — nothing to build for the dev_branch workshop output.',
+        try {
+            const devModIds = collectIncludedModIds(
+                projectConfig,
+                'development',
             );
-        } else {
-            log(`\nBuilding dev_branch workshop...`);
-            executeBuildPlan(
-                planBuild({ ...planInput, variant: 'development' }),
-            );
+            if (devModIds.length === 0) {
+                warn(
+                    'All mods are excluded — nothing to build for the dev_branch workshop output.',
+                );
+            } else {
+                log(`\nBuilding dev_branch workshop...`);
+                executeBuildPlan(
+                    planBuild({ ...planInput, variant: 'development' }),
+                );
+            }
+        } catch (e) {
+            variantErrors.push(e instanceof Error ? e.message : String(e));
         }
+    }
+
+    if (variantErrors.length > 0) {
+        throw new Error(variantErrors.join('\n'));
     }
 
     const endTime = performance.now();
