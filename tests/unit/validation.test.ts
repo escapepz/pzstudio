@@ -391,6 +391,80 @@ describe('Validation', () => {
             );
             expect(context.hasErrors()).toBe(false);
         });
+    });
+
+    describe('validateBuildTargetField', () => {
+        it('should accept a valid build section via validateProject', () => {
+            validateProject(
+                {
+                    workshop: {
+                        title: 'T',
+                        visibility: 'public',
+                        tags: [],
+                    },
+                    mods: { mod1: { name: 'Mod 1', description: 'Desc' } },
+                    build: { target: 'both' },
+                },
+                context,
+            );
+            expect(context.hasErrors()).toBe(false);
+        });
+
+        it('should accept an omitted build.target', () => {
+            validateProject(
+                {
+                    workshop: {
+                        title: 'T',
+                        visibility: 'public',
+                        tags: [],
+                    },
+                    mods: { mod1: { name: 'Mod 1', description: 'Desc' } },
+                    build: {},
+                },
+                context,
+            );
+            expect(context.hasErrors()).toBe(false);
+        });
+
+        it('should report an invalid build.target value', () => {
+            validateProject(
+                {
+                    workshop: {
+                        title: 'T',
+                        visibility: 'public',
+                        tags: [],
+                    },
+                    mods: { mod1: { name: 'Mod 1', description: 'Desc' } },
+                    build: { target: 'everything' },
+                },
+                context,
+            );
+            expect(context.hasErrors()).toBe(true);
+            expect(
+                context
+                    .getErrors()
+                    .some((e) => e.location.includes('build.target')),
+            ).toBe(true);
+        });
+
+        it('should report a non-object build field', () => {
+            validateProject(
+                {
+                    workshop: {
+                        title: 'T',
+                        visibility: 'public',
+                        tags: [],
+                    },
+                    mods: { mod1: { name: 'Mod 1', description: 'Desc' } },
+                    build: 'both',
+                },
+                context,
+            );
+            expect(context.hasErrors()).toBe(true);
+            expect(
+                context.getErrors().some((e) => e.location.endsWith(':build')),
+            ).toBe(true);
+        });
 
         it('should report error for an invalid field in project config', () => {
             validateProject(

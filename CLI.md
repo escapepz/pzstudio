@@ -222,6 +222,7 @@ Build the project into the configured output directory.
 pzstudio build
 pzstudio build --production
 pzstudio build --development
+pzstudio build --both
 pzstudio build --verbose
 ```
 
@@ -231,6 +232,8 @@ pzstudio build --verbose
   - Builds the main workshop output.
 - `--development`
   - Builds the development `dev_branch` output.
+- `--both`
+  - Builds both the main and the `dev_branch` outputs in one run.
 - `--verbose`
   - Enable diagnostic output.
 
@@ -242,10 +245,12 @@ pzstudio build --verbose
 
 ### Behavior
 
-- With no target flags, builds the main workshop output.
-- `--production` also builds the main workshop output.
+- With no target flags, builds the target from `project.json`'s optional `build.target` field (`production`, `development`, or `both`; main output by default).
+- `--production` builds only the main workshop output.
 - `--development` builds the `dev_branch` output.
-- The two target flags are mutually exclusive.
+- `--both` builds both outputs in one run.
+- Target precedence: an explicit `--production`/`--development`/`--both` flag wins over `project.json` `build.target`, which wins over the default (main only). The VS Code `pzstudio.build.target` setting is passed to the CLI as a flag, so a non-default setting also wins over `project.json`.
+- The target flags are mutually exclusive.
 - When no mod qualifies for the selected target (all dev-only or excluded), that target is skipped with a warning and the existing output directory is left untouched.
 - Dev-only mods (`project.json.mods[modId].build.devOnly`) are skipped by the main build with a warning; they are built into the `dev_branch` output with `--development`.
 

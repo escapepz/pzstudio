@@ -312,6 +312,100 @@ describe('build with all mods dev-only (E2E)', () => {
     });
 });
 
+describe('build with project.json build.target (E2E)', () => {
+    let workspace: E2ETestWorkspace;
+
+    beforeEach(() => {
+        workspace = createE2EWorkspace();
+    });
+
+    afterEach(() => {
+        workspace.cleanup();
+    });
+
+    it('should build both outputs when build.target is "both"', async () => {
+        const title = 'Dual Project';
+        writeMinimalProject(workspace, { title, outdir: 'out' });
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: { title, visibility: 'public', tags: [] },
+                mods: {
+                    flag_mod: {
+                        name: 'Flag Mod',
+                        description: 'D',
+                        build: { modInfo: 'auto' },
+                    },
+                },
+                excludes: [],
+                outdir: 'out',
+                build: { target: 'both' },
+            }),
+        );
+
+        const result = await workspace.run('build');
+        workspace.assertSuccess(result);
+
+        expect(
+            fs.existsSync(
+                path.join(
+                    workspace.dir,
+                    'out',
+                    title,
+                    'Contents',
+                    'mods',
+                    'flag_mod',
+                ),
+            ),
+        ).toBe(true);
+        expect(
+            fs.existsSync(
+                path.join(
+                    workspace.dir,
+                    'out',
+                    `${title} - dev_branch`,
+                    'Contents',
+                    'mods',
+                    'flag_mod_dev',
+                ),
+            ),
+        ).toBe(true);
+    });
+
+    it('should let an explicit flag override project.json build.target', async () => {
+        const title = 'Override Project';
+        writeMinimalProject(workspace, { title, outdir: 'out' });
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: { title, visibility: 'public', tags: [] },
+                mods: {
+                    flag_mod: {
+                        name: 'Flag Mod',
+                        description: 'D',
+                        build: { modInfo: 'auto' },
+                    },
+                },
+                excludes: [],
+                outdir: 'out',
+                build: { target: 'both' },
+            }),
+        );
+
+        const result = await workspace.run('build', ['--production']);
+        workspace.assertSuccess(result);
+
+        expect(fs.existsSync(path.join(workspace.dir, 'out', title))).toBe(
+            true,
+        );
+        expect(
+            fs.existsSync(
+                path.join(workspace.dir, 'out', `${title} - dev_branch`),
+            ),
+        ).toBe(false);
+    });
+});
+
 describe('build excludes array filters entire mods (E2E)', () => {
     let workspace: E2ETestWorkspace;
 

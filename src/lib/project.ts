@@ -87,6 +87,13 @@ export interface IModConfig {
 
 export type TemplateCategory = 'project' | 'mod' | 'workshop' | 'language';
 
+/**
+ * Build targets for a single build invocation.
+ * "both" produces the main (production) and the development (dev_branch)
+ * outputs in one run.
+ */
+export type ProjectBuildTarget = 'production' | 'development' | 'both';
+
 export interface ITemplateConfig {
     url: string;
     ref?: string;
@@ -110,4 +117,15 @@ export interface IProjectConfig {
     outdir?: string;
 
     excludes?: string[];
+
+    /**
+     * Project-level build behaviour.
+     */
+    build?: {
+        /**
+         * Which workshop outputs `pzstudio build` produces when no target
+         * flag is given. An explicit CLI flag still wins.
+         */
+        target?: ProjectBuildTarget;
+    };
 }

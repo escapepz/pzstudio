@@ -401,6 +401,10 @@ export function validateProject(config: any, context: ValidationContext): void {
         validatePzBuildCompatibilityField(config.pzBuildCompatibility, context);
     }
 
+    if (config.build !== undefined) {
+        validateBuildTargetField(config.build, context);
+    }
+
     if (config.templates !== undefined) {
         context.addError(
             'templates',
@@ -425,6 +429,39 @@ export function validatePzBuildCompatibilityField(
             pathPrefix,
             'Field "pzBuildCompatibility" must be a string',
             'Specify the Project Zomboid build line this project targets (e.g. "42.x")',
+        );
+    }
+}
+
+/**
+ * Validates the optional build section of project.json.
+ * @param build The build section object
+ * @param context The validation context to add errors to
+ */
+export function validateBuildTargetField(
+    build: any,
+    context: ValidationContext,
+    pathPrefix: string = 'build',
+): void {
+    if (!guards.isObject(build)) {
+        context.addError(
+            pathPrefix,
+            'Field "build" must be an object',
+            'Use an object with an optional "target" key',
+        );
+        return;
+    }
+
+    if (build.target === undefined) {
+        return;
+    }
+
+    const allowedTargets = ['production', 'development', 'both'];
+    if (!allowedTargets.includes(build.target)) {
+        context.addError(
+            `${pathPrefix}.target`,
+            'Field "build.target" must be one of: production, development, both',
+            'Set which workshop outputs "pzstudio build" produces when no target flag is given',
         );
     }
 }

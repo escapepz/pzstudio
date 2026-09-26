@@ -5,7 +5,7 @@ import { resolveProjectDir } from '../util/project';
 
 export const PZ_TASK_TYPE = 'pzstudio';
 
-export type PZTaskTarget = 'production' | 'development' | 'clean';
+export type PZTaskTarget = 'production' | 'development' | 'both' | 'clean';
 
 export interface PZTaskDefinition extends vscode.TaskDefinition {
     target: string;
@@ -53,6 +53,8 @@ class PZTaskTerminal implements vscode.Pseudoterminal {
                 flags.push('--production');
             } else if (this.target === 'development') {
                 flags.push('--development');
+            } else if (this.target === 'both') {
+                flags.push('--both');
             }
 
             await runCLI(command, [], { flags });
@@ -78,6 +80,7 @@ export class BuildTaskProvider implements vscode.TaskProvider {
         return [
             createTask('production'),
             createTask('development'),
+            createTask('both'),
             createTask('clean'),
         ];
     }
@@ -88,6 +91,7 @@ export class BuildTaskProvider implements vscode.TaskProvider {
         if (
             target === 'production' ||
             target === 'development' ||
+            target === 'both' ||
             target === 'clean'
         ) {
             return createTask(target);

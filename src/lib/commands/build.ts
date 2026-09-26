@@ -27,9 +27,10 @@ addHelp(
     use 'pzstudio modinfo generate'.
 
     Usages:
-        pzstudio build               - Builds only the main workshop output (Default).
+        pzstudio build               - Builds the target from project.json build.target (main by default).
         pzstudio build --production  - Builds only the main workshop output.
         pzstudio build --development - Builds only the dev_branch workshop output.
+        pzstudio build --both        - Builds both the main and dev_branch workshop outputs.
         pzstudio build --verbose     - Enable diagnostic output.`,
 );
 
@@ -110,8 +111,9 @@ export async function buildCmd() {
 
     const isProduction = hasFlag('production');
     const isDevelopment = hasFlag('development');
+    const isBoth = hasFlag('both');
     verbose(
-        `Targets: production=${isProduction}, development=${isDevelopment}`,
+        `Flags: production=${isProduction}, development=${isDevelopment}, both=${isBoth}`,
     );
 
     // Conflict detection
@@ -120,8 +122,34 @@ export async function buildCmd() {
             'Conflicting targets selected: Use either --production or --development, not both.',
         );
     }
+    if (isBoth && (isProduction || isDevelopment)) {
+        throw new Error(
+            'Conflicting targets selected: --both cannot be combined with --production or --development.',
+        );
+    }
 
-    const noFlags = !isProduction && !isDevelopment;
+    // Target resolution: explicit flags win over project.json build.target,
+    // which in turn wins over the default (main only).
+    const configTarget = projectConfig.build?.target;
+    let buildMain = false;
+    let buildDev = false;
+    if (isBoth) {
+        buildMain = true;
+        buildDev = true;
+    } else if (isProduction) {
+        buildMain = true;
+    } else if (isDevelopment) {
+        buildDev = true;
+    } else if (configTarget === 'both') {
+        buildMain = true;
+        buildDev = true;
+    } else if (configTarget === 'development') {
+        buildDev = true;
+    } else {
+        // 'production' or unset — the main output only
+        buildMain = true;
+    }
+    verbose(`Targets: main=${buildMain}, development=${buildDev}`);
 
     verbose(`Resolving workshop template...`);
     const templateWorkshopPath = resolveTemplateDir('workshop');
@@ -145,8 +173,8 @@ export async function buildCmd() {
         ),
     };
 
-    // Build main workshop (Default or explicit --production)
-    if (noFlags || isProduction) {
+    // Build main workshop (Default/project.json target or explicit --production)
+    if (buildMain) {
         const mainModIds = collectIncludedModIds(projectConfig, 'main');
         if (mainModIds.length === 0) {
             warn(
@@ -168,8 +196,8 @@ export async function buildCmd() {
         }
     }
 
-    // Build dev_branch workshop (Only if --development is specified)
-    if (isDevelopment) {
+    // Build dev_branch workshop (project.json target, --development or --both)
+    if (buildDev) {
         const devModIds = collectIncludedModIds(projectConfig, 'development');
         if (devModIds.length === 0) {
             warn(

@@ -285,4 +285,93 @@ describe('buildCmd', () => {
             ),
         );
     });
+
+    it('should build both outputs with --both', async () => {
+        vi.mocked(hasFlag).mockImplementation(
+            (name: string) => name === 'both',
+        );
+
+        await buildCmd();
+
+        const templateCopies = vi
+            .mocked(scaffoldProject)
+            .mock.calls.filter((call) => call[0] === '/templates/workshop');
+        expect(templateCopies).toHaveLength(2);
+        expect(templateCopies[0][1]).toContain('Test Project');
+        expect(templateCopies[1][1]).toContain('Test Project - dev_branch');
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+            expect.stringMatching(/Test Project\/workshop\.txt$/),
+            expect.anything(),
+        );
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+            expect.stringMatching(/dev_branch\/workshop\.txt$/),
+            expect.anything(),
+        );
+    });
+
+    it('should build both outputs from project.json build.target without flags', async () => {
+        vi.mocked(resolveProjectConfig).mockImplementation(
+            () =>
+                JSON.parse(
+                    JSON.stringify({ ...project, build: { target: 'both' } }),
+                ) as any,
+        );
+
+        await buildCmd();
+
+        const templateCopies = vi
+            .mocked(scaffoldProject)
+            .mock.calls.filter((call) => call[0] === '/templates/workshop');
+        expect(templateCopies).toHaveLength(2);
+    });
+
+    it('should let an explicit flag override project.json build.target', async () => {
+        vi.mocked(resolveProjectConfig).mockImplementation(
+            () =>
+                JSON.parse(
+                    JSON.stringify({ ...project, build: { target: 'both' } }),
+                ) as any,
+        );
+        vi.mocked(hasFlag).mockImplementation(
+            (name: string) => name === 'production',
+        );
+
+        await buildCmd();
+
+        const templateCopies = vi
+            .mocked(scaffoldProject)
+            .mock.calls.filter((call) => call[0] === '/templates/workshop');
+        expect(templateCopies).toHaveLength(1);
+        expect(templateCopies[0][1]).not.toContain('dev_branch');
+    });
+
+    it('should build only the dev output from project.json build.target=development', async () => {
+        vi.mocked(resolveProjectConfig).mockImplementation(
+            () =>
+                JSON.parse(
+                    JSON.stringify({
+                        ...project,
+                        build: { target: 'development' },
+                    }),
+                ) as any,
+        );
+
+        await buildCmd();
+
+        const templateCopies = vi
+            .mocked(scaffoldProject)
+            .mock.calls.filter((call) => call[0] === '/templates/workshop');
+        expect(templateCopies).toHaveLength(1);
+        expect(templateCopies[0][1]).toContain('Test Project - dev_branch');
+    });
+
+    it('should throw when --both is combined with another target flag', async () => {
+        vi.mocked(hasFlag).mockImplementation(
+            (name: string) => name === 'both' || name === 'production',
+        );
+
+        await expect(buildCmd()).rejects.toThrow(
+            'Conflicting targets selected: --both',
+        );
+    });
 });
