@@ -26,6 +26,8 @@ export function resolveFlags(command: string): string[] {
             flags.push('--production');
         } else if (target === 'development') {
             flags.push('--development');
+        } else if (target === 'both') {
+            flags.push('--both');
         }
     }
 

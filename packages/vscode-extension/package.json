@@ -133,6 +133,7 @@
                         "enum": [
                             "production",
                             "development",
+                            "both",
                             "clean"
                         ],
                         "description": "%taskDefinition.target.description%"
@@ -254,12 +255,14 @@
                     "enum": [
                         "default",
                         "production",
-                        "development"
+                        "development",
+                        "both"
                     ],
                     "enumDescriptions": [
                         "%config.build.target.enumDescriptions.default%",
                         "%config.build.target.enumDescriptions.production%",
-                        "%config.build.target.enumDescriptions.development%"
+                        "%config.build.target.enumDescriptions.development%",
+                        "%config.build.target.enumDescriptions.both%"
                     ],
                     "description": "%config.build.target.description%",
                     "scope": "resource",

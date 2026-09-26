@@ -1,6 +1,18 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "properties": {
+        "build": {
+            "description": "Project-level build behaviour.",
+            "properties": {
+                "target": {
+                    "default": "production",
+                    "description": "Which workshop outputs 'pzstudio build' produces when no target flag is given. An explicit --production/--development/--both flag wins.",
+                    "enum": ["production", "development", "both"],
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
         "excludes": {
             "description": "List of mod IDs to exclude from the workshop build.",
             "items": {

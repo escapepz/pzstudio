@@ -61,11 +61,12 @@ describe('BuildTaskProvider', () => {
         name,
     });
 
-    it('provides the three default tasks', () => {
+    it('provides the four default tasks', () => {
         const tasks = new BuildTaskProvider().provideTasks();
         expect(tasks.map((t) => (t as { name: string }).name)).toEqual([
             'pzstudio: build (production)',
             'pzstudio: build (development)',
+            'pzstudio: build (both)',
             'pzstudio: clean',
         ]);
         expect(
@@ -145,6 +146,18 @@ describe('BuildTaskProvider', () => {
             flags: ['--production'],
         });
         expect(writes.join('')).toContain('pzstudio build started...');
+        expect(writes.join('')).toContain('pzstudio build completed.');
+    });
+
+    it('runs build in-process with the both flag', async () => {
+        const writes = await runTask('both');
+
+        const { runCLI } = (await import('pzstudio-cli/api')) as {
+            runCLI: import('vitest').Mock;
+        };
+        expect(runCLI).toHaveBeenCalledWith('build', [], {
+            flags: ['--both'],
+        });
         expect(writes.join('')).toContain('pzstudio build completed.');
     });
 
