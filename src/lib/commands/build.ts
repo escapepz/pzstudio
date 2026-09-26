@@ -7,6 +7,7 @@ import {
     FileOperation,
     ModSourceState,
     PlanBuildInput,
+    collectIncludedModIds,
     planBuild,
 } from '../core/buildplan';
 import {
@@ -146,14 +147,40 @@ export async function buildCmd() {
 
     // Build main workshop (Default or explicit --production)
     if (noFlags || isProduction) {
-        log(`\nBuilding main workshop...`);
-        executeBuildPlan(planBuild({ ...planInput, variant: 'main' }));
+        const mainModIds = collectIncludedModIds(projectConfig, 'main');
+        if (mainModIds.length === 0) {
+            warn(
+                'All mods are dev-only or excluded — nothing to build for the main workshop output. Use --development to build the dev_branch output.',
+            );
+        } else {
+            const devOnlyModIds = Object.keys(projectConfig.mods).filter(
+                (modId) =>
+                    !(projectConfig.excludes ?? []).includes(modId) &&
+                    projectConfig.mods[modId].build?.devOnly,
+            );
+            if (devOnlyModIds.length > 0) {
+                warn(
+                    `Dev-only mods skipped in the main build: ${devOnlyModIds.join(', ')} — they are built into the dev_branch output (--development).`,
+                );
+            }
+            log(`\nBuilding main workshop...`);
+            executeBuildPlan(planBuild({ ...planInput, variant: 'main' }));
+        }
     }
 
     // Build dev_branch workshop (Only if --development is specified)
     if (isDevelopment) {
-        log(`\nBuilding dev_branch workshop...`);
-        executeBuildPlan(planBuild({ ...planInput, variant: 'development' }));
+        const devModIds = collectIncludedModIds(projectConfig, 'development');
+        if (devModIds.length === 0) {
+            warn(
+                'All mods are excluded — nothing to build for the dev_branch workshop output.',
+            );
+        } else {
+            log(`\nBuilding dev_branch workshop...`);
+            executeBuildPlan(
+                planBuild({ ...planInput, variant: 'development' }),
+            );
+        }
     }
 
     const endTime = performance.now();

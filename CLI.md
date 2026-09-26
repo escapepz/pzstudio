@@ -246,6 +246,8 @@ pzstudio build --verbose
 - `--production` also builds the main workshop output.
 - `--development` builds the `dev_branch` output.
 - The two target flags are mutually exclusive.
+- When no mod qualifies for the selected target (all dev-only or excluded), that target is skipped with a warning and the existing output directory is left untouched.
+- Dev-only mods (`project.json.mods[modId].build.devOnly`) are skipped by the main build with a warning; they are built into the `dev_branch` output with `--development`.
 
 ### Main output
 

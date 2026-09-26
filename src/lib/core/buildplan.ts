@@ -113,6 +113,27 @@ export function resolveBuildOutputPath(
 }
 
 /**
+ * Collects the mod ids that qualify for a variant: excluded mods never
+ * qualify, dev-only mods (build.devOnly) qualify for the development
+ * variant only.
+ */
+export function collectIncludedModIds(
+    config: IProjectConfig,
+    variant: 'main' | 'development',
+): string[] {
+    const excludes = config.excludes ?? [];
+    return Object.keys(config.mods).filter((modId) => {
+        if (excludes.includes(modId)) {
+            return false;
+        }
+        if (variant === 'main' && config.mods[modId].build?.devOnly) {
+            return false;
+        }
+        return true;
+    });
+}
+
+/**
  * Computes the ordered operations that build one workshop output.
  * @param input The resolved config, build variant and source-tree snapshot
  * @returns {FileOperation[]} The operations the adapter must execute in order
@@ -154,15 +175,7 @@ export function planBuild(input: PlanBuildInput): FileOperation[] {
 
     // Copy the mods. Dev-only mods (build.devOnly) ship in the development
     // output only; the main (production) build skips them.
-    const includedModIds = Object.keys(config.mods).filter((modId) => {
-        if (excludes.includes(modId)) {
-            return false;
-        }
-        if (variant === 'main' && config.mods[modId].build?.devOnly) {
-            return false;
-        }
-        return true;
-    });
+    const includedModIds = collectIncludedModIds(config, variant);
     for (const modId of includedModIds) {
         const prefixedModId = variantOptions.modIdSuffix
             ? `${modId}${variantOptions.modIdSuffix}`

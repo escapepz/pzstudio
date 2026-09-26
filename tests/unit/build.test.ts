@@ -203,4 +203,86 @@ describe('buildCmd', () => {
             ),
         );
     });
+
+    it('should skip the main build and warn when all mods are dev-only', async () => {
+        vi.mocked(resolveProjectConfig).mockImplementation(
+            () =>
+                JSON.parse(
+                    JSON.stringify({
+                        ...project,
+                        mods: {
+                            my_mod: {
+                                name: 'My Mod',
+                                description: 'A mod.',
+                                build: { devOnly: true },
+                            },
+                        },
+                    }),
+                ) as any,
+        );
+
+        await buildCmd();
+
+        // Nothing may touch the output: the previous build must survive.
+        expect(fs.rmSync).not.toHaveBeenCalled();
+        expect(fs.mkdirSync).not.toHaveBeenCalled();
+        expect(scaffoldProject).not.toHaveBeenCalled();
+        expect(logger.warn).toHaveBeenCalledWith(
+            expect.stringContaining(
+                'nothing to build for the main workshop output',
+            ),
+        );
+    });
+
+    it('should warn about dev-only mods skipped in a partial main build', async () => {
+        vi.mocked(resolveProjectConfig).mockImplementation(
+            () =>
+                JSON.parse(
+                    JSON.stringify({
+                        ...project,
+                        mods: {
+                            mod_a: { name: 'A', description: 'd' },
+                            mod_b: {
+                                name: 'B',
+                                description: 'd',
+                                build: { devOnly: true },
+                            },
+                        },
+                    }),
+                ) as any,
+        );
+
+        await buildCmd();
+
+        expect(fs.rmSync).toHaveBeenCalledWith(
+            expect.stringContaining('Test Project'),
+            { recursive: true, force: true },
+        );
+        expect(logger.warn).toHaveBeenCalledWith(
+            expect.stringContaining(
+                'Dev-only mods skipped in the main build: mod_b',
+            ),
+        );
+    });
+
+    it('should skip the dev build and warn when all mods are excluded', async () => {
+        vi.mocked(hasFlag).mockImplementation(
+            (name: string) => name === 'development',
+        );
+        vi.mocked(resolveProjectConfig).mockImplementation(
+            () =>
+                JSON.parse(
+                    JSON.stringify({ ...project, excludes: ['my_mod'] }),
+                ) as any,
+        );
+
+        await buildCmd();
+
+        expect(scaffoldProject).not.toHaveBeenCalled();
+        expect(logger.warn).toHaveBeenCalledWith(
+            expect.stringContaining(
+                'nothing to build for the dev_branch workshop output',
+            ),
+        );
+    });
 });

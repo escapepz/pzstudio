@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     FileOperation,
     PlanBuildInput,
+    collectIncludedModIds,
     planBuild,
     resolveBuildOutputPath,
     sanitizeFolderName,
@@ -335,5 +336,29 @@ describe('sanitizeFolderName (pure)', () => {
     it('should return an underscore for an empty result', () => {
         expect(sanitizeFolderName('')).toBe('_');
         expect(sanitizeFolderName('::')).toBe('_');
+    });
+});
+
+describe('collectIncludedModIds (pure)', () => {
+    const config = {
+        workshop: { title: 'T', visibility: 'public', tags: [] },
+        mods: {
+            normal_mod: { name: 'A', description: 'd' },
+            dev_mod: { name: 'B', description: 'd', build: { devOnly: true } },
+            gone_mod: { name: 'C', description: 'd' },
+        },
+        excludes: ['gone_mod'],
+        outdir: '/out',
+    } as unknown as IProjectConfig;
+
+    it('main variant keeps included mods and drops dev-only and excluded ones', () => {
+        expect(collectIncludedModIds(config, 'main')).toEqual(['normal_mod']);
+    });
+
+    it('development variant keeps dev-only mods but still drops excluded ones', () => {
+        expect(collectIncludedModIds(config, 'development')).toEqual([
+            'normal_mod',
+            'dev_mod',
+        ]);
     });
 });

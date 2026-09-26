@@ -6,6 +6,7 @@ export {
     setVsCodeSettings,
 } from './lib/helper';
 export {
+    collectIncludedModIds,
     planBuild,
     resolveBuildOutputPath,
     sanitizeFolderName,
