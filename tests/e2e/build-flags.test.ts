@@ -254,6 +254,64 @@ describe('build missing workshop/preview.png warning (E2E)', () => {
     });
 });
 
+describe('build with all mods dev-only (E2E)', () => {
+    let workspace: E2ETestWorkspace;
+
+    beforeEach(() => {
+        workspace = createE2EWorkspace();
+    });
+
+    afterEach(() => {
+        workspace.cleanup();
+    });
+
+    it('should not create or wipe the main output when all mods are dev-only', async () => {
+        const title = 'DevOnly Project';
+        writeMinimalProject(workspace, { title, outdir: 'out' });
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: { title, visibility: 'public', tags: [] },
+                mods: {
+                    flag_mod: {
+                        name: 'Flag Mod',
+                        description: 'D',
+                        build: { modInfo: 'auto', devOnly: true },
+                    },
+                },
+                excludes: [],
+                outdir: 'out',
+            }),
+        );
+        // A pre-existing production output must survive the skipped build.
+        workspace.write(
+            path.join('out', title, 'Contents', 'mods', 'keep.txt'),
+            'keep me',
+        );
+
+        const result = await workspace.run('build');
+        workspace.assertSuccess(result);
+
+        expect(
+            fs.existsSync(
+                path.join(
+                    workspace.dir,
+                    'out',
+                    title,
+                    'Contents',
+                    'mods',
+                    'keep.txt',
+                ),
+            ),
+        ).toBe(true);
+        expect(
+            fs.existsSync(
+                path.join(workspace.dir, 'out', `${title} - dev_branch`),
+            ),
+        ).toBe(false);
+    });
+});
+
 describe('build excludes array filters entire mods (E2E)', () => {
     let workspace: E2ETestWorkspace;
 
