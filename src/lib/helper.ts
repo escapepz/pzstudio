@@ -93,6 +93,37 @@ export function getResolvedUseSymlinks(
 }
 
 /**
+ * Deletes a directory tree with retries. ENOTEMPTY/EBUSY/EPERM happen on
+ * Windows when another program (the game, Steam, an editor or an antivirus)
+ * briefly holds handles inside the folder — a bare rmSync gets exactly one
+ * shot, so give transient locks time to clear before giving up.
+ */
+export function removeDirRecursive(target: string): void {
+    try {
+        rmSync(target, {
+            recursive: true,
+            force: true,
+            maxRetries: 5,
+            retryDelay: 200,
+        });
+    } catch (e) {
+        const code = (e as NodeJS.ErrnoException | undefined)?.code;
+        if (
+            code === 'ENOTEMPTY' ||
+            code === 'EBUSY' ||
+            code === 'EPERM' ||
+            code === 'EACCES'
+        ) {
+            throw new Error(
+                `Cannot delete '${target}' — the folder is in use by another program (the game, Steam, or Explorer). Close it and try again.`,
+                { cause: e },
+            );
+        }
+        throw e;
+    }
+}
+
+/**
  * Resolves the full project configuration by merging workspace and global settings.
  * Workspace (project.json) settings always take precedence.
  * @returns {IProjectConfig | undefined} The resolved configuration, or undefined if no project.json exists.

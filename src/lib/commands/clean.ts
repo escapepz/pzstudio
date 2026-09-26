@@ -1,8 +1,8 @@
-import { existsSync, rmSync } from 'fs';
+import { existsSync } from 'fs';
 import { resolveBuildOutputPath } from '../core/buildplan';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
-import { resolveProjectConfig } from '../helper';
+import { removeDirRecursive, resolveProjectConfig } from '../helper';
 import { log, verbose } from '../logger';
 
 addHelp(
@@ -30,21 +30,35 @@ export function cleanCmd() {
     const devOutPath = resolveBuildOutputPath(projectConfig, 'development');
 
     let cleaned = false;
+    const failures: string[] = [];
 
     // Clean main output
     if (existsSync(mainOutPath)) {
         log(`Cleaning main output directory at '${mainOutPath}'...`);
-        rmSync(mainOutPath, { recursive: true, force: true });
-        verbose(`Cleaned: ${mainOutPath}`);
-        cleaned = true;
+        try {
+            removeDirRecursive(mainOutPath);
+            verbose(`Cleaned: ${mainOutPath}`);
+            cleaned = true;
+        } catch (e) {
+            failures.push(e instanceof Error ? e.message : String(e));
+        }
     }
 
-    // Clean development output
+    // Clean development output — always attempted, even when the main
+    // output could not be deleted.
     if (existsSync(devOutPath)) {
         log(`Cleaning development output directory at '${devOutPath}'...`);
-        rmSync(devOutPath, { recursive: true, force: true });
-        verbose(`Cleaned: ${devOutPath}`);
-        cleaned = true;
+        try {
+            removeDirRecursive(devOutPath);
+            verbose(`Cleaned: ${devOutPath}`);
+            cleaned = true;
+        } catch (e) {
+            failures.push(e instanceof Error ? e.message : String(e));
+        }
+    }
+
+    if (failures.length > 0) {
+        throw new Error(failures.join('\n'));
     }
 
     if (!cleaned) {

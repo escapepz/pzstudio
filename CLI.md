@@ -253,6 +253,8 @@ pzstudio build --verbose
 - The target flags are mutually exclusive.
 - When no mod qualifies for the selected target (all dev-only or excluded), that target is skipped with a warning and the existing output directory is left untouched.
 - Dev-only mods (`project.json.mods[modId].build.devOnly`) are skipped by the main build with a warning; they are built into the `dev_branch` output with `--development`.
+- The two targets are built independently: if one output folder cannot be deleted because another program (the game, Steam, or Explorer) holds it open, the other target is still built and the failure is reported at the end.
+- Deletion retries briefly to ride out transient file locks before failing with a clear message naming the folder.
 
 ### Main output
 
@@ -308,12 +310,9 @@ pzstudio clean
 
 - Removes the main output directory.
 - Removes the development output directory if it exists.
+- Both output directories are always attempted, even when the first one cannot be deleted.
+- Deletion retries briefly to ride out transient file locks; if a directory is still in use by another program (the game, Steam, or Explorer), the command fails with a clear message naming the folder.
 - Throws if neither output directory is found.
-
-### Output
-
-- Logs which output directories were removed.
-- Prints a completion time when successful.
 
 ## `pzstudio delete`
 

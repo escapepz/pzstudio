@@ -88,7 +88,7 @@ describe('buildCmd', () => {
 
         expect(fs.rmSync).toHaveBeenCalledWith(
             expect.stringContaining('Test Project'),
-            { recursive: true, force: true },
+            { recursive: true, force: true, maxRetries: 5, retryDelay: 200 },
         );
         expect(fs.mkdirSync).toHaveBeenCalledWith(
             expect.stringContaining('Test Project'),
@@ -256,7 +256,7 @@ describe('buildCmd', () => {
 
         expect(fs.rmSync).toHaveBeenCalledWith(
             expect.stringContaining('Test Project'),
-            { recursive: true, force: true },
+            { recursive: true, force: true, maxRetries: 5, retryDelay: 200 },
         );
         expect(logger.warn).toHaveBeenCalledWith(
             expect.stringContaining(
@@ -372,6 +372,28 @@ describe('buildCmd', () => {
 
         await expect(buildCmd()).rejects.toThrow(
             'Conflicting targets selected: --both',
+        );
+    });
+
+    it('should still build the dev output when the main output is locked', async () => {
+        // First rmSync call is the main variant's removeDir: simulate a lock.
+        vi.mocked(fs.rmSync).mockImplementationOnce(() => {
+            const e = new Error('not empty') as NodeJS.ErrnoException;
+            e.code = 'ENOTEMPTY';
+            throw e;
+        });
+        vi.mocked(hasFlag).mockImplementation(
+            (name: string) => name === 'both',
+        );
+
+        await expect(buildCmd()).rejects.toThrow(
+            "Cannot delete '/out/Test Project' — the folder is in use by another program",
+        );
+
+        // The dev variant was still planned and executed.
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+            expect.stringMatching(/dev_branch\/workshop\.txt$/),
+            expect.anything(),
         );
     });
 });
