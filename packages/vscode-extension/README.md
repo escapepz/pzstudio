@@ -12,29 +12,39 @@
 - **Instant Project Creation**: Initialize a full modding project structure with templates in seconds.
 - **Multi-Mod Support**: Manage multiple mods within a single project workspace.
 - **Automated Building**: Build your workshop-ready folders with one click, including `mod.info` generation and dual-branch support (Main & Dev Branch).
-- **Live Sync**: Watch mode to automatically update your workshop directory as you save files.
+- **Project Explorer**: A dedicated tree view mirroring your projects and mods — build, clean and configure mods with inline buttons.
 - **In-Place Documentation**: Automatically clones the latest modding docs and guides into your project.
 - **Integrated Output Logging**: Standardized timestamps and labels (`[INFO]`, `[WARN]`, `[ERROR]`) in the VS Code output channel for easier troubleshooting.
 - **Clean execution**: Automatic log clearing at the start of command execution.
-- **Version Compatibility**: Optimized for **Project Zomboid b42.17.0** and later versions.
+- **Version Compatibility**: Optimized for **Project Zomboid build 42.x** and later versions.
 
 ## 🛠 Commands
 
 Access these commands via the **Command Palette** (`Ctrl+Shift+P` / `Cmd+Shift+P`):
 
-| Command                  | Description                                          |
-| :----------------------- | :--------------------------------------------------- |
-| `PZStudio: New Project`  | Create a new project with a simple mod template.     |
-| `PZStudio: New Project Here` | Create a new project inside the opened workspace folder. |
-| `PZStudio: Add Mod`      | Add a new mod to the current project.                |
-| `PZStudio: Build`        | Build the project and deploy to the Workshop folder. |
-| `PZStudio: Watch`        | Watch for changes and build incrementally.           |
-| `PZStudio: Clean`        | Clean the output directories.                        |
-| `PZStudio: New Language` | Add a new translation template to a mod.             |
-| `PZStudio: Rename Mod`   | Safely rename an existing mod.                       |
-| `PZStudio: Delete Mod`   | Remove a mod from the project.                       |
-| `PZStudio: ModInfo Generate` | Generate mod.info files in your source tree. |
-| `PZStudio: Update`           | Sync libraries and documentation.            |
+| Command                       | Description                                                   |
+| :---------------------------- | :------------------------------------------------------------ |
+| `PZStudio: New Project`       | Create a new project from the project template.               |
+| `PZStudio: New Project Here`  | Create a new project inside the opened workspace folder.      |
+| `PZStudio: Add Mod`           | Add a new mod to a project.                                   |
+| `PZStudio: Build`             | Build the project and deploy to the Workshop folder.          |
+| `PZStudio: Clean`             | Clean the output directories.                                 |
+| `PZStudio: Delete Mod`        | Remove a mod from the project.                                |
+| `PZStudio: New Language`      | Add a new translation template to a mod.                      |
+| `PZStudio: Rename Mod ID`     | Safely rename an existing mod (folder + project.json key).    |
+| `PZStudio: ModInfo Generate`  | Generate mod.info files in your source tree.                  |
+| `PZStudio: Update`            | Refresh the cached templates (libraries and documentation).   |
+
+Commands that always act on one specific row — **Edit Mod Configuration**, the per-mod build-state toggles, explorer refresh and the All/Essential files toggle — are intentionally not in the Command Palette: they live in the **PZ Project Explorer**, where their target is unambiguous.
+
+## 🌲 PZ Project Explorer
+
+The activity-bar view mirrors the real folder structure: every project found in the workspace (workspace roots and first-level subfolders) with its mods.
+
+- **Project rows** carry inline **Build** and **Clean** buttons; both ask for confirmation first (disable with `pzstudio.confirmBeforeRun`).
+- **Mod rows** show their build state right in the row (`included` / `dev builds only` / `excluded from build`) with inline buttons: include/exclude toggle, dev_branch-only toggle, generate `mod.info`, rename and delete.
+- Right-click a mod for **Edit Mod Configuration** (author, description, `build.modInfo`, build inclusion, …).
+- Every command that needs a mod resolves the project first — the active editor's project, then the only discovered project, then a quick-pick labeled with the workshop title — so multi-root workspaces and projects in subfolders always target the right files.
 
 ## ⚙️ Configuration
 
