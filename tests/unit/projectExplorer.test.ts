@@ -434,4 +434,54 @@ describe('constants and manifest', () => {
             ),
         ).toBe(true);
     });
+
+    it('keeps explorer-only commands out of the command palette', () => {
+        const palette: Array<{ command: string; when?: string }> =
+            PKG.contributes.commandPalette;
+
+        // Tree/title-bar actions stay reachable from the explorer itself;
+        // they must not clutter the palette or keyboard-shortcut search.
+        const hidden = [
+            'pzstudio.modConfigure',
+            'pzstudio.explorer.refresh',
+            'pzstudio.explorer.toggleFiles',
+            'pzstudio.explorer.toggleFiles.hidden',
+            'pzstudio.modIncluded',
+            'pzstudio.modExcluded',
+            'pzstudio.modDevOnly',
+            'pzstudio.modDevOnly.dim',
+        ];
+        for (const id of hidden) {
+            expect(
+                palette.some((p) => p.command === id && p.when === 'false'),
+                `${id} must be hidden from the command palette`,
+            ).toBe(true);
+        }
+
+        // The core workflow commands stay palette-visible.
+        const visible = [
+            'pzstudio.new',
+            'pzstudio.newHere',
+            'pzstudio.add',
+            'pzstudio.build',
+            'pzstudio.clean',
+            'pzstudio.delete',
+            'pzstudio.lang',
+            'pzstudio.rename',
+            'pzstudio.update',
+            'pzstudio.modinfoGenerate',
+        ];
+        for (const id of visible) {
+            expect(
+                PKG.contributes.commands.some(
+                    (c: { command: string }) => c.command === id,
+                ),
+                `${id} must remain a contributed command`,
+            ).toBe(true);
+            expect(
+                palette.some((p) => p.command === id && p.when === 'false'),
+                `${id} must stay palette-visible`,
+            ).toBe(false);
+        }
+    });
 });
