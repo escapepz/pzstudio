@@ -463,7 +463,7 @@
     },
     "devDependencies": {
         "@types/vscode": "^1.102.0",
-        "@vscode/vsce": "^3.7.1",
+        "@vscode/vsce": "^4.0.0",
         "esbuild": "^0.27.2"
     },
     "dependencies": {
