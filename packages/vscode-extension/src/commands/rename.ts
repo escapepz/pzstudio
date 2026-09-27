@@ -11,9 +11,13 @@ export function registerRenameCommand(
         'pzstudio.rename',
         async (node?: unknown) => {
             const modNode = asModNode(node);
-            const modId =
-                modNode?.modId ?? (await pickModId(t('Select mod to rename')));
-            if (!modId) return;
+            const picked = modNode
+                ? { modId: modNode.modId, projectDir: modNode.projectDir }
+                : await pickModId(t('Select mod to rename'), {
+                      action: 'rename mods in',
+                  });
+            if (!picked) return;
+            const { modId, projectDir } = picked;
 
             const newName = await vscode.window.showInputBox({
                 prompt: t(
@@ -24,7 +28,7 @@ export function registerRenameCommand(
             if (!newName) return;
 
             await execute('rename', [modId, newName], undefined, {
-                projectDir: modNode?.projectDir.fsPath,
+                projectDir: projectDir.fsPath,
             });
         },
     );

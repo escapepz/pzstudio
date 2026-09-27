@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { ExecutePZCommand } from '../util/execute';
 import { asProjectNode } from '../providers/projectExplorer';
-import { resolveProjectDir } from '../util/project';
+import { readProjectSummary, resolveProjectDir } from '../util/project';
 import { basename } from 'path';
 import { confirmBeforeRun, disableConfirmBeforeRun } from '../util/confirm';
 
@@ -11,24 +11,27 @@ export function registerCleanCommand(
     return vscode.commands.registerCommand(
         'pzstudio.clean',
         async (node?: unknown) => {
-            const projectDir =
-                asProjectNode(node)?.projectDir.fsPath ??
-                (await resolveProjectDir('clean'))?.fsPath;
+            const dir =
+                asProjectNode(node)?.projectDir ??
+                (await resolveProjectDir('clean'));
 
-            if (projectDir) {
+            if (dir) {
+                // Name the workshop in the confirm so a wrong-project pick
+                // is obvious before anything is deleted.
+                const { title } = await readProjectSummary(dir);
                 const decision = await confirmBeforeRun(
                     'clean',
-                    basename(projectDir),
+                    title ?? basename(dir.fsPath),
                 );
                 if (decision === 'cancel') {
                     return;
                 }
                 if (decision === 'never') {
-                    await disableConfirmBeforeRun(projectDir);
+                    await disableConfirmBeforeRun(dir.fsPath);
                 }
             }
 
-            await execute('clean', [], undefined, { projectDir });
+            await execute('clean', [], undefined, { projectDir: dir?.fsPath });
         },
     );
 }

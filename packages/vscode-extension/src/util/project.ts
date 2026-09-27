@@ -3,41 +3,108 @@ import { TextDecoder } from 'util';
 import path from 'path';
 import { t } from './l10n';
 
+/** A mod as declared in project.json: its id plus optional display name. */
+export interface ModSummary {
+    id: string;
+    name?: string;
+}
+
 /**
- * Reads the mod ids from project.json in the workspace folder.
- * Returns an empty list when there is no project or the file is unreadable.
+ * Reads the mods of ONE project from its project.json, tolerantly:
+ * an empty list when the file is missing or unreadable.
  */
-export async function getModIds(): Promise<string[]> {
-    const folder = vscode.workspace.workspaceFolders?.[0];
-    if (!folder) {
-        return [];
-    }
+export async function getModSummaries(
+    projectDir: vscode.Uri,
+): Promise<ModSummary[]> {
     try {
-        const fileUri = vscode.Uri.joinPath(folder.uri, 'project.json');
         const content = new TextDecoder().decode(
-            await vscode.workspace.fs.readFile(fileUri),
+            await vscode.workspace.fs.readFile(
+                vscode.Uri.joinPath(projectDir, 'project.json'),
+            ),
         );
         const config = JSON.parse(content);
-        return Object.keys(config?.mods ?? {});
+        return Object.entries(config?.mods ?? {})
+            .filter(([, mod]) => typeof mod === 'object' && mod !== null)
+            .map(([id, mod]) => {
+                const name = (mod as { name?: unknown }).name;
+                return {
+                    id,
+                    name: typeof name === 'string' ? name : undefined,
+                };
+            });
     } catch {
         return [];
     }
 }
 
+/** A mod pick bound to the project it belongs to. */
+export interface PickedMod {
+    modId: string;
+    projectDir: vscode.Uri;
+}
+
+export interface PickModIdOptions {
+    /** Project to pick from; resolved like every other command when omitted. */
+    projectDir?: vscode.Uri;
+    /** Action phrase for the project picker: "Select the project to {0}". */
+    action?: string;
+}
+
 /**
- * Asks for a mod id via a quick-pick of the project's mods, falling back
- * to a free-text input when the project has no mods or project.json is
- * missing.
+ * Friendly warning shown instead of running a command when the workspace
+ * has no project at all; the caller aborts right after.
  */
-export async function pickModId(prompt: string): Promise<string | undefined> {
-    const modIds = await getModIds();
-    if (modIds.length > 0) {
-        const picked = await vscode.window.showQuickPick(modIds, {
-            placeHolder: prompt,
-        });
-        return picked;
+export function warnNoProject(action: string): void {
+    vscode.window.showWarningMessage(
+        t(
+            "PZStudio: no PZ project (project.json) found in this workspace — nothing to {0}. Use 'PZStudio: New Project' to create one.",
+            action,
+        ),
+    );
+}
+
+/**
+ * Asks for a mod id, always bound to one explicit project:
+ * - a project passed in (tree node context) is used as-is,
+ * - otherwise the project is resolved first (active editor → only project
+ *   → quick-pick), so subfolder and multi-root workspaces work,
+ * - a single mod is selected without asking, several mods quick-pick
+ *   (label = id, description = display name), and a project without mods
+ *   falls back to free text (fresh project).
+ * Returns undefined when the user cancels or no project exists at all.
+ */
+export async function pickModId(
+    prompt: string,
+    options: PickModIdOptions = {},
+): Promise<PickedMod | undefined> {
+    let projectDir = options.projectDir;
+    if (!projectDir) {
+        projectDir = await resolveProjectDir(
+            options.action ?? 'pick a mod from',
+        );
+        if (!projectDir) {
+            warnNoProject(options.action ?? 'pick a mod from');
+            return undefined;
+        }
     }
-    return vscode.window.showInputBox({ prompt });
+
+    const mods = await getModSummaries(projectDir);
+    if (mods.length === 1) {
+        return { modId: mods[0].id, projectDir };
+    }
+    if (mods.length > 1) {
+        const picked = await vscode.window.showQuickPick(
+            mods.map((mod) => ({
+                label: mod.id,
+                description: mod.name,
+                mod,
+            })),
+            { placeHolder: prompt },
+        );
+        return picked ? { modId: picked.mod.id, projectDir } : undefined;
+    }
+    const typed = await vscode.window.showInputBox({ prompt });
+    return typed ? { modId: typed, projectDir } : undefined;
 }
 
 /** Scan limits: keep the discovery cheap even in huge workspaces. */
@@ -211,13 +278,45 @@ export async function readModConfig(
     }
 }
 
+/** Workshop identity of a project, for labels. */
+export interface ProjectSummary {
+    title?: string;
+    id?: string;
+}
+
+/**
+ * Reads workshop title/id from a project's project.json for labels,
+ * tolerantly (both fields undefined when missing or unreadable).
+ */
+export async function readProjectSummary(
+    projectDir: vscode.Uri,
+): Promise<ProjectSummary> {
+    try {
+        const content = new TextDecoder().decode(
+            await vscode.workspace.fs.readFile(
+                vscode.Uri.joinPath(projectDir, 'project.json'),
+            ),
+        );
+        const config = JSON.parse(content);
+        const title = config?.workshop?.title;
+        const id = config?.workshop?.id;
+        return {
+            title: typeof title === 'string' ? title : undefined,
+            id: id != null ? String(id) : undefined,
+        };
+    } catch {
+        return {};
+    }
+}
+
 /**
  * Resolves the project a command should run against, without the caller
  * having to know the workspace layout:
  * 1. the project containing the active editor's file (most intent, no UI),
  * 2. the only discovered project, auto-selected,
  * 3. a quick-pick of every discovered project (workspace roots and
- *    depth-1 subfolders — the same discovery the tree view uses).
+ *    depth-1 subfolders — the same discovery the tree view uses), each
+ *    labeled with its folder name and workshop title.
  * Returns undefined when the workspace has no project at all; callers
  * show a friendly warning instead of running the CLI.
  */
@@ -237,14 +336,24 @@ export async function resolveProjectDir(
         return dirs[0];
     }
     if (dirs.length > 1) {
-        const picked = await vscode.window.showQuickPick(
-            dirs.map((dir) => ({
-                label: dir.path.split('/').pop() ?? dir.path,
-                detail: dir.fsPath,
-                dir,
-            })),
-            { placeHolder: t('Select the project to {0}', action) },
+        const picks = await Promise.all(
+            dirs.map(async (dir) => {
+                const summary = await readProjectSummary(dir);
+                return {
+                    label: dir.path.split('/').pop() ?? dir.path,
+                    description:
+                        summary.title ??
+                        (summary.id !== undefined
+                            ? `id ${summary.id}`
+                            : undefined),
+                    detail: dir.fsPath,
+                    dir,
+                };
+            }),
         );
+        const picked = await vscode.window.showQuickPick(picks, {
+            placeHolder: t('Select the project to {0}', action),
+        });
         return picked?.dir;
     }
     return undefined;

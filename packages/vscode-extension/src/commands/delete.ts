@@ -11,9 +11,13 @@ export function registerDeleteCommand(
         'pzstudio.delete',
         async (node?: unknown) => {
             const modNode = asModNode(node);
-            const modId =
-                modNode?.modId ?? (await pickModId(t('Select mod to delete')));
-            if (!modId) return;
+            const picked = modNode
+                ? { modId: modNode.modId, projectDir: modNode.projectDir }
+                : await pickModId(t('Select mod to delete'), {
+                      action: 'delete mods from',
+                  });
+            if (!picked) return;
+            const { modId, projectDir } = picked;
 
             const confirm = await vscode.window.showWarningMessage(
                 t(
@@ -26,7 +30,7 @@ export function registerDeleteCommand(
             if (confirm !== t('Yes')) return;
 
             await execute('delete', [modId], undefined, {
-                projectDir: modNode?.projectDir.fsPath,
+                projectDir: projectDir.fsPath,
             });
         },
     );
