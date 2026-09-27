@@ -161,6 +161,18 @@
             {
                 "command": "pzstudio.explorer.toggleFiles.hidden",
                 "when": "false"
+            },
+            {
+                "command": "pzstudio.modConfigure",
+                "when": "false"
+            },
+            {
+                "command": "pzstudio.explorer.refresh",
+                "when": "false"
+            },
+            {
+                "command": "pzstudio.explorer.toggleFiles",
+                "when": "false"
             }
         ],
         "jsonValidation": [
