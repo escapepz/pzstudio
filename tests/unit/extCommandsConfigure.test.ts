@@ -53,7 +53,12 @@ describe('pzstudio.modConfigure', () => {
 
         await handler(modNode);
 
-        expect(execute).toHaveBeenCalledWith('modconfig', ['m1', 'devonly']);
+        expect(execute).toHaveBeenCalledWith(
+            'modconfig',
+            ['m1', 'devonly'],
+            undefined,
+            { projectDir: expect.any(String) },
+        );
     });
 
     it('sets build.modInfo through the note menu', async () => {
@@ -66,12 +71,12 @@ describe('pzstudio.modConfigure', () => {
 
         await handler(modNode);
 
-        expect(execute).toHaveBeenCalledWith('modconfig', [
-            'm1',
-            'set',
-            'modInfo',
-            'skip',
-        ]);
+        expect(execute).toHaveBeenCalledWith(
+            'modconfig',
+            ['m1', 'set', 'modInfo', 'skip'],
+            undefined,
+            { projectDir: expect.any(String) },
+        );
     });
 
     it('prefills the current field value and writes non-empty input', async () => {
@@ -87,12 +92,12 @@ describe('pzstudio.modConfigure', () => {
         expect(asMock(vscode.window.showInputBox)).toHaveBeenCalledWith(
             expect.objectContaining({ value: 'Old Name' }),
         );
-        expect(execute).toHaveBeenCalledWith('modconfig', [
-            'm1',
-            'set',
-            'name',
-            'New Name',
-        ]);
+        expect(execute).toHaveBeenCalledWith(
+            'modconfig',
+            ['m1', 'set', 'name', 'New Name'],
+            undefined,
+            { projectDir: expect.any(String) },
+        );
     });
 
     it('unsets a field when the input is cleared', async () => {
@@ -105,11 +110,12 @@ describe('pzstudio.modConfigure', () => {
 
         await handler(modNode);
 
-        expect(execute).toHaveBeenCalledWith('modconfig', [
-            'm1',
-            'unset',
-            'name',
-        ]);
+        expect(execute).toHaveBeenCalledWith(
+            'modconfig',
+            ['m1', 'unset', 'name'],
+            undefined,
+            { projectDir: expect.any(String) },
+        );
     });
 
     it('leaves array fields comma-separated', async () => {
@@ -128,12 +134,12 @@ describe('pzstudio.modConfigure', () => {
         expect(asMock(vscode.window.showInputBox)).toHaveBeenCalledWith(
             expect.objectContaining({ value: 'a, b' }),
         );
-        expect(execute).toHaveBeenCalledWith('modconfig', [
-            'm1',
-            'set',
-            'pack',
-            'a, b',
-        ]);
+        expect(execute).toHaveBeenCalledWith(
+            'modconfig',
+            ['m1', 'set', 'pack', 'a, b'],
+            undefined,
+            { projectDir: expect.any(String) },
+        );
     });
 
     it('does nothing when the field menu is dismissed', async () => {

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ExecutePZCommand } from '../util/execute';
 import { asModNode } from '../providers/projectExplorer';
 import { pickModId } from '../util/project';
+import { t } from '../util/l10n';
 
 type BuildStateAction = 'include' | 'devonly' | 'exclude';
 
@@ -46,19 +47,17 @@ export function registerModStateCommands(
             const modNode = asModNode(node);
             const modId = modNode?.modId;
             if (!modId) {
-                // Palette use is disabled for these state commands; reaching
-                // here without a tree node falls back to the mod picker.
-                const picked = await pickModId(
-                    `Select mod to ${
-                        action === 'devonly'
-                            ? 'build in dev_branch only'
-                            : action
-                    }`,
-                );
+                // Keyboard-shortcut runs have no tree context; fall back to
+                // the project-and-mod picker so the target stays explicit.
+                const picked = await pickModId(t('Select mod'), {
+                    action: 'change mod build states in',
+                });
                 if (!picked) {
                     return;
                 }
-                await execute('modconfig', [picked, action]);
+                await execute('modconfig', [picked.modId, action], undefined, {
+                    projectDir: picked.projectDir.fsPath,
+                });
                 return;
             }
             await execute('modconfig', [modId, action], undefined, {

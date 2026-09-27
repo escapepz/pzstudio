@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { runCLI, setProjectDir } from 'pzstudio-cli/api';
 import { resolveFlags } from './flags';
-import { resolveProjectDir } from './project';
+import { resolveProjectDir, warnNoProject } from './project';
 import { t } from './l10n';
 
 export interface ExecuteOptions {
@@ -45,12 +45,7 @@ export function createCommandRunner(
                 // → warn instead of surfacing the raw CLI error.
                 const dir = await resolveProjectDir(command);
                 if (!dir) {
-                    vscode.window.showWarningMessage(
-                        t(
-                            "PZStudio: no PZ project (project.json) found in this workspace — nothing to {0}. Use 'PZStudio: New Project' to create one.",
-                            command,
-                        ),
-                    );
+                    warnNoProject(command);
                     return;
                 }
                 setProjectDir(dir.fsPath);

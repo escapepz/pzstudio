@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { ExecutePZCommand } from '../util/execute';
 import { asModNode } from '../providers/projectExplorer';
-import { pickModId, readModConfig, resolveProjectDir } from '../util/project';
+import { pickModId, readModConfig } from '../util/project';
 import { t } from '../util/l10n';
 
 /** Editable mod fields, in menu order (mirrors the modconfig whitelist). */
@@ -54,19 +54,15 @@ export function registerConfigureCommand(
         'pzstudio.modConfigure',
         async (node?: unknown) => {
             const modNode = asModNode(node);
-            const modId =
-                modNode?.modId ??
-                (await pickModId(t('Select mod to configure')));
-            if (!modId) {
+            const modPick = modNode
+                ? { modId: modNode.modId, projectDir: modNode.projectDir }
+                : await pickModId(t('Select mod to configure'), {
+                      action: 'configure mods in',
+                  });
+            if (!modPick) {
                 return;
             }
-
-            const projectDir =
-                modNode?.projectDir ??
-                (await resolveProjectDir('mod configuration'));
-            if (!projectDir) {
-                return;
-            }
+            const { modId, projectDir } = modPick;
 
             const snapshot = await readModConfig(projectDir, modId);
             if (!snapshot) {
@@ -128,7 +124,12 @@ export function registerConfigureCommand(
                     },
                 );
                 if (choice) {
-                    await execute('modconfig', [modId, choice.action]);
+                    await execute(
+                        'modconfig',
+                        [modId, choice.action],
+                        undefined,
+                        { projectDir: projectDir.fsPath },
+                    );
                 }
                 return;
             }
@@ -145,12 +146,12 @@ export function registerConfigureCommand(
                     },
                 );
                 if (choice) {
-                    await execute('modconfig', [
-                        modId,
-                        'set',
-                        'modInfo',
-                        choice,
-                    ]);
+                    await execute(
+                        'modconfig',
+                        [modId, 'set', 'modInfo', choice],
+                        undefined,
+                        { projectDir: projectDir.fsPath },
+                    );
                 }
                 return;
             }
@@ -173,10 +174,17 @@ export function registerConfigureCommand(
                 if (current === '') {
                     return;
                 }
-                await execute('modconfig', [modId, 'unset', key]);
+                await execute('modconfig', [modId, 'unset', key], undefined, {
+                    projectDir: projectDir.fsPath,
+                });
                 return;
             }
-            await execute('modconfig', [modId, 'set', key, trimmed]);
+            await execute(
+                'modconfig',
+                [modId, 'set', key, trimmed],
+                undefined,
+                { projectDir: projectDir.fsPath },
+            );
         },
     );
 }
