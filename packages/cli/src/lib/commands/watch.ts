@@ -86,6 +86,23 @@ export async function watchCmd() {
         const batch = pending.splice(0, pending.length);
         if (batch.length === 0) return;
         const result = await session.apply(batch);
+        // A successful sync is otherwise silent: say what a batch did so
+        // "nothing happened" is never ambiguous again.
+        const summary: string[] = [];
+        if (result.incremental > 0) {
+            summary.push(`${result.incremental} file(s) synced`);
+        }
+        if (result.scoped.length > 0) {
+            summary.push(
+                `re-synced mod(s): ${result.scoped.map((s) => s.modId).join(', ')}`,
+            );
+        }
+        if (result.fullRebuild) {
+            summary.push('full rebuild');
+        }
+        if (summary.length > 0) {
+            info(`- ${summary.join('; ')}.`);
+        }
         for (const message of result.errors) {
             warn(`- ${message}`);
         }
