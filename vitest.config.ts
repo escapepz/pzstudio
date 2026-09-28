@@ -24,6 +24,12 @@ export default defineConfig({
                     import.meta.url,
                 ),
             ),
+            '@pzstudio/platform-web': fileURLToPath(
+                new URL(
+                    './packages/platform-web/src/index.ts',
+                    import.meta.url,
+                ),
+            ),
         },
     },
     test: {
