@@ -443,6 +443,33 @@ export function validateTemplateManifest(
 }
 
 /**
+ * Resolves the template cache directory a category would use — WITHOUT any
+ * side effect (no clone, no refresh, no cache cleanup). Returns undefined
+ * when nothing would resolve for the category. Doctor uses this to report
+ * the template state without triggering a download.
+ */
+export function probeTemplateCacheDir(
+    category: TemplateCategory,
+): { dir: string; name: string } | undefined {
+    const globalConfig = readGlobalConfig(false);
+    const vscodeSettings = getVsCodeSettings();
+    const templates = vscodeSettings?.templates ?? globalConfig.templates;
+    const templateConfig = templates?.[category];
+    if (!templateConfig) return undefined;
+
+    // Same shorthand getCachePathFromUrl derives, kept as a display name.
+    const parts = templateConfig.url
+        .replace('https://github.com/', '')
+        .replace('.git', '')
+        .split('/');
+    const name =
+        parts.length >= 2
+            ? `${parts[parts.length - 2]}/${parts[parts.length - 1]}`
+            : parts[parts.length - 1] || templateConfig.url;
+    return { dir: getCachePathFromUrl(templateConfig.url), name };
+}
+
+/**
  * Resolves the template directory for a given category.
  *
  * Resolution chain:

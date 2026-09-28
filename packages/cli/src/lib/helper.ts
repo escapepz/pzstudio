@@ -180,6 +180,14 @@ export function setProjectDir(dir: string | undefined) {
 }
 
 /**
+ * Returns the externally anchored project directory, if any. Callers that
+ * anchor temporarily (e.g. the doctor gatherer) restore the previous value.
+ */
+export function getExternalProjectDir(): string | undefined {
+    return externalProjectDir;
+}
+
+/**
  * Searches for project.json in the current directory and its parents.
  * @param startDir The directory to start searching from
  * @returns The directory containing project.json, or process.cwd() if not found
