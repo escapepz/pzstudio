@@ -82,6 +82,19 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  packages/platform-node:
+    dependencies:
+      '@pzstudio/platform':
+        specifier: workspace:*
+        version: link:../platform
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.39
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/vscode-extension:
     dependencies:
       pzstudio-cli:

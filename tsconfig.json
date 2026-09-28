@@ -16,7 +16,9 @@
         "baseUrl": ".",
         "paths": {
             "@pzstudio/platform": ["packages/platform/src/index.ts"],
-            "@pzstudio/core": ["packages/core/src/index.ts"]
+            "@pzstudio/core": ["packages/core/src/index.ts"],
+            "@pzstudio/platform-node": ["packages/platform-node/src/index.ts"],
+            "@pzstudio/platform-web": ["packages/platform-web/src/index.ts"]
         },
         "typeRoots": ["./node_modules/@types"],
         "types": ["node"]

@@ -18,6 +18,12 @@ export default defineConfig({
             '@pzstudio/core': fileURLToPath(
                 new URL('./packages/core/src/index.ts', import.meta.url),
             ),
+            '@pzstudio/platform-node': fileURLToPath(
+                new URL(
+                    './packages/platform-node/src/index.ts',
+                    import.meta.url,
+                ),
+            ),
         },
     },
     test: {

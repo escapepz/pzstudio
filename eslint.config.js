@@ -72,6 +72,33 @@ module.exports = tseslint.config(
         },
     },
     {
+        files: [
+            'packages/platform-node/src/**/*.ts',
+            'packages/platform-web/src/**/*.ts',
+        ],
+        languageOptions: {
+            parserOptions: {
+                project: [
+                    './packages/platform-node/tsconfig.build.json',
+                    './packages/platform-web/tsconfig.build.json',
+                ],
+            },
+        },
+        rules: {
+            '@typescript-eslint/no-explicit-any': 'off',
+            '@typescript-eslint/no-unused-vars': [
+                'warn',
+                {
+                    argsIgnorePattern: '^_',
+                    varsIgnorePattern: '^_',
+                    caughtErrorsIgnorePattern: '^_',
+                },
+            ],
+            'no-undef': 'off',
+            'prefer-const': 'warn',
+        },
+    },
+    {
         files: ['packages/core/src/**/*.ts'],
         languageOptions: {
             parserOptions: {
