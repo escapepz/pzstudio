@@ -1,9 +1,18 @@
 import { IProjectConfig, IModConfig } from './project';
-import { join } from 'path';
-import { existsSync, readFileSync } from 'fs';
-import { homedir } from 'os';
 import { DEFAULT_TEMPLATES } from './constants';
 import { parseModInfoText } from './modInfoParser';
+
+/**
+ * Host-provided fallbacks for config.json migration. The migration logic
+ * itself is pure; the adapter supplies how to read the legacy backup file
+ * and what the platform default outdir is.
+ */
+export interface MigrationHostOptions {
+    /** Reads the legacy ~/.pzstudio/.pzstudio.bak outdir, if present. */
+    readBackupOutdir?: () => string | undefined;
+    /** Outdir used when neither the config nor the backup provides one. */
+    defaultOutdir?: string;
+}
 
 /**
  * Result of a migration check.
@@ -125,9 +134,13 @@ export const migration = {
     },
 
     /**
-     * Upgrades config.json to the current shape.
+     * Upgrades config.json to the current shape. Pure: the legacy backup
+     * read and the platform default outdir come in through hostOptions.
      */
-    upgradeConfig: (config: any): any => {
+    upgradeConfig: (
+        config: any,
+        hostOptions: MigrationHostOptions = {},
+    ): any => {
         const upgraded = JSON.parse(JSON.stringify(config));
 
         if (upgraded.useSymlinks === undefined) {
@@ -147,17 +160,14 @@ export const migration = {
         }
 
         if (!upgraded.outdir) {
-            const configDir = join(homedir(), '.pzstudio');
-            const backupPath = join(configDir, '.pzstudio.bak');
-            if (existsSync(backupPath)) {
-                try {
-                    upgraded.outdir = readFileSync(backupPath, 'utf-8').trim();
-                } catch {
-                    // Fall through
-                }
+            try {
+                const backup = hostOptions.readBackupOutdir?.();
+                if (backup) upgraded.outdir = backup;
+            } catch {
+                // Fall through
             }
-            if (!upgraded.outdir) {
-                upgraded.outdir = join(homedir(), 'Zomboid', 'Workshop');
+            if (!upgraded.outdir && hostOptions.defaultOutdir) {
+                upgraded.outdir = hostOptions.defaultOutdir;
             }
         }
 

@@ -5,8 +5,8 @@ import {
     modInfoText,
     modInfoTextLines,
     patchModInfoId,
-} from '../../packages/cli/src/lib/core/textgen';
-import type { IProjectConfig } from '../../packages/cli/src/lib/project';
+} from '../../packages/core/src/textgen';
+import type { IProjectConfig } from '../../packages/core/src/project';
 
 const baseConfig = {
     workshop: {

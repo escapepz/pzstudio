@@ -15,13 +15,40 @@ import {
     IVsCodeSettings,
     TemplateCategory,
     ITemplateConfig,
-} from './project';
+} from '@pzstudio/core';
 import { log, warn, verbose } from './logger';
 import {
     GlobalConfig,
     readGlobalConfig,
     writeGlobalConfig,
 } from './templateManager';
+import {
+    ValidationContext,
+    validateProject,
+    migration,
+    applyProjectDefaults as applyProjectDefaultsPure,
+    type MigrationHostOptions,
+} from '@pzstudio/core';
+
+/**
+ * Host-provided fallbacks for config.json migration: the legacy backup file
+ * under ~/.pzstudio and the platform default workshop outdir. The migration
+ * logic in @pzstudio/core is pure; only the adapter knows the filesystem.
+ */
+export function migrationHostOptions(): MigrationHostOptions {
+    return {
+        readBackupOutdir: () => {
+            const backupPath = join(homedir(), '.pzstudio', '.pzstudio.bak');
+            if (!existsSync(backupPath)) return undefined;
+            try {
+                return readFileSync(backupPath, 'utf-8').trim() || undefined;
+            } catch {
+                return undefined;
+            }
+        },
+        defaultOutdir: join(homedir(), 'Zomboid', 'Workshop'),
+    };
+}
 
 let vscodeWorkspaceSettings: IVsCodeSettings | undefined;
 let vscodeUserSettings: IVsCodeSettings | undefined;
@@ -178,9 +205,6 @@ export function projectDir() {
     return externalProjectDir ?? findProjectRoot(process.cwd());
 }
 
-import { ValidationContext, validateProject } from './validation';
-import { migration } from './migration';
-
 /**
  * Returns the current project config.
  * Uses atomic read (readFileSync) to avoid require cache issues.
@@ -233,40 +257,13 @@ export function readProjectConfig(
 }
 
 /**
- * Applies safe defaults to a project config.
+ * Applies safe defaults to a project config, reporting each defaulting
+ * decision to the CLI logger. The pure logic lives in @pzstudio/core.
  * @param config The original project config
  * @returns The config with defaults applied
  */
 export function applyProjectDefaults(config: any): IProjectConfig {
-    if (!config) return config;
-
-    // Default workshop settings
-    if (!config.workshop) config.workshop = {};
-    if (config.excludes === undefined) {
-        verbose(`Defaulting excludes to empty list`);
-        config.excludes = [];
-    }
-
-    // Default mods settings
-    if (config.mods) {
-        for (const modId in config.mods) {
-            const mod = config.mods[modId];
-            if (mod.poster === undefined) {
-                verbose(`Mod '${modId}' defaulting poster to: poster.png`);
-                mod.poster = 'poster.png';
-            }
-            if (mod.icon === undefined) {
-                verbose(`Mod '${modId}' defaulting icon to: icon.png`);
-                mod.icon = 'icon.png';
-            }
-            if (!mod.build) mod.build = {};
-            if (mod.build.modInfo === undefined) {
-                mod.build.modInfo = 'auto-if-missing';
-            }
-        }
-    }
-
-    return config as IProjectConfig;
+    return applyProjectDefaultsPure(config, verbose);
 }
 
 /**
@@ -338,16 +335,10 @@ export function updateProjectConfig(
 }
 
 /**
- * Format a title to a valid id (Unix-compatible for Windows and Linux)
- * @param {string} title The title to format
- * @returns {string} The formatted id
+ * Format a title to a valid id (Unix-compatible for Windows and Linux).
+ * Re-exported from @pzstudio/core.
  */
-export function formatTitleToId(title: string) {
-    return title
-        .toLowerCase()
-        .replace(/\s+/g, '_') // Replace spaces with underscores
-        .replace(/[^a-z0-9_]/g, ''); // Remove any other special characters
-}
+export { formatTitleToId } from '@pzstudio/core';
 
 /**
  * Returns the files in a directory recursively
@@ -494,8 +485,8 @@ export function generateModInfoText(
  * Parses mod.info text into a partial IModConfig.
  * Re-exported from modInfoParser.ts (single source of truth, shared with migration).
  */
-export { parseModInfoText } from './modInfoParser';
-import { workshopText, modInfoText } from './core/textgen';
+export { parseModInfoText } from '@pzstudio/core';
+import { workshopText, modInfoText } from '@pzstudio/core';
 
 /**
  * Returns the branch folders (direct subdirectories) of a mod.

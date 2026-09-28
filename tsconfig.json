@@ -15,7 +15,8 @@
         "allowSyntheticDefaultImports": true,
         "baseUrl": ".",
         "paths": {
-            "@pzstudio/platform": ["packages/platform/src/index.ts"]
+            "@pzstudio/platform": ["packages/platform/src/index.ts"],
+            "@pzstudio/core": ["packages/core/src/index.ts"]
         },
         "typeRoots": ["./node_modules/@types"],
         "types": ["node"]

@@ -6,8 +6,8 @@ import {
     planBuild,
     resolveBuildOutputPath,
     sanitizeFolderName,
-} from '../../packages/cli/src/lib/core/buildplan';
-import type { IProjectConfig } from '../../packages/cli/src/lib/project';
+} from '../../packages/core/src/buildplan';
+import type { IProjectConfig } from '../../packages/core/src/project';
 
 const baseConfig = {
     workshop: {

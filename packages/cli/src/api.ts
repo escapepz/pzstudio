@@ -10,13 +10,13 @@ export {
     planBuild,
     resolveBuildOutputPath,
     sanitizeFolderName,
-} from './lib/core/buildplan';
+} from '@pzstudio/core';
 export type {
     FileOperation,
     ModSourceState,
     PlanBuildInput,
-} from './lib/core/buildplan';
-export { patchModInfoId } from './lib/core/textgen';
+} from '@pzstudio/core';
+export { patchModInfoId } from '@pzstudio/core';
 export {
     resolveTemplateDir,
     cloneRemoteTemplate,

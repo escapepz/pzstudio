@@ -5,7 +5,7 @@
  * takes plain data in and returns strings out, so it can be unit-tested
  * without filesystem fixtures and reused by a browser extension host.
  */
-import type { IProjectConfig } from '../project';
+import type { IProjectConfig } from './project';
 
 export interface WorkshopTextOptions {
     /** Description lines from workshop/description.txt, already newline-split. */

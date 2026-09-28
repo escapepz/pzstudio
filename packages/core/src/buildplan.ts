@@ -7,7 +7,7 @@
  * workshop build. The Node adapter lives in src/lib/commands/build.ts; a
  * browser adapter (web export as .zip) can consume the same plan.
  */
-import type { IProjectConfig } from '../project';
+import type { IProjectConfig } from './project';
 import { modInfoText, patchModInfoId, workshopText } from './textgen';
 
 export type FileOperation =

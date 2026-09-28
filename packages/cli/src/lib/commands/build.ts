@@ -9,7 +9,7 @@ import {
     PlanBuildInput,
     collectIncludedModIds,
     planBuild,
-} from '../core/buildplan';
+} from '@pzstudio/core';
 import {
     projectDir,
     readWorkshopDescriptionLines,

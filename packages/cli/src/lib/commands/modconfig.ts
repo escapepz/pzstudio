@@ -2,10 +2,10 @@ import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { info, log, verbose } from '../logger';
 import { projectDir, updateProjectConfig } from '../helper';
-import { validateProject, ValidationContext } from '../validation';
+import { validateProject, ValidationContext } from '@pzstudio/core';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import type { IModConfig, IProjectConfig } from '../project';
+import type { IModConfig, IProjectConfig } from '@pzstudio/core';
 
 addHelp(
     'modconfig',

@@ -11,7 +11,7 @@ import { tmpdir } from 'os';
 import { join, dirname, resolve as resolvePath } from 'path';
 import { unzipSync } from 'fflate';
 import { log, warn, verbose } from './logger';
-import { TemplateResolutionError } from './errors/TemplateResolutionError';
+import { TemplateResolutionError } from '@pzstudio/core';
 import type { TemplateTransport } from '@pzstudio/platform';
 
 export type { TemplateTransport };

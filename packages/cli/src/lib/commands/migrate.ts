@@ -5,8 +5,9 @@ import {
     updateProjectConfig,
     projectDir,
     resolveModInfoTargets,
+    migrationHostOptions,
 } from '../helper';
-import { migration } from '../migration';
+import { migration } from '@pzstudio/core';
 import { writeGlobalConfig, getConfigPath } from '../templateManager';
 import { existsSync, readFileSync } from 'fs';
 import path, { join } from 'path';
@@ -59,7 +60,10 @@ export async function migrateCmd() {
     const configCheck = migration.checkConfig(config);
     if (configCheck.needsMigration) {
         info(`- Migrating config.json: ${configCheck.reason}`);
-        const upgradedConfig = migration.upgradeConfig(config);
+        const upgradedConfig = migration.upgradeConfig(
+            config,
+            migrationHostOptions(),
+        );
         writeGlobalConfig(upgradedConfig);
         info('  → config.json upgraded successfully.');
     } else {
