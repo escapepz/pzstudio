@@ -18,8 +18,8 @@ import {
     getResolvedTemplates,
     getResolvedUseSymlinks,
 } from '../../packages/cli/src/lib/helper';
-import { migration } from '../../packages/cli/src/lib/migration';
-import { IProjectConfig } from '../../packages/cli/src/lib/project';
+import { migration } from '../../packages/core/src/migration';
+import { IProjectConfig } from '../../packages/core/src/project';
 import fs from 'fs';
 import * as logger from '../../packages/cli/src/lib/logger';
 import * as templateManager from '../../packages/cli/src/lib/templateManager';

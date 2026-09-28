@@ -3,7 +3,7 @@ import {
     parseModInfoText,
     generateModInfoText,
 } from '../../packages/cli/src/lib/helper';
-import { IProjectConfig } from '../../packages/cli/src/lib/project';
+import { IProjectConfig } from '../../packages/core/src/project';
 
 describe('mod.info lossless round-trip', () => {
     it('should round-trip all supported fields losslessly', () => {

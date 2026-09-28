@@ -1,5 +1,5 @@
 import { existsSync } from 'fs';
-import { resolveBuildOutputPath } from '../core/buildplan';
+import { resolveBuildOutputPath } from '@pzstudio/core';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { removeDirRecursive, resolveProjectConfig } from '../helper';

@@ -16,9 +16,9 @@ import type {
     TemplateCategory,
     GlobalConfig,
     ITemplateConfig,
-} from './project';
-import { DEFAULT_TEMPLATES } from './constants';
-import { getVsCodeSettings } from './helper';
+} from '@pzstudio/core';
+import { DEFAULT_TEMPLATES } from '@pzstudio/core';
+import { getVsCodeSettings, migrationHostOptions } from './helper';
 import { getTemplateTransport } from './transport';
 
 export type { TemplateCategory, GlobalConfig, ITemplateConfig };
@@ -298,8 +298,8 @@ export function refreshCachedTemplate(dir: string, ref?: string): boolean {
     return getTemplateTransport().refresh(dir, ref);
 }
 
-import { ValidationContext, validateConfig } from './validation';
-import { migration } from './migration';
+import { ValidationContext, validateConfig } from '@pzstudio/core';
+import { migration } from '@pzstudio/core';
 
 /**
  * Reads the global pzstudio config from ~/.pzstudio/config.json
@@ -343,7 +343,10 @@ export function readGlobalConfig(validate: boolean = true): GlobalConfig {
                 verbose(
                     `[MIGRATION] Global config ${basename(configPath)} needs migration: ${migrationCheck.reason}`,
                 );
-                config = migration.upgradeConfig(config);
+                config = migration.upgradeConfig(
+                    config,
+                    migrationHostOptions(),
+                );
             }
 
             const context = new ValidationContext(basename(configPath));
@@ -401,7 +404,10 @@ export function migrateGlobalConfigIfNeeded(): void {
         const migrationCheck = migration.checkConfig(config);
         if (migrationCheck.needsMigration) {
             log(`- Migrating config.json: ${migrationCheck.reason}`);
-            const upgraded = migration.upgradeConfig(config);
+            const upgraded = migration.upgradeConfig(
+                config,
+                migrationHostOptions(),
+            );
             try {
                 writeGlobalConfig(upgraded);
             } catch (_e) {

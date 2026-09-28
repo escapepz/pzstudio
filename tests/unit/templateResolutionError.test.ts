@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TemplateResolutionError } from '../../packages/cli/src/lib/errors/TemplateResolutionError';
+import { TemplateResolutionError } from '../../packages/core/src/errors/TemplateResolutionError';
 
 describe('TemplateResolutionError', () => {
     it('should set the name and message correctly', () => {

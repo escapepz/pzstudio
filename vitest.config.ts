@@ -15,6 +15,9 @@ export default defineConfig({
             '@pzstudio/platform': fileURLToPath(
                 new URL('./packages/platform/src/index.ts', import.meta.url),
             ),
+            '@pzstudio/core': fileURLToPath(
+                new URL('./packages/core/src/index.ts', import.meta.url),
+            ),
         },
     },
     test: {

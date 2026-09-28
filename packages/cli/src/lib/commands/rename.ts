@@ -3,7 +3,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { expect } from '../expect';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
-import { BINARY_FILE_EXTENSIONS } from '../constants';
+import { BINARY_FILE_EXTENSIONS } from '@pzstudio/core';
 import {
     getFilesRecursively,
     projectDir,
