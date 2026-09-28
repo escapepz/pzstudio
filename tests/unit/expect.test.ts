@@ -1,5 +1,5 @@
 import { describe, it, expect as vitestExpect } from 'vitest';
-import { expect as validateExpect } from '../../src/lib/expect';
+import { expect as validateExpect } from '../../packages/cli/src/lib/expect';
 
 describe('Expect Library', () => {
     it('should validate strings', () => {

@@ -17,16 +17,16 @@ import {
     getVsCodeSettings,
     getResolvedTemplates,
     getResolvedUseSymlinks,
-} from '../../src/lib/helper';
-import { migration } from '../../src/lib/migration';
-import { IProjectConfig } from '../../src/lib/project';
+} from '../../packages/cli/src/lib/helper';
+import { migration } from '../../packages/cli/src/lib/migration';
+import { IProjectConfig } from '../../packages/cli/src/lib/project';
 import fs from 'fs';
-import * as logger from '../../src/lib/logger';
-import * as templateManager from '../../src/lib/templateManager';
+import * as logger from '../../packages/cli/src/lib/logger';
+import * as templateManager from '../../packages/cli/src/lib/templateManager';
 
 vi.mock('fs');
-vi.mock('../../src/lib/logger');
-vi.mock('../../src/lib/templateManager');
+vi.mock('../../packages/cli/src/lib/logger');
+vi.mock('../../packages/cli/src/lib/templateManager');
 
 describe('Helper Library', () => {
     const defaultGlobalConfig = {
@@ -771,7 +771,7 @@ describe('Helper Library', () => {
                 };
             });
             const { updateExperimentalScripts: updateScriptsMocked } =
-                await import('../../src/lib/helper');
+                await import('../../packages/cli/src/lib/helper');
             expect(() =>
                 updateScriptsMocked('addProject', '/some/dir'),
             ).not.toThrow();

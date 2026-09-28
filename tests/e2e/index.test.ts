@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { version } from '../../package.json';
+import { version } from '../../packages/cli/package.json';
 import { createE2EWorkspace, E2ETestWorkspace } from '../helpers/e2e-fixtures';
-import { setVerbose } from '../../src/lib/logger';
+import { setVerbose } from '../../packages/cli/src/lib/logger';
 
 describe('CLI Global Behavior (E2E)', () => {
     let workspace: E2ETestWorkspace;

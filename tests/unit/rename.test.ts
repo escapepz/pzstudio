@@ -1,22 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { join } from 'path';
 import fs from 'fs';
-import * as logger from '../../src/lib/logger';
-import { renameCmd } from '../../src/lib/commands/rename';
+import * as logger from '../../packages/cli/src/lib/logger';
+import { renameCmd } from '../../packages/cli/src/lib/commands/rename';
 import {
     projectDir,
     readProjectConfig,
     updateProjectConfig,
     updateExperimentalScripts,
     getFilesRecursively,
-} from '../../src/lib/helper';
-import { scaffoldProject } from '../../src/lib/templateManager';
+} from '../../packages/cli/src/lib/helper';
+import { scaffoldProject } from '../../packages/cli/src/lib/templateManager';
 
 vi.mock('fs');
-vi.mock('../../src/lib/logger');
-vi.mock('../../src/lib/templateManager');
-vi.mock('../../src/lib/helper', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('../../src/lib/helper')>()),
+vi.mock('../../packages/cli/src/lib/logger');
+vi.mock('../../packages/cli/src/lib/templateManager');
+vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
+    ...(await importOriginal<
+        typeof import('../../packages/cli/src/lib/helper')
+    >()),
     projectDir: vi.fn(),
     readProjectConfig: vi.fn(),
     updateProjectConfig: vi.fn(),

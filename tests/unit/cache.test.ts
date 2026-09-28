@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { addCmd } from '../../src/lib/commands/add';
-import { newCmd } from '../../src/lib/commands/new';
-import * as helper from '../../src/lib/helper';
-import * as templateManager from '../../src/lib/templateManager';
+import { addCmd } from '../../packages/cli/src/lib/commands/add';
+import { newCmd } from '../../packages/cli/src/lib/commands/new';
+import * as helper from '../../packages/cli/src/lib/helper';
+import * as templateManager from '../../packages/cli/src/lib/templateManager';
 import fs from 'fs';
 import path from 'path';
 
-vi.mock('../../src/lib/helper', () => ({
+vi.mock('../../packages/cli/src/lib/helper', () => ({
     projectDir: vi.fn(() => 'D:/project'),
     readProjectConfig: vi.fn(),
     resolveProjectConfig: vi.fn(),
@@ -15,10 +15,10 @@ vi.mock('../../src/lib/helper', () => ({
     updateExperimentalScripts: vi.fn(),
     getOutDir: vi.fn(() => 'D:/out'),
 }));
-vi.mock('../../src/lib/templateManager');
+vi.mock('../../packages/cli/src/lib/templateManager');
 vi.mock('fs');
-vi.mock('../../src/lib/logger');
-vi.mock('../../src/lib/args', () => ({
+vi.mock('../../packages/cli/src/lib/logger');
+vi.mock('../../packages/cli/src/lib/args', () => ({
     processArgs: vi.fn(() => []),
     cmd: vi.fn(),
     splitArgs: vi.fn(() => ({ positionals: [], flags: [] })),

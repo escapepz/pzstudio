@@ -36,7 +36,7 @@ describe('Helper Coverage Gaps', () => {
         });
 
         const { updateExperimentalScripts } =
-            await import('../../src/lib/helper');
+            await import('../../packages/cli/src/lib/helper');
 
         // This should not throw even if the require fails (it's caught)
         updateExperimentalScripts('addProject', '/some/dir');
@@ -72,7 +72,7 @@ describe('Helper Coverage Gaps', () => {
             });
 
             const { updateExperimentalScripts } =
-                await import('../../src/lib/helper');
+                await import('../../packages/cli/src/lib/helper');
 
             // Call all actions to cover the 'if' branches being false
             updateExperimentalScripts('addProject', '/dir');
@@ -126,7 +126,7 @@ describe('Helper Coverage Gaps', () => {
             });
 
             const { updateExperimentalScripts } =
-                await import('../../src/lib/helper');
+                await import('../../packages/cli/src/lib/helper');
 
             updateExperimentalScripts('addProject', '/dir');
             expect((global as any).test_addProjectDir).toBe('/dir');

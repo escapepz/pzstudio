@@ -7,7 +7,7 @@ import {
     validatePzBuildCompatibilityField,
     validateTemplatesField,
     validateUseSymlinksField,
-} from '../../src/lib/validation';
+} from '../../packages/cli/src/lib/validation';
 
 describe('Validation', () => {
     let context: ValidationContext;

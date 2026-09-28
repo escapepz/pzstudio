@@ -42,8 +42,8 @@ if (fs.existsSync(expScriptSource)) {
     console.log(`Copied experimental-package-scripts.js to ${expScriptDest}`);
 }
 
-// Copy .template-legacy to dist
-const templateLegacySource = path.join(__dirname, '../.template-legacy');
+// Copy .template-legacy to dist (the submodule container lives at the repo root)
+const templateLegacySource = path.join(__dirname, '../../.template-legacy');
 const templateLegacyDest = path.join(distPath, '.template-legacy');
 
 function copyDirRecursive(src, dest) {

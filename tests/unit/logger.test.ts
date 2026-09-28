@@ -8,7 +8,7 @@ import {
     warn,
     error,
     setLogger,
-} from '../../src/lib/logger';
+} from '../../packages/cli/src/lib/logger';
 
 describe('Logger', () => {
     let mockLogger: any;

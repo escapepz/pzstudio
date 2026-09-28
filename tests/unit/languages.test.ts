@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Languages } from '../../src/lib/languages';
+import { Languages } from '../../packages/cli/src/lib/languages';
 
 describe('Languages constant', () => {
     it('should contain English', () => {

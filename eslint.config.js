@@ -16,24 +16,23 @@ module.exports = tseslint.config(
     },
     {
         ignores: [
-            'dist/',
-            'node_modules/',
+            '**/dist/',
+            '**/node_modules/',
             '.vscode/',
             '.idea/',
             'coverage/',
             'bin/',
             '*.config.js',
-            'scripts/',
-            'packages/',
+            'packages/vscode-extension/',
             '**/*.js',
             '**/*.d.ts',
         ],
     },
     {
-        files: ['src/**/*.ts'],
+        files: ['packages/cli/src/**/*.ts'],
         languageOptions: {
             parserOptions: {
-                project: './tsconfig.build.json',
+                project: './packages/cli/tsconfig.build.json',
             },
         },
         rules: {

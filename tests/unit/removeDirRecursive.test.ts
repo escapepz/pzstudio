@@ -2,10 +2,10 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'fs';
-import { removeDirRecursive } from '../../src/lib/helper';
+import { removeDirRecursive } from '../../packages/cli/src/lib/helper';
 
 vi.mock('fs');
-vi.mock('../../src/lib/logger');
+vi.mock('../../packages/cli/src/lib/logger');
 
 const RMDIR_OPTIONS = {
     recursive: true,
