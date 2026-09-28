@@ -1,18 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import * as templateManager from '../../src/lib/templateManager';
-import * as helper from '../../src/lib/helper';
+import * as templateManager from '../../packages/cli/src/lib/templateManager';
+import * as helper from '../../packages/cli/src/lib/helper';
 import {
     createIgnoreFilter,
     readGlobalConfig,
     resolveTemplateDir,
     getConfigPath,
-} from '../../src/lib/templateManager';
+} from '../../packages/cli/src/lib/templateManager';
 import fs, { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir, homedir } from 'os';
-import * as logger from '../../src/lib/logger';
+import * as logger from '../../packages/cli/src/lib/logger';
 
-vi.mock('../../src/lib/logger');
+vi.mock('../../packages/cli/src/lib/logger');
 vi.mock('fs', async () => {
     const actual = await vi.importActual<typeof import('fs')>('fs');
     const mocks = {

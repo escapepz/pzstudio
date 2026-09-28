@@ -3,7 +3,7 @@ import {
     IProjectConfig,
     IWorkshopConfig,
     IModConfig,
-} from '../../src/lib/project';
+} from '../../packages/cli/src/lib/project';
 
 describe('Project Types', () => {
     it('should allow valid IProjectConfig object', () => {

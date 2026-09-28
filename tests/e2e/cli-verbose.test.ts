@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createE2EWorkspace, E2ETestWorkspace } from '../helpers/e2e-fixtures';
-import { setVerbose } from '../../src/lib/logger';
+import { setVerbose } from '../../packages/cli/src/lib/logger';
 import fs from 'fs';
 import path from 'path';
 

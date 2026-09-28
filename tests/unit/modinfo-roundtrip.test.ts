@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { parseModInfoText, generateModInfoText } from '../../src/lib/helper';
-import { IProjectConfig } from '../../src/lib/project';
+import {
+    parseModInfoText,
+    generateModInfoText,
+} from '../../packages/cli/src/lib/helper';
+import { IProjectConfig } from '../../packages/cli/src/lib/project';
 
 describe('mod.info lossless round-trip', () => {
     it('should round-trip all supported fields losslessly', () => {

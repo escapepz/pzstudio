@@ -1,28 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import path from 'path';
 import fs from 'fs';
-import { newCmd } from '../../src/lib/commands/new';
+import { newCmd } from '../../packages/cli/src/lib/commands/new';
 import {
     projectDir,
     readProjectConfig,
     resolveProjectConfig,
     updateProjectConfig,
     updateExperimentalScripts,
-} from '../../src/lib/helper';
+} from '../../packages/cli/src/lib/helper';
 import {
     resolveTemplateDir,
     readGlobalConfig,
     scaffoldProject,
     scaffoldTemplateFolder,
-} from '../../src/lib/templateManager';
-import { hasFlag, extractFlag } from '../../src/lib/args';
+} from '../../packages/cli/src/lib/templateManager';
+import { hasFlag, extractFlag } from '../../packages/cli/src/lib/args';
 
 vi.mock('fs');
-vi.mock('../../src/lib/logger');
-vi.mock('../../src/lib/args');
-vi.mock('../../src/lib/templateManager');
-vi.mock('../../src/lib/helper', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('../../src/lib/helper')>()),
+vi.mock('../../packages/cli/src/lib/logger');
+vi.mock('../../packages/cli/src/lib/args');
+vi.mock('../../packages/cli/src/lib/templateManager');
+vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
+    ...(await importOriginal<
+        typeof import('../../packages/cli/src/lib/helper')
+    >()),
     projectDir: vi.fn(),
     readProjectConfig: vi.fn(),
     resolveProjectConfig: vi.fn(),

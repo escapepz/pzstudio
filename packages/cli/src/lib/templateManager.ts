@@ -211,8 +211,12 @@ function bootstrapLegacyTemplates(): void {
         return;
     }
 
-    // Find the bundled .template-legacy directory
+    // Find the bundled .template-legacy directory. Probes cover, in order:
+    // the repo root during development (packages/cli/dist/lib -> repo root),
+    // the package root when published (dist/lib -> package root), the dist
+    // folder populated by the build script, and the working directory.
     const installRootPaths = [
+        join(__dirname, '..', '..', '..', '.template-legacy'),
         join(__dirname, '..', '..', '.template-legacy'),
         join(__dirname, '..', '.template-legacy'),
         join(process.cwd(), '.template-legacy'),

@@ -6,7 +6,7 @@ import {
     arg,
     processArgs,
     splitArgs,
-} from '../../src/lib/args';
+} from '../../packages/cli/src/lib/args';
 
 describe('Args Library', () => {
     describe('parseArgType', () => {

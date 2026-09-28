@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { getFakeHome, setFakeHome } from './fake-home';
-import { runCLI } from '../../src/lib/cli';
-import { setLogger, ILogger } from '../../src/lib/logger';
+import { runCLI } from '../../packages/cli/src/lib/cli';
+import { setLogger, ILogger } from '../../packages/cli/src/lib/logger';
 import { createTempDir, deleteDir } from './test-fixtures';
 
 let currentFakeHome: string | undefined;

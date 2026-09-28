@@ -1,0 +1,82 @@
+{
+    "name": "pzstudio-cli",
+    "version": "0.42200.0",
+    "pzBuildCompatibility": "42.x",
+    "description": "Effortlessly create and maintain Lua mods for Project Zomboid with intuitive structuring.",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "require": "./dist/index.js"
+        },
+        "./api": {
+            "types": "./dist/api.d.ts",
+            "import": "./dist/api.js",
+            "require": "./dist/api.js"
+        }
+    },
+    "typesVersions": {
+        "*": {
+            "api": [
+                "dist/api.d.ts"
+            ]
+        }
+    },
+    "type": "commonjs",
+    "engines": {
+        "node": ">=20"
+    },
+    "bin": {
+        "pzstudio": "./dist/index.js"
+    },
+    "publishConfig": {
+        "tag": "latest"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Konijima/project-zomboid-studio.git"
+    },
+    "bugs": {
+        "url": "https://github.com/Konijima/project-zomboid-studio/issues"
+    },
+    "author": "Konijima",
+    "contributors": [
+        {
+            "name": "asledgehammer",
+            "url": "https://github.com/asledgehammer"
+        },
+        {
+            "name": "demiurgeQuantified",
+            "url": "https://github.com/demiurgeQuantified"
+        }
+    ],
+    "funding": [
+        {
+            "type": "ko-fi",
+            "url": "https://ko-fi.com/konijima"
+        }
+    ],
+    "license": "Apache License Version 2.0",
+    "keywords": [
+        "pzstudio",
+        "modding-tool",
+        "project-zomboid",
+        "project-zomboid-studio"
+    ],
+    "scripts": {
+        "clean": "node -e \"require('fs').rmSync('./dist', { recursive: true, force: true })\"",
+        "build": "pnpm run clean && tsc -p tsconfig.build.json && node scripts/update-build-date.js",
+        "watch": "pnpm run clean && tsc --watch"
+    },
+    "dependencies": {
+        "fflate": "^0.8.3",
+        "picocolors": "^1.1.1",
+        "tslib": "^2.8.1"
+    },
+    "devDependencies": {
+        "@types/node": "^20.0.0",
+        "typescript": "^5.9.3"
+    }
+}

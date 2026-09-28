@@ -1,22 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { join } from 'path';
 import fs from 'fs';
-import { migrateCmd } from '../../src/lib/commands/migrate';
+import { migrateCmd } from '../../packages/cli/src/lib/commands/migrate';
 import {
     projectDir,
     resolveModInfoTargets,
     updateProjectConfig,
-} from '../../src/lib/helper';
+} from '../../packages/cli/src/lib/helper';
 import {
     getConfigPath,
     writeGlobalConfig,
-} from '../../src/lib/templateManager';
+} from '../../packages/cli/src/lib/templateManager';
 
 vi.mock('fs');
-vi.mock('../../src/lib/logger');
-vi.mock('../../src/lib/templateManager');
-vi.mock('../../src/lib/helper', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('../../src/lib/helper')>()),
+vi.mock('../../packages/cli/src/lib/logger');
+vi.mock('../../packages/cli/src/lib/templateManager');
+vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
+    ...(await importOriginal<
+        typeof import('../../packages/cli/src/lib/helper')
+    >()),
     projectDir: vi.fn(),
     resolveModInfoTargets: vi.fn(),
     updateProjectConfig: vi.fn(),

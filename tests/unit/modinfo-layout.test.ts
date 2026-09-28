@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { resolveModInfoTargets } from '../../src/lib/helper';
+import { resolveModInfoTargets } from '../../packages/cli/src/lib/helper';
 import fs from 'fs';
 import path from 'path';
 

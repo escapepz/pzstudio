@@ -1,18 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { join } from 'path';
 import fs from 'fs';
-import { deleteCmd } from '../../src/lib/commands/delete';
+import { deleteCmd } from '../../packages/cli/src/lib/commands/delete';
 import {
     projectDir,
     resolveProjectConfig,
     updateProjectConfig,
     updateExperimentalScripts,
-} from '../../src/lib/helper';
+} from '../../packages/cli/src/lib/helper';
 
 vi.mock('fs');
-vi.mock('../../src/lib/logger');
-vi.mock('../../src/lib/helper', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('../../src/lib/helper')>()),
+vi.mock('../../packages/cli/src/lib/logger');
+vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
+    ...(await importOriginal<
+        typeof import('../../packages/cli/src/lib/helper')
+    >()),
     projectDir: vi.fn(),
     resolveProjectConfig: vi.fn(),
     updateProjectConfig: vi.fn(),

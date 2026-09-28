@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'fs';
-import { cleanCmd } from '../../src/lib/commands/clean';
-import { resolveProjectConfig } from '../../src/lib/helper';
+import { cleanCmd } from '../../packages/cli/src/lib/commands/clean';
+import { resolveProjectConfig } from '../../packages/cli/src/lib/helper';
 
 vi.mock('fs');
-vi.mock('../../src/lib/logger');
-vi.mock('../../src/lib/helper', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('../../src/lib/helper')>()),
+vi.mock('../../packages/cli/src/lib/logger');
+vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
+    ...(await importOriginal<
+        typeof import('../../packages/cli/src/lib/helper')
+    >()),
     resolveProjectConfig: vi.fn(),
 }));
 

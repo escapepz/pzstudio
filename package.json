@@ -1,64 +1,9 @@
 {
-    "name": "pzstudio-cli",
+    "name": "pzstudio-workspace",
     "version": "0.42200.0",
-    "pzBuildCompatibility": "42.x",
-    "description": "Effortlessly create and maintain Lua mods for Project Zomboid with intuitive structuring.",
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-        ".": {
-            "types": "./dist/index.d.ts",
-            "import": "./dist/index.js",
-            "require": "./dist/index.js"
-        },
-        "./api": {
-            "types": "./dist/api.d.ts",
-            "import": "./dist/api.js",
-            "require": "./dist/api.js"
-        }
-    },
-    "typesVersions": {
-        "*": {
-            "api": [
-                "dist/api.d.ts"
-            ]
-        }
-    },
+    "private": true,
+    "description": "Workspace root for the PZ Studio packages (CLI, core, platform adapters, VS Code extension).",
     "type": "commonjs",
-    "engines": {
-        "node": ">=20"
-    },
-    "bin": {
-        "pzstudio": "./dist/index.js"
-    },
-    "publishConfig": {
-        "tag": "latest"
-    },
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/Konijima/project-zomboid-studio.git"
-    },
-    "bugs": {
-        "url": "https://github.com/Konijima/project-zomboid-studio/issues"
-    },
-    "author": "Konijima",
-    "contributors": [
-        {
-            "name": "asledgehammer",
-            "url": "https://github.com/asledgehammer"
-        },
-        {
-            "name": "demiurgeQuantified",
-            "url": "https://github.com/demiurgeQuantified"
-        }
-    ],
-    "funding": [
-        {
-            "type": "ko-fi",
-            "url": "https://ko-fi.com/konijima"
-        }
-    ],
-    "license": "Apache License Version 2.0",
     "pnpm": {
         "overrides": {
             "picomatch": "^2.3.2",
@@ -69,9 +14,8 @@
         }
     },
     "scripts": {
-        "clean": "node -e \"require('fs').rmSync('./dist', { recursive: true, force: true })\"",
-        "build": "pnpm run clean && tsc -p tsconfig.build.json && node scripts/update-build-date.js",
-        "watch": "pnpm run clean && tsc --watch",
+        "clean": "pnpm -r clean",
+        "build": "pnpm -r build",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "lint": "eslint .",
@@ -80,12 +24,6 @@
         "test:watch": "vitest",
         "test:coverage": "vitest run --coverage"
     },
-    "keywords": [
-        "pzstudio",
-        "modding-tool",
-        "project-zomboid",
-        "project-zomboid-studio"
-    ],
     "devDependencies": {
         "@eslint/js": "^10.0.0",
         "@types/node": "^20.0.0",
@@ -99,9 +37,5 @@
         "typescript": "^5.9.3",
         "typescript-eslint": "^8.58.2",
         "vitest": "^4.1.4"
-    },
-    "dependencies": {
-        "fflate": "^0.8.3",
-        "picocolors": "^1.1.1"
     }
 }

@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { addHelp, getHelp, getAvailableCommands } from '../../src/lib/help';
+import {
+    addHelp,
+    getHelp,
+    getAvailableCommands,
+} from '../../packages/cli/src/lib/help';
 
 describe('help helper', () => {
     beforeEach(() => {
