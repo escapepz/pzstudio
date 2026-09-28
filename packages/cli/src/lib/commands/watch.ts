@@ -3,6 +3,7 @@ import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { hasFlag } from '../args';
 import type { FileDelta } from '@pzstudio/core';
+import { summarizeApplyResult } from '@pzstudio/core';
 import { projectDir, resolveProjectConfig } from '../helper';
 import { info, verbose, warn } from '../logger';
 import { createDevSync } from '../devsync';
@@ -87,21 +88,11 @@ export async function watchCmd() {
         if (batch.length === 0) return;
         const result = await session.apply(batch);
         // A successful sync is otherwise silent: say what a batch did so
-        // "nothing happened" is never ambiguous again.
-        const summary: string[] = [];
-        if (result.incremental > 0) {
-            summary.push(`${result.incremental} file(s) synced`);
-        }
-        if (result.scoped.length > 0) {
-            summary.push(
-                `re-synced mod(s): ${result.scoped.map((s) => s.modId).join(', ')}`,
-            );
-        }
-        if (result.fullRebuild) {
-            summary.push('full rebuild');
-        }
-        if (summary.length > 0) {
-            info(`- ${summary.join('; ')}.`);
+        // "nothing happened" is never ambiguous again (same wording the
+        // extension's output channel uses).
+        const summary = summarizeApplyResult(result);
+        if (summary) {
+            info(`- ${summary}.`);
         }
         for (const message of result.errors) {
             warn(`- ${message}`);

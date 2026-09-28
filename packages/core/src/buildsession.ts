@@ -272,6 +272,29 @@ export interface SessionApplyResult {
 }
 
 /**
+ * One-line summary of an apply() result for hosts that surface sync
+ * activity (CLI watch, the extension output channel). A successful sync
+ * is otherwise silent — this line makes "nothing happened" unambiguous.
+ * Returns '' when the batch did nothing worth announcing (only ignored
+ * deltas and no errors).
+ */
+export function summarizeApplyResult(result: SessionApplyResult): string {
+    const summary: string[] = [];
+    if (result.incremental > 0) {
+        summary.push(`${result.incremental} file(s) synced`);
+    }
+    if (result.scoped.length > 0) {
+        summary.push(
+            `re-synced mod(s): ${result.scoped.map((s) => s.modId).join(', ')}`,
+        );
+    }
+    if (result.fullRebuild) {
+        summary.push('full rebuild');
+    }
+    return summary.join('; ');
+}
+
+/**
  * The host side of a session: filesystem access plus fresh plan inputs.
  * getPlanInput() must re-read the config, resolve the workshop template,
  * snapshot every mod's source state and read the workshop metadata — it is
@@ -291,6 +314,16 @@ function isLockError(e: unknown): boolean {
         code === 'EPERM' ||
         code === 'EACCES'
     );
+}
+
+/**
+ * Node adapters surface a vanished file as ENOENT (by code or message);
+ * the in-memory test fs only has the message. A vanished source is not a
+ * sync failure — see applyModFileIncremental.
+ */
+function isMissingSource(e: unknown): boolean {
+    const err = e as { code?: string; message?: string } | undefined;
+    return err?.code === 'ENOENT' || (err?.message ?? '').includes('ENOENT');
 }
 
 function describeError(e: unknown): string {
@@ -547,10 +580,33 @@ export class BuildSession {
                         return;
                     }
                 } catch {
-                    // The source vanished between event and apply: the write
-                    // below surfaces the real error for change events.
+                    // The source may have vanished entirely; the read below
+                    // handles that case.
                 }
             }
+
+            // Read once for every variant. Watchers deliver events for
+            // transient files too (atomic saves, temp copies) — when the
+            // source is already gone by the time the batch runs there is
+            // nothing to sync: real removals arrive as delete events.
+            let content: Uint8Array | undefined;
+            if (file.type !== 'delete') {
+                try {
+                    content = await this.host.fs.read(modSource);
+                } catch (e) {
+                    if (isMissingSource(e)) {
+                        result.ignored += 1;
+                        this.log(
+                            'verbose',
+                            `Skipped ${file.type} '${modSource}': the source vanished before the sync.`,
+                        );
+                        return;
+                    }
+                    result.errors.push(describeError(e));
+                    return;
+                }
+            }
+
             // Same filter the full build used for this mod's copyTree; the
             // project excludes for direct children were already handled by
             // classifyDelta. Rules do not vary per variant, so evaluate once.
@@ -588,10 +644,7 @@ export class BuildSession {
                             recursive: true,
                         });
                     } else {
-                        await this.host.fs.write(
-                            modDestination,
-                            await this.host.fs.read(modSource),
-                        );
+                        await this.host.fs.write(modDestination, content!);
                     }
                     result.incremental += 1;
                 } catch (e) {

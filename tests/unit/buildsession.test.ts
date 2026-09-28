@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MemoryFileSystem } from '../helpers/memory-file-system';
+import type { ProjectFileSystem } from '@pzstudio/platform';
 import {
     BuildSession,
     BuildSessionHost,
@@ -7,6 +8,7 @@ import {
     classifyDelta,
     coalesceDeltas,
     FileDelta,
+    summarizeApplyResult,
 } from '../../packages/core/src/buildsession';
 import type { PlanBuildInput } from '../../packages/core/src/buildplan';
 import type { IProjectConfig } from '../../packages/core/src/project';
@@ -558,23 +560,50 @@ describe('BuildSession (fs-driven sync engine)', () => {
     });
 
     it('collects per-action errors instead of throwing', async () => {
-        const { host } = createHost(fs, config);
+        // A write that keeps failing with a transient lock: both variants
+        // fail, the distinct cause is reported once, and the session stays
+        // usable for the next batch.
+        let failWrites = false;
+        const failingFs: ProjectFileSystem = Object.create(fs);
+        failingFs.write = async (uri: string, data: Uint8Array) => {
+            if (failWrites && uri.includes('/shared/hello.lua')) {
+                // Both variants hit the same lock; the engine reports the
+                // distinct causes once each, so the message is identical.
+                throw Object.assign(
+                    new Error("EBUSY: resource busy, open 'hello.lua'"),
+                    { code: 'EBUSY' },
+                );
+            }
+            await fs.write(uri, data);
+        };
+        const { host } = createHost(failingFs, config);
         const session = new BuildSession(host);
         await session.start();
 
-        // A change event for a file that does not exist in the source tree.
+        await fs.writeText(
+            `${PROJECT_DIR}/my_mod/media/lua/shared/hello.lua`,
+            'print("locked")',
+        );
+        failWrites = true;
         const result = await session.apply([
-            { type: 'change', path: '/proj/my_mod/media/lua/ghost.lua' },
+            { type: 'change', path: '/proj/my_mod/media/lua/shared/hello.lua' },
         ]);
+        failWrites = false;
         expect(result.errors).toHaveLength(1);
+        expect(result.errors[0]).toContain('EBUSY');
         expect(result.incremental).toBe(0);
+
         // The session stays usable.
-        await fs.writeText(`${PROJECT_DIR}/my_mod/media/lua/real.lua`, 'ok');
         const second = await session.apply([
-            { type: 'create', path: '/proj/my_mod/media/lua/real.lua' },
+            { type: 'change', path: '/proj/my_mod/media/lua/shared/hello.lua' },
         ]);
         expect(second.errors).toEqual([]);
         expect(second.incremental).toBe(2);
+        expect(
+            await fs.readText(
+                `${MAIN_OUT}/Contents/mods/my_mod/media/lua/shared/hello.lua`,
+            ),
+        ).toBe('print("locked")');
         await session.stop();
     });
 
@@ -655,5 +684,104 @@ describe('BuildSession (fs-driven sync engine)', () => {
             ),
         ).toBe('x');
         await session.stop();
+    });
+});
+
+describe('BuildSession transient sources and batch summary', () => {
+    let fs: MemoryFileSystem;
+    let config: IProjectConfig;
+
+    beforeEach(async () => {
+        fs = new MemoryFileSystem();
+        config = baseConfig();
+        await seedProject(fs, config);
+    });
+
+    it('skips change events whose source vanished before the sync', async () => {
+        const { host } = createHost(fs, config);
+        const session = new BuildSession(host);
+        await session.start();
+
+        // Watchers deliver events for transient files too (atomic saves,
+        // temp copies like "_init.lua.git"); by the time the batch runs the
+        // file is gone. That is not a sync failure.
+        const result = await session.apply([
+            {
+                type: 'change',
+                path: '/proj/my_mod/media/lua/client/mod/_init.lua.git',
+            },
+        ]);
+
+        expect(result.errors).toEqual([]);
+        expect(result.incremental).toBe(0);
+        expect(result.ignored).toBe(1);
+        await session.stop();
+    });
+
+    it('skips a vanished create and still syncs the real save afterwards', async () => {
+        const { host } = createHost(fs, config);
+        const session = new BuildSession(host);
+        await session.start();
+
+        const vanished = await session.apply([
+            { type: 'create', path: '/proj/my_mod/media/lua/new.lua' },
+        ]);
+        expect(vanished.errors).toEqual([]);
+        expect(vanished.ignored).toBe(1);
+
+        await fs.writeText(`${PROJECT_DIR}/my_mod/media/lua/new.lua`, '-- new');
+        const real = await session.apply([
+            { type: 'create', path: '/proj/my_mod/media/lua/new.lua' },
+        ]);
+        expect(real.errors).toEqual([]);
+        expect(real.incremental).toBe(2);
+        expect(
+            await fs.readText(
+                `${MAIN_OUT}/Contents/mods/my_mod/media/lua/new.lua`,
+            ),
+        ).toBe('-- new');
+        await session.stop();
+    });
+
+    it('summarizeApplyResult describes what a batch did', () => {
+        expect(
+            summarizeApplyResult({
+                incremental: 2,
+                scoped: [],
+                fullRebuild: false,
+                ignored: 0,
+                errors: [],
+            }),
+        ).toBe('2 file(s) synced');
+        expect(
+            summarizeApplyResult({
+                incremental: 0,
+                scoped: [
+                    { modId: 'a', variants: ['main'] },
+                    { modId: 'b', variants: ['main'] },
+                ],
+                fullRebuild: false,
+                ignored: 0,
+                errors: [],
+            }),
+        ).toBe('re-synced mod(s): a, b');
+        expect(
+            summarizeApplyResult({
+                incremental: 1,
+                scoped: [],
+                fullRebuild: true,
+                ignored: 0,
+                errors: [],
+            }),
+        ).toBe('1 file(s) synced; full rebuild');
+        expect(
+            summarizeApplyResult({
+                incremental: 0,
+                scoped: [],
+                fullRebuild: false,
+                ignored: 5,
+                errors: [],
+            }),
+        ).toBe('');
     });
 });
