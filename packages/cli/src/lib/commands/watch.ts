@@ -1,5 +1,4 @@
 import { relative } from 'path';
-import { subscribe } from '@parcel/watcher';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { hasFlag } from '../args';
@@ -8,6 +7,8 @@ import { projectDir, resolveProjectConfig } from '../helper';
 import { info, verbose, warn } from '../logger';
 import { createDevSync } from '../devsync';
 import { isWatchPathIgnored, resolveWatchVariants } from '../watch-shared';
+
+type ParcelWatcher = typeof import('@parcel/watcher');
 
 addHelp(
     'watch',
@@ -102,6 +103,13 @@ export async function watchCmd() {
     // uses, so the CLI and the extension behave identically. Events arrive
     // in batches; the debounce coalesces editor save bursts, replacing
     // chokidar's awaitWriteFinish.
+    //
+    // Required lazily: the VS Code extension inlines this module through the
+    // api surface (the command registry self-registers on import), and a
+    // top-level require would crash its activation — the native binding is
+    // only resolvable from the CLI package. Only the real watch command ever
+    // executes this line.
+    const { subscribe } = require('@parcel/watcher') as ParcelWatcher;
     const subscription = await subscribe(
         projectPath,
         (err, events) => {
