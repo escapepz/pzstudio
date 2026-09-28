@@ -37,9 +37,10 @@ addHelp(
 
 /**
  * Executes the operations produced by planBuild. This is the only I/O layer of
- * the build: everything above it is pure planning.
+ * the build: everything above it is pure planning. Exported so the sync
+ * engine's filesystem-based executor can be kept in parity by tests.
  */
-function executeBuildPlan(operations: FileOperation[]) {
+export function executeBuildPlan(operations: FileOperation[]) {
     for (const operation of operations) {
         switch (operation.type) {
             case 'log':

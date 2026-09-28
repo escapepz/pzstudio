@@ -11,6 +11,8 @@ export * from './validation';
 export * from './modInfoParser';
 export * from './textgen';
 export * from './buildplan';
+export * from './execute';
+export * from './buildsession';
 export * from './migration';
 export * from './constants';
 export * from './defaults';
