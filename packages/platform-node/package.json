@@ -1,0 +1,27 @@
+{
+    "name": "@pzstudio/platform-node",
+    "version": "0.42200.0",
+    "private": true,
+    "description": "Node.js adapter for @pzstudio/platform: filesystem over fs/promises and Node capability profile.",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "require": "./dist/index.js"
+        }
+    },
+    "type": "commonjs",
+    "scripts": {
+        "clean": "node -e \"require('fs').rmSync('./dist', { recursive: true, force: true })\"",
+        "build": "pnpm run clean && tsc -p tsconfig.build.json"
+    },
+    "dependencies": {
+        "@pzstudio/platform": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/node": "^20.0.0",
+        "typescript": "^5.9.3"
+    }
+}
