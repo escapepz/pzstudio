@@ -12,11 +12,7 @@ import {
 } from '../helper';
 import { log, verbose } from '../logger';
 import { hasFlag } from '../args';
-import {
-    readGlobalConfig,
-    resolveTemplateDir,
-    scaffoldProject,
-} from '../templateManager';
+import { resolveTemplateDir, scaffoldProject } from '../templateManager';
 
 addHelp(
     'add',
@@ -25,11 +21,10 @@ addHelp(
     Usages:
         pzstudio add <modName> - Add a mod to your project.
         pzstudio add <modName> <modId> - Add a mod to your project.
-    
+
     Flags:
     --offline        - Bypass network updates and use local cache or legacy templates.
     --force-update   - Force refresh of cached templates from remote.
-    --symlinks       - Use directory junctions for template folders (if supported).
     --transport <git|fetch> - Template download method (default: git when available, else fetch).
     --verbose        - Enable diagnostic output.`,
 );
@@ -50,8 +45,6 @@ export function addCmd(modName: string, modId?: string) {
 
     const isOffline = hasFlag('offline');
     const forceUpdate = hasFlag('force-update');
-    const useSymlinks =
-        hasFlag('symlinks') || readGlobalConfig(false).useSymlinks;
 
     // US2: Check for local .template-mod tier-0 guard
     const localTemplatePath = join(projectPath, '.template-mod');
@@ -79,33 +72,23 @@ export function addCmd(modName: string, modId?: string) {
         throw new Error(`A mod with id '${modId}' already exists!`);
     }
 
-    // Copy mod template
+    // Copy mod template. Junctions are intentionally NOT used here: a mod
+    // folder must diverge from its template, and the seeded local
+    // .template-mod cache is the project's editable override — always copy.
     verbose(
         `Scaffolding mod from ${templateModPath} to ${join(projectPath, modId)}`,
     );
-    scaffoldProject(
-        templateModPath,
-        join(projectPath, modId),
-        useSymlinks,
-        false,
-        {
-            excludeIgnoreFile: true,
-            ignoreDotFiles: false,
-        },
-    );
+    scaffoldProject(templateModPath, join(projectPath, modId), false, false, {
+        excludeIgnoreFile: true,
+        ignoreDotFiles: false,
+    });
 
     // Seed local cache if we resolved a remote template and no local one existed
     if (!usedLocalTemplate) {
-        scaffoldProject(
-            templateModPath,
-            localTemplatePath,
-            useSymlinks,
-            false,
-            {
-                excludeIgnoreFile: true,
-                ignoreDotFiles: false,
-            },
-        );
+        scaffoldProject(templateModPath, localTemplatePath, false, false, {
+            excludeIgnoreFile: true,
+            ignoreDotFiles: false,
+        });
     }
 
     // Update config

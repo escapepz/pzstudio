@@ -186,8 +186,6 @@ pzstudio add <modName> <modId>
   - Skip remote refresh and use cached or legacy template data.
 - `--force-update`
   - Force refresh of cached templates.
-- `--symlinks`
-  - Use directory junctions when scaffolding template folders, if supported.
 - `--verbose`
   - Enable diagnostic output.
 
