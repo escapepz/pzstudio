@@ -12,9 +12,12 @@ Implemented commands:
 - `build`
 - `clean`
 - `delete`
+- `doctor`
 - `help`
 - `lang`
+- `list`
 - `migrate`
+- `modconfig`
 - `modinfo`
 - `new`
 - `outdir`
@@ -61,6 +64,7 @@ These flags are handled by the CLI parser:
 
 - `new` must be run outside a project directory.
 - `add`, `build`, `clean`, `delete`, `rename`, `lang`, `modinfo`, and `watch` require an existing project directory.
+- `doctor` can run anywhere; without a `project.json` it reports that single finding and fails.
 - `migrate` can run with or without a project; it always checks the global config and only processes `project.json` when one exists in the current directory.
 - `update` does not require a project directory.
 - `outdir` updates the global config stored under the CLI config path, not the project config.
@@ -73,9 +77,12 @@ These flags are handled by the CLI parser:
 | `build` | Build workshop output | Yes | Implemented |
 | `clean` | Remove build output | Yes | Implemented |
 | `delete` | Remove a mod from a project | Yes | Implemented |
+| `doctor` | Check the project and environment for problems | No | Implemented |
 | `help` | Show help text | No | Implemented |
 | `lang` | Translation helper | Yes | Stub |
+| `list` | List the mods in your project | Yes | Implemented |
 | `migrate` | Upgrade legacy config and sync `mod.info` data | No | Implemented |
+| `modconfig` | Edit mod configuration fields | Yes | Implemented |
 | `modinfo` | Generate `mod.info` files | Yes | Implemented |
 | `new` | Create a new project | No, must be outside a project | Implemented |
 | `outdir` | Set global output directory | No | Implemented |
@@ -517,6 +524,46 @@ pzstudio watch --development # syncs only the dev_branch workshop output
 pzstudio watch --both        # syncs both workshop outputs
 pzstudio watch --verbose     # enable diagnostic output
 ```
+
+### Status
+
+- Implemented.
+
+## `pzstudio doctor`
+
+Check the project and its environment for problems and print a report. The
+same diagnostics engine feeds the PZ Studio explorer in the VS Code
+extension, so both surfaces report identical findings.
+
+Checks per module:
+
+- `project` — project.json loads through the public contract (parse /
+  schema version / validation failures become errors); legacy layout
+  migrated in memory; `workshop/description.txt` and `workshop/preview.png`
+  presence.
+- `environment` — host capabilities (web hosts report the missing workshop
+  output and shell capabilities).
+- `filesystem` — the resolved build output directory exists, is a
+  directory, and sits outside the project folder.
+- `templates` — whether the project template cache is downloaded.
+- `mods` — declared mod folders exist on disk, have a Build 42 branch
+  (subfolder with `media/`), no `mod.info` gap when `build.modInfo` is
+  `skip`, no dev-only + excluded conflicts, no stale `excludes` entries.
+- `buildTarget` — `pzBuildCompatibility` against the running game build
+  (warning only), empty production/development variants, and the
+  development-only default target.
+
+### Usage
+
+```bash
+pzstudio doctor                       # run every check
+pzstudio doctor --game-build 42.20.1  # also check pzBuildCompatibility
+```
+
+### Behavior
+
+- Exits with code 1 when the report contains errors; warnings are advisory.
+- Warnings never block `pzstudio build`.
 
 ### Status
 

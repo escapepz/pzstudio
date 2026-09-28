@@ -20,6 +20,16 @@ export type {
     PlanBuildInput,
 } from '@pzstudio/core';
 export { patchModInfoId } from '@pzstudio/core';
+export { matchBuildCompatibility, runDoctor } from '@pzstudio/core';
+export type {
+    Diagnostic,
+    DiagnosticModule,
+    DiagnosticSeverity,
+    DoctorInput,
+    DoctorReport,
+} from '@pzstudio/core';
+export { runProjectDoctor } from './lib/doctor';
+export type { ProjectDoctorOptions } from './lib/doctor';
 export {
     resolveTemplateDir,
     cloneRemoteTemplate,

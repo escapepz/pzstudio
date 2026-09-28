@@ -9,6 +9,7 @@ import './commands/add';
 import './commands/build';
 import './commands/clean';
 import './commands/delete';
+import './commands/doctor';
 import './commands/lang';
 import './commands/list';
 import './commands/new';
