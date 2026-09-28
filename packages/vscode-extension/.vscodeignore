@@ -3,6 +3,10 @@
 src
 scripts
 tsconfig.json
+tsconfig.test.json
+.vscode-test.js
+.vscode-test
+out
 node_modules
 !dist/extension.js
 !dist/extension.js.map
