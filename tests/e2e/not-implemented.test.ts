@@ -12,20 +12,16 @@ describe('Not Implemented Commands (E2E)', () => {
         workspace.cleanup();
     });
 
-    it('should report not implemented for watch command', async () => {
-        // Need a project.json for watch to reach its implementation
-        workspace.write(
-            'project.json',
-            JSON.stringify({
-                workshop: { title: 'T', visibility: 'public', tags: [] },
-                mods: {},
-                excludes: [],
-            }),
-        );
-
+    it('should fail fast for watch outside a project directory', async () => {
+        // No project.json: watch cannot start and must exit instead of
+        // running forever. A started watch session is long-lived and covered
+        // by the unit tests of the sync engine + watch helpers.
         const result = await workspace.run('watch');
         workspace.assertFailure(result);
-        workspace.assertStderr(result, 'Not implemented yet');
+        workspace.assertStderr(
+            result,
+            'You must execute this command within a project directory!',
+        );
     });
 
     it('should report not implemented for lang command', async () => {

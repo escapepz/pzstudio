@@ -71,8 +71,10 @@
         "watch": "pnpm run clean && tsc --watch"
     },
     "dependencies": {
-        "@pzstudio/platform": "workspace:*",
         "@pzstudio/core": "workspace:*",
+        "@pzstudio/platform": "workspace:*",
+        "@pzstudio/platform-node": "workspace:*",
+        "chokidar": "^3.6.0",
         "fflate": "^0.8.3",
         "picocolors": "^1.1.1",
         "tslib": "^2.8.1"

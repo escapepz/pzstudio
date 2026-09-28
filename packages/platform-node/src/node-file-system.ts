@@ -64,6 +64,11 @@ export class NodeFileSystem implements ProjectFileSystem {
         await fs.rm(toPath(uri), {
             recursive: options?.recursive ?? false,
             force: true,
+            // rm retries only apply to recursive directory removal on
+            // Windows; they ride out the transient locks the game/Steam/
+            // Explorer hold on workshop output folders.
+            maxRetries: 5,
+            retryDelay: 200,
         });
     }
 

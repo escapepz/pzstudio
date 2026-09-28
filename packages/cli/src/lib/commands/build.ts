@@ -1,20 +1,16 @@
-import { basename, join } from 'path';
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { mkdirSync, writeFileSync, cpSync } from 'fs';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { hasFlag } from '../args';
 import {
     FileOperation,
-    ModSourceState,
-    PlanBuildInput,
     collectIncludedModIds,
     planBuild,
 } from '@pzstudio/core';
 import {
+    gatherPlanInput,
     projectDir,
-    readWorkshopDescriptionLines,
     removeDirRecursive,
-    resolveModInfoTargets,
     resolveProjectConfig,
 } from '../helper';
 import { info, log, verbose, warn } from '../logger';
@@ -70,46 +66,6 @@ export function executeBuildPlan(operations: FileOperation[]) {
                 break;
         }
     }
-}
-
-/**
- * Snapshots the source tree of a mod so the planner can decide mod.info
- * targeting without touching the filesystem. The output is a fresh copy of
- * this tree, so source decisions match the ones previously made on the output.
- * Existing mod.info content is snapshotted too so the planner can rewrite its
- * id for the development output.
- */
-function gatherModSourceState(
-    projectPath: string,
-    modId: string,
-): ModSourceState {
-    const state: ModSourceState = {
-        branchFolders: [],
-        modInfoExists: {},
-        modInfoContent: {},
-    };
-
-    const snapshotTarget = (target: string, targetDir: string) => {
-        const modInfoPath = join(targetDir, 'mod.info');
-        state.modInfoExists[target] = existsSync(modInfoPath);
-        if (!state.modInfoExists[target]) {
-            return;
-        }
-        try {
-            state.modInfoContent![target] = readFileSync(modInfoPath, 'utf8');
-        } catch {
-            // Unreadable mod.info: no content snapshot, so the planner falls
-            // back to copying the file verbatim.
-        }
-    };
-
-    snapshotTarget('', join(projectPath, modId));
-    for (const branchPath of resolveModInfoTargets(modId, projectPath)) {
-        const branchName = basename(branchPath);
-        state.branchFolders.push(branchName);
-        snapshotTarget(branchName, branchPath);
-    }
-    return state;
 }
 
 export async function buildCmd() {
@@ -171,27 +127,12 @@ export async function buildCmd() {
     }
     verbose(`Targets: main=${buildMain}, development=${buildDev}`);
 
-    verbose(`Resolving workshop template...`);
     const templateWorkshopPath = resolveTemplateDir('workshop');
-    verbose(`Workshop template path: ${templateWorkshopPath}`);
-
-    // Snapshot the source tree once; every fs decision below is derived from
-    // it by the pure planner.
-    const modSourceStates: Record<string, ModSourceState> = {};
-    for (const modId of Object.keys(projectConfig.mods)) {
-        modSourceStates[modId] = gatherModSourceState(projectPath, modId);
-    }
-
-    const planInput: Omit<PlanBuildInput, 'variant'> = {
-        config: projectConfig,
-        workshopTemplateDir: templateWorkshopPath,
-        projectDir: projectPath,
-        modSourceStates,
-        descriptionLines: readWorkshopDescriptionLines(projectPath),
-        previewPngExists: existsSync(
-            join(projectPath, 'workshop', 'preview.png'),
-        ),
-    };
+    const planInput = gatherPlanInput(
+        projectPath,
+        projectConfig,
+        templateWorkshopPath,
+    );
 
     // Each variant is isolated: a locked output folder in one target must
     // not prevent the other target from being built (--both).

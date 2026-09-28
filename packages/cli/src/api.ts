@@ -22,6 +22,19 @@ export {
     cloneRemoteTemplate,
     scaffoldProject,
 } from './lib/templateManager';
+export { createDevSync } from './lib/devsync';
+export type {
+    DevSyncOptions,
+    BuildSession,
+    BuildVariant,
+    FileDelta,
+    SessionApplyResult,
+} from './lib/devsync';
+export {
+    resolveWatchVariants,
+    isWatchPathIgnored,
+    WATCH_DEBOUNCE_MS,
+} from './lib/commands/watch';
 export {
     setTemplateTransport,
     TemplateTransport,

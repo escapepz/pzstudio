@@ -13,6 +13,8 @@ import {
 import {
     IProjectConfig,
     IVsCodeSettings,
+    ModSourceState,
+    PlanBuildInput,
     TemplateCategory,
     ITemplateConfig,
 } from '@pzstudio/core';
@@ -442,6 +444,76 @@ export function readWorkshopDescriptionLines(projectPath: string): string[] {
     return readFileSync(workshopDescriptionPath, {
         encoding: 'utf-8',
     }).split(/\r?\n/);
+}
+
+/**
+ * Snapshots the source tree of a mod so the planner can decide mod.info
+ * targeting without touching the filesystem. Existing mod.info content is
+ * snapshotted too so the planner can rewrite its id for the development
+ * output. Shared by build and the Development Sync Engine (watch).
+ */
+export function gatherModSourceState(
+    projectPath: string,
+    modId: string,
+): ModSourceState {
+    const state: ModSourceState = {
+        branchFolders: [],
+        modInfoExists: {},
+        modInfoContent: {},
+    };
+
+    const snapshotTarget = (target: string, targetDir: string) => {
+        const modInfoPath = join(targetDir, 'mod.info');
+        state.modInfoExists[target] = existsSync(modInfoPath);
+        if (!state.modInfoExists[target]) {
+            return;
+        }
+        try {
+            state.modInfoContent![target] = readFileSync(modInfoPath, 'utf8');
+        } catch {
+            // Unreadable mod.info: no content snapshot, so the planner falls
+            // back to copying the file verbatim.
+        }
+    };
+
+    snapshotTarget('', join(projectPath, modId));
+    for (const branchPath of resolveModInfoTargets(modId, projectPath)) {
+        const branchName = basename(branchPath);
+        state.branchFolders.push(branchName);
+        snapshotTarget(branchName, branchPath);
+    }
+    return state;
+}
+
+/**
+ * Assembles the full plan input for the pure planner: resolved template,
+ * per-mod source snapshots and the workshop metadata. This is the shared
+ * host-side pre-planning work of `pzstudio build` and the sync engine.
+ * @param projectPath The project root directory
+ * @param config The fully-resolved project config (outdir absolute)
+ */
+export function gatherPlanInput(
+    projectPath: string,
+    config: IProjectConfig,
+    workshopTemplateDir: string,
+): Omit<PlanBuildInput, 'variant'> {
+    // Snapshot the source tree once; every fs decision below is derived from
+    // it by the pure planner.
+    const modSourceStates: Record<string, ModSourceState> = {};
+    for (const modId of Object.keys(config.mods)) {
+        modSourceStates[modId] = gatherModSourceState(projectPath, modId);
+    }
+
+    return {
+        config,
+        workshopTemplateDir,
+        projectDir: projectPath,
+        modSourceStates,
+        descriptionLines: readWorkshopDescriptionLines(projectPath),
+        previewPngExists: existsSync(
+            join(projectPath, 'workshop', 'preview.png'),
+        ),
+    };
 }
 
 /**
