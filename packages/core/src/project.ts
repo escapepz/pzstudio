@@ -119,6 +119,13 @@ export interface IProjectConfig {
     excludes?: string[];
 
     /**
+     * Version of the project.json schema this file was written against.
+     * Absent means version 1 (pre-schemaVersion files); the loader stamps
+     * the current version when migrating and saving.
+     */
+    schemaVersion?: number;
+
+    /**
      * Project-level build behaviour.
      */
     build?: {

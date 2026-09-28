@@ -6,6 +6,7 @@
  * out. Host packages (cli, vscode-extension) are thin adapters on top.
  */
 export * from './project';
+export * from './schema-version';
 export * from './validation';
 export * from './modInfoParser';
 export * from './textgen';
@@ -14,3 +15,4 @@ export * from './migration';
 export * from './constants';
 export * from './defaults';
 export * from './errors/TemplateResolutionError';
+export * from './project-contract';

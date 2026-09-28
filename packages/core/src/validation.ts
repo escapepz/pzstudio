@@ -1,3 +1,5 @@
+import { PROJECT_SCHEMA_VERSION } from './schema-version';
+
 /**
  * Structured validation failure details.
  */
@@ -65,6 +67,8 @@ export function validateProject(config: any, context: ValidationContext): void {
         );
         return;
     }
+
+    validateSchemaVersionField(config.schemaVersion, context);
 
     // Legacy/Unsupported root fields
     if ('title' in config) {
@@ -577,6 +581,24 @@ export function validateUseSymlinksField(
             pathPrefix,
             'Field "useSymlinks" must be a boolean',
             'Set to true or false for global symlink default',
+        );
+    }
+}
+
+/**
+ * Validates the schemaVersion field: a positive integer when present.
+ * Absence is legal (pre-versioning files).
+ */
+export function validateSchemaVersionField(
+    value: any,
+    context: ValidationContext,
+): void {
+    if (value === undefined) return;
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+        context.addError(
+            'schemaVersion',
+            'Field "schemaVersion" must be a positive integer',
+            `Remove the field or set it to ${PROJECT_SCHEMA_VERSION}`,
         );
     }
 }

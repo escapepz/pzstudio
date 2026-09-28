@@ -71,6 +71,10 @@ importers:
         version: 5.9.3
 
   packages/core:
+    dependencies:
+      '@pzstudio/platform':
+        specifier: workspace:*
+        version: link:../platform
     devDependencies:
       typescript:
         specifier: ^5.9.3
