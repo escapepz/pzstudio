@@ -43,5 +43,6 @@
     "command.explorer.toggleFiles.title": "PZStudio : Basculer tous/fichiers essentiels dans l'Explorer",
     "command.explorer.toggleFiles.hidden.title": "PZStudio : Basculer tous/fichiers essentiels dans l'Explorer",
     "command.newHere.title": "PZStudio: Nouveau projet ici",
-    "config.newProject.defaultLocation.description": "Dossier par défaut préféré pour les nouveaux projets. Le sélecteur de New Project s'ouvre ici et, en cas d'annulation, ce dossier est utilisé."
+    "config.newProject.defaultLocation.description": "Dossier par défaut préféré pour les nouveaux projets. Le sélecteur de New Project s'ouvre ici et, en cas d'annulation, ce dossier est utilisé.",
+    "command.watch.title": "Basculer la synchronisation de développement"
 }

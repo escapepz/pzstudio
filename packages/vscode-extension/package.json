@@ -395,6 +395,10 @@
                 "title": "%command.update.title%"
             },
             {
+                "command": "pzstudio.watch",
+                "title": "%command.watch.title%"
+            },
+            {
                 "command": "pzstudio.modinfoGenerate",
                 "title": "%command.modinfoGenerate.title%",
                 "icon": "$(note)"

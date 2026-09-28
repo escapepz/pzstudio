@@ -47,5 +47,7 @@
     "excluded from build": "已从构建排除",
     "Create project in...": "在以下位置创建项目...",
     "Select the workspace folder for the new project": "为新项目选择工作区文件夹",
-    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio：请先打开一个工作区文件夹，再在此处创建项目。"
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio：请先打开一个工作区文件夹，再在此处创建项目。",
+    "PZStudio: development sync stopped.": "PZStudio：开发同步已停止。",
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio：已为“{0}”启动开发同步 — 再次运行该命令可停止。"
 }

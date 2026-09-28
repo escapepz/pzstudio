@@ -47,5 +47,7 @@
     "excluded from build": "derlemeden hariç",
     "Create project in...": "Projeyi şurada oluştur...",
     "Select the workspace folder for the new project": "Yeni proje için çalışma alanı klasörünü seçin",
-    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Burada proje oluşturmadan önce bir çalışma alanı klasörü açın."
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Burada proje oluşturmadan önce bir çalışma alanı klasörü açın.",
+    "PZStudio: development sync stopped.": "PZStudio: geliştirme eşitlemesi durduruldu.",
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: '{0}' için geliştirme eşitlemesi başlatıldı — durdurmak için komutu yeniden çalıştırın."
 }

@@ -43,5 +43,6 @@
     "command.explorer.toggleFiles.title": "PZStudio: Minden/létszükséges fájl váltása a Explorerben",
     "command.explorer.toggleFiles.hidden.title": "PZStudio: Minden/létszükséges fájl váltása a Explorerben",
     "command.newHere.title": "PZStudio: Új projekt ide",
-    "config.newProject.defaultLocation.description": "Az új projektek előnyben részesített alapértelmezett mappája. A New Project választó itt nyílik, és megszakításkor ez a mappa lesz használva."
+    "config.newProject.defaultLocation.description": "Az új projektek előnyben részesített alapértelmezett mappája. A New Project választó itt nyílik, és megszakításkor ez a mappa lesz használva.",
+    "command.watch.title": "Fejlesztési szinkronizálás be/ki"
 }

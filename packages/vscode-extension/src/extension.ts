@@ -7,8 +7,10 @@ import {
     updateVsCodeSettings,
 } from './util/settings';
 import { createCommandRunner } from './util/execute';
+import { DevSyncController } from './util/devsync';
 import { registerAllCommands } from './commands';
 import { registerExplorerCommands } from './commands/explorer';
+import { registerWatchCommand } from './commands/watch';
 import {
     PROJECT_EXPLORER_VIEW_ID,
     ProjectExplorerProvider,
@@ -47,9 +49,14 @@ export async function activate(context: vscode.ExtensionContext) {
         projectExplorer.requestRefresh(),
     );
 
+    // Development Sync Engine: one controller shared by the palette toggle.
+    const devSync = new DevSyncController();
+
     context.subscriptions.push(
         outputChannel,
+        devSync,
         ...registerAllCommands(context, executePZCommand),
+        registerWatchCommand(devSync),
         treeView,
         projectJsonWatcher,
         ...registerExplorerCommands(projectExplorer),

@@ -47,5 +47,7 @@
     "excluded from build": "빌드에서 제외됨",
     "Create project in...": "프로젝트를 만들 위치...",
     "Select the workspace folder for the new project": "새 프로젝트의 워크스페이스 폴더를 선택하세요",
-    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: 여기에서 프로젝트를 만들기 전에 워크스페이스 폴더를 여세요."
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: 여기에서 프로젝트를 만들기 전에 워크스페이스 폴더를 여세요.",
+    "PZStudio: development sync stopped.": "PZStudio: 개발 동기화가 중지되었습니다.",
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: '{0}'에 대한 개발 동기화가 시작되었습니다 — 중지하려면 명령을 다시 실행하세요."
 }

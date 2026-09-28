@@ -43,5 +43,6 @@
     "command.explorer.toggleFiles.title": "PZStudio: Veksle alle/essensielle filer i Explorer",
     "command.explorer.toggleFiles.hidden.title": "PZStudio: Veksle alle/essensielle filer i Explorer",
     "command.newHere.title": "PZStudio: Nytt prosjekt her",
-    "config.newProject.defaultLocation.description": "Foretrukket standardmappe for nye prosjekter. New Project-velgeren starter her, og ved avbryting brukes denne mappen."
+    "config.newProject.defaultLocation.description": "Foretrukket standardmappe for nye prosjekter. New Project-velgeren starter her, og ved avbryting brukes denne mappen.",
+    "command.watch.title": "Veksle utviklingssynkronisering"
 }
