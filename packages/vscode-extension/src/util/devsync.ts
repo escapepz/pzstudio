@@ -1,5 +1,11 @@
 import * as vscode from 'vscode';
-import { createDevSync, warn, WATCH_DEBOUNCE_MS } from 'pzstudio-cli/api';
+import {
+    createDevSync,
+    log,
+    summarizeApplyResult,
+    warn,
+    WATCH_DEBOUNCE_MS,
+} from 'pzstudio-cli/api';
 import type { BuildSession, FileDelta } from 'pzstudio-cli/api';
 
 /**
@@ -95,6 +101,12 @@ export class DevSyncController implements vscode.Disposable {
             return;
         }
         const result = await session.apply(batch);
+        // A successful sync is otherwise silent in the output channel —
+        // say what the batch did, same wording the CLI watch prints.
+        const summary = summarizeApplyResult(result);
+        if (summary) {
+            log(`- ${summary}.`);
+        }
         for (const message of result.errors) {
             warn(`- ${message}`);
         }

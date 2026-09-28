@@ -21,6 +21,7 @@ export type {
 } from '@pzstudio/core';
 export { patchModInfoId } from '@pzstudio/core';
 export { matchBuildCompatibility, runDoctor } from '@pzstudio/core';
+export { summarizeApplyResult } from '@pzstudio/core';
 export type {
     Diagnostic,
     DiagnosticModule,
