@@ -49,5 +49,8 @@
     "Select the workspace folder for the new project": "เลือกโฟลเดอร์ workspace สำหรับโปรเจกต์ใหม่",
     "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: เปิดโฟลเดอร์ workspace ก่อนสร้างโปรเจกต์ที่นี่",
     "PZStudio: development sync stopped.": "PZStudio: หยุดการซิงค์การพัฒนาแล้ว",
-    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: เริ่มการซิงค์การพัฒนาสำหรับ '{0}' แล้ว — เรียกใช้คำสั่งอีกครั้งเพื่อหยุด"
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: เริ่มการซิงค์การพัฒนาสำหรับ '{0}' แล้ว — เรียกใช้คำสั่งอีกครั้งเพื่อหยุด",
+    "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: ไม่พบปัญหาใน '{0}' ทุกอย่างดูดี",
+    "Diagnostics for '{0}'": "การวินิจฉัยสำหรับ '{0}'",
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "ข้อผิดพลาด {0}, คำเตือน {1}, ข้อมูล {2} — ไม่มีการเปลี่ยนแปลง"
 }

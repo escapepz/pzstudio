@@ -49,5 +49,8 @@
     "Select the workspace folder for the new project": "Valitse uuden projektin työtilan kansio",
     "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Avaa työtilan kansio ennen projektin luomista tähän.",
     "PZStudio: development sync stopped.": "PZStudio: kehityssynkronointi pysäytetty.",
-    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: kehityssynkronointi käynnistetty kohteelle '{0}' — pysäytä suorittamalla komento uudelleen."
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: kehityssynkronointi käynnistetty kohteelle '{0}' — pysäytä suorittamalla komento uudelleen.",
+    "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: ongelmia ei löytynyt kohteesta '{0}'. Kaikki näyttää hyvältä.",
+    "Diagnostics for '{0}'": "Diagnostiikka kohteelle '{0}'",
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} virhettä, {1} varoitusta, {2} tietoa — mitään ei muutettu"
 }

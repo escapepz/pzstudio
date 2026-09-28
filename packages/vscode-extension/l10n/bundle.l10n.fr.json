@@ -49,5 +49,8 @@
     "Select the workspace folder for the new project": "Sélectionnez le dossier de l'espace de travail pour le nouveau projet",
     "PZStudio: Open a workspace folder before creating a project here.": "PZStudio : Ouvrez un dossier d'espace de travail avant de créer un projet ici.",
     "PZStudio: development sync stopped.": "PZStudio : synchronisation de développement arrêtée.",
-    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio : synchronisation de développement démarrée pour '{0}' — relancez la commande pour l'arrêter."
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio : synchronisation de développement démarrée pour '{0}' — relancez la commande pour l'arrêter.",
+    "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio : aucun problème trouvé dans '{0}'. Tout semble bon.",
+    "Diagnostics for '{0}'": "Diagnostic de '{0}'",
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} erreur(s), {1} avertissement(s), {2} info(s) — rien n’a été modifié"
 }

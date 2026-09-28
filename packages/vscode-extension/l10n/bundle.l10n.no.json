@@ -49,5 +49,8 @@
     "Select the workspace folder for the new project": "Velg arbeidsområdemappen for det nye prosjektet",
     "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Åpne en arbeidsområdemappe før du oppretter et prosjekt her.",
     "PZStudio: development sync stopped.": "PZStudio: utviklingssynkronisering stoppet.",
-    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: utviklingssynkronisering startet for '{0}' — kjør kommandoen på nytt for å stoppe."
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: utviklingssynkronisering startet for '{0}' — kjør kommandoen på nytt for å stoppe.",
+    "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: ingen problemer funnet i '{0}'. Alt ser bra ut.",
+    "Diagnostics for '{0}'": "Diagnostikk for '{0}'",
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} feil, {1} advarsler, {2} info — ingenting ble endret"
 }

@@ -44,5 +44,6 @@
     "command.explorer.toggleFiles.hidden.title": "PZStudio: Ẩn/hiện mọi file trong Explorer",
     "command.newHere.title": "PZStudio: Project mới tại đây",
     "config.newProject.defaultLocation.description": "Folder mặc định ưu tiên cho project mới. Picker của New Project sẽ mở tại đây, và nếu bỏ qua picker thì dùng luôn folder này.",
-    "command.watch.title": "Bật/tắt đồng bộ phát triển"
+    "command.watch.title": "Bật/tắt đồng bộ phát triển",
+    "command.doctor.title": "PZStudio: Chạy chẩn đoán"
 }

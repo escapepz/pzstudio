@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { TextDecoder } from 'util';
 import { findProjectDirs } from '../util/project';
 import { t } from '../util/l10n';
+import type { ProjectDiagnosticsSummary } from '../util/doctor';
 
 export const PROJECT_EXPLORER_VIEW_ID = 'pzstudio.projectExplorer';
 
@@ -35,6 +36,15 @@ export const SHOW_ALL_FILES_CONTEXT_KEY = 'pzstudioExplorer.showAllFiles';
  */
 export const MOD_BRANCH_INFO_FILE = 'mod.info';
 export const MOD_BRANCH_ICON_FILE = 'icon.png';
+
+/**
+ * Supplies the shared diagnostics for one project. Wired from
+ * extension.ts with the same engine `pzstudio doctor` runs; optional so
+ * tests and lightweight embeddings can leave diagnostics off.
+ */
+export type DiagnosticsSource = (
+    projectDir: vscode.Uri,
+) => Promise<ProjectDiagnosticsSummary | undefined>;
 
 /** A function so the state labels re-translate when the language changes. */
 function modStateDescription(state: ModBuildState): string {
@@ -153,6 +163,8 @@ interface TreeElement {
     label: string;
     collapsible: vscode.TreeItemCollapsibleState;
     description?: string;
+    /** Plain-text hover for nodes with diagnostics (project rows). */
+    tooltip?: string;
     /** Set when this node is a mod folder known to project.json. */
     modId?: string;
     /** Build state of a mod folder, mirrored into its contextValue. */
@@ -220,12 +232,15 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         light: vscode.Uri;
         dark: vscode.Uri;
     };
+    /** Shared diagnostics provider; unset until extension.ts wires it. */
+    private readonly diagnostics?: DiagnosticsSource;
 
-    constructor(extensionUri: vscode.Uri) {
+    constructor(extensionUri: vscode.Uri, diagnostics?: DiagnosticsSource) {
         this.projectIcon = {
             light: vscode.Uri.joinPath(extensionUri, PROJECT_FOLDER_ICON_LIGHT),
             dark: vscode.Uri.joinPath(extensionUri, PROJECT_FOLDER_ICON_DARK),
         };
+        this.diagnostics = diagnostics;
     }
 
     /**
@@ -265,10 +280,56 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         }, REFRESH_DEBOUNCE_MS);
     }
 
+    /**
+     * Runs the shared diagnostics (when wired) and renders the summary as
+     * a description badge (errors/warnings counts) plus a tooltip with the
+     * full findings list. A failing source never breaks the tree — the
+     * badge is decoration.
+     */
+    private async projectDiagnostics(
+        dir: vscode.Uri,
+    ): Promise<{ badge: string; tooltip: string } | undefined> {
+        if (!this.diagnostics) {
+            return undefined;
+        }
+        let summary: ProjectDiagnosticsSummary | undefined;
+        try {
+            summary = await this.diagnostics(dir);
+        } catch {
+            return undefined;
+        }
+        if (!summary || summary.report.diagnostics.length === 0) {
+            return undefined;
+        }
+
+        const glyphs: Record<string, string> = {
+            error: '✗',
+            warning: '⚠',
+            info: '·',
+        };
+        const badgeParts: string[] = [];
+        if (summary.errors > 0) {
+            badgeParts.push(`✗ ${summary.errors}`);
+        }
+        if (summary.warnings > 0) {
+            badgeParts.push(`⚠ ${summary.warnings}`);
+        }
+        const tooltip = summary.report.diagnostics
+            .map(
+                (d) =>
+                    `${glyphs[d.severity] ?? '·'} [${d.module}] ${d.message}`,
+            )
+            .join('\n');
+        return { badge: badgeParts.join(' '), tooltip };
+    }
+
     getTreeItem(element: TreeElement): vscode.TreeItem {
         const item = new vscode.TreeItem(element.label, element.collapsible);
         if (element.description) {
             item.description = element.description;
+        }
+        if (element.tooltip) {
+            item.tooltip = element.tooltip;
         }
         switch (element.kind) {
             case 'project':
@@ -367,13 +428,18 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
             ]
                 .filter(Boolean)
                 .join(' · ');
+            const diagnostics = await this.projectDiagnostics(dir);
             nodes.push({
                 kind: 'project',
                 uri: dir,
                 projectDir: dir,
                 label,
                 collapsible: vscode.TreeItemCollapsibleState.Collapsed,
-                description: description || undefined,
+                description:
+                    [description, diagnostics?.badge]
+                        .filter(Boolean)
+                        .join(' · ') || undefined,
+                tooltip: diagnostics?.tooltip,
             });
         }
         if (truncated) {

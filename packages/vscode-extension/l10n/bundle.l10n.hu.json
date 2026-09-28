@@ -49,5 +49,8 @@
     "Select the workspace folder for the new project": "Válassza ki az új projekt munkaterület-mappáját",
     "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Nyisson meg egy munkaterület-mappát, mielőtt itt hozna létre projektet.",
     "PZStudio: development sync stopped.": "PZStudio: fejlesztési szinkronizálás leállítva.",
-    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: fejlesztési szinkronizálás elindítva ehhez: '{0}' — a leállításhoz futtassa újra a parancsot."
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: fejlesztési szinkronizálás elindítva ehhez: '{0}' — a leállításhoz futtassa újra a parancsot.",
+    "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: nem találtunk problémát itt: '{0}'. Minden rendben.",
+    "Diagnostics for '{0}'": "Diagnosztika: '{0}'",
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} hiba, {1} figyelmeztetés, {2} információ — semmi nem változott"
 }

@@ -34,6 +34,7 @@ Access these commands via the **Command Palette** (`Ctrl+Shift+P` / `Cmd+Shift+P
 | `PZStudio: Rename Mod ID`     | Safely rename an existing mod (folder + project.json key).    |
 | `PZStudio: ModInfo Generate`  | Generate mod.info files in your source tree.                  |
 | `PZStudio: Update`            | Refresh the cached templates (libraries and documentation).   |
+| `PZStudio: Run Diagnostics`   | Check a project (project.json, mods, output folder, template cache, build target) and list every finding with a hint. The same report `pzstudio doctor` prints. |
 | `PZStudio: Toggle Development Sync` | Keep the workshop outputs synced while you edit: saved files apply incrementally, `mod.info`/`.pzstudioignore` edits re-sync their mod, `project.json` edits trigger a full rebuild. Run again to stop. |
 
 Commands that always act on one specific row — **Edit Mod Configuration**, the per-mod build-state toggles, explorer refresh and the All/Essential files toggle — are intentionally not in the Command Palette: they live in the **PZ Project Explorer**, where their target is unambiguous.
@@ -42,7 +43,7 @@ Commands that always act on one specific row — **Edit Mod Configuration**, the
 
 The activity-bar view mirrors the real folder structure: every project found in the workspace (workspace roots and first-level subfolders) with its mods.
 
-- **Project rows** carry inline **Build** and **Clean** buttons; both ask for confirmation first (disable with `pzstudio.confirmBeforeRun`).
+- **Project rows** carry inline **Build** and **Clean** buttons; both ask for confirmation first (disable with `pzstudio.confirmBeforeRun`). Right-click a project for **Run Diagnostics** — the row description also shows the finding counts (`✗ 1 ⚠ 2`) with the full list in the tooltip.
 - **Mod rows** show their build state right in the row (`included` / `dev builds only` / `excluded from build`) with inline buttons: include/exclude toggle, dev_branch-only toggle, generate `mod.info`, rename and delete.
 - Right-click a mod for **Edit Mod Configuration** (author, description, `build.modInfo`, build inclusion, …).
 - Every command that needs a mod resolves the project first — the active editor's project, then the only discovered project, then a quick-pick labeled with the workshop title — so multi-root workspaces and projects in subfolders always target the right files.

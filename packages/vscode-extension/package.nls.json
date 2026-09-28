@@ -44,5 +44,6 @@
     "command.explorer.toggleFiles.hidden.title": "PZStudio: Toggle All/Essential Files in Explorer",
     "command.newHere.title": "PZStudio: New Project Here",
     "config.newProject.defaultLocation.description": "Preferred default folder for new projects. The New Project picker starts here, and cancelling the picker falls back to this location.",
-    "command.watch.title": "Toggle Development Sync"
+    "command.watch.title": "Toggle Development Sync",
+    "command.doctor.title": "PZStudio: Run Diagnostics"
 }

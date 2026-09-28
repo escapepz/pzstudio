@@ -44,5 +44,6 @@
     "command.explorer.toggleFiles.hidden.title": "PZStudio: Alternar todos/ficheiros essenciais no Explorador",
     "command.newHere.title": "PZStudio: Novo projeto aqui",
     "config.newProject.defaultLocation.description": "Pasta predefinida preferida para novos projetos. O seletor de New Project abre aqui e, ao cancelar, é utilizada esta pasta.",
-    "command.watch.title": "Alternar sincronização de desenvolvimento"
+    "command.watch.title": "Alternar sincronização de desenvolvimento",
+    "command.doctor.title": "PZStudio: Executar diagnóstico"
 }

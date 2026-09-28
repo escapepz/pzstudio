@@ -49,5 +49,8 @@
     "Select the workspace folder for the new project": "为新项目选择工作区文件夹",
     "PZStudio: Open a workspace folder before creating a project here.": "PZStudio：请先打开一个工作区文件夹，再在此处创建项目。",
     "PZStudio: development sync stopped.": "PZStudio：开发同步已停止。",
-    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio：已为“{0}”启动开发同步 — 再次运行该命令可停止。"
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio：已为“{0}”启动开发同步 — 再次运行该命令可停止。",
+    "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: 在「{0}」中未发现问题。一切正常。",
+    "Diagnostics for '{0}'": "「{0}」的诊断",
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} 个错误、{1} 个警告、{2} 条信息 — 未做任何更改"
 }
