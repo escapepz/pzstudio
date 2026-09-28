@@ -1,12 +1,13 @@
-import { relative, sep } from 'path';
-import chokidar from 'chokidar';
+import { relative } from 'path';
+import { subscribe } from '@parcel/watcher';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { hasFlag } from '../args';
-import type { BuildVariant, FileDelta } from '@pzstudio/core';
+import type { FileDelta } from '@pzstudio/core';
 import { projectDir, resolveProjectConfig } from '../helper';
 import { info, verbose, warn } from '../logger';
 import { createDevSync } from '../devsync';
+import { isWatchPathIgnored, resolveWatchVariants } from '../watch-shared';
 
 addHelp(
     'watch',
@@ -26,53 +27,11 @@ addHelp(
     Press Ctrl+C to stop.`,
 );
 
-/** How long file-system events are collected before one sync pass runs. */
-export const WATCH_DEBOUNCE_MS = 300;
-
-/**
- * Pure: target flags to synced variants. Unlike `build` (main only by
- * default), watch syncs BOTH outputs unless told otherwise — a development
- * session wants the dev_branch live and the packaging output current.
- */
-export function resolveWatchVariants(flags: {
-    production?: boolean;
-    development?: boolean;
-    both?: boolean;
-}): BuildVariant[] {
-    if (flags.both) return ['main', 'development'];
-    if (flags.production) return ['main'];
-    if (flags.development) return ['development'];
-    return ['main', 'development'];
-}
-
-/**
- * Pure: should the watcher skip a path? Skips the output directory (watching
- * it would feed the engine its own writes) and every dot segment (.git,
- * .template-mod, ...) — except .pzstudioignore files, which steer the ignore
- * rules and are worth re-syncing on.
- */
-export function isWatchPathIgnored(
-    projectPath: string,
-    outDir: string,
-    target: string,
-): boolean {
-    const rel = relative(projectPath, target);
-    if (rel === '') return false; // the watched root itself
-    if (rel.startsWith('..')) return true; // outside the project
-    const outRel = relative(projectPath, outDir);
-    if (
-        !outRel.startsWith('..') &&
-        (rel === outRel || rel.startsWith(outRel + sep))
-    ) {
-        return true;
-    }
-    return rel
-        .split(sep)
-        .some(
-            (segment) =>
-                segment.startsWith('.') && segment !== '.pzstudioignore',
-        );
-}
+export {
+    isWatchPathIgnored,
+    resolveWatchVariants,
+    WATCH_DEBOUNCE_MS,
+} from '../watch-shared';
 
 export async function watchCmd() {
     const projectConfig = resolveProjectConfig();
@@ -136,24 +95,48 @@ export async function watchCmd() {
         timer = setTimeout(() => {
             timer = undefined;
             void flush();
-        }, WATCH_DEBOUNCE_MS);
+        }, 300);
     };
 
-    const watcher = chokidar.watch(projectPath, {
-        ignoreInitial: true,
-        awaitWriteFinish: {
-            stabilityThreshold: 250,
-            pollInterval: 100,
+    // @parcel/watcher — the same watcher engine VS Code's FileSystemWatcher
+    // uses, so the CLI and the extension behave identically. Events arrive
+    // in batches; the debounce coalesces editor save bursts, replacing
+    // chokidar's awaitWriteFinish.
+    const subscription = await subscribe(
+        projectPath,
+        (err, events) => {
+            if (err) {
+                warn(`Watcher error: ${(err as Error).message}`);
+                return;
+            }
+            for (const event of events) {
+                if (isWatchPathIgnored(projectPath, outDir, event.path)) {
+                    continue;
+                }
+                // parcel's 'update' is our 'change'; directories pass
+                // through as create/delete events and the session decides
+                // what they mean (it never writes a directory as a file).
+                const type: FileDelta['type'] =
+                    event.type === 'update'
+                        ? 'change'
+                        : event.type === 'delete'
+                          ? 'delete'
+                          : 'create';
+                schedule(type, event.path);
+            }
         },
-        ignored: (target: string) =>
-            isWatchPathIgnored(projectPath, outDir, target),
-    });
-    watcher.on('add', (p) => schedule('create', p));
-    watcher.on('change', (p) => schedule('change', p));
-    watcher.on('unlink', (p) => schedule('delete', p));
-    // Directory events are skipped on purpose: the game only consumes files,
-    // and the sync engine does not materialize empty directories.
-    watcher.on('error', (e) => warn(`Watcher error: ${(e as Error).message}`));
+        {
+            // Cheaper to drop the output tree natively than to filter its
+            // events after delivery (watching our own writes is pure noise).
+            ignore: (() => {
+                const outRel = relative(projectPath, outDir);
+                if (!outRel || outRel.startsWith('..')) {
+                    return undefined;
+                }
+                return [outRel, `${outRel}/**`];
+            })(),
+        },
+    );
 
     let stopping = false;
     let resolveStopped!: () => void;
@@ -164,7 +147,7 @@ export async function watchCmd() {
         if (stopping) return;
         stopping = true;
         if (timer) clearTimeout(timer);
-        await watcher.close();
+        await subscription.unsubscribe();
         await session.stop();
         resolveStopped();
     };

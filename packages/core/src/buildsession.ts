@@ -530,6 +530,27 @@ export class BuildSession {
         );
 
         try {
+            // Watchers report directories as create/change events too (the
+            // extension's FileSystemWatcher and @parcel/watcher alike). The
+            // engine only ever syncs files — a directory event is skipped,
+            // while delete events may target directories and remove them
+            // from the output recursively below.
+            if (file.type !== 'delete') {
+                try {
+                    const stat = await this.host.fs.stat(modSource);
+                    if (stat.type === 'directory') {
+                        result.ignored += 1;
+                        this.log(
+                            'verbose',
+                            `Skipped '${modSource}': directory event.`,
+                        );
+                        return;
+                    }
+                } catch {
+                    // The source vanished between event and apply: the write
+                    // below surfaces the real error for change events.
+                }
+            }
             // Same filter the full build used for this mod's copyTree; the
             // project excludes for direct children were already handled by
             // classifyDelta. Rules do not vary per variant, so evaluate once.

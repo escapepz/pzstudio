@@ -620,4 +620,40 @@ describe('BuildSession (fs-driven sync engine)', () => {
         expect(result.incremental).toBe(0);
         expect(result.fullRebuild).toBe(false);
     });
+
+    it('skips directory events without writing them as files', async () => {
+        // Watchers report directory creations like file creations (the
+        // extension's FileSystemWatcher and @parcel/watcher alike).
+        const { host } = createHost(fs, config);
+        const session = new BuildSession(host);
+        await session.start();
+
+        // The directory has content so stat() resolves it as a directory.
+        await fs.writeText(`${PROJECT_DIR}/my_mod/media/lua/sub/x.lua`, 'x');
+        const result = await session.apply([
+            { type: 'create', path: `${PROJECT_DIR}/my_mod/media/lua/sub` },
+        ]);
+        expect(result.errors).toEqual([]);
+        expect(result.ignored).toBe(1);
+        expect(result.incremental).toBe(0);
+        // No file was materialized at the directory path in the output.
+        expect(
+            fs.files.has(`${MAIN_OUT}/Contents/mods/my_mod/media/lua/sub`),
+        ).toBe(false);
+        // The directory's content still syncs like any file event.
+        const fileResult = await session.apply([
+            {
+                type: 'create',
+                path: `${PROJECT_DIR}/my_mod/media/lua/sub/x.lua`,
+            },
+        ]);
+        expect(fileResult.errors).toEqual([]);
+        expect(fileResult.incremental).toBe(2);
+        expect(
+            await fs.readText(
+                `${MAIN_OUT}/Contents/mods/my_mod/media/lua/sub/x.lua`,
+            ),
+        ).toBe('x');
+        await session.stop();
+    });
 });

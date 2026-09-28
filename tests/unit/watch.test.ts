@@ -5,7 +5,7 @@ import {
     isWatchPathIgnored,
     resolveWatchVariants,
     WATCH_DEBOUNCE_MS,
-} from '../../packages/cli/src/lib/commands/watch';
+} from '../../packages/cli/src/lib/watch-shared';
 import { createDevSync } from '../../packages/cli/src/lib/devsync';
 import { setProjectDir } from '../../packages/cli/src/lib/helper';
 import { createTempDir, deleteDir } from '../helpers/test-fixtures';
