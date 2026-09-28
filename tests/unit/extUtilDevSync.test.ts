@@ -9,12 +9,34 @@ vi.mock('vscode', async () => {
 vi.mock('pzstudio-cli/api', () => ({
     createDevSync: vi.fn(),
     warn: vi.fn(),
+    log: vi.fn(),
     WATCH_DEBOUNCE_MS: 10,
+    // Same reduction as the core helper: the controller test asserts the
+    // controller's use of it, not the helper itself.
+    summarizeApplyResult: (result: {
+        incremental: number;
+        scoped: Array<{ modId: string }>;
+        fullRebuild: boolean;
+    }) => {
+        const parts: string[] = [];
+        if (result.incremental > 0) {
+            parts.push(`${result.incremental} file(s) synced`);
+        }
+        if (result.scoped.length > 0) {
+            parts.push(
+                `re-synced mod(s): ${result.scoped.map((s) => s.modId).join(', ')}`,
+            );
+        }
+        if (result.fullRebuild) {
+            parts.push('full rebuild');
+        }
+        return parts.join('; ');
+    },
 }));
 
 import * as vscode from 'vscode';
 import { DevSyncController } from '../../packages/vscode-extension/src/util/devsync';
-import { createDevSync, warn } from 'pzstudio-cli/api';
+import { createDevSync, log, warn } from 'pzstudio-cli/api';
 
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 
@@ -104,6 +126,27 @@ describe('DevSyncController', () => {
             { type: 'change', path: '/proj/a.lua' },
             { type: 'delete', path: '/proj/b.lua' },
         ]);
+        await controller.dispose();
+    });
+
+    it('logs a one-line summary per successful sync batch', async () => {
+        vi.useFakeTimers();
+        const session = fakeSession();
+        asMock(session.apply).mockResolvedValue({
+            incremental: 2,
+            scoped: [],
+            fullRebuild: false,
+            ignored: 1,
+            errors: [],
+        } as never);
+        asMock(createDevSync).mockReturnValue(session as never);
+
+        const controller = new DevSyncController();
+        await controller.start('/proj');
+        handlers.change.forEach((fn) => fn({ fsPath: '/proj/a.lua' }));
+        await vi.advanceTimersByTimeAsync(10);
+
+        expect(asMock(log)).toHaveBeenCalledWith('- 2 file(s) synced.');
         await controller.dispose();
     });
 
