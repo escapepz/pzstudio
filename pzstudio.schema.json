@@ -24,6 +24,12 @@
             "description": "The output directory for generated workshop files.",
             "type": "string"
         },
+        "schemaVersion": {
+            "default": 2,
+            "description": "Version of the project.json schema this file was written against. Files without it are treated as version 1 and migrated on load.",
+            "minimum": 1,
+            "type": "integer"
+        },
         "pzBuildCompatibility": {
             "description": "The Project Zomboid build line this project targets (e.g. \"42.x\").",
             "type": "string"
