@@ -1,5 +1,8 @@
 export { runCLI, RunCLIOptions } from './lib/cli';
 export { setLogger, ILogger } from './lib/logger';
+// Direct logger access for hosts that run long-lived sessions (the
+// extension auto-sync reports sync errors through the bridged channel).
+export { log, info, warn, verbose } from './lib/logger';
 export {
     resolveModInfoTargets,
     setProjectDir,
@@ -34,7 +37,7 @@ export {
     resolveWatchVariants,
     isWatchPathIgnored,
     WATCH_DEBOUNCE_MS,
-} from './lib/commands/watch';
+} from './lib/watch-shared';
 export {
     setTemplateTransport,
     TemplateTransport,
