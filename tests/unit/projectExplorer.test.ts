@@ -425,7 +425,7 @@ describe('constants and manifest', () => {
             ).icon,
         ).toBe('$(eye-closed)');
 
-        const palette = PKG.contributes.commandPalette;
+        const palette = PKG.contributes.menus.commandPalette;
         expect(
             palette.some(
                 (p: { command: string; when?: string }) =>
@@ -436,8 +436,16 @@ describe('constants and manifest', () => {
     });
 
     it('keeps explorer-only commands out of the command palette', () => {
+        // The entries must live under menus.commandPalette: a top-level
+        // contributes.commandPalette key is silently ignored by VS Code
+        // (the f4122cf nesting bug every later edit preserved).
         const palette: Array<{ command: string; when?: string }> =
-            PKG.contributes.commandPalette;
+            PKG.contributes.menus.commandPalette;
+        expect(
+            Array.isArray(palette) && palette.length > 0,
+            'menus.commandPalette must exist and hold the hidden entries',
+        ).toBe(true);
+        expect(PKG.contributes.commandPalette).toBeUndefined();
 
         // Tree/title-bar actions stay reachable from the explorer itself;
         // they must not clutter the palette or keyboard-shortcut search.
@@ -458,7 +466,8 @@ describe('constants and manifest', () => {
             ).toBe(true);
         }
 
-        // The core workflow commands stay palette-visible.
+        // The core workflow commands stay palette-visible (watch = the
+        // sync toggle, doctor = the diagnostics entry point).
         const visible = [
             'pzstudio.new',
             'pzstudio.newHere',
@@ -470,6 +479,8 @@ describe('constants and manifest', () => {
             'pzstudio.rename',
             'pzstudio.update',
             'pzstudio.modinfoGenerate',
+            'pzstudio.watch',
+            'pzstudio.doctor',
         ];
         for (const id of visible) {
             expect(
