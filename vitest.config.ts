@@ -35,7 +35,9 @@ export default defineConfig({
     test: {
         globals: true,
         environment: 'node',
-        include: ['tests/**/*.test.ts'],
+        // Unit + in-process e2e only. The real-env suite (spawning the built
+        // CLI binary) runs through vitest.real-env.config.ts after a build.
+        include: ['tests/unit/**/*.test.ts', 'tests/e2e/**/*.test.ts'],
         setupFiles: ['./tests/setup/vitest.setup.ts'],
         coverage: {
             provider: 'v8',

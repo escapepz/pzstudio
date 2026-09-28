@@ -23,6 +23,7 @@
         "lint:fix": "eslint . --fix",
         "test": "vitest run",
         "test:watch": "vitest",
+        "test:real-env": "vitest run --config vitest.real-env.config.ts",
         "test:coverage": "vitest run --coverage"
     },
     "devDependencies": {
