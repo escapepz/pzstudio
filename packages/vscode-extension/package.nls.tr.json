@@ -44,6 +44,6 @@
     "command.explorer.toggleFiles.hidden.title": "PZStudio: Gezginde tüm/temel dosyaları değiştir",
     "command.newHere.title": "PZStudio: Burada Yeni Proje",
     "config.newProject.defaultLocation.description": "Yeni projeler için tercih edilen varsayılan klasör. New Project seçicisi buradan açılır ve iptal edilirse bu klasör kullanılır.",
-    "command.watch.title": "Geliştirme eşitlemesini aç/kapat",
+    "command.watch.title": "PZStudio: Geliştirme eşitlemesini aç/kapat",
     "command.doctor.title": "PZStudio: Tanılamayı Çalıştır"
 }

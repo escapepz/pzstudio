@@ -44,6 +44,6 @@
     "command.explorer.toggleFiles.hidden.title": "PZStudio: สลับทุกไฟล์/ไฟล์จำเป็นใน Explorer",
     "command.newHere.title": "PZStudio: สร้างโปรเจกต์ใหม่ที่นี่",
     "config.newProject.defaultLocation.description": "โฟลเดอร์เริ่มต้นที่ต้องการสำหรับโปรเจกต์ใหม่ ตัวเลือกของ New Project จะเปิดที่นี่ และหากยกเลิกจะใช้โฟลเดอร์นี้",
-    "command.watch.title": "สลับการซิงค์การพัฒนา",
+    "command.watch.title": "PZStudio: สลับการซิงค์การพัฒนา",
     "command.doctor.title": "PZStudio: รันการวินิจฉัย"
 }
