@@ -135,4 +135,11 @@ export interface IProjectConfig {
          */
         target?: ProjectBuildTarget;
     };
+
+    /**
+     * The Project Zomboid build line this project targets, e.g. "42.x".
+     * Advisory only: doctor/build warn when the running game build falls
+     * outside it, but nothing is blocked.
+     */
+    pzBuildCompatibility?: string;
 }
