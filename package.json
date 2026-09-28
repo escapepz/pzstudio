@@ -16,6 +16,7 @@
     "scripts": {
         "clean": "pnpm -r clean",
         "build": "pnpm -r build",
+        "pzstudio": "node packages/cli/dist/index.js",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "lint": "eslint .",
