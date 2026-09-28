@@ -76,3 +76,46 @@ jobs:
 
             - name: Real-environment e2e
               run: pnpm test:real-env
+
+    ext-real-env:
+        name: Extension real-env tests (${{ matrix.os }})
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [windows-latest, ubuntu-latest, macos-latest]
+
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  submodules: recursive
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: pnpm
+
+            - name: Cache the downloaded VS Code test installation
+              uses: actions/cache@v4
+              with:
+                  path: packages/vscode-extension/.vscode-test
+                  key: vscode-test-${{ matrix.os }}-${{ hashFiles('packages/vscode-extension/.vscode-test.js') }}
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Build extension and its workspace dependencies
+              run: pnpm --filter pzstudio42... build
+
+            - name: Desktop integration tests
+              # VS Code needs an X server on Linux; Xvfb is preinstalled there.
+              run: |
+                  if [ "$RUNNER_OS" = "Linux" ]; then
+                    xvfb-run -a pnpm --filter pzstudio42 test:integration
+                  else
+                    pnpm --filter pzstudio42 test:integration
+                  fi
