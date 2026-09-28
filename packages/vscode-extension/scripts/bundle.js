@@ -9,7 +9,10 @@ async function run() {
         entryPoints: ['src/extension.ts'],
         bundle: true,
         outfile: 'dist/extension.js',
-        external: ['vscode'],
+        // fsevents is chokidar's optional macOS-only native watcher: it cannot be
+        // bundled (.node binary) and chokidar loads it lazily in a try/catch, so
+        // keeping it external is safe on every platform.
+        external: ['vscode', 'fsevents'],
         format: 'cjs',
         platform: 'node',
         sourcemap: true,

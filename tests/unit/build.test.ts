@@ -3,6 +3,7 @@ import fs from 'fs';
 import * as logger from '../../packages/cli/src/lib/logger';
 import { buildCmd } from '../../packages/cli/src/lib/commands/build';
 import {
+    gatherPlanInput,
     projectDir,
     readWorkshopDescriptionLines,
     resolveModInfoTargets,
@@ -14,6 +15,12 @@ import {
 } from '../../packages/cli/src/lib/templateManager';
 import { hasFlag } from '../../packages/cli/src/lib/args';
 
+// The real helper implementation, outside the module mock: tests that mock
+// gatherPlanInput must restore the delegate so overrides cannot leak.
+const actualHelper = await vi.importActual<
+    typeof import('../../packages/cli/src/lib/helper')
+>('../../packages/cli/src/lib/helper');
+
 vi.mock('fs');
 vi.mock('../../packages/cli/src/lib/logger');
 vi.mock('../../packages/cli/src/lib/templateManager');
@@ -23,15 +30,23 @@ vi.mock('../../packages/cli/src/lib/args', async (importOriginal) => ({
     >()),
     hasFlag: vi.fn(),
 }));
-vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
-    ...(await importOriginal<
-        typeof import('../../packages/cli/src/lib/helper')
-    >()),
-    projectDir: vi.fn(),
-    resolveProjectConfig: vi.fn(),
-    resolveModInfoTargets: vi.fn(),
-    readWorkshopDescriptionLines: vi.fn(),
-}));
+vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => {
+    const actual =
+        await importOriginal<
+            typeof import('../../packages/cli/src/lib/helper')
+        >();
+    return {
+        ...actual,
+        projectDir: vi.fn(),
+        resolveProjectConfig: vi.fn(),
+        resolveModInfoTargets: vi.fn(),
+        readWorkshopDescriptionLines: vi.fn(),
+        // Delegates to the real implementation: most tests drive the real
+        // snapshot logic through the fs mocks; branch-folder scenarios
+        // override this mock with a hand-written plan input.
+        gatherPlanInput: vi.fn(actual.gatherPlanInput),
+    };
+});
 
 describe('buildCmd', () => {
     const project = {
@@ -48,6 +63,11 @@ describe('buildCmd', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        // mockReturnValue values set by branch-folder tests must not leak
+        // into the tests that drive the real snapshot logic.
+        vi.mocked(gatherPlanInput).mockImplementation(
+            actualHelper.gatherPlanInput,
+        );
         vi.mocked(projectDir).mockReturnValue('/proj' as any);
         vi.mocked(resolveProjectConfig).mockImplementation(
             () => JSON.parse(JSON.stringify(project)) as any,
@@ -164,14 +184,20 @@ describe('buildCmd', () => {
     });
 
     it('should generate mod.info in branch folders from the source snapshot', async () => {
-        vi.mocked(resolveModInfoTargets).mockReturnValue([
-            '/proj/my_mod/42_branch',
-        ] as any);
-        vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-            return String(p)
-                .replace(/\\/g, '/')
-                .endsWith('/workshop/preview.png');
-        });
+        vi.mocked(gatherPlanInput).mockReturnValue({
+            config: JSON.parse(JSON.stringify(project)),
+            workshopTemplateDir: '/templates/workshop',
+            projectDir: '/proj',
+            modSourceStates: {
+                my_mod: {
+                    branchFolders: ['42_branch'],
+                    modInfoExists: { '': true, '42_branch': false },
+                    modInfoContent: { '': 'id=my_mod\n' },
+                },
+            },
+            descriptionLines: [],
+            previewPngExists: true,
+        } as any);
 
         await buildCmd();
 
@@ -182,16 +208,22 @@ describe('buildCmd', () => {
     });
 
     it('should skip mod.info generation when the snapshot says it exists', async () => {
-        vi.mocked(resolveModInfoTargets).mockReturnValue([
-            '/proj/my_mod/42_branch',
-        ] as any);
-        vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-            const normalized = String(p).replace(/\\/g, '/');
-            return (
-                normalized.endsWith('/workshop/preview.png') ||
-                normalized.endsWith('/my_mod/42_branch/mod.info')
-            );
-        });
+        vi.mocked(gatherPlanInput).mockReturnValue({
+            config: JSON.parse(JSON.stringify(project)),
+            workshopTemplateDir: '/templates/workshop',
+            projectDir: '/proj',
+            modSourceStates: {
+                my_mod: {
+                    branchFolders: ['42_branch'],
+                    modInfoExists: { '': false, '42_branch': true },
+                    modInfoContent: {
+                        '42_branch': 'id=my_mod\nname=My Mod\n',
+                    },
+                },
+            },
+            descriptionLines: [],
+            previewPngExists: true,
+        } as any);
 
         await buildCmd();
 

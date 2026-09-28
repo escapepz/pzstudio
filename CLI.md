@@ -81,7 +81,7 @@ These flags are handled by the CLI parser:
 | `outdir` | Set global output directory | No | Implemented |
 | `rename` | Rename a mod | Yes | Implemented |
 | `update` | Refresh template caches | No | Implemented |
-| `watch` | Watch and sync output | Yes | Stub |
+| `watch` | Watch and sync output (Development Sync Engine) | Yes | Implemented |
 
 ## `pzstudio help`
 
@@ -505,17 +505,24 @@ pzstudio lang <modId> <lang> <toLang>
 
 ## `pzstudio watch`
 
-Watch the project and keep the output directory synced.
+Watch the project and keep the workshop outputs synced while you work — the
+Development Sync Engine. Saved files are applied incrementally; `mod.info`
+and `.pzstudioignore` edits re-sync their mod; `project.json` edits trigger
+a full rebuild. Press Ctrl+C to stop.
 
 ### Usage
 
 ```bash
-pzstudio watch
+pzstudio watch               # syncs both the main and dev_branch outputs
+pzstudio watch --production  # syncs only the main workshop output
+pzstudio watch --development # syncs only the dev_branch workshop output
+pzstudio watch --both        # syncs both workshop outputs
+pzstudio watch --verbose     # enable diagnostic output
 ```
 
 ### Status
 
-- Not implemented yet.
+- Implemented.
 
 ## File Layout Cheatsheet
 
@@ -552,4 +559,4 @@ Typical project contents after `new`:
 - `new` can use local `.template-mod` and `.template-workshop` folders from the current working directory when they exist and are non-empty.
 - `add` uses a local `.template-mod` in the project root if present; otherwise it resolves a template and seeds the local folder.
 - `migrate` is safe to run repeatedly.
-- `lang` and `watch` are registered in help, but both currently throw `Not implemented yet!`.
+- `lang` is registered in help, but currently throws `Not implemented yet!`.
