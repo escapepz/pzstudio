@@ -9,7 +9,11 @@ async function run() {
         entryPoints: ['src/extension.ts'],
         bundle: true,
         outfile: 'dist/extension.js',
-        external: ['vscode'],
+        // @parcel/watcher is the CLI watch command's native watcher: the api
+        // surface inlines the whole command registry, so keep the require
+        // external (the command loads it lazily and the extension never
+        // invokes it — the auto-sync uses the VS Code FileSystemWatcher).
+        external: ['vscode', '@parcel/watcher'],
         format: 'cjs',
         platform: 'node',
         sourcemap: true,
