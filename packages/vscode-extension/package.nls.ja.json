@@ -44,6 +44,6 @@
     "command.explorer.toggleFiles.hidden.title": "PZStudio: エクスプローラーの全ファイル/必須ファイルを切り替え",
     "command.newHere.title": "PZStudio: ここに新規プロジェクト",
     "config.newProject.defaultLocation.description": "新しいプロジェクトの優先既定フォルダー。New Project のピッカーはここから開き、キャンセルした場合はこのフォルダーへフォールバックします。",
-    "command.watch.title": "開発同期の切り替え",
+    "command.watch.title": "PZStudio: 開発同期の切り替え",
     "command.doctor.title": "PZStudio: 診断を実行"
 }

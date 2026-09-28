@@ -44,6 +44,6 @@
     "command.explorer.toggleFiles.hidden.title": "PZStudio: Alihkan semua/berkas esensial di Explorer",
     "command.newHere.title": "PZStudio: Proyek Baru di Sini",
     "config.newProject.defaultLocation.description": "Folder default yang diutamakan untuk proyek baru. Pemilih New Project terbuka di sini, dan jika dibatalkan akan menggunakan folder ini.",
-    "command.watch.title": "Alihkan Sinkronisasi Pengembangan",
+    "command.watch.title": "PZStudio: Alihkan Sinkronisasi Pengembangan",
     "command.doctor.title": "PZStudio: Jalankan Diagnostik"
 }

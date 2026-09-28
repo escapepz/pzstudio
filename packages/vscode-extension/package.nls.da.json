@@ -44,6 +44,6 @@
     "command.explorer.toggleFiles.hidden.title": "PZStudio: Skift alle/essentielle filer i Explorer",
     "command.newHere.title": "PZStudio: Nyt projekt her",
     "config.newProject.defaultLocation.description": "Foretrukken standardmappe for nye projekter. Nyt projekt-vælgeren starter her, og annullering falder tilbage til denne mappe.",
-    "command.watch.title": "Skift udviklingssynkronisering",
+    "command.watch.title": "PZStudio: Skift udviklingssynkronisering",
     "command.doctor.title": "PZStudio: Kør diagnostik"
 }
