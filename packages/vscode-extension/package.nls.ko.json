@@ -44,5 +44,6 @@
     "command.explorer.toggleFiles.hidden.title": "PZStudio: 탐색기에서 전체/필수 파일 전환",
     "command.newHere.title": "PZStudio: 여기에 새 프로젝트",
     "config.newProject.defaultLocation.description": "새 프로젝트의 기본 폴더 우선 설정입니다. New Project 선택기가 여기서 열리고, 취소하면 이 폴더로 대체됩니다.",
-    "command.watch.title": "개발 동기화 전환"
+    "command.watch.title": "개발 동기화 전환",
+    "command.doctor.title": "PZStudio: 진단 실행"
 }

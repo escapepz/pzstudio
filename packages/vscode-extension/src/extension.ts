@@ -8,9 +8,11 @@ import {
 } from './util/settings';
 import { createCommandRunner } from './util/execute';
 import { DevSyncController } from './util/devsync';
+import { runProjectDiagnostics } from './util/doctor';
 import { registerAllCommands } from './commands';
 import { registerExplorerCommands } from './commands/explorer';
 import { registerWatchCommand } from './commands/watch';
+import { registerDoctorCommand } from './commands/doctor';
 import {
     PROJECT_EXPLORER_VIEW_ID,
     ProjectExplorerProvider,
@@ -29,7 +31,10 @@ export async function activate(context: vscode.ExtensionContext) {
     updateVsCodeSettings();
     context.subscriptions.push(subscribeToConfigurationChanges());
 
-    const projectExplorer = new ProjectExplorerProvider(context.extensionUri);
+    const projectExplorer = new ProjectExplorerProvider(
+        context.extensionUri,
+        runProjectDiagnostics,
+    );
     // Publish the toggle state up front so the eye/eye-closed title button
     // resolves its when-clause before the first click.
     projectExplorer.syncShowAllFilesContext();
@@ -57,6 +62,7 @@ export async function activate(context: vscode.ExtensionContext) {
         devSync,
         ...registerAllCommands(context, executePZCommand),
         registerWatchCommand(devSync),
+        registerDoctorCommand(),
         treeView,
         projectJsonWatcher,
         ...registerExplorerCommands(projectExplorer),

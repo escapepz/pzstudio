@@ -44,5 +44,6 @@
     "command.explorer.toggleFiles.hidden.title": "PZStudio: Alle/essentiële bestanden in Explorer wisselen",
     "command.newHere.title": "PZStudio: Nieuw project hier",
     "config.newProject.defaultLocation.description": "Gewenste standaardmap voor nieuwe projecten. De New Project-keuzedialoog opent hier en bij annuleren wordt deze map gebruikt.",
-    "command.watch.title": "Ontwikkelsynchronisatie in-/uitschakelen"
+    "command.watch.title": "Ontwikkelsynchronisatie in-/uitschakelen",
+    "command.doctor.title": "PZStudio: Diagnostiek uitvoeren"
 }

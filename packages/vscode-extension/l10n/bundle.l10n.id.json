@@ -49,5 +49,8 @@
     "Select the workspace folder for the new project": "Pilih folder workspace untuk proyek baru",
     "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Buka folder workspace sebelum membuat proyek di sini.",
     "PZStudio: development sync stopped.": "PZStudio: sinkronisasi pengembangan dihentikan.",
-    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: sinkronisasi pengembangan dimulai untuk '{0}' — jalankan perintah lagi untuk menghentikan."
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: sinkronisasi pengembangan dimulai untuk '{0}' — jalankan perintah lagi untuk menghentikan.",
+    "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: tidak ada masalah yang ditemukan di '{0}'. Semua terlihat baik.",
+    "Diagnostics for '{0}'": "Diagnostik untuk '{0}'",
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} kesalahan, {1} peringatan, {2} info — tidak ada yang diubah"
 }

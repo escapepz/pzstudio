@@ -49,5 +49,8 @@
     "Select the workspace folder for the new project": "Vyberte složku pracovního prostoru pro nový projekt",
     "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Před vytvořením projektu zde nejprve otevřete složku pracovního prostoru.",
     "PZStudio: development sync stopped.": "PZStudio: vývojová synchronizace zastavena.",
-    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: vývojová synchronizace spuštěna pro '{0}' — pro zastavení spusťte příkaz znovu."
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: vývojová synchronizace spuštěna pro '{0}' — pro zastavení spusťte příkaz znovu.",
+    "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: v '{0}' nebyly nalezeny žádné problémy. Vše vypadá v pořádku.",
+    "Diagnostics for '{0}'": "Diagnostika pro '{0}'",
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} chyb(y), {1} varování, {2} informací — nic nebylo změněno"
 }

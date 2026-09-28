@@ -485,3 +485,116 @@ describe('constants and manifest', () => {
         }
     });
 });
+
+describe('project diagnostics badge', () => {
+    const PROJECT_JSON = JSON.stringify({
+        workshop: { id: 12345, title: 'Test Title' },
+        mods: {},
+    });
+
+    /** Workspace with one root project discoverable by the scan. */
+    function seedProjectNode() {
+        vscodeMock.workspace.workspaceFolders = [
+            { uri: asUri('ws'), name: 'ws' },
+        ] as never;
+        vscodeMock.workspace.fs.stat = vi.fn(async (uri: { path: string }) => {
+            if (uri.path.endsWith('/project.json')) {
+                return { type: FileType.File };
+            }
+            throw new Error('ENOENT');
+        });
+        vscodeMock.workspace.fs.readDirectory = vi.fn(
+            async () => [] as Entry[],
+        );
+        vscodeMock.workspace.fs.readFile = vi.fn(
+            async (uri: { path: string }) => {
+                if (uri.path.endsWith('/project.json')) {
+                    return new TextEncoder().encode(PROJECT_JSON);
+                }
+                throw new Error('ENOENT');
+            },
+        );
+    }
+
+    it('appends error/warning counts to the row and findings to the tooltip', async () => {
+        seedProjectNode();
+        const source = vi.fn(async () => ({
+            errors: 1,
+            warnings: 2,
+            infos: 1,
+            report: {
+                projectDir: '/ws',
+                diagnostics: [
+                    {
+                        severity: 'error',
+                        module: 'mods',
+                        code: 'mods.missing',
+                        message:
+                            "Mod folder 'ghost' is declared in project.json but missing on disk.",
+                    },
+                    {
+                        severity: 'warning',
+                        module: 'project',
+                        code: 'project.noDescription',
+                        message: 'workshop/description.txt is missing.',
+                    },
+                    {
+                        severity: 'warning',
+                        module: 'filesystem',
+                        code: 'filesystem.outDirMissing',
+                        message:
+                            'The build output directory does not exist yet.',
+                    },
+                    {
+                        severity: 'info',
+                        module: 'templates',
+                        code: 'templates.notCached',
+                        message: 'The template cache is not downloaded yet.',
+                    },
+                ],
+            },
+        }));
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const nodes = await provider.getChildren();
+
+        expect(nodes).toHaveLength(1);
+        expect(nodes[0].description).toBe('id 12345 · Test Title · ✗ 1 ⚠ 2');
+        expect(nodes[0].tooltip).toContain(
+            "[mods] Mod folder 'ghost' is declared",
+        );
+        expect(nodes[0].tooltip).toContain('[templates]');
+    });
+
+    it('leaves clean project rows unannotated', async () => {
+        seedProjectNode();
+        const source = vi.fn(async () => ({
+            errors: 0,
+            warnings: 0,
+            infos: 0,
+            report: { projectDir: '/ws', diagnostics: [] },
+        }));
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const nodes = await provider.getChildren();
+
+        expect(nodes[0].description).toBe('id 12345 · Test Title');
+        expect(nodes[0].tooltip).toBeUndefined();
+    });
+
+    it('skips diagnostics entirely when no source is wired', async () => {
+        seedProjectNode();
+        const provider = new ProjectExplorerProvider(asUri('ext'));
+
+        const nodes = await provider.getChildren();
+
+        expect(nodes[0].description).toBe('id 12345 · Test Title');
+        expect(nodes[0].tooltip).toBeUndefined();
+    });
+});

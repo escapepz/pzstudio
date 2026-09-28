@@ -49,5 +49,8 @@
     "Select the workspace folder for the new project": "Виберіть папку робочої області для нового проєкту",
     "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Перед створенням проєкту тут відкрийте папку робочої області.",
     "PZStudio: development sync stopped.": "PZStudio: синхронізацію розробки зупинено.",
-    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: синхронізацію розробки запущено для '{0}' — щоб зупинити, виконайте команду ще раз."
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: синхронізацію розробки запущено для '{0}' — щоб зупинити, виконайте команду ще раз.",
+    "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: проблем у '{0}' не знайдено. Усе гаразд.",
+    "Diagnostics for '{0}'": "Діагностика «{0}»",
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "помилок: {0}, попереджень: {1}, інформації: {2} — нічого не змінено"
 }

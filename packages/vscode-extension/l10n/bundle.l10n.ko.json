@@ -49,5 +49,8 @@
     "Select the workspace folder for the new project": "새 프로젝트의 워크스페이스 폴더를 선택하세요",
     "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: 여기에서 프로젝트를 만들기 전에 워크스페이스 폴더를 여세요.",
     "PZStudio: development sync stopped.": "PZStudio: 개발 동기화가 중지되었습니다.",
-    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: '{0}'에 대한 개발 동기화가 시작되었습니다 — 중지하려면 명령을 다시 실행하세요."
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: '{0}'에 대한 개발 동기화가 시작되었습니다 — 중지하려면 명령을 다시 실행하세요.",
+    "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: '{0}'에서 문제를 찾을 수 없습니다. 모든 것이 정상입니다.",
+    "Diagnostics for '{0}'": "'{0}' 진단",
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "오류 {0}개, 경고 {1}개, 정보 {2}개 — 아무것도 변경되지 않았습니다"
 }

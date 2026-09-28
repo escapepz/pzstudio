@@ -44,5 +44,6 @@
     "command.explorer.toggleFiles.hidden.title": "PZStudio: Vaihda kaikki/olennaiset tiedostot Explorerissa",
     "command.newHere.title": "PZStudio: Uusi projekti tähän",
     "config.newProject.defaultLocation.description": "Ensisijainen oletuskansio uusille projekteille. New Project -valitsin avautuu tähän, ja peruttessa käytetään tätä kansiota.",
-    "command.watch.title": "Vaihda kehityssynkronointi"
+    "command.watch.title": "Vaihda kehityssynkronointi",
+    "command.doctor.title": "PZStudio: Suorita diagnostiikka"
 }

@@ -55,6 +55,11 @@
             ],
             "view/item/context": [
                 {
+                    "command": "pzstudio.doctor",
+                    "when": "view == pzstudio.projectExplorer && viewItem == project",
+                    "group": "0_project@1"
+                },
+                {
                     "command": "pzstudio.build",
                     "when": "view == pzstudio.projectExplorer && viewItem == project",
                     "group": "inline@1"
@@ -397,6 +402,10 @@
             {
                 "command": "pzstudio.watch",
                 "title": "%command.watch.title%"
+            },
+            {
+                "command": "pzstudio.doctor",
+                "title": "%command.doctor.title%"
             },
             {
                 "command": "pzstudio.modinfoGenerate",
