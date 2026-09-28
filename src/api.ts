@@ -16,6 +16,7 @@ export type {
     ModSourceState,
     PlanBuildInput,
 } from './lib/core/buildplan';
+export { patchModInfoId } from './lib/core/textgen';
 export {
     resolveTemplateDir,
     cloneRemoteTemplate,

@@ -33,7 +33,7 @@ This is a CLI tool for creating and maintaining Lua mods for Project Zomboid wit
 - Enhanced build command to create dual workshop outputs:
     - **Main workshop**: `{projectTitle}` with standard mod IDs and configured visibility.
     - **Dev branch workshop**: `{projectTitle} - dev_branch` with `_dev` suffix on mod IDs.
-    - Each mod in dev branch has its ID field prefixed in the generated metadata.
+    - Each mod in dev branch has its ID field prefixed in the generated metadata; existing `mod.info` files copied from the source tree get their `id=` field rewritten to the `_dev` id as well (regardless of `build.modInfo`).
     - Dev branch workshop always sets visibility to `unlisted` regardless of project.json settings.
     - Dev branch workshop title appends ` - dev_branch` suffix: `title={projectTitle} - dev_branch`.
     - Dev branch workshop.txt has no `id=` field (excluded automatically).

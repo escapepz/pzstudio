@@ -237,6 +237,116 @@ describe('planBuild (pure)', () => {
         expect(writes[0].content).toContain('id=my_mod_dev');
     });
 
+    it('should rewrite the id of an existing mod.info in the development output', () => {
+        const input = baseInput({ variant: 'development' });
+        input.modSourceStates.my_mod.modInfoExists = { '': true };
+        input.modSourceStates.my_mod.modInfoContent = {
+            '': 'id=my_mod\nname=My Mod\nposter=poster.png\n',
+        };
+
+        const operations = planBuild(input);
+        const writes = modInfoWrites(operations);
+
+        expect(writes).toHaveLength(1);
+        expect(writes[0].path).toBe(
+            '/out/Test Project - dev_branch/Contents/mods/my_mod_dev/mod.info',
+        );
+        expect(writes[0].content).toBe(
+            'id=my_mod_dev\nname=My Mod\nposter=poster.png\n',
+        );
+        expect(operations).toContainEqual({
+            type: 'log',
+            level: 'info',
+            message: `- Patching 'my_mod' mod.info id to 'my_mod_dev' (development build)...`,
+        });
+    });
+
+    it('should leave an existing mod.info untouched in the main variant', () => {
+        const input = baseInput();
+        input.modSourceStates.my_mod.modInfoExists = { '': true };
+        input.modSourceStates.my_mod.modInfoContent = {
+            '': 'id=my_mod\nname=My Mod\n',
+        };
+
+        const operations = planBuild(input);
+
+        expect(modInfoWrites(operations)).toHaveLength(0);
+        expect(operations).toContainEqual({
+            type: 'log',
+            level: 'info',
+            message: `- Skipping 'my_mod' mod.info generation (already exists, build.modInfo: "auto-if-missing")...`,
+        });
+    });
+
+    it('should fall back to a verbatim copy when no mod.info content is snapshotted', () => {
+        const input = baseInput({ variant: 'development' });
+        input.modSourceStates.my_mod.modInfoExists = { '': true };
+
+        const operations = planBuild(input);
+
+        expect(modInfoWrites(operations)).toHaveLength(0);
+        expect(operations).toContainEqual({
+            type: 'log',
+            level: 'info',
+            message: `- Skipping 'my_mod' mod.info generation (already exists, build.modInfo: "auto-if-missing")...`,
+        });
+    });
+
+    it('should still align the mod.info id in development despite build.modInfo "skip"', () => {
+        const config = baseInput().config;
+        config.mods.my_mod.build = { modInfo: 'skip' };
+        const input = baseInput({ config, variant: 'development' });
+        input.modSourceStates.my_mod.modInfoExists = { '': true };
+        input.modSourceStates.my_mod.modInfoContent = {
+            '': 'id=my_mod\nname=My Mod\n',
+        };
+
+        const operations = planBuild(input);
+        const writes = modInfoWrites(operations);
+
+        expect(writes).toHaveLength(1);
+        expect(writes[0].content).toBe('id=my_mod_dev\nname=My Mod\n');
+    });
+
+    it('should log the skip reason in development when nothing can be patched', () => {
+        const config = baseInput().config;
+        config.mods.my_mod.build = { modInfo: 'skip' };
+        const input = baseInput({ config, variant: 'development' });
+        input.modSourceStates.my_mod.modInfoExists = { '': true };
+
+        const operations = planBuild(input);
+
+        expect(modInfoWrites(operations)).toHaveLength(0);
+        expect(operations).toContainEqual({
+            type: 'log',
+            level: 'info',
+            message: `- Skipping 'my_mod' mod.info generation (build.modInfo: "skip")...`,
+        });
+    });
+
+    it('should patch mod.info in Build 42 branch folder targets too', () => {
+        const input = baseInput({ variant: 'development' });
+        input.modSourceStates.my_mod = {
+            branchFolders: ['42'],
+            modInfoExists: { '': true, '42': true },
+            modInfoContent: {
+                '': 'id=my_mod\n',
+                '42': 'id=my_mod\nname=My Mod\n',
+            },
+        };
+
+        const operations = planBuild(input);
+        const writes = modInfoWrites(operations);
+
+        // Only branch folder targets get mod.info handling; the root file is
+        // legacy Build 41 layout and is copied verbatim.
+        expect(writes).toHaveLength(1);
+        expect(writes[0].path).toBe(
+            '/out/Test Project - dev_branch/Contents/mods/my_mod_dev/42/mod.info',
+        );
+        expect(writes[0].content).toBe('id=my_mod_dev\nname=My Mod\n');
+    });
+
     it('should mark the dev build unlisted, exclude the workshop id and suffix the title', () => {
         const operations = planBuild(baseInput({ variant: 'development' }));
         const workshopWrite = operations.find(

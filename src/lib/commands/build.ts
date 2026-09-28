@@ -1,5 +1,5 @@
 import { basename, join } from 'path';
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { hasFlag } from '../args';
@@ -75,20 +75,38 @@ function executeBuildPlan(operations: FileOperation[]) {
  * Snapshots the source tree of a mod so the planner can decide mod.info
  * targeting without touching the filesystem. The output is a fresh copy of
  * this tree, so source decisions match the ones previously made on the output.
+ * Existing mod.info content is snapshotted too so the planner can rewrite its
+ * id for the development output.
  */
 function gatherModSourceState(
     projectPath: string,
     modId: string,
 ): ModSourceState {
-    const state: ModSourceState = { branchFolders: [], modInfoExists: {} };
+    const state: ModSourceState = {
+        branchFolders: [],
+        modInfoExists: {},
+        modInfoContent: {},
+    };
 
-    state.modInfoExists[''] = existsSync(join(projectPath, modId, 'mod.info'));
+    const snapshotTarget = (target: string, targetDir: string) => {
+        const modInfoPath = join(targetDir, 'mod.info');
+        state.modInfoExists[target] = existsSync(modInfoPath);
+        if (!state.modInfoExists[target]) {
+            return;
+        }
+        try {
+            state.modInfoContent![target] = readFileSync(modInfoPath, 'utf8');
+        } catch {
+            // Unreadable mod.info: no content snapshot, so the planner falls
+            // back to copying the file verbatim.
+        }
+    };
+
+    snapshotTarget('', join(projectPath, modId));
     for (const branchPath of resolveModInfoTargets(modId, projectPath)) {
         const branchName = basename(branchPath);
         state.branchFolders.push(branchName);
-        state.modInfoExists[branchName] = existsSync(
-            join(branchPath, 'mod.info'),
-        );
+        snapshotTarget(branchName, branchPath);
     }
     return state;
 }

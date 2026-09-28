@@ -202,3 +202,21 @@ export function modInfoText(
 ): string {
     return modInfoTextLines(modId, config, prefixedId).join('\n');
 }
+
+/**
+ * Rewrites the `id=` field of existing mod.info text without touching any
+ * other line. The development build uses this so a mod.info copied from the
+ * source tree matches its `_dev`-suffixed output folder (the game requires
+ * the mod.info id to agree with the folder name).
+ *
+ * Every top-level `id=` line is replaced (duplicates collapse to the new
+ * value) while commented lines such as `// id=...` are left alone. When the
+ * file has no id line at all, one is prepended. All other bytes — including
+ * CRLF line endings — are preserved.
+ */
+export function patchModInfoId(content: string, id: string): string {
+    if (!/^[ \t]*id[ \t]*=/m.test(content)) {
+        return `id=${id}\n${content}`;
+    }
+    return content.replace(/^[ \t]*id[ \t]*=.*$/gm, () => `id=${id}`);
+}

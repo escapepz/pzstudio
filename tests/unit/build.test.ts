@@ -204,6 +204,62 @@ describe('buildCmd', () => {
         );
     });
 
+    it('should rewrite the id of an existing mod.info in the dev output', async () => {
+        vi.mocked(hasFlag).mockImplementation(
+            (name: string) => name === 'development',
+        );
+        vi.mocked(fs.existsSync).mockImplementation((p: any) => {
+            const normalized = String(p).replace(/\\/g, '/');
+            return (
+                normalized.endsWith('/workshop/preview.png') ||
+                normalized.endsWith('/my_mod/mod.info')
+            );
+        });
+        vi.mocked(fs.readFileSync).mockReturnValue(
+            'id=my_mod\nname=My Mod\nposter=poster.png\n' as any,
+        );
+
+        await buildCmd();
+
+        const modInfoWrite = vi
+            .mocked(fs.writeFileSync)
+            .mock.calls.find((call) =>
+                String(call[0])
+                    .replace(/\\/g, '/')
+                    .endsWith('dev_branch/Contents/mods/my_mod_dev/mod.info'),
+            );
+        expect(modInfoWrite?.[1]).toBe(
+            'id=my_mod_dev\nname=My Mod\nposter=poster.png\n',
+        );
+    });
+
+    it('should keep an existing mod.info verbatim in the main output', async () => {
+        vi.mocked(fs.existsSync).mockImplementation((p: any) => {
+            const normalized = String(p).replace(/\\/g, '/');
+            return (
+                normalized.endsWith('/workshop/preview.png') ||
+                normalized.endsWith('/my_mod/mod.info')
+            );
+        });
+        vi.mocked(fs.readFileSync).mockReturnValue(
+            'id=my_mod\nname=My Mod\n' as any,
+        );
+
+        await buildCmd();
+
+        const modInfoWrite = vi
+            .mocked(fs.writeFileSync)
+            .mock.calls.find((call) =>
+                String(call[0]).replace(/\\/g, '/').endsWith('mod.info'),
+            );
+        expect(modInfoWrite).toBeUndefined();
+        expect(logger.log).toHaveBeenCalledWith(
+            expect.stringContaining(
+                'already exists, build.modInfo: "auto-if-missing"',
+            ),
+        );
+    });
+
     it('should skip the main build and warn when all mods are dev-only', async () => {
         vi.mocked(resolveProjectConfig).mockImplementation(
             () =>
