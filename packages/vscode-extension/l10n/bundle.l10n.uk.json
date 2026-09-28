@@ -47,5 +47,7 @@
     "excluded from build": "виключено зі збірки",
     "Create project in...": "Створити проєкт у...",
     "Select the workspace folder for the new project": "Виберіть папку робочої області для нового проєкту",
-    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Перед створенням проєкту тут відкрийте папку робочої області."
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Перед створенням проєкту тут відкрийте папку робочої області.",
+    "PZStudio: development sync stopped.": "PZStudio: синхронізацію розробки зупинено.",
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: синхронізацію розробки запущено для '{0}' — щоб зупинити, виконайте команду ще раз."
 }

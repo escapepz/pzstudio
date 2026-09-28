@@ -47,5 +47,7 @@
     "excluded from build": "除外",
     "Create project in...": "プロジェクトの作成先...",
     "Select the workspace folder for the new project": "新しいプロジェクトのワークスペース フォルダーを選択してください",
-    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: ここでプロジェクトを作成する前に、ワークスペース フォルダーを開いてください。"
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: ここでプロジェクトを作成する前に、ワークスペース フォルダーを開いてください。",
+    "PZStudio: development sync stopped.": "PZStudio: 開発同期を停止しました。",
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: '{0}' の開発同期を開始しました — もう一度コマンドを実行すると停止します。"
 }

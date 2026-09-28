@@ -47,5 +47,7 @@
     "excluded from build": "loại khỏi build",
     "Create project in...": "Tạo project tại...",
     "Select the workspace folder for the new project": "Chọn workspace folder cho project mới",
-    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Hãy mở một workspace folder trước khi tạo project tại đây."
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Hãy mở một workspace folder trước khi tạo project tại đây.",
+    "PZStudio: development sync stopped.": "PZStudio: đã dừng đồng bộ phát triển.",
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: đã bắt đầu đồng bộ phát triển cho '{0}' — chạy lệnh lần nữa để dừng."
 }

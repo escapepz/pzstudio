@@ -47,5 +47,7 @@
     "excluded from build": "uitgesloten van build",
     "Create project in...": "Project maken in...",
     "Select the workspace folder for the new project": "Selecteer de werkruimtemap voor het nieuwe project",
-    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Open een werkruimtemap voordat u hier een project maakt."
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Open een werkruimtemap voordat u hier een project maakt.",
+    "PZStudio: development sync stopped.": "PZStudio: ontwikkelsynchronisatie gestopt.",
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: ontwikkelsynchronisatie gestart voor '{0}' — voer de opdracht opnieuw uit om te stoppen."
 }

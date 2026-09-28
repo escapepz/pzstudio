@@ -43,5 +43,6 @@
     "command.explorer.toggleFiles.title": "PZStudio: Przełącz wszystkie/istotne pliki w Eksploratorze",
     "command.explorer.toggleFiles.hidden.title": "PZStudio: Przełącz wszystkie/istotne pliki w Eksploratorze",
     "command.newHere.title": "PZStudio: Nowy projekt tutaj",
-    "config.newProject.defaultLocation.description": "Preferowany folder domyślny dla nowych projektów. Selektor New Project otwiera się tutaj, a po anulowaniu używany jest ten folder."
+    "config.newProject.defaultLocation.description": "Preferowany folder domyślny dla nowych projektów. Selektor New Project otwiera się tutaj, a po anulowaniu używany jest ten folder.",
+    "command.watch.title": "Przełącz synchronizację rozwoju"
 }

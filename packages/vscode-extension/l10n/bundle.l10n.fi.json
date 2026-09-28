@@ -47,5 +47,7 @@
     "excluded from build": "suljettu pois käännöksestä",
     "Create project in...": "Luo projekti kohteeseen...",
     "Select the workspace folder for the new project": "Valitse uuden projektin työtilan kansio",
-    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Avaa työtilan kansio ennen projektin luomista tähän."
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Avaa työtilan kansio ennen projektin luomista tähän.",
+    "PZStudio: development sync stopped.": "PZStudio: kehityssynkronointi pysäytetty.",
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: kehityssynkronointi käynnistetty kohteelle '{0}' — pysäytä suorittamalla komento uudelleen."
 }

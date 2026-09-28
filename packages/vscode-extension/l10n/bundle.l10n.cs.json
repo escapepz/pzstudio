@@ -47,5 +47,7 @@
     "excluded from build": "vyloučeno z buildu",
     "Create project in...": "Vytvořit projekt v...",
     "Select the workspace folder for the new project": "Vyberte složku pracovního prostoru pro nový projekt",
-    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Před vytvořením projektu zde nejprve otevřete složku pracovního prostoru."
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Před vytvořením projektu zde nejprve otevřete složku pracovního prostoru.",
+    "PZStudio: development sync stopped.": "PZStudio: vývojová synchronizace zastavena.",
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: vývojová synchronizace spuštěna pro '{0}' — pro zastavení spusťte příkaz znovu."
 }

@@ -61,9 +61,17 @@ export function createVscodeMock() {
         ) {}
     }
 
+    class MockRelativePattern {
+        constructor(
+            public base: unknown,
+            public pattern: string,
+        ) {}
+    }
+
     const mock = {
         Uri: MockUri,
         EventEmitter: MockEventEmitter,
+        RelativePattern: MockRelativePattern,
         TreeItem: MockTreeItem,
         Task: MockTask,
         CustomExecution: class {

@@ -34,6 +34,7 @@ Access these commands via the **Command Palette** (`Ctrl+Shift+P` / `Cmd+Shift+P
 | `PZStudio: Rename Mod ID`     | Safely rename an existing mod (folder + project.json key).    |
 | `PZStudio: ModInfo Generate`  | Generate mod.info files in your source tree.                  |
 | `PZStudio: Update`            | Refresh the cached templates (libraries and documentation).   |
+| `PZStudio: Toggle Development Sync` | Keep the workshop outputs synced while you edit: saved files apply incrementally, `mod.info`/`.pzstudioignore` edits re-sync their mod, `project.json` edits trigger a full rebuild. Run again to stop. |
 
 Commands that always act on one specific row — **Edit Mod Configuration**, the per-mod build-state toggles, explorer refresh and the All/Essential files toggle — are intentionally not in the Command Palette: they live in the **PZ Project Explorer**, where their target is unambiguous.
 

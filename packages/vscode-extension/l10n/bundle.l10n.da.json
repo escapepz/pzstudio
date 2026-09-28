@@ -47,5 +47,7 @@
     "excluded from build": "udeladt fra build",
     "Create project in...": "Opret projekt i...",
     "Select the workspace folder for the new project": "Vælg workspace-mappen til det nye projekt",
-    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Åbn en workspace-mappe, før du opretter et projekt her."
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Åbn en workspace-mappe, før du opretter et projekt her.",
+    "PZStudio: development sync stopped.": "PZStudio: udviklingssynkronisering stoppet.",
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: udviklingssynkronisering startet for '{0}' — kør kommandoen igen for at stoppe."
 }

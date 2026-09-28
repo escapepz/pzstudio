@@ -47,5 +47,7 @@
     "excluded from build": "vom Build ausgeschlossen",
     "Create project in...": "Projekt erstellen in...",
     "Select the workspace folder for the new project": "Ordner des Arbeitsbereichs für das neue Projekt auswählen",
-    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Öffnen Sie vor dem Erstellen eines Projekts hier einen Arbeitsbereichsordner."
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Öffnen Sie vor dem Erstellen eines Projekts hier einen Arbeitsbereichsordner.",
+    "PZStudio: development sync stopped.": "PZStudio: Entwicklungssynchronisierung gestoppt.",
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: Entwicklungssynchronisierung für '{0}' gestartet — zum Stoppen den Befehl erneut ausführen."
 }

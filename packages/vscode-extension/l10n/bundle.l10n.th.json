@@ -47,5 +47,7 @@
     "excluded from build": "ยกเว้นจากการบิลด์",
     "Create project in...": "สร้างโปรเจกต์ที่...",
     "Select the workspace folder for the new project": "เลือกโฟลเดอร์ workspace สำหรับโปรเจกต์ใหม่",
-    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: เปิดโฟลเดอร์ workspace ก่อนสร้างโปรเจกต์ที่นี่"
+    "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: เปิดโฟลเดอร์ workspace ก่อนสร้างโปรเจกต์ที่นี่",
+    "PZStudio: development sync stopped.": "PZStudio: หยุดการซิงค์การพัฒนาแล้ว",
+    "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: เริ่มการซิงค์การพัฒนาสำหรับ '{0}' แล้ว — เรียกใช้คำสั่งอีกครั้งเพื่อหยุด"
 }
