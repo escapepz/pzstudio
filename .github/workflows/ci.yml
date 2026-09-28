@@ -2,7 +2,7 @@ name: CI
 
 on:
     push:
-        branches: [main]
+        branches: [main, 42.20.0-dev]
     pull_request:
         branches: [main]
 
@@ -17,14 +17,17 @@ jobs:
 
         steps:
             - uses: actions/checkout@v4
-
-            - uses: actions/setup-node@v4
               with:
-                  node-version: 20
+                  submodules: recursive
 
             - uses: pnpm/action-setup@v4
               with:
                   version: 11
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: pnpm
 
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
@@ -42,3 +45,34 @@ jobs:
               run: |
                   cd packages/vscode-extension
                   pnpm build
+
+    cli-real-env:
+        name: CLI real-env e2e (${{ matrix.os }})
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [windows-latest, ubuntu-latest, macos-latest]
+
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  submodules: recursive
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: pnpm
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Build CLI and its workspace dependencies
+              run: pnpm --filter pzstudio-cli... build
+
+            - name: Real-environment e2e
+              run: pnpm test:real-env
