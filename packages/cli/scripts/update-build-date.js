@@ -42,8 +42,20 @@ if (fs.existsSync(expScriptSource)) {
     console.log(`Copied experimental-package-scripts.js to ${expScriptDest}`);
 }
 
-// Copy .template-legacy to dist (the submodule container lives at the repo root)
-const templateLegacySource = path.join(__dirname, '../../.template-legacy');
+// Copy .template-legacy into dist so the built binary can bootstrap
+// templates offline (templateManager probes dist/.template-legacy). The
+// submodule container lives at the repo root in the monorepo layout
+// (packages/cli/scripts -> repo root); the package root is probed as a
+// fallback for standalone checkouts.
+const templateLegacyCandidates = [
+    path.join(__dirname, '../../../.template-legacy'),
+    path.join(__dirname, '../../.template-legacy'),
+];
+const templateLegacySource = templateLegacyCandidates.find(
+    (candidate) =>
+        fs.existsSync(candidate) &&
+        fs.existsSync(path.join(candidate, '.template-project')),
+);
 const templateLegacyDest = path.join(distPath, '.template-legacy');
 
 function copyDirRecursive(src, dest) {
@@ -63,7 +75,13 @@ function copyDirRecursive(src, dest) {
     }
 }
 
-if (fs.existsSync(templateLegacySource)) {
+if (templateLegacySource) {
     copyDirRecursive(templateLegacySource, templateLegacyDest);
-    console.log(`Copied .template-legacy to ${templateLegacyDest}`);
+    console.log(
+        `Copied .template-legacy from ${templateLegacySource} to ${templateLegacyDest}`,
+    );
+} else {
+    console.warn(
+        'No populated .template-legacy found (submodules not checked out?) — the built binary will not be able to bootstrap templates offline.',
+    );
 }
