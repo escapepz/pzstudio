@@ -86,6 +86,12 @@ export function createVscodeMock() {
         ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
         TaskScope: { Global: 1, Workspace: 2 },
         ViewColumn: { Active: -1, Beside: -2 },
+        tasks: {
+            registerTaskProvider: vi.fn(() => ({ dispose: vi.fn() })),
+            taskExecutions: [],
+            onDidStartTask: vi.fn(() => ({ dispose: vi.fn() })),
+            onDidEndTask: vi.fn(() => ({ dispose: vi.fn() })),
+        },
         l10n: {
             // Pass-through with indexed {0} substitution: assertions compare
             // against the English bundle keys.
