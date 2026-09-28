@@ -124,6 +124,40 @@
                     "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod/",
                     "group": "3_mod"
                 }
+            ],
+            "commandPalette": [
+                {
+                    "command": "pzstudio.modIncluded",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.modExcluded",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.modDevOnly",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.modDevOnly.dim",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.explorer.toggleFiles.hidden",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.modConfigure",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.explorer.refresh",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.explorer.toggleFiles",
+                    "when": "false"
+                }
             ]
         },
         "taskDefinitions": [
@@ -144,40 +178,6 @@
                         "description": "%taskDefinition.target.description%"
                     }
                 }
-            }
-        ],
-        "commandPalette": [
-            {
-                "command": "pzstudio.modIncluded",
-                "when": "false"
-            },
-            {
-                "command": "pzstudio.modExcluded",
-                "when": "false"
-            },
-            {
-                "command": "pzstudio.modDevOnly",
-                "when": "false"
-            },
-            {
-                "command": "pzstudio.modDevOnly.dim",
-                "when": "false"
-            },
-            {
-                "command": "pzstudio.explorer.toggleFiles.hidden",
-                "when": "false"
-            },
-            {
-                "command": "pzstudio.modConfigure",
-                "when": "false"
-            },
-            {
-                "command": "pzstudio.explorer.refresh",
-                "when": "false"
-            },
-            {
-                "command": "pzstudio.explorer.toggleFiles",
-                "when": "false"
             }
         ],
         "jsonValidation": [
