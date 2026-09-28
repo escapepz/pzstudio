@@ -71,8 +71,8 @@
                     "description": "Custom build flags for this mod.",
                     "properties": {
                         "modInfo": {
-                            "default": "skip",
-                            "description": "Controls whether mod.info is auto-generated from project.json.\n- \"skip\" (default) — never generate; use whatever file exists in the mod folder\n- \"auto\" — generate mod.info from project.json\n- \"auto-if-missing\" — generate only if mod.info is not already present in the output",
+                            "default": "auto-if-missing",
+                            "description": "Controls whether mod.info is auto-generated from project.json.\n- \"auto-if-missing\" (default) — generate only if mod.info is not already present in the mod folder\n- \"auto\" — generate mod.info from project.json, overwriting existing files\n- \"skip\" — never generate; use whatever file exists in the mod folder\nDevelopment (dev_branch) builds always align the mod.info id with the _dev-suffixed output folder, regardless of this setting.",
                             "enum": ["auto", "skip", "auto-if-missing"],
                             "type": "string"
                         },

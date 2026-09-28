@@ -8,7 +8,7 @@
  * browser adapter (web export as .zip) can consume the same plan.
  */
 import type { IProjectConfig } from '../project';
-import { modInfoText, workshopText } from './textgen';
+import { modInfoText, patchModInfoId, workshopText } from './textgen';
 
 export type FileOperation =
     | { type: 'log'; level: 'verbose' | 'info' | 'warn'; message: string }
@@ -33,6 +33,13 @@ export interface ModSourceState {
      * branch folder name.
      */
     modInfoExists: Record<string, boolean>;
+    /**
+     * mod.info content per candidate target (same keys as modInfoExists),
+     * only meaningful where modInfoExists is true. The development variant
+     * uses it to rewrite the id of a copied mod.info; when no content is
+     * snapshotted the planner falls back to copying the file verbatim.
+     */
+    modInfoContent?: Record<string, string | undefined>;
 }
 
 export interface PlanBuildInput {
@@ -212,32 +219,81 @@ export function planBuild(input: PlanBuildInput): FileOperation[] {
             ignoreItems: excludes,
         });
 
-        // Generate the mod.info
-        const modInfoFlag = config.mods[modId].build?.modInfo;
-        const effectiveModInfoFlag = modInfoFlag ?? 'auto-if-missing';
-
-        if (effectiveModInfoFlag === 'skip') {
-            operations.push({
-                type: 'log',
-                level: 'info',
-                message: `- Skipping '${modId}' mod.info generation (build.modInfo: "skip")...`,
-            });
-            continue;
-        }
-
-        // Build 42 branch folders (with media/); fall back to the mod root
-        // when none survive the excludes filter (Build 41 layout)
+        // mod.info handling. The source snapshot is resolved first because
+        // even 'skip' needs the target list for the dev id alignment below.
         const state = modSourceStates[modId] ?? {
             branchFolders: [],
             modInfoExists: {},
         };
+        const modInfoFlag = config.mods[modId].build?.modInfo;
+        const effectiveModInfoFlag = modInfoFlag ?? 'auto-if-missing';
+
+        // Build 42 branch folders (with media/); fall back to the mod root
+        // when none survive the excludes filter (Build 41 layout)
         const branchTargets = state.branchFolders.filter(
             (name) => !excludes.includes(name),
         );
         const targets = branchTargets.length > 0 ? branchTargets : [''];
 
+        // Rewrites the id of a source mod.info copied into the development
+        // output: the output folder carries the suffixed id (<modId>_dev) and
+        // the game requires the mod.info id to match the folder name. Content
+        // comes from the source snapshot; without one the planner falls back
+        // to copying the file verbatim.
+        const pushDevIdPatch = (target: string): boolean => {
+            if (!variantOptions.modIdSuffix) {
+                return false;
+            }
+            const content = state.modInfoContent?.[target];
+            if (!state.modInfoExists[target] || content === undefined) {
+                return false;
+            }
+            operations.push({
+                type: 'log',
+                level: 'info',
+                message: `- Patching '${modId}' mod.info id to '${prefixedModId}' (development build)...`,
+            });
+            operations.push({
+                type: 'writeFile',
+                path: joinPosix(outModsPath, target, 'mod.info'),
+                content: patchModInfoId(content, prefixedModId),
+            });
+            return true;
+        };
+
+        if (effectiveModInfoFlag === 'skip') {
+            // 'skip' never generates, but a copied mod.info still gets its id
+            // aligned with the dev_branch output folder.
+            if (variantOptions.modIdSuffix) {
+                let patchedAny = false;
+                for (const target of targets) {
+                    if (pushDevIdPatch(target)) {
+                        patchedAny = true;
+                    }
+                }
+                if (!patchedAny) {
+                    operations.push({
+                        type: 'log',
+                        level: 'info',
+                        message: `- Skipping '${modId}' mod.info generation (build.modInfo: "skip")...`,
+                    });
+                }
+            } else {
+                operations.push({
+                    type: 'log',
+                    level: 'info',
+                    message: `- Skipping '${modId}' mod.info generation (build.modInfo: "skip")...`,
+                });
+            }
+            continue;
+        }
+
         for (const target of targets) {
             const modInfoPath = joinPosix(outModsPath, target, 'mod.info');
+
+            if (pushDevIdPatch(target)) {
+                continue;
+            }
 
             if (
                 effectiveModInfoFlag === 'auto-if-missing' &&

@@ -4,6 +4,7 @@ import {
     workshopTextLines,
     modInfoText,
     modInfoTextLines,
+    patchModInfoId,
 } from '../../src/lib/core/textgen';
 import type { IProjectConfig } from '../../src/lib/project';
 
@@ -122,5 +123,64 @@ describe('modInfoText (pure)', () => {
 
     it('should return an empty string for an unknown mod', () => {
         expect(modInfoText('nope', baseConfig)).toBe('');
+    });
+});
+
+describe('patchModInfoId (pure)', () => {
+    it('should replace the id line and keep every other line', () => {
+        const content =
+            'id=my_mod\nname=My Mod\nposter=poster.png\nrequire=Base\n';
+
+        expect(patchModInfoId(content, 'my_mod_dev')).toBe(
+            'id=my_mod_dev\nname=My Mod\nposter=poster.png\nrequire=Base\n',
+        );
+    });
+
+    it('should preserve CRLF line endings', () => {
+        expect(
+            patchModInfoId('id=my_mod\r\nname=My Mod\r\n', 'my_mod_dev'),
+        ).toBe('id=my_mod_dev\r\nname=My Mod\r\n');
+    });
+
+    it('should normalize id lines with surrounding whitespace', () => {
+        expect(patchModInfoId('id = my_mod\n', 'my_mod_dev')).toBe(
+            'id=my_mod_dev\n',
+        );
+        expect(patchModInfoId('  id=my_mod\n', 'my_mod_dev')).toBe(
+            'id=my_mod_dev\n',
+        );
+    });
+
+    it('should rewrite every id line when the file has duplicates', () => {
+        expect(patchModInfoId('id=a\nname=N\nid=b\n', 'my_mod_dev')).toBe(
+            'id=my_mod_dev\nname=N\nid=my_mod_dev\n',
+        );
+    });
+
+    it('should not touch commented id lines', () => {
+        expect(
+            patchModInfoId(
+                '// id=my_mod\n# id=my_mod\nid=my_mod\n',
+                'my_mod_dev',
+            ),
+        ).toBe('// id=my_mod\n# id=my_mod\nid=my_mod_dev\n');
+    });
+
+    it('should prepend an id line when the file has none', () => {
+        expect(patchModInfoId('name=My Mod\n', 'my_mod_dev')).toBe(
+            'id=my_mod_dev\nname=My Mod\n',
+        );
+    });
+
+    it('should not treat keys containing "id" as the id field', () => {
+        expect(patchModInfoId('versionMin=42.0\n', 'my_mod_dev')).toBe(
+            'id=my_mod_dev\nversionMin=42.0\n',
+        );
+    });
+
+    it('should keep an id that already matches unchanged', () => {
+        expect(
+            patchModInfoId('id=my_mod_dev\nname=My Mod\n', 'my_mod_dev'),
+        ).toBe('id=my_mod_dev\nname=My Mod\n');
     });
 });
