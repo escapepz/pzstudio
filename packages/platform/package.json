@@ -1,0 +1,23 @@
+{
+    "name": "@pzstudio/platform",
+    "version": "0.42200.0",
+    "private": true,
+    "description": "Host-agnostic contracts (ProjectFileSystem, PlatformCapabilities, TemplateTransport) shared by every PZ Studio package.",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "require": "./dist/index.js"
+        }
+    },
+    "type": "commonjs",
+    "scripts": {
+        "clean": "node -e \"require('fs').rmSync('./dist', { recursive: true, force: true })\"",
+        "build": "pnpm run clean && tsc -p tsconfig.build.json"
+    },
+    "devDependencies": {
+        "typescript": "^5.9.3"
+    }
+}

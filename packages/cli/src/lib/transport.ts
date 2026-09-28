@@ -12,24 +12,9 @@ import { join, dirname, resolve as resolvePath } from 'path';
 import { unzipSync } from 'fflate';
 import { log, warn, verbose } from './logger';
 import { TemplateResolutionError } from './errors/TemplateResolutionError';
+import type { TemplateTransport } from '@pzstudio/platform';
 
-/**
- * A transport knows how to download a template repository (optionally at a
- * ref) into a local directory and refresh an existing cache directory.
- *
- * The CLI and the Node VS Code extension default to GitTransport; the web
- * extension (vscode.dev) injects FetchTransport. Which transport is used is
- * a wiring decision per package — the core never branches on host type.
- */
-export interface TemplateTransport {
-    readonly name: 'git' | 'fetch';
-    /** Download the template at url (at ref) into destDir. Throws on failure. */
-    download(url: string, ref: string | undefined, destDir: string): void;
-    /** Bring the cached template at cacheDir up to ref. Returns true on success. */
-    refresh(cacheDir: string, ref: string | undefined): boolean;
-    /** Whether a cache directory produced by this transport is usable. */
-    isCacheValid(dir: string): boolean;
-}
+export type { TemplateTransport };
 
 function isDirNonEmpty(dir: string): boolean {
     if (!existsSync(dir)) return false;

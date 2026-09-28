@@ -10,6 +10,11 @@ export default defineConfig({
             'pzstudio-cli': fileURLToPath(
                 new URL('./packages/cli/dist', import.meta.url),
             ),
+            // Workspace packages resolve to their sources in tests so the
+            // suite never depends on a prior build of them.
+            '@pzstudio/platform': fileURLToPath(
+                new URL('./packages/platform/src/index.ts', import.meta.url),
+            ),
         },
     },
     test: {
