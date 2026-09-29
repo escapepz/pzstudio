@@ -27,6 +27,14 @@ describe('PZ Studio extension (real VS Code host)', () => {
             );
         }
         extension = found;
+        // Redirect the api's homedir() INSIDE the extension host only —
+        // overriding HOME in the spawned VS Code process (test-electron
+        // passes env to the whole app) breaks Electron's own state
+        // locations on macOS. os.homedir() reads the env on every call,
+        // so the api bridge sees the fake home from here on.
+        assert.ok(fakeHome, 'fixture fake home env is missing');
+        process.env.HOME = fakeHome;
+        process.env.USERPROFILE = fakeHome;
         await extension.activate();
     });
 

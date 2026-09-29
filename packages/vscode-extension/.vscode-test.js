@@ -16,19 +16,16 @@ module.exports = defineConfig({
     version: '1.102.0',
     extensionDevelopmentPath: __dirname,
     workspaceFolder: fixture.projectDir,
-    // --disable-workspace-trust: the throwaway CI profile has nobody to
-    // click the trust dialog, and an untrusted workspace gates extension
-    // activation — the test run would hang forever. --disable-extensions
-    // keeps the host hermetic (the dev extension still loads);
-    // --disable-gpu avoids flaky GPU init in headless-ish environments.
-    launchArgs: [
-        '--disable-workspace-trust',
-        '--disable-extensions',
-        '--disable-gpu',
-    ],
+    // --disable-extensions keeps the host hermetic (the dev extension still
+    // loads); --disable-gpu avoids flaky GPU init in headless-ish
+    // environments. Workspace trust is already disabled by test-electron
+    // itself, so nobody has to click the trust dialog.
+    launchArgs: ['--disable-extensions', '--disable-gpu'],
     env: {
-        HOME: fixture.home,
-        USERPROFILE: fixture.home,
+        // NOT HOME/USERPROFILE: test-electron spawns the whole VS Code
+        // process with this env, and a fake home breaks Electron's own
+        // state locations on macOS (~/Library). The extension host picks
+        // the fake home up inside the test instead (integration.test.ts).
         PZSTUDIO_TEST_PROJECT_DIR: fixture.projectDir,
         PZSTUDIO_TEST_FAKE_HOME: fixture.home,
     },
