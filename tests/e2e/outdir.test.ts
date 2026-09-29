@@ -80,7 +80,11 @@ describe('outdir command e2e', () => {
         );
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         expect(path.isAbsolute(config.outdir)).toBe(true);
-        expect(config.outdir).toBe(path.resolve(workspace.dir, 'relative_out'));
+        // The CLI resolves through the real cwd; on macOS the tmp dir sits
+        // behind the /var -> /private/var symlink, so compare real paths.
+        expect(config.outdir).toBe(
+            fs.realpathSync(path.resolve(workspace.dir, 'relative_out')),
+        );
     });
 
     it('should recover from a malformed config.json', async () => {

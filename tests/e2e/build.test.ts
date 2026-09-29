@@ -130,7 +130,10 @@ describe('build command e2e', () => {
         workspace.write(
             'project.json',
             JSON.stringify({
-                outdir: 'invalid?path',
+                // A path that passes through an existing FILE: creating a
+                // directory under it fails on every platform (ENOTDIR),
+                // unlike Windows-reserved characters such as '?'.
+                outdir: './project.json',
                 workshop: {
                     title: 'Invalid OutDir',
                     visibility: 'public',

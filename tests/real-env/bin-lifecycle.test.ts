@@ -218,7 +218,11 @@ describe('real env: project lifecycle commands', () => {
                 path.join('.pzstudio', 'config.json'),
                 'home',
             );
-            expect(config.outdir).toBe(workspace.path('custom_out'));
+            // The spawned CLI resolves through its real cwd; on macOS the
+            // tmp dir sits behind the /var -> /private/var symlink.
+            expect(config.outdir).toBe(
+                fs.realpathSync(workspace.path('custom_out')),
+            );
         });
 
         it('rejects a path that does not exist', async () => {
