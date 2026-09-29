@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { getFakeHome, setFakeHome } from './fake-home';
 import { runCLI } from '../../packages/cli/src/lib/cli';
@@ -6,6 +7,43 @@ import { setLogger, ILogger } from '../../packages/cli/src/lib/logger';
 import { createTempDir, deleteDir } from './test-fixtures';
 
 let currentFakeHome: string | undefined;
+
+/**
+ * Per-worker scratch copy of the repo-root .template-legacy. Every fake
+ * home links to it instead of re-copying the templates per test — the
+ * recursive copy + delete around each case dominated CI runtime on the
+ * Windows runners. The store is a throwaway copy (never the repo checkout
+ * itself), and Node's rmSync unlinks junctions/symlinks instead of
+ * descending into them, so cleanup can never reach the store through a
+ * linked fake home.
+ */
+let sharedLegacyStore: string | null | undefined;
+
+function getSharedLegacyStore(): string | null {
+    if (sharedLegacyStore !== undefined) return sharedLegacyStore;
+    const legacyDir = path.resolve(__dirname, '..', '..', '.template-legacy');
+    if (!fs.existsSync(legacyDir) || fs.readdirSync(legacyDir).length === 0) {
+        // Mirror the old behavior: without checked-out submodules the
+        // fixture seeds nothing.
+        sharedLegacyStore = null;
+        return sharedLegacyStore;
+    }
+    const store = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'pzstudio-e2e-templates-'),
+    );
+    fs.cpSync(legacyDir, path.join(store, '.template-legacy'), {
+        recursive: true,
+    });
+    sharedLegacyStore = store;
+    process.once('exit', () => {
+        try {
+            fs.rmSync(store, { recursive: true, force: true });
+        } catch {
+            // Best effort: OS temp cleanup handles leftovers.
+        }
+    });
+    return sharedLegacyStore;
+}
 
 export interface E2EResult {
     stdout: string[];
@@ -26,17 +64,26 @@ export class E2ETestWorkspace {
         this.fakeHome = createTempDir();
         this.originalCwd = process.cwd();
 
-        // Pre-bootstrap legacy templates into fake home
-        const legacyDir = path.join(this.originalCwd, '.template-legacy');
-        if (fs.existsSync(legacyDir)) {
+        // One link per fake home (junction on Windows, dir symlink on
+        // POSIX); copy as a fallback for filesystems without link support.
+        const store = getSharedLegacyStore();
+        if (store) {
+            const src = path.join(store, '.template-legacy');
             const dest = path.join(
                 this.fakeHome,
                 '.pzstudio',
                 '.template-legacy',
             );
             fs.mkdirSync(path.dirname(dest), { recursive: true });
-            // Copy instead of symlink to avoid issues with recursive operations in scaffoldProject
-            fs.cpSync(legacyDir, dest, { recursive: true });
+            try {
+                fs.symlinkSync(
+                    src,
+                    dest,
+                    process.platform === 'win32' ? 'junction' : 'dir',
+                );
+            } catch {
+                fs.cpSync(src, dest, { recursive: true });
+            }
         }
     }
 

@@ -7,6 +7,14 @@ import os from 'os';
 // Initialize global state for the fake home directory.
 (globalThis as any).__PZSTUDIO_FAKE_HOME = undefined;
 
+// Keep the whole suite off the network: any accidental real `git clone` /
+// `git pull` during template resolution must fail instantly instead of
+// hitting GitHub (the CLI then falls back to the bundled legacy templates,
+// the same path it takes when git is unavailable). The real-env suite
+// spawns its own processes through a config without this setup file.
+process.env.GIT_TERMINAL_PROMPT = '0';
+process.env.GIT_ALLOW_PROTOCOL = 'file';
+
 // Use vi.mock for both 'os' and 'node:os'.
 // We use a factory that refers to globalThis to avoid closure issues.
 // We must use vi.hoisted to ensure the mock can access shared state if needed,
