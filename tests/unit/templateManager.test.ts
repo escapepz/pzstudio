@@ -273,13 +273,24 @@ describe('templateManager - config and resolution', () => {
 
     describe('resolveTemplateDir', () => {
         it('should resolve built-in workshop template', () => {
+            // Cache-hit on the DEFAULT template url. The online path with
+            // an empty cache would perform a real network clone, which a
+            // unit test must never do.
             vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+            vi.spyOn(fs, 'lstatSync').mockReturnValue({
+                isDirectory: () => true,
+            } as any);
+            vi.spyOn(fs, 'readdirSync').mockReturnValue(['.git'] as any);
             const path = resolveTemplateDir('workshop');
             expect(path).toContain('workshop');
         });
 
         it('should resolve built-in mod template', () => {
             vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+            vi.spyOn(fs, 'lstatSync').mockReturnValue({
+                isDirectory: () => true,
+            } as any);
+            vi.spyOn(fs, 'readdirSync').mockReturnValue(['.git'] as any);
             const path = resolveTemplateDir('mod');
             expect(path).toContain('mod');
         });
