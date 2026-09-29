@@ -22,11 +22,11 @@ jobs:
 
             - uses: pnpm/action-setup@v4
               with:
-                  version: 11
+                  version: 12
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 20
+                  node-version: 22
                   cache: pnpm
 
             - name: Install dependencies
@@ -61,11 +61,11 @@ jobs:
 
             - uses: pnpm/action-setup@v4
               with:
-                  version: 11
+                  version: 12
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 20
+                  node-version: 22
                   cache: pnpm
 
             - name: Install dependencies
@@ -92,11 +92,11 @@ jobs:
 
             - uses: pnpm/action-setup@v4
               with:
-                  version: 11
+                  version: 12
 
             - uses: actions/setup-node@v4
               with:
-                  node-version: 20
+                  node-version: 22
                   cache: pnpm
 
             - name: Cache the downloaded VS Code test installation
