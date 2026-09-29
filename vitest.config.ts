@@ -51,5 +51,9 @@ export default defineConfig({
             concurrent: false,
         },
         testTimeout: 15000,
+        // The POSIX CI runners occasionally starve the fast synchronous
+        // e2e hooks past the 10s default (cold fs caches, busy workers).
+        // 60s absorbs the jitter; genuine hangs still hit the job timeout.
+        hookTimeout: 60000,
     },
 });
