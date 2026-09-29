@@ -36,6 +36,17 @@ jobs:
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
+            - name: Exclude the test working set from Windows Defender
+              if: runner.os == 'Windows'
+              continue-on-error: true
+              shell: pwsh
+              # The suite does thousands of small temp-file writes; real-time
+              # scanning multiplies that cost several-fold on the runners.
+              run: |
+                  Set-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE"
+                  Set-MpPreference -ExclusionPath "$env:TEMP"
+                  Set-MpPreference -ExclusionProcess "node.exe"
+
             - name: Lint
               run: pnpm lint
 
@@ -76,6 +87,15 @@ jobs:
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
+            - name: Exclude the test working set from Windows Defender
+              if: runner.os == 'Windows'
+              continue-on-error: true
+              shell: pwsh
+              run: |
+                  Set-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE"
+                  Set-MpPreference -ExclusionPath "$env:TEMP"
+                  Set-MpPreference -ExclusionProcess "node.exe"
+
             - name: Build CLI and its workspace dependencies
               run: pnpm --filter pzstudio-cli... build
 
@@ -113,6 +133,15 @@ jobs:
 
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
+
+            - name: Exclude the test working set from Windows Defender
+              if: runner.os == 'Windows'
+              continue-on-error: true
+              shell: pwsh
+              run: |
+                  Set-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE"
+                  Set-MpPreference -ExclusionPath "$env:TEMP"
+                  Set-MpPreference -ExclusionProcess "node.exe"
 
             - name: Build extension and its workspace dependencies
               run: pnpm --filter pzstudio42... build
