@@ -10,6 +10,7 @@ jobs:
     test:
         name: Lint, build & test (${{ matrix.os }})
         runs-on: ${{ matrix.os }}
+        timeout-minutes: 15
         strategy:
             fail-fast: false
             matrix:
@@ -49,6 +50,7 @@ jobs:
     cli-real-env:
         name: CLI real-env e2e (${{ matrix.os }})
         runs-on: ${{ matrix.os }}
+        timeout-minutes: 15
         strategy:
             fail-fast: false
             matrix:
@@ -80,6 +82,7 @@ jobs:
     ext-real-env:
         name: Extension real-env tests (${{ matrix.os }})
         runs-on: ${{ matrix.os }}
+        timeout-minutes: 15
         strategy:
             fail-fast: false
             matrix:

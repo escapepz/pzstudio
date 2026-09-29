@@ -16,7 +16,16 @@ module.exports = defineConfig({
     version: '1.102.0',
     extensionDevelopmentPath: __dirname,
     workspaceFolder: fixture.projectDir,
-    launchArgs: ['--disable-extensions'],
+    // --disable-workspace-trust: the throwaway CI profile has nobody to
+    // click the trust dialog, and an untrusted workspace gates extension
+    // activation — the test run would hang forever. --disable-extensions
+    // keeps the host hermetic (the dev extension still loads);
+    // --disable-gpu avoids flaky GPU init in headless-ish environments.
+    launchArgs: [
+        '--disable-workspace-trust',
+        '--disable-extensions',
+        '--disable-gpu',
+    ],
     env: {
         HOME: fixture.home,
         USERPROFILE: fixture.home,
