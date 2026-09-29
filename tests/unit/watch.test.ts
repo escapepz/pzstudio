@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import {
     isWatchPathIgnored,
@@ -29,8 +30,11 @@ describe('resolveWatchVariants (pure)', () => {
 });
 
 describe('isWatchPathIgnored (pure)', () => {
-    const projectPath = 'C:\\proj';
-    const outDir = 'C:\\proj\\Output';
+    // Virtual absolute paths built with the current platform's separator —
+    // hardcoded Windows-style strings would collapse into single segments
+    // on POSIX and make every target look "outside the project".
+    const projectPath = path.join(os.tmpdir(), 'pzstudio-watch-proj');
+    const outDir = path.join(projectPath, 'Output');
 
     it('watches the project root itself', () => {
         expect(isWatchPathIgnored(projectPath, outDir, projectPath)).toBe(
@@ -39,9 +43,13 @@ describe('isWatchPathIgnored (pure)', () => {
     });
 
     it('skips paths outside the project', () => {
-        expect(isWatchPathIgnored(projectPath, outDir, 'C:\\elsewhere')).toBe(
-            true,
-        );
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                outDir,
+                path.join(projectPath, '..', 'elsewhere'),
+            ),
+        ).toBe(true);
     });
 
     it('skips the output directory and everything below it', () => {
@@ -50,34 +58,38 @@ describe('isWatchPathIgnored (pure)', () => {
             isWatchPathIgnored(
                 projectPath,
                 outDir,
-                'C:\\proj\\Output\\Contents\\mods\\my_mod',
+                path.join(outDir, 'Contents', 'mods', 'my_mod'),
             ),
         ).toBe(true);
     });
 
     it('skips dot segments but keeps .pzstudioignore files', () => {
-        expect(isWatchPathIgnored(projectPath, outDir, 'C:\\proj\\.git')).toBe(
-            true,
-        );
         expect(
             isWatchPathIgnored(
                 projectPath,
                 outDir,
-                'C:\\proj\\my_mod\\.template-mod\\x.lua',
+                path.join(projectPath, '.git'),
             ),
         ).toBe(true);
         expect(
             isWatchPathIgnored(
                 projectPath,
                 outDir,
-                'C:\\proj\\my_mod\\media\\.DS_Store',
+                path.join(projectPath, 'my_mod', '.template-mod', 'x.lua'),
             ),
         ).toBe(true);
         expect(
             isWatchPathIgnored(
                 projectPath,
                 outDir,
-                'C:\\proj\\my_mod\\.pzstudioignore',
+                path.join(projectPath, 'my_mod', 'media', '.DS_Store'),
+            ),
+        ).toBe(true);
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                outDir,
+                path.join(projectPath, 'my_mod', '.pzstudioignore'),
             ),
         ).toBe(false);
     });
@@ -87,11 +99,15 @@ describe('isWatchPathIgnored (pure)', () => {
             isWatchPathIgnored(
                 projectPath,
                 outDir,
-                'C:\\proj\\my_mod\\media\\lua\\a.lua',
+                path.join(projectPath, 'my_mod', 'media', 'lua', 'a.lua'),
             ),
         ).toBe(false);
         expect(
-            isWatchPathIgnored(projectPath, outDir, 'C:\\proj\\project.json'),
+            isWatchPathIgnored(
+                projectPath,
+                outDir,
+                path.join(projectPath, 'project.json'),
+            ),
         ).toBe(false);
     });
 });
