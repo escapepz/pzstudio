@@ -118,7 +118,10 @@ jobs:
               run: pnpm --filter pzstudio42... build
 
             - name: Desktop integration tests
+              shell: bash
               # VS Code needs an X server on Linux; Xvfb is preinstalled there.
+              # Bash is explicit because the Windows default shell (pwsh)
+              # cannot parse the RUNNER_OS conditional below.
               run: |
                   if [ "$RUNNER_OS" = "Linux" ]; then
                     xvfb-run -a pnpm --filter pzstudio42 test:integration
