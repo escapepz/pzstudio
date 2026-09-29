@@ -2,7 +2,10 @@ name: CI
 
 on:
     push:
-        branches: [main, 42.20.0-dev]
+        # main + 42.20.0 run after merges; 42.20.0-dev gives early feedback
+        # on development pushes. 42.20.0 is the verify branch every change
+        # passes through before it may merge into main.
+        branches: [main, 42.20.0-dev, 42.20.0]
     pull_request:
         branches: [main]
 
