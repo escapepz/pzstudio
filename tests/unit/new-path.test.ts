@@ -8,6 +8,7 @@ import {
     resolveProjectConfig,
     updateProjectConfig,
     updateExperimentalScripts,
+    removeDirRecursive,
 } from '../../packages/cli/src/lib/helper';
 import {
     resolveTemplateDir,
@@ -30,6 +31,7 @@ vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
     resolveProjectConfig: vi.fn(),
     updateProjectConfig: vi.fn(),
     updateExperimentalScripts: vi.fn(),
+    removeDirRecursive: vi.fn(),
 }));
 
 describe('newCmd --path (issue #43)', () => {
@@ -64,9 +66,20 @@ describe('newCmd --path (issue #43)', () => {
 
         await newCmd('My Mod');
 
+        // The scaffold targets a staging directory and the commit is a
+        // same-volume rename onto the destination.
+        const [stagingPath, destPath] = vi.mocked(fs.renameSync).mock
+            .calls[0] as [string, string];
+        expect(stagingPath).toContain('.my_mod.staging-');
+        expect(path.dirname(String(stagingPath))).toBe(
+            path.resolve('/dest/projects'),
+        );
+        expect(destPath).toBe(
+            path.join(path.resolve('/dest/projects'), 'my_mod'),
+        );
         expect(scaffoldProject).toHaveBeenCalledWith(
             '/tpl/project',
-            path.join(path.resolve('/dest/projects'), 'my_mod'),
+            stagingPath,
             false,
             false,
             expect.objectContaining({ ignoreItems: ['.libraries'] }),
@@ -114,12 +127,40 @@ describe('newCmd --path (issue #43)', () => {
     it('should default to cwd when --path is absent (unchanged behavior)', async () => {
         await newCmd('My Mod');
 
+        const [stagingPath, destPath] = vi.mocked(fs.renameSync).mock
+            .calls[0] as [string, string];
+        expect(stagingPath).toContain('.my_mod.staging-');
+        expect(path.dirname(String(stagingPath))).toBe(path.resolve('/cwd'));
+        expect(destPath).toBe(path.join(path.resolve('/cwd'), 'my_mod'));
         expect(scaffoldProject).toHaveBeenCalledWith(
             '/tpl/project',
-            path.join(path.resolve('/cwd'), 'my_mod'),
+            stagingPath,
             false,
             false,
             expect.anything(),
         );
+    });
+
+    it('should commit through a single rename and keep no staging on success', async () => {
+        await newCmd('My Mod');
+
+        expect(fs.renameSync).toHaveBeenCalledTimes(1);
+        expect(removeDirRecursive).not.toHaveBeenCalled();
+    });
+
+    it('should roll back the staging directory and report no project on failure', async () => {
+        vi.mocked(scaffoldProject).mockImplementation(() => {
+            throw new Error('template resolution failed');
+        });
+
+        await expect(newCmd('My Mod')).rejects.toThrow(
+            'No project was created.',
+        );
+
+        // The staging directory was removed and nothing was committed.
+        expect(removeDirRecursive).toHaveBeenCalledTimes(1);
+        const [stagingPath] = vi.mocked(removeDirRecursive).mock.calls[0];
+        expect(String(stagingPath)).toContain('.my_mod.staging-');
+        expect(fs.renameSync).not.toHaveBeenCalled();
     });
 });

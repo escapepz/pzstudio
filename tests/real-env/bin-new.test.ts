@@ -1,4 +1,5 @@
 import path from 'path';
+import fs from 'fs';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { RealEnvWorkspace, hasLegacyTemplates } from '../helpers/real-env';
 
@@ -86,6 +87,28 @@ describe.skipIf(!hasLegacyTemplates())(
             );
             expect(inner.exitCode).toBe(1);
             expect(inner.stderr).toContain('within a project directory');
+        });
+
+        it('leaves nothing behind when the pre-commit phase fails', async () => {
+            // --path pointing at an existing FILE: creating the staging
+            // directory fails (ENOTDIR) inside the transaction, before any
+            // commit happens.
+            workspace.write('occupied.txt', 'taken');
+
+            const result = await workspace.run([
+                'new',
+                '--offline',
+                '--path',
+                'occupied.txt',
+                'Real Env Project',
+                'real_mod',
+            ]);
+            expect(result.exitCode).toBe(1);
+            expect(result.stderr).toContain('No project was created.');
+            expect(result.stderr).toContain('Cause: ');
+            // The occupant survived and no staging leftovers exist.
+            expect(workspace.read('occupied.txt')).toBe('taken');
+            expect(fs.readdirSync(workspace.dir)).toEqual(['occupied.txt']);
         });
     },
 );

@@ -6,11 +6,12 @@ import { registerCommand } from '../registry';
 import {
     formatTitleToId,
     projectDir,
+    removeDirRecursive,
     resolveProjectConfig,
     updateExperimentalScripts,
     updateProjectConfig,
 } from '../helper';
-import { log, verbose } from '../logger';
+import { log, verbose, warn } from '../logger';
 import { hasFlag } from '../args';
 import { resolveTemplateDir, scaffoldProject } from '../templateManager';
 
@@ -78,25 +79,56 @@ export function addCmd(modName: string, modId?: string) {
     verbose(
         `Scaffolding mod from ${templateModPath} to ${join(projectPath, modId)}`,
     );
-    scaffoldProject(templateModPath, join(projectPath, modId), false, false, {
-        excludeIgnoreFile: true,
-        ignoreDotFiles: false,
-    });
 
-    // Seed local cache if we resolved a remote template and no local one existed
-    if (!usedLocalTemplate) {
-        scaffoldProject(templateModPath, localTemplatePath, false, false, {
-            excludeIgnoreFile: true,
-            ignoreDotFiles: false,
-        });
+    // Ownership guard: the rollback below may only remove artifacts THIS
+    // invocation created. The preflight above rejected an existing mod id
+    // and directory, so nothing registered here is ever pre-existing.
+    const createdPaths: string[] = [];
+    try {
+        scaffoldProject(
+            templateModPath,
+            join(projectPath, modId),
+            false,
+            false,
+            {
+                excludeIgnoreFile: true,
+                ignoreDotFiles: false,
+            },
+        );
+        createdPaths.push(join(projectPath, modId));
+
+        // Seed the local cache only when this invocation introduced it: a
+        // pre-existing (possibly empty) .template-mod is never rolled back.
+        if (!usedLocalTemplate) {
+            const cacheExisted = existsSync(localTemplatePath);
+            scaffoldProject(templateModPath, localTemplatePath, false, false, {
+                excludeIgnoreFile: true,
+                ignoreDotFiles: false,
+            });
+            if (!cacheExisted) {
+                createdPaths.push(localTemplatePath);
+            }
+        }
+
+        // Update config
+        projectConfig.mods[modId] = {
+            name: modName,
+            description: '',
+        };
+        updateProjectConfig(join(projectPath, 'project.json'), projectConfig);
+    } catch (e) {
+        // Roll back exactly what was created, newest first; a failed
+        // cleanup must not mask the original error.
+        for (const created of createdPaths.reverse()) {
+            try {
+                removeDirRecursive(created);
+                verbose(`Rolled back: ${created}`);
+            } catch (_cleanup) {
+                warn(`Failed to roll back '${created}'; remove it manually.`);
+            }
+        }
+        throw e;
     }
-
-    // Update config
-    projectConfig.mods[modId] = {
-        name: modName,
-        description: '',
-    };
-    updateProjectConfig(join(projectPath, 'project.json'), projectConfig);
 
     // Run experimental scripts
     updateExperimentalScripts('addMod', projectPath, modId);

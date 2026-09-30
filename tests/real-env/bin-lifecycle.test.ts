@@ -204,6 +204,28 @@ describe('real env: project lifecycle commands', () => {
         });
     });
 
+    describe('add', () => {
+        it('never removes a pre-existing mod directory (preflight reject)', async () => {
+            writeProjectFixture(workspace);
+            fs.mkdirSync(workspace.path('ghost_mod'), { recursive: true });
+            workspace.write(path.join('ghost_mod', 'owned.txt'), 'mine');
+
+            const result = await workspace.run([
+                'add',
+                'Ghost Mod',
+                'ghost_mod',
+            ]);
+            expect(result.exitCode).toBe(1);
+            expect(result.stderr).toContain('already exists');
+            // The pre-existing directory was never touched — the ownership
+            // guard's rollback only ever removes what this invocation
+            // created (mechanics pinned in tests/unit/add-rollback.test.ts).
+            expect(workspace.read(path.join('ghost_mod', 'owned.txt'))).toBe(
+                'mine',
+            );
+        });
+    });
+
     describe('outdir', () => {
         it('writes the resolved path into the fake home global config', async () => {
             fs.mkdirSync(workspace.path('custom_out'), { recursive: true });

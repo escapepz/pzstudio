@@ -1,17 +1,19 @@
-import { existsSync, readdirSync } from 'fs';
+import { existsSync, readdirSync, renameSync } from 'fs';
 import { join, resolve } from 'path';
 import { expect } from '../expect';
+import { CliError } from '../errors';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import {
     formatTitleToId,
     projectDir,
     readProjectConfig,
+    removeDirRecursive,
     resolveProjectConfig,
     updateExperimentalScripts,
     updateProjectConfig,
 } from '../helper';
-import { info, log, verbose } from '../logger';
+import { info, log, verbose, warn } from '../logger';
 import { extractFlag, hasFlag } from '../args';
 import {
     resolveTemplateDir,
@@ -122,63 +124,94 @@ export async function newCmd(projectTitle: string, modId?: string) {
     );
 
     log(`- Creating project '${projectTitle}' dir '${modId}' ...`);
-    scaffoldProject(templateProjectPath, projectPath, useSymlinks, false, {
-        ignoreItems: ['.libraries'],
-    });
 
-    // Copy mod template into the project mod folder
-    log(`- Creating mod '${modId}'...`);
-    scaffoldProject(templateModPath, join(projectPath, modId), useSymlinks);
-
-    // Link or copy shared template folders
-    log(`- Creating shared template folders...`);
-
-    scaffoldTemplateFolder(
-        templateModPath,
-        join(projectPath, '.template-mod'),
-        useSymlinks,
+    // PRE-COMMIT: everything is scaffolded into a staging directory next to
+    // the destination (same parent, same volume), so the commit below is an
+    // atomic rename. The destination path does not exist until the rename.
+    const stagingPath = join(
+        destDir,
+        `.${modId}.staging-${Date.now().toString(36)}`,
     );
 
-    scaffoldTemplateFolder(
-        templateLanguagePath,
-        join(projectPath, '.template-language'),
-        useSymlinks,
-    );
+    try {
+        scaffoldProject(templateProjectPath, stagingPath, useSymlinks, false, {
+            ignoreItems: ['.libraries'],
+        });
 
-    const templateLibrariesPath = join(templateProjectPath, '.libraries');
-    if (existsSync(templateLibrariesPath)) {
+        // Copy mod template into the project mod folder
+        log(`- Creating mod '${modId}'...`);
+        scaffoldProject(templateModPath, join(stagingPath, modId), useSymlinks);
+
+        // Link or copy shared template folders
+        log(`- Creating shared template folders...`);
+
         scaffoldTemplateFolder(
-            templateLibrariesPath,
-            join(projectPath, '.libraries'),
+            templateModPath,
+            join(stagingPath, '.template-mod'),
             useSymlinks,
         );
-    }
 
-    // Copy workshop template
-    log(`- Creating workshop folder...`);
-    scaffoldProject(
-        templateWorkshopPath,
-        join(projectPath, 'workshop'),
-        useSymlinks,
-    );
-
-    // Update config
-    log(`- Updating project config...`);
-    const newProjectConfigPath = join(projectPath, 'project.json');
-    const newProjectConfig = readProjectConfig(newProjectConfigPath);
-    if (!newProjectConfig) {
-        throw new Error(
-            `The project template did not produce a valid '${newProjectConfigPath}'.`,
+        scaffoldTemplateFolder(
+            templateLanguagePath,
+            join(stagingPath, '.template-language'),
+            useSymlinks,
         );
-    }
-    newProjectConfig.workshop.title = projectTitle;
-    newProjectConfig.mods[modId] = {
-        name: projectTitle,
-        description: '',
-    };
-    updateProjectConfig(newProjectConfigPath, newProjectConfig);
 
-    // Run experimental scripts
+        const templateLibrariesPath = join(templateProjectPath, '.libraries');
+        if (existsSync(templateLibrariesPath)) {
+            scaffoldTemplateFolder(
+                templateLibrariesPath,
+                join(stagingPath, '.libraries'),
+                useSymlinks,
+            );
+        }
+
+        // Copy workshop template
+        log(`- Creating workshop folder...`);
+        scaffoldProject(
+            templateWorkshopPath,
+            join(stagingPath, 'workshop'),
+            useSymlinks,
+        );
+
+        // Update config — validated inside the staging copy so an incomplete
+        // scaffold never reaches the commit.
+        log(`- Updating project config...`);
+        const newProjectConfigPath = join(stagingPath, 'project.json');
+        const newProjectConfig = readProjectConfig(newProjectConfigPath);
+        if (!newProjectConfig) {
+            throw new Error(
+                `The project template did not produce a valid '${newProjectConfigPath}'.`,
+            );
+        }
+        newProjectConfig.workshop.title = projectTitle;
+        newProjectConfig.mods[modId] = {
+            name: projectTitle,
+            description: '',
+        };
+        updateProjectConfig(newProjectConfigPath, newProjectConfig);
+
+        // COMMIT: atomic same-volume rename — the destination only starts
+        // existing here.
+        renameSync(stagingPath, projectPath);
+    } catch (e) {
+        // PRE-COMMIT failure: the staging directory belongs to this
+        // invocation — remove it and leave the destination untouched.
+        try {
+            removeDirRecursive(stagingPath);
+            verbose(`Removed staging directory: ${stagingPath}`);
+        } catch (_cleanup) {
+            warn(`Failed to remove staging directory '${stagingPath}'.`);
+        }
+        throw new CliError('No project was created.', {
+            cause: e instanceof Error ? e.message : String(e),
+            tryHint: 'Fix the reported cause, then run pzstudio new again.',
+        });
+    }
+
+    // POST-COMMIT: hooks are non-fatal by policy (updateExperimentalScripts
+    // swallows script failures); a failure past the commit never claims
+    // rollback.
     updateExperimentalScripts('addProject', projectPath);
     updateExperimentalScripts('addMod', projectPath, modId);
 
