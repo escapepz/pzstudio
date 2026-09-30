@@ -120,11 +120,12 @@ describe('help — odd input shapes (E2E)', () => {
         workspace.assertStdout(result, 'pzstudio add');
     });
 
-    it('should only use the first positional arg and ignore extra args', async () => {
-        // help receives command.params[0] only; extra args are ignored
+    it('should reject extra positional args instead of ignoring them', async () => {
+        // The parser enforces positional arity: excess args are a usage error
+        // (exit 2), not silently ignored.
         const result = await workspace.run('help', ['build', 'extra', 'args']);
-        workspace.assertSuccess(result);
-        workspace.assertStdout(result, 'pzstudio build');
+        workspace.assertFailure(result, 2);
+        workspace.assertStderr(result, 'Too many arguments for command [help]');
     });
 
     it('should list all registered commands in general help output', async () => {

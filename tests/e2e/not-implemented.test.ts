@@ -25,7 +25,9 @@ describe('Not Implemented Commands (E2E)', () => {
     });
 
     it('should report not implemented for lang command', async () => {
-        const result = await workspace.run('lang', ['en']);
+        // lang takes <modId> <lang>: pass both so the invocation reaches the
+        // (still registered, hidden) stub instead of a usage error.
+        const result = await workspace.run('lang', ['some_mod', 'en']);
         workspace.assertFailure(result);
         workspace.assertStderr(result, 'Not implemented yet');
     });

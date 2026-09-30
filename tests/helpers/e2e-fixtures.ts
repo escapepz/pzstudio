@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 import { getFakeHome, setFakeHome } from './fake-home';
 import { runCLI } from '../../packages/cli/src/lib/cli';
+import { CliUsageError, setCliIO } from '../../packages/cli/src/lib/parser';
 import { setLogger, ILogger } from '../../packages/cli/src/lib/logger';
 import { createTempDir, deleteDir } from './test-fixtures';
 
@@ -117,6 +118,13 @@ export class E2ETestWorkspace {
         };
         setLogger(mockLogger);
 
+        // Parser-level output (version line, usage errors) flows through
+        // CliIO, not the logger — capture it into the same buffers.
+        setCliIO({
+            stdout: (text) => this.stdout.push(text),
+            stderr: (text) => this.stderr.push(text),
+        });
+
         // Mock process.exit
         const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
             this.exitCode = (code as number) ?? 0;
@@ -139,7 +147,8 @@ export class E2ETestWorkspace {
         } catch (e: any) {
             if (!e.message.startsWith('Process exited with code')) {
                 this.stderr.push(e.stack || e.message);
-                this.exitCode = 1;
+                // Usage errors (unknown command/flag, arity) are exit 2.
+                this.exitCode = e instanceof CliUsageError ? 2 : 1;
             }
         } finally {
             // Restore everything
@@ -148,6 +157,7 @@ export class E2ETestWorkspace {
             exitSpy.mockRestore();
             setFakeHome(previousHome);
             setLogger(undefined);
+            setCliIO(undefined);
         }
 
         return {

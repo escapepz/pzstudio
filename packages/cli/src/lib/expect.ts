@@ -1,4 +1,10 @@
-import { ArgType } from './args';
+export type ArgType =
+    | 'string'
+    | 'number'
+    | 'boolean'
+    | 'string|undefined'
+    | 'number|undefined'
+    | 'boolean|undefined';
 
 class ArgTypeError extends Error {}
 

@@ -130,12 +130,12 @@ describe('delete command e2e', () => {
             }),
         );
 
-        // delete called with zero positional args → undefined modId
+        // delete called with zero positional args → usage error (exit 2)
         const result = await workspace.run('delete', []);
-        workspace.assertFailure(result, 1);
+        workspace.assertFailure(result, 2);
         workspace.assertStderr(
             result,
-            "Expected param [modId] to be 'string', but got 'undefined'",
+            "Missing required argument '<modId>' for command [delete]",
         );
     });
 

@@ -12,9 +12,9 @@ describe('Global CLI Error Handling (E2E)', () => {
         workspace.cleanup();
     });
 
-    it('should fail with exit code 1 for unknown command', async () => {
+    it('should fail with exit code 2 for unknown command', async () => {
         const result = await workspace.run('not-a-command');
-        workspace.assertFailure(result, 1);
+        workspace.assertFailure(result, 2);
         workspace.assertStderr(result, 'Unknown command [not-a-command]');
     });
 
@@ -30,22 +30,23 @@ describe('Global CLI Error Handling (E2E)', () => {
             }),
         );
 
-        // 'add' requires at least one argument (modName)
+        // 'add' requires at least one argument (modName) — enforced by the
+        // shared semantic validator (usage error, exit 2).
         const result = await workspace.run('add');
-        workspace.assertFailure(result, 1);
+        workspace.assertFailure(result, 2);
         workspace.assertStderr(
             result,
-            "Expected param [modName] to be 'string'",
+            "Missing required argument '<modName>' for command [add]",
         );
     });
 
     it('should fail when an invalid argument type is provided', async () => {
         // 'outdir' requires 1 argument
         const result = await workspace.run('outdir');
-        workspace.assertFailure(result, 1);
+        workspace.assertFailure(result, 2);
         workspace.assertStderr(
             result,
-            "Expected param [newOutDir] to be 'string'",
+            "Missing required argument '<path>' for command [outdir]",
         );
     });
 

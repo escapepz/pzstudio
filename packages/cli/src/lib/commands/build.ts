@@ -199,5 +199,6 @@ registerCommand({
     name: 'build',
     summary: 'Build your project and package it for the workshop.',
     silent: true,
+    flags: [{ name: 'production' }, { name: 'development' }, { name: 'both' }],
     run: () => buildCmd(),
 });

@@ -56,9 +56,9 @@ describe('real env: CLI binary global behavior', () => {
         expect(result.stdout).toContain('Available commands:');
     });
 
-    it('fails with a friendly message for an unknown command', async () => {
+    it('fails with a usage error for an unknown command (exit 2)', async () => {
         const result = await workspace.run(['definitely-not-a-command']);
-        expect(result.exitCode).toBe(1);
+        expect(result.exitCode).toBe(2);
         expect(result.stderr).toContain(
             'Unknown command [definitely-not-a-command]',
         );

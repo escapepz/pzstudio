@@ -108,5 +108,10 @@ export function addCmd(modName: string, modId?: string) {
 registerCommand({
     name: 'add',
     summary: 'Add a mod to your project.',
+    flags: [{ name: 'offline' }, { name: 'force-update' }],
+    positionals: [
+        { name: 'modName', required: true },
+        { name: 'modId', required: false },
+    ],
     run: (ctx) => addCmd(ctx.positionals[0], ctx.positionals[1]),
 });

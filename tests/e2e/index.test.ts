@@ -32,9 +32,9 @@ describe('CLI Global Behavior (E2E)', () => {
         workspace.assertStdout(result, 'add');
     });
 
-    it('should handle unknown commands with exit code 1', async () => {
+    it('should handle unknown commands with exit code 2', async () => {
         const result = await workspace.run('unknown-command');
-        workspace.assertFailure(result, 1);
+        workspace.assertFailure(result, 2);
         workspace.assertStderr(result, 'Unknown command [unknown-command]');
     });
 

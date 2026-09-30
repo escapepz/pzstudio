@@ -15,9 +15,13 @@ export function resolveFlags(command: string): string[] {
         if (config.get<boolean>('forceUpdate')) {
             flags.push('--force-update');
         }
-        if (config.get<boolean>('useSymlinks')) {
-            flags.push('--symlinks');
-        }
+    }
+
+    // --symlinks only exists on `new` (junction shared template folders);
+    // `add` dropped the no-op flag (ee0855a) and the parser now rejects
+    // unknown options, so it must not be sent for other commands.
+    if (command === 'new' && config.get<boolean>('useSymlinks')) {
+        flags.push('--symlinks');
     }
 
     if (command === 'build') {
