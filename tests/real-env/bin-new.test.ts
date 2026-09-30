@@ -58,6 +58,46 @@ describe.skipIf(!hasLegacyTemplates())(
             ).toBe(true);
         });
 
+        it('does not inject experimental scripts by default (CLI-10 BREAKING)', async () => {
+            const result = await workspace.run([
+                'new',
+                '--offline',
+                'Real Env Project',
+                'real_mod',
+            ]);
+            expect(result.exitCode).toBe(0);
+
+            const pkg = workspace.readJson(
+                path.join('real_mod', 'package.json'),
+            );
+            expect(pkg.scripts['experimental:setup:vanilla']).toBeUndefined();
+            expect(JSON.stringify(pkg)).not.toContain('experimental:');
+        });
+
+        it('injects experimental scripts when the global config opts in', async () => {
+            workspace.writeHome(
+                path.join('.pzstudio', 'config.json'),
+                JSON.stringify({ experimental: { integration: true } }),
+            );
+            const result = await workspace.run([
+                'new',
+                '--offline',
+                'Real Env Project',
+                'real_mod',
+            ]);
+            expect(result.exitCode).toBe(0);
+
+            const pkg = workspace.readJson(
+                path.join('real_mod', 'package.json'),
+            );
+            expect(pkg.scripts['experimental:setup:vanilla']).toContain(
+                'mklink /J',
+            );
+            expect(
+                pkg.scripts['experimental:setup:nonsteam:real_mod'],
+            ).toContain('real_mod');
+        });
+
         it('refuses to create a project over an existing directory', async () => {
             workspace.write(path.join('real_mod', 'occupied.txt'), 'taken');
             const result = await workspace.run([

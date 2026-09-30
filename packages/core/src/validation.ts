@@ -409,6 +409,10 @@ export function validateProject(config: any, context: ValidationContext): void {
         validateBuildTargetField(config.build, context);
     }
 
+    if (config.experimental !== undefined) {
+        validateExperimentalField(config.experimental, context);
+    }
+
     if (config.templates !== undefined) {
         context.addError(
             'templates',
@@ -471,6 +475,37 @@ export function validateBuildTargetField(
 }
 
 /**
+ * Validates the optional experimental section (project.json and config.json).
+ * @param experimental The experimental section object
+ * @param context The validation context to add errors to
+ */
+export function validateExperimentalField(
+    experimental: any,
+    context: ValidationContext,
+    pathPrefix: string = 'experimental',
+): void {
+    if (!guards.isObject(experimental)) {
+        context.addError(
+            pathPrefix,
+            'Field "experimental" must be an object',
+            'Use an object with an optional "integration" key',
+        );
+        return;
+    }
+
+    if (
+        experimental.integration !== undefined &&
+        !guards.isBoolean(experimental.integration)
+    ) {
+        context.addError(
+            `${pathPrefix}.integration`,
+            'Field "experimental.integration" must be a boolean',
+            'Set it to true to opt in to experimental integrations (disabled by default)',
+        );
+    }
+}
+
+/**
  * Validates a config.json configuration.
  */
 export function validateConfig(config: any, context: ValidationContext): void {
@@ -511,6 +546,10 @@ export function validateConfig(config: any, context: ValidationContext): void {
 
     if (config.useSymlinks !== undefined) {
         validateUseSymlinksField(config.useSymlinks, context);
+    }
+
+    if (config.experimental !== undefined) {
+        validateExperimentalField(config.experimental, context);
     }
 }
 

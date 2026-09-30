@@ -163,6 +163,9 @@ describe('rename command e2e', () => {
                     },
                 },
                 excludes: [],
+                // Opt in (CLI-10): the script rewrite only runs when the
+                // project explicitly enables experimental integration.
+                experimental: { integration: true },
             }),
         );
         workspace.write(`${oldModId}/mod.info`, `id=${oldModId}\nname=Old Mod`);

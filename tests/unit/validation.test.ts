@@ -486,4 +486,66 @@ describe('Validation', () => {
             );
         });
     });
+
+    describe('validateExperimentalField (CLI-10)', () => {
+        const validProject = {
+            workshop: { title: 'T', visibility: 'public', tags: [] },
+            mods: { mod1: { name: 'Mod 1', description: 'Desc' } },
+        };
+
+        it('should accept an explicit experimental.integration via validateProject', () => {
+            validateProject(
+                { ...validProject, experimental: { integration: true } },
+                context,
+            );
+            expect(context.hasErrors()).toBe(false);
+        });
+
+        it('should accept an omitted integration key', () => {
+            validateProject({ ...validProject, experimental: {} }, context);
+            expect(context.hasErrors()).toBe(false);
+        });
+
+        it('should report a non-boolean experimental.integration', () => {
+            validateProject(
+                { ...validProject, experimental: { integration: 'yes' } },
+                context,
+            );
+            expect(context.hasErrors()).toBe(true);
+            expect(
+                context
+                    .getErrors()
+                    .some((e) =>
+                        e.location.includes('experimental.integration'),
+                    ),
+            ).toBe(true);
+        });
+
+        it('should report a non-object experimental field', () => {
+            validateProject({ ...validProject, experimental: true }, context);
+            expect(context.hasErrors()).toBe(true);
+            expect(
+                context
+                    .getErrors()
+                    .some((e) => e.location.endsWith(':experimental')),
+            ).toBe(true);
+        });
+
+        it('should accept experimental.integration in the global config', () => {
+            validateConfig({ experimental: { integration: false } }, context);
+            expect(context.hasErrors()).toBe(false);
+        });
+
+        it('should report an invalid experimental section in the global config', () => {
+            validateConfig({ experimental: { integration: 1 } }, context);
+            expect(context.hasErrors()).toBe(true);
+            expect(
+                context
+                    .getErrors()
+                    .some((e) =>
+                        e.location.includes('experimental.integration'),
+                    ),
+            ).toBe(true);
+        });
+    });
 });

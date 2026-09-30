@@ -107,6 +107,14 @@ describe('Helper Coverage Gaps', () => {
         fsReal.writeFileSync(tempScriptPath, scriptContent);
 
         try {
+            // CLI-10: the experimental gate must be open for the script to
+            // run — pretend the global config opted in.
+            vi.doMock('../../packages/cli/src/lib/templateManager', () => ({
+                readGlobalConfig: () => ({
+                    experimental: { integration: true },
+                }),
+                writeGlobalConfig: () => {},
+            }));
             vi.doMock('path', async (importOriginal) => {
                 const actual = await importOriginal<typeof import('path')>();
                 return {

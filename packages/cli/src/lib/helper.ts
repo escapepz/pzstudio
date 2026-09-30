@@ -654,6 +654,23 @@ export function resolveModInfoTargets(
 }
 
 /**
+ * Resolves the experimental integration opt-in (CLI-10, BREAKING: default
+ * off). An explicit project.json setting wins over the global config's
+ * explicit setting; absent in both layers means disabled — the CLI never
+ * auto-enables experimental behaviour.
+ */
+export function isExperimentalIntegrationEnabled(projectPath: string): boolean {
+    const project = readProjectConfig(join(projectPath, 'project.json'), false);
+    const projectValue = project?.experimental?.integration;
+    if (projectValue !== undefined) return projectValue === true;
+
+    const globalValue = readGlobalConfig(false).experimental?.integration;
+    if (globalValue !== undefined) return globalValue === true;
+
+    return false;
+}
+
+/**
  * Update experimental package scripts
  * @param action The action to perform ('addProject', 'addMod', 'removeMod', 'renameMod')
  * @param projectDir The project directory
@@ -667,6 +684,16 @@ export function updateExperimentalScripts(
     newModId?: string,
 ) {
     try {
+        // Experimental integration is opt-in only (CLI-10, BREAKING):
+        // without an explicit project.json or global config setting this
+        // is a silent no-op — no more unrequested script/junction setup.
+        if (!isExperimentalIntegrationEnabled(projectDir)) {
+            verbose(
+                'Experimental integration is disabled (default). Set experimental.integration = true in project.json (or the global config) to enable it.',
+            );
+            return;
+        }
+
         const srcPath = resolve(
             __dirname,
             '../../scripts/experimental-package-scripts.js',
