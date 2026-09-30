@@ -19,11 +19,13 @@ describe('real env: doctor command', () => {
         await workspace.cleanup();
     });
 
-    it('reports the missing project and exits 1 outside a project directory', async () => {
+    it('fails closed with the structured discovery error outside a project directory', async () => {
         const result = await workspace.run(['doctor']);
         expect(result.exitCode).toBe(1);
-        expect(result.stdout).toContain('No project.json found');
-        expect(result.stderr).toContain('Doctor found 1 error(s)');
+        expect(result.stdout).not.toContain('Summary:');
+        expect(result.stderr).toContain('No pzstudio project found.');
+        expect(result.stderr).toContain('Searched from');
+        expect(result.stderr).toContain('pzstudio new');
     });
 
     it('passes a fully healthy project with exit code 0', async () => {

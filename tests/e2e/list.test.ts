@@ -15,10 +15,7 @@ describe('list command (E2E)', () => {
     it('should fail when run outside a project directory', async () => {
         const result = await workspace.run('list');
         workspace.assertFailure(result);
-        workspace.assertStderr(
-            result,
-            'You must execute this command within a project directory!',
-        );
+        workspace.assertStderr(result, 'No pzstudio project found.');
     });
 
     it('should report an empty project', async () => {

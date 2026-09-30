@@ -3,7 +3,7 @@ import { join } from 'path';
 import fs from 'fs';
 import { migrateCmd } from '../../packages/cli/src/lib/commands/migrate';
 import {
-    projectDir,
+    findProjectDir,
     resolveModInfoTargets,
     updateProjectConfig,
 } from '../../packages/cli/src/lib/helper';
@@ -19,7 +19,7 @@ vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
     ...(await importOriginal<
         typeof import('../../packages/cli/src/lib/helper')
     >()),
-    projectDir: vi.fn(),
+    findProjectDir: vi.fn(),
     resolveModInfoTargets: vi.fn(),
     updateProjectConfig: vi.fn(),
 }));
@@ -49,7 +49,7 @@ function mockFiles(files: Record<string, string>, existing: string[]) {
 describe('migrateCmd', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(projectDir).mockReturnValue('/proj' as any);
+        vi.mocked(findProjectDir).mockReturnValue('/proj' as any);
         vi.mocked(getConfigPath).mockReturnValue(CONFIG_PATH as any);
         vi.mocked(writeGlobalConfig).mockReturnValue(undefined as any);
         vi.mocked(updateProjectConfig).mockReturnValue(undefined as any);

@@ -2,6 +2,7 @@ import { existsSync } from 'fs';
 import { resolveBuildOutputPath } from '@pzstudio/core';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
+import { CliError } from '../errors';
 import { removeDirRecursive, resolveProjectConfig } from '../helper';
 import { log, verbose } from '../logger';
 
@@ -19,9 +20,7 @@ export function cleanCmd() {
 
     // Check if we are in a project directory
     if (!projectConfig) {
-        throw new Error(
-            'You must execute this command within a project directory!',
-        );
+        throw new CliError('No pzstudio project found.');
     }
 
     const startTime = performance.now();

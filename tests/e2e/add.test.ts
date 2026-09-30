@@ -89,10 +89,7 @@ describe('add command e2e', () => {
     it('should fail if not in a project directory', async () => {
         const result = await workspace.run('add', ['New Mod', 'new_mod']);
         workspace.assertFailure(result);
-        workspace.assertStderr(
-            result,
-            'You must execute this command within a project directory',
-        );
+        workspace.assertStderr(result, 'No pzstudio project found.');
     });
 
     it('should fail if mod already exists', async () => {

@@ -19,6 +19,7 @@ import {
     ITemplateConfig,
 } from '@pzstudio/core';
 import { log, warn, verbose } from './logger';
+import { CliError } from './errors';
 import {
     GlobalConfig,
     readGlobalConfig,
@@ -170,6 +171,7 @@ export function resolveProjectConfig(): IProjectConfig | undefined {
 }
 
 let externalProjectDir: string | undefined;
+let projectRootAnchor: string | undefined;
 
 /**
  * Sets the project working directory externally (e.g. from VS Code)
@@ -188,11 +190,31 @@ export function getExternalProjectDir(): string | undefined {
 }
 
 /**
- * Searches for project.json in the current directory and its parents.
- * @param startDir The directory to start searching from
- * @returns The directory containing project.json, or process.cwd() if not found
+ * Anchors project discovery to `-C/--project <dir>` (CLI-5): the anchor
+ * replaces the working directory as the discovery start without ever
+ * mutating process.cwd(). Cleared by passing undefined.
  */
-function findProjectRoot(startDir: string): string {
+export function setProjectRootAnchor(dir: string | undefined) {
+    projectRootAnchor = dir;
+}
+
+/**
+ * The directory project discovery starts from: the `-C/--project` anchor,
+ * then the externally anchored project dir (embedded hosts), then the
+ * process working directory.
+ */
+export function discoveryStartDir(): string {
+    return projectRootAnchor ?? externalProjectDir ?? process.cwd();
+}
+
+/**
+ * Searches for project.json in the given directory and its parents.
+ * Fail-closed (CLI-5): returns undefined when no project is found instead
+ * of pretending the start dir is one.
+ * @param startDir The directory to start searching from
+ * @returns The directory containing project.json, or undefined
+ */
+function findProjectRoot(startDir: string): string | undefined {
     let currentDir = startDir;
     while (true) {
         if (existsSync(join(currentDir, 'project.json'))) {
@@ -204,15 +226,36 @@ function findProjectRoot(startDir: string): string {
         }
         currentDir = parentDir;
     }
-    return startDir; // Fallback to start dir if not found
+    return undefined;
 }
 
 /**
- * Returns the current project working directory
- * @returns {string} The current working directory
+ * Non-throwing project discovery from the current discovery start
+ * (anchor > external anchor > cwd). Commands that legitimately work
+ * outside a project (`new`, `migrate`) use this; commands that require
+ * a project go through projectDir().
+ * @returns The directory containing project.json, or undefined
  */
-export function projectDir() {
-    return externalProjectDir ?? findProjectRoot(process.cwd());
+export function findProjectDir(): string | undefined {
+    return findProjectRoot(discoveryStartDir());
+}
+
+/**
+ * Returns the current project working directory. Fail-closed: throws a
+ * structured CliError when no project.json exists at or above the
+ * discovery start, instead of silently pretending the start dir is one.
+ * @returns {string} The project working directory
+ */
+export function projectDir(): string {
+    const start = discoveryStartDir();
+    const found = findProjectRoot(start);
+    if (!found) {
+        throw new CliError('No pzstudio project found.', {
+            cause: `Searched from '${start}' up to the filesystem root for a project.json.`,
+            tryHint: `Run 'pzstudio new <title>' to create a project, or point at one with 'pzstudio -C <dir> <command>'.`,
+        });
+    }
+    return found;
 }
 
 /**

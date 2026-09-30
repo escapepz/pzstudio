@@ -3,7 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import { newCmd } from '../../packages/cli/src/lib/commands/new';
 import {
-    projectDir,
+    discoveryStartDir,
+    findProjectDir,
     readProjectConfig,
     resolveProjectConfig,
     updateProjectConfig,
@@ -26,7 +27,8 @@ vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
     ...(await importOriginal<
         typeof import('../../packages/cli/src/lib/helper')
     >()),
-    projectDir: vi.fn(),
+    discoveryStartDir: vi.fn(),
+    findProjectDir: vi.fn(),
     readProjectConfig: vi.fn(),
     resolveProjectConfig: vi.fn(),
     updateProjectConfig: vi.fn(),
@@ -40,7 +42,10 @@ describe('newCmd --path (issue #43)', () => {
 
         vi.mocked(hasFlag).mockReturnValue(false);
         vi.mocked(extractFlag).mockReturnValue(undefined);
-        vi.mocked(projectDir).mockReturnValue(path.resolve('/cwd') as any);
+        vi.mocked(discoveryStartDir).mockReturnValue(
+            path.resolve('/cwd') as any,
+        );
+        vi.mocked(findProjectDir).mockReturnValue(path.resolve('/cwd') as any);
         vi.mocked(resolveProjectConfig).mockReturnValue(undefined as any);
         vi.mocked(readGlobalConfig).mockReturnValue({
             useSymlinks: false,

@@ -32,7 +32,7 @@ describe('real env: watch command', () => {
     it('fails cleanly outside a project directory', async () => {
         const result = await workspace.run(['watch']);
         expect(result.exitCode).toBe(1);
-        expect(result.stderr).toContain('within a project directory');
+        expect(result.stderr).toContain('No pzstudio project found.');
     });
 
     it('runs the initial full build for both outputs from the real binary', async () => {

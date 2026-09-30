@@ -16,10 +16,7 @@ describe('CLI Command Flow (E2E)', () => {
         // We use 'build' in an empty directory which should fail
         const result = await workspace.run('build');
         workspace.assertFailure(result, 1);
-        workspace.assertStderr(
-            result,
-            'You must execute this command within a project directory',
-        );
+        workspace.assertStderr(result, 'No pzstudio project found.');
     });
 
     it('should exit with error on project validation failure', async () => {

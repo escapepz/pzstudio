@@ -14,11 +14,13 @@ describe('doctor command (E2E)', () => {
         workspace.cleanup();
     });
 
-    it('should report a missing project and fail outside a project directory', async () => {
+    it('should fail closed with the discovery error outside a project directory', async () => {
+        // Embedded path: the mock logger receives the raw error, so the
+        // bare problem statement is what appears on stderr. The formatted
+        // Problem/Cause/Try rendering is asserted by the real-env suite.
         const result = await workspace.run('doctor');
         workspace.assertFailure(result);
-        workspace.assertStdout(result, 'No project.json found');
-        workspace.assertStderr(result, 'Doctor found 1 error(s)');
+        workspace.assertStderr(result, 'No pzstudio project found.');
     });
 
     it('should pass a fully healthy project', async () => {

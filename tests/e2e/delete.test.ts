@@ -67,10 +67,7 @@ describe('delete command e2e', () => {
     it('should fail if not in a project directory', async () => {
         const result = await workspace.run('delete', ['any']);
         workspace.assertFailure(result);
-        workspace.assertStderr(
-            result,
-            'You must execute this command within a project directory',
-        );
+        workspace.assertStderr(result, 'No pzstudio project found.');
     });
 
     it('should log error if mod directory is missing but still try to delete from config', async () => {

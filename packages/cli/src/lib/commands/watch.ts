@@ -1,6 +1,7 @@
 import { relative } from 'path';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
+import { CliError } from '../errors';
 import { hasFlag } from '../args';
 import type { FileDelta } from '@pzstudio/core';
 import { summarizeApplyResult } from '@pzstudio/core';
@@ -38,9 +39,7 @@ export {
 export async function watchCmd() {
     const projectConfig = resolveProjectConfig();
     if (!projectConfig) {
-        throw new Error(
-            'You must execute this command within a project directory!',
-        );
+        throw new CliError('No pzstudio project found.');
     }
 
     const isProduction = hasFlag('production');

@@ -117,7 +117,9 @@ function camelCase(name: string): string {
 }
 
 function addFlag(cmd: Command, flag: FlagSpec): void {
-    const token = flag.takesValue ? `--${flag.name} <value>` : `--${flag.name}`;
+    const value = flag.takesValue ? ' <value>' : '';
+    const long = `--${flag.name}${value}`;
+    const token = flag.short ? `-${flag.short}, ${long}` : long;
     const opt = new Option(token, flag.name);
     if (flag.choices) {
         opt.choices([...flag.choices]);
@@ -259,16 +261,35 @@ function detectCommandCandidate(userArgs: string[]): string | undefined {
     const valueFlags = new Set(
         GLOBAL_FLAGS.filter((f) => f.takesValue).map((f) => f.name),
     );
+    const valueShorts = new Set(
+        GLOBAL_FLAGS.filter((f) => f.takesValue && f.short).map(
+            (f) => f.short as string,
+        ),
+    );
     for (let i = 0; i < userArgs.length; i++) {
         const token = userArgs[i];
         if (token === '--') {
             break;
         }
-        if (token.startsWith('-')) {
+        if (token.startsWith('--')) {
             const name = token.slice(2).split('=', 1)[0];
             if (
                 valueFlags.has(name) &&
                 !token.includes('=') &&
+                i + 1 < userArgs.length &&
+                !userArgs[i + 1].startsWith('-')
+            ) {
+                i++;
+            }
+            continue;
+        }
+        if (token.startsWith('-')) {
+            // Short flag: `-C dir` consumes the next token as its value;
+            // `-Cdir` / `-C=dir` carry it inline.
+            const short = token[1];
+            if (
+                valueShorts.has(short) &&
+                token.length === 2 &&
                 i + 1 < userArgs.length &&
                 !userArgs[i + 1].startsWith('-')
             ) {
