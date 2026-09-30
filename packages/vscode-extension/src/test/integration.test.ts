@@ -108,4 +108,42 @@ describe('PZ Studio extension (real VS Code host)', () => {
             'Mod media file was not packaged',
         );
     });
+
+    it('renames and deletes a mod through the api without prompting (embedded)', async () => {
+        assert.ok(projectDir, 'fixture project dir env is missing');
+
+        setProjectDir(projectDir);
+        const configPath = path.join(projectDir, 'project.json');
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        config.mods.scratch_mod = { name: 'Scratch', description: 'tmp' };
+        fs.mkdirSync(path.join(projectDir, 'scratch_mod'), {
+            recursive: true,
+        });
+        fs.writeFileSync(
+            path.join(projectDir, 'scratch_mod', 'marker.txt'),
+            'owned by scratch_mod',
+        );
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
+
+        // Embedded contract (CLI-9): runCLI NEVER terminal-prompts — both
+        // destructive commands complete without --yes and without stdin.
+        await runCLI('rename', ['scratch_mod', 'renamed_scratch'], {
+            flags: [],
+        });
+        assert.strictEqual(
+            fs.readFileSync(
+                path.join(projectDir, 'renamed_scratch', 'marker.txt'),
+                'utf8',
+            ),
+            'owned by renamed_scratch',
+        );
+        const renamed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        assert.ok(renamed.mods.renamed_scratch);
+        assert.strictEqual(renamed.mods.scratch_mod, undefined);
+
+        await runCLI('delete', ['renamed_scratch'], { flags: [] });
+        assert.ok(!fs.existsSync(path.join(projectDir, 'renamed_scratch')));
+        const deleted = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        assert.strictEqual(deleted.mods.renamed_scratch, undefined);
+    });
 });

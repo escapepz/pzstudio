@@ -42,6 +42,7 @@ import {
     setProjectRootAnchor,
 } from './helper';
 import { migrateGlobalConfigIfNeeded } from './templateManager';
+import { setInteractionMode } from './interaction';
 
 // Backward-compatible re-exports: flags used to live here and external
 // code (tests, templates) may import them from this module.
@@ -69,6 +70,18 @@ export async function runCLI(
     // handler would also leak into embedded hosts and double-report on
     // Ctrl+C alongside the command's own handler.
     try {
+        // CLI-9: the interaction policy is decided once per invocation from
+        // the invocation shape — never by command handlers. The legacy
+        // embedded shape is the library boundary (VS Code extension): it
+        // must never terminal-prompt. The executable prompts only on a real
+        // TTY; anything else (pipes, CI) refuses destructive actions.
+        setInteractionMode(
+            cmdName !== undefined || options?.flags !== undefined
+                ? 'embedded'
+                : process.stdout.isTTY
+                  ? 'interactive'
+                  : 'non-interactive',
+        );
         // ---- Parse phase (pure: no side effects, no output besides usage) ----
         // The legacy embedded shape runCLI(cmd, args, {flags}) converges onto
         // the same ParsedInvocation the executable path produces, then both

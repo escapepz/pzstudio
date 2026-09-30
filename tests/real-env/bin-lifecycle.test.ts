@@ -170,7 +170,7 @@ describe('real env: project lifecycle commands', () => {
     });
 
     describe('rename', () => {
-        it('renames the folder, the config key, and file contents', async () => {
+        it('refuses to rename in a non-interactive session without --yes', async () => {
             writeProjectFixture(workspace);
             workspace.write(
                 'disk_mod/42/media/lua/shared/rename_me.lua',
@@ -181,6 +181,32 @@ describe('real env: project lifecycle commands', () => {
                 'rename',
                 'disk_mod',
                 'renamed_mod',
+            ]);
+            expect(result.exitCode).toBe(2);
+            expect(result.stderr).toContain(
+                "Refusing 'rename' without confirmation",
+            );
+            expect(result.stderr).toContain(
+                'Try: pzstudio rename disk_mod renamed_mod --yes',
+            );
+            expect(workspace.exists('disk_mod')).toBe(true);
+            expect(
+                workspace.readJson('project.json').mods.disk_mod,
+            ).toBeDefined();
+        });
+
+        it('renames the folder, the config key, and file contents with --yes', async () => {
+            writeProjectFixture(workspace);
+            workspace.write(
+                'disk_mod/42/media/lua/shared/rename_me.lua',
+                '-- owned by disk_mod\n',
+            );
+
+            const result = await workspace.run([
+                'rename',
+                'disk_mod',
+                'renamed_mod',
+                '--yes',
             ]);
             expect(result.exitCode).toBe(0);
             expect(result.stdout).toContain(
@@ -201,6 +227,79 @@ describe('real env: project lifecycle commands', () => {
                 'rename_me.lua',
             );
             expect(workspace.read(luaPath)).toContain('owned by renamed_mod');
+        });
+
+        it('previews a dry run without changing anything', async () => {
+            writeProjectFixture(workspace);
+            workspace.write(
+                'disk_mod/42/media/lua/shared/rename_me.lua',
+                '-- owned by disk_mod\n',
+            );
+
+            const result = await workspace.run([
+                'rename',
+                'disk_mod',
+                'renamed_mod',
+                '--dry-run',
+            ]);
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toContain('Would:');
+            expect(result.stdout).toContain('No files were changed.');
+            expect(workspace.exists('disk_mod')).toBe(true);
+            expect(workspace.exists('renamed_mod')).toBe(false);
+            expect(
+                workspace.readJson('project.json').mods.disk_mod,
+            ).toBeDefined();
+            expect(
+                workspace.read('disk_mod/42/media/lua/shared/rename_me.lua'),
+            ).toContain('owned by disk_mod');
+        });
+    });
+
+    describe('delete', () => {
+        it('refuses to delete in a non-interactive session without --yes', async () => {
+            writeProjectFixture(workspace);
+
+            const result = await workspace.run(['delete', 'disk_mod']);
+            expect(result.exitCode).toBe(2);
+            expect(result.stderr).toContain(
+                "Refusing 'delete' without confirmation",
+            );
+            expect(result.stderr).toContain(
+                'Try: pzstudio delete disk_mod --yes',
+            );
+            expect(workspace.exists('disk_mod')).toBe(true);
+            expect(
+                workspace.readJson('project.json').mods.disk_mod,
+            ).toBeDefined();
+        });
+
+        it('deletes the folder and the config entry with --yes', async () => {
+            writeProjectFixture(workspace);
+
+            const result = await workspace.run(['delete', 'disk_mod', '--yes']);
+            expect(result.exitCode).toBe(0);
+            expect(workspace.exists('disk_mod')).toBe(false);
+
+            const config = workspace.readJson('project.json');
+            expect(config.mods.disk_mod).toBeUndefined();
+        });
+
+        it('previews a dry run without changing anything', async () => {
+            writeProjectFixture(workspace);
+
+            const result = await workspace.run([
+                'delete',
+                'disk_mod',
+                '--dry-run',
+            ]);
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toContain('Would:');
+            expect(result.stdout).toContain('No files were changed.');
+            expect(workspace.exists('disk_mod')).toBe(true);
+            expect(
+                workspace.readJson('project.json').mods.disk_mod,
+            ).toBeDefined();
         });
     });
 
