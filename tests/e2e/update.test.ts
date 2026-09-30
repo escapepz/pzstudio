@@ -66,7 +66,7 @@ describe('update command (E2E) - Mocked', () => {
         workspace.assertSuccess(result);
         workspace.assertStdout(result, 'Refreshing global template caches');
         workspace.assertStdout(result, "Updating 'project' templates");
-        workspace.assertStdout(
+        workspace.assertStderr(
             result,
             'All template caches refreshed successfully!',
         );
@@ -84,7 +84,7 @@ describe('update command (E2E) - Mocked', () => {
             "Failed to clone template from 'https://github.com/escapepz/pzstudio-template-mod.git'",
         );
         // Falls back to legacy template, so updateCmd still counts it as success
-        workspace.assertStdout(
+        workspace.assertStderr(
             result,
             'All template caches refreshed successfully!',
         );
@@ -105,7 +105,7 @@ describe('update command (E2E) - Mocked', () => {
 
         // updateCmd still considers all successful because resolveTemplateDir
         // returned a valid path (the legacy fallback)
-        workspace.assertStdout(
+        workspace.assertStderr(
             result,
             'All template caches refreshed successfully!',
         );

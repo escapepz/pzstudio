@@ -157,7 +157,7 @@ describe('delete command e2e', () => {
         workspace.assertSuccess(result);
 
         // Verify verbose output
-        const hasVerbose = result.stdout.some(
+        const hasVerbose = result.stderr.some(
             (line) =>
                 line.includes('Executing command [delete]') ||
                 line.includes('Project Dir:'),

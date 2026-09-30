@@ -70,6 +70,8 @@ export function allCommands(): CommandDef[] {
 /** Flags accepted by every command (parsed on the root program and repeated on subcommands). */
 export const GLOBAL_FLAGS: FlagSpec[] = [
     { name: 'verbose' },
+    { name: 'quiet' },
+    { name: 'debug' },
     {
         name: 'transport',
         takesValue: true,

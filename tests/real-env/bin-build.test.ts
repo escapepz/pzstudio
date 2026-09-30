@@ -172,7 +172,7 @@ describe('real env: build and clean commands', () => {
 
         const result = await workspace.run(['build', '--production']);
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('All mods are dev-only or excluded');
+        expect(result.stderr).toContain('All mods are dev-only or excluded');
         expect(fs.readFileSync(markerPath, 'utf8')).toBe('previous output');
     });
 

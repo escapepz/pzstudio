@@ -103,17 +103,18 @@ export class E2ETestWorkspace {
         this.stderr = [];
         this.exitCode = 0;
 
-        // Mock logger
+        // Mock logger — mirrors the CLI-2 stream contract: log() = data on
+        // stdout; info/warn/error/verbose = progress/diagnostics on stderr.
         const mockLogger: ILogger = {
             log: (msg) => this.stdout.push(msg),
-            info: (msg) => this.stdout.push(msg),
+            info: (msg) => this.stderr.push(msg),
             warn: (msg) => this.stderr.push(msg),
             error: (msg) => {
                 const errorMsg =
                     msg instanceof Error ? msg.message : String(msg);
                 this.stderr.push(errorMsg);
             },
-            verbose: (msg) => this.stdout.push(msg),
+            verbose: (msg) => this.stderr.push(msg),
             clear: () => {},
         };
         setLogger(mockLogger);

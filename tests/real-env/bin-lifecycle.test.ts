@@ -59,8 +59,8 @@ describe('real env: project lifecycle commands', () => {
 
             const result = await workspace.run(['migrate']);
             expect(result.exitCode).toBe(0);
-            expect(result.stdout).toContain('Migrating project.json');
-            expect(result.stdout).toContain(
+            expect(result.stderr).toContain('Migrating project.json');
+            expect(result.stderr).toContain(
                 'project.json upgraded and synced successfully',
             );
 

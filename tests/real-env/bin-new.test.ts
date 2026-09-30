@@ -29,7 +29,7 @@ describe.skipIf(!hasLegacyTemplates())(
                 'real_mod',
             ]);
             expect(result.exitCode).toBe(0);
-            expect(result.stdout).toContain(
+            expect(result.stderr).toContain(
                 "The project 'Real Env Project' has been created",
             );
 

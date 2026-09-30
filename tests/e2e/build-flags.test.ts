@@ -469,8 +469,8 @@ describe('build --verbose success-path (E2E)', () => {
         const result = await workspace.run('build', ['--verbose']);
         workspace.assertSuccess(result);
 
-        workspace.assertStdout(result, 'Project root:');
-        workspace.assertStdout(result, 'Output root:');
+        workspace.assertStderr(result, 'Project root:');
+        workspace.assertStderr(result, 'Output root:');
     });
 });
 

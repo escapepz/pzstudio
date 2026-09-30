@@ -50,7 +50,7 @@ describe('Global --verbose flag behavior (E2E)', () => {
             workspace.assertSuccess(result);
 
             // Assert verbose output is present
-            const hasVerbose = result.stdout.some(
+            const hasVerbose = result.stderr.some(
                 (line) =>
                     line.includes('Executing command [new]') ||
                     line.includes('Project Dir:'),
@@ -82,7 +82,7 @@ describe('Global --verbose flag behavior (E2E)', () => {
         ]);
         workspace.assertSuccess(result);
 
-        const hasVerbose = result.stdout.some(
+        const hasVerbose = result.stderr.some(
             (line) =>
                 line.includes('Executing command [add]') ||
                 line.includes('Project Dir:'),
@@ -104,7 +104,7 @@ describe('Global --verbose flag behavior (E2E)', () => {
         const result = await workspace.run('delete', ['vmod', '--verbose']);
         workspace.assertSuccess(result);
 
-        const hasVerbose = result.stdout.some(
+        const hasVerbose = result.stderr.some(
             (line) =>
                 line.includes('Executing command [delete]') ||
                 line.includes('Project Dir:'),
@@ -138,7 +138,7 @@ describe('Global --verbose flag behavior (E2E)', () => {
         const result = await workspace.run('build', ['--verbose']);
         workspace.assertSuccess(result);
 
-        const hasVerbose = result.stdout.some(
+        const hasVerbose = result.stderr.some(
             (line) =>
                 line.includes('Project root:') || line.includes('Output root:'),
         );
@@ -153,7 +153,7 @@ describe('Global --verbose flag behavior (E2E)', () => {
         const result = await workspace.run('outdir', [outDirPath, '--verbose']);
         workspace.assertSuccess(result);
 
-        const hasVerbose = result.stdout.some(
+        const hasVerbose = result.stderr.some(
             (line) =>
                 line.includes('Changing outdir to:') ||
                 line.includes('Resolved outdir path:'),
@@ -165,7 +165,7 @@ describe('Global --verbose flag behavior (E2E)', () => {
         const result = await workspace.run('update', ['--verbose']);
         workspace.assertSuccess(result);
 
-        const hasVerbose = result.stdout.some((line) =>
+        const hasVerbose = result.stderr.some((line) =>
             line.includes('Requesting template resolution for category:'),
         );
         expect(hasVerbose).toBe(true);
@@ -194,7 +194,7 @@ describe('Global --verbose flag behavior (E2E)', () => {
         ]);
         workspace.assertSuccess(result);
 
-        const hasVerbose = result.stdout.some(
+        const hasVerbose = result.stderr.some(
             (line) =>
                 line.includes('Eligible mods for mod.info:') ||
                 line.includes('is configured to skip mod.info generation.'),
