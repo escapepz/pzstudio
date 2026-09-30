@@ -73,7 +73,7 @@ describe('real env: watch command', () => {
         });
         try {
             await spawned.waitFor(
-                ({ stderr }) => stderr.includes('Starting development sync'),
+                ({ stderr }) => stderr.includes('Syncing '),
                 20000,
                 'the development sync banner',
             );

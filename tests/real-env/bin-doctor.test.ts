@@ -55,7 +55,7 @@ describe('real env: doctor command', () => {
         const result = await workspace.run(['doctor']);
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain("'Real Healthy'");
-        expect(result.stdout).toContain('No errors or warnings');
+        expect(result.stdout).toContain('Ready to develop.');
     });
 
     it('fails with a typed finding when project.json is malformed', async () => {
@@ -64,7 +64,7 @@ describe('real env: doctor command', () => {
         const result = await workspace.run(['doctor']);
         expect(result.exitCode).toBe(1);
         expect(result.stdout).toContain('project.json');
-        expect(result.stderr).toContain('Doctor found 1 error(s)');
+        expect(result.stderr).toContain('Doctor found 1 blocking issues');
     });
 
     it('reports a mod declared but missing on disk as an error', async () => {
@@ -82,6 +82,6 @@ describe('real env: doctor command', () => {
         const result = await workspace.run(['doctor']);
         expect(result.exitCode).toBe(1);
         expect(result.stdout).toContain("Mod folder 'ghost' is declared");
-        expect(result.stderr).toContain('Doctor found 1 error(s)');
+        expect(result.stderr).toContain('Doctor found 1 blocking issues');
     });
 });

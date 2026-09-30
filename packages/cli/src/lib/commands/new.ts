@@ -223,6 +223,12 @@ export async function newCmd(projectTitle: string, modId?: string) {
 
     // Done
     info(`The project '${projectTitle}' has been created at '${projectPath}'`);
+
+    // Golden path (CLI-7): tell the user what to do next — verify with
+    // doctor, then start the Development Sync Engine.
+    log(
+        `Next: cd '${projectPath}' then run 'pzstudio doctor' to verify the project and 'pzstudio watch' to start developing.`,
+    );
 }
 
 registerCommand({

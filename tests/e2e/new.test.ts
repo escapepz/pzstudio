@@ -26,6 +26,10 @@ describe('new command e2e', () => {
                 result,
                 "The project 'Test Project' has been created",
             );
+            // Golden path (CLI-7): next steps on stdout.
+            workspace.assertStdout(result, 'Next:');
+            workspace.assertStdout(result, 'pzstudio doctor');
+            workspace.assertStdout(result, 'pzstudio watch');
 
             const projectDir = 'test_author';
             expect(
