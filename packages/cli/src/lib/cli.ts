@@ -43,7 +43,7 @@ import { migrateGlobalConfigIfNeeded } from './templateManager';
 export { hasFlag, extractFlag } from './args';
 export { CliUsageError } from './parser';
 
-import { setQuiet, setVerbose } from './logger';
+import { setQuiet, setVerbose, setDebug } from './logger';
 
 export interface RunCLIOptions {
     /**
@@ -114,9 +114,11 @@ async function executeInvocation(valid: ValidInvocation): Promise<void> {
 
     // Global option wiring (from the parsed invocation, never process.argv).
     // --debug implies verbose; --quiet suppresses non-essential stderr
-    // (info/verbose); errors and warnings always print.
+    // (info/verbose); errors and warnings always print. setDebug gates the
+    // stack trace of unexpected errors in the runCLI catch path.
     setVerbose(options.verbose === true || options.debug === true);
     setQuiet(options.quiet === true);
+    setDebug(options.debug === true);
     if (typeof options.transport === 'string') {
         setTemplateTransport(
             options.transport === 'git'

@@ -1,5 +1,6 @@
 import * as pc from 'picocolors';
 import { getCliIO } from './parser';
+import { formatError } from './errors';
 
 export interface ILogger {
     log(message: string): void;
@@ -13,6 +14,7 @@ export interface ILogger {
 let externalLogger: ILogger | undefined;
 let verboseEnabled = false;
 let quietEnabled = false;
+let debugEnabled = false;
 
 /**
  * Stream contract (CLI-2): stdout carries command data (list/doctor/help
@@ -45,6 +47,11 @@ export function setVerbose(enabled: boolean) {
 
 export function setQuiet(enabled: boolean) {
     quietEnabled = enabled;
+}
+
+/** Controls whether unexpected errors print their full stack trace. */
+export function setDebug(enabled: boolean) {
+    debugEnabled = enabled;
 }
 
 /**
@@ -118,7 +125,10 @@ export function warn(message: any) {
 }
 
 /**
- * Logs an error to stderr.
+ * Logs an error to stderr. The rendering is owned by formatError (CLI-3):
+ * usage errors print their message, structured CliErrors print the
+ * Problem/Cause/Try block, and anything unexpected prints the wrapped
+ * message — with the full stack only when --debug is enabled.
  * @param error
  */
 export function error(error: any) {
@@ -126,8 +136,7 @@ export function error(error: any) {
         externalLogger.error(error);
         return;
     }
-    const detail =
-        error instanceof Error ? error.stack || error.message : String(error);
+    const detail = formatError(error, { debug: debugEnabled });
     const tty = isTTY(process.stderr);
     const output = tty
         ? pc.red(`[${getTimestamp()}] [ERROR] ${detail}`)

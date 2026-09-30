@@ -1,6 +1,7 @@
 import { join, extname } from 'path';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { expect } from '../expect';
+import { CliError } from '../errors';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { BINARY_FILE_EXTENSIONS } from '@pzstudio/core';
@@ -41,7 +42,9 @@ export function renameCmd(oldModId: string, newModId: string) {
 
     // Check if old mod id already exists
     if (!projectConfig.mods[oldModId]) {
-        throw new Error(`Mod '${oldModId}' does not exist!`);
+        throw new CliError(`Mod '${oldModId}' does not exist!`, {
+            tryHint: `Run 'pzstudio list' to see the mods of this project.`,
+        });
     }
 
     // Check if mod already exists
