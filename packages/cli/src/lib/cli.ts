@@ -34,7 +34,7 @@ import {
     GitTransport,
     FetchTransport,
 } from './transport';
-import { clear, error, info, log, warn, verbose } from './logger';
+import { error, info, log, warn, verbose } from './logger';
 import { projectDir, migrateStoreDirIfNeeded } from './helper';
 import { migrateGlobalConfigIfNeeded } from './templateManager';
 
@@ -43,7 +43,7 @@ import { migrateGlobalConfigIfNeeded } from './templateManager';
 export { hasFlag, extractFlag } from './args';
 export { CliUsageError } from './parser';
 
-import { setVerbose } from './logger';
+import { setQuiet, setVerbose } from './logger';
 
 export interface RunCLIOptions {
     /**
@@ -113,7 +113,10 @@ async function executeInvocation(valid: ValidInvocation): Promise<void> {
     const options = valid.options;
 
     // Global option wiring (from the parsed invocation, never process.argv).
-    setVerbose(options.verbose === true);
+    // --debug implies verbose; --quiet suppresses non-essential stderr
+    // (info/verbose); errors and warnings always print.
+    setVerbose(options.verbose === true || options.debug === true);
+    setQuiet(options.quiet === true);
     if (typeof options.transport === 'string') {
         setTemplateTransport(
             options.transport === 'git'
@@ -146,7 +149,6 @@ async function executeInvocation(valid: ValidInvocation): Promise<void> {
     migrateStoreDirIfNeeded();
     migrateGlobalConfigIfNeeded();
 
-    clear();
     log('\n');
 
     verbose('Project Dir:  ' + projectDir());

@@ -22,7 +22,7 @@ describe('new command e2e', () => {
 
         try {
             workspace.assertSuccess(result);
-            workspace.assertStdout(
+            workspace.assertStderr(
                 result,
                 "The project 'Test Project' has been created",
             );
@@ -119,7 +119,7 @@ describe('new command e2e', () => {
 
         try {
             workspace.assertSuccess(result);
-            workspace.assertStdout(
+            workspace.assertStderr(
                 result,
                 "The project 'My Auto Project' has been created",
             );

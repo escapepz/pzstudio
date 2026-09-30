@@ -39,8 +39,8 @@ describe('migrate command e2e', () => {
 
         try {
             workspace.assertSuccess(result);
-            workspace.assertStdout(result, 'Migrating project.json');
-            workspace.assertStdout(
+            workspace.assertStderr(result, 'Migrating project.json');
+            workspace.assertStderr(
                 result,
                 'project.json upgraded and synced successfully',
             );
@@ -183,7 +183,7 @@ describe('migrate command e2e', () => {
         const result = await workspace.run('migrate');
 
         workspace.assertSuccess(result);
-        workspace.assertStdout(result, 'Migrating config.json');
+        workspace.assertStderr(result, 'Migrating config.json');
 
         const upgraded = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         expect(upgraded.useSymlinks).toBe(true);

@@ -67,7 +67,7 @@ describe('add command e2e', () => {
 
         try {
             workspace.assertSuccess(result);
-            workspace.assertStdout(result, 'Command [add] completed');
+            workspace.assertStderr(result, 'Command [add] completed');
 
             // 3. Verify filesystem
             expect(workspace.exists(newModId)).toBe(true);

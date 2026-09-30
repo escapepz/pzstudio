@@ -45,7 +45,7 @@ url=https://example.com
         // 3. Run migrate
         const result = await workspace.run('migrate');
         workspace.assertSuccess(result);
-        workspace.assertStdout(
+        workspace.assertStderr(
             result,
             'Synced data from test_mod/mod.info into project.json',
         );

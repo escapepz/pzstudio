@@ -1,4 +1,5 @@
 import * as pc from 'picocolors';
+import { getCliIO } from './parser';
 
 export interface ILogger {
     log(message: string): void;
@@ -11,12 +12,16 @@ export interface ILogger {
 
 let externalLogger: ILogger | undefined;
 let verboseEnabled = false;
+let quietEnabled = false;
 
 /**
- * Checks if the output destination is a TTY.
+ * Stream contract (CLI-2): stdout carries command data (list/doctor/help
+ * output, the banner); stderr carries progress, warnings, diagnostics and
+ * errors. Timestamps and colors appear only when the TARGET stream is a
+ * TTY — piped output is always clean text.
  */
-function isTTY(): boolean {
-    return process.stdout.isTTY;
+function isTTY(stream: NodeJS.WriteStream): boolean {
+    return stream.isTTY;
 }
 
 function getTimestamp() {
@@ -38,19 +43,8 @@ export function setVerbose(enabled: boolean) {
     verboseEnabled = enabled;
 }
 
-export function isVerbose(): boolean {
-    return verboseEnabled;
-}
-
-/**
- * Clears the console.
- */
-export function clear() {
-    if (externalLogger && externalLogger.clear) {
-        externalLogger.clear();
-        return;
-    }
-    process.stdout.write('\u001b[2J\u001b[H');
+export function setQuiet(enabled: boolean) {
+    quietEnabled = enabled;
 }
 
 /**
@@ -61,68 +55,84 @@ function withNewline(msg: string): string {
     return msg.replace(/\n+$/, '') + '\n';
 }
 
+function toText(message: any): string {
+    return typeof message === 'string' ? message : JSON.stringify(message);
+}
+
+/** Writes through the shared CliIO sink so tests and embedders can capture. */
+function emit(stream: 'stdout' | 'stderr', text: string): void {
+    const io = getCliIO();
+    if (stream === 'stdout') {
+        io.stdout(text);
+    } else {
+        io.stderr(text);
+    }
+}
+
 /**
- * Logs a message to the console.
+ * Logs a data message to stdout.
  * @param message
  */
 export function log(message: any) {
-    const msg = typeof message === 'string' ? message : JSON.stringify(message);
+    const msg = toText(message);
     if (externalLogger) {
         externalLogger.log(msg);
         return;
     }
-    process.stdout.write(
-        isTTY() ? pc.white(withNewline(msg)) : withNewline(msg),
-    );
+    emit('stdout', withNewline(msg));
 }
 
 /**
- * Logs a message to the console as an information.
+ * Logs a progress message to stderr.
  * @param message
  */
 export function info(message: any) {
-    const msg = typeof message === 'string' ? message : JSON.stringify(message);
+    const msg = toText(message);
     if (externalLogger) {
         externalLogger.info(msg);
         return;
     }
-    const output = `[${getTimestamp()}] [INFO] ${msg}`;
-    process.stdout.write(
-        isTTY() ? pc.cyan(withNewline(output)) : withNewline(output),
-    );
+    if (quietEnabled) return;
+    const tty = isTTY(process.stderr);
+    const output = tty
+        ? pc.cyan(`[${getTimestamp()}] [INFO] ${msg}`)
+        : `[INFO] ${msg}`;
+    emit('stderr', withNewline(output));
 }
 
 /**
- * Logs a message to the console as a warning.
+ * Logs a warning to stderr.
  * @param message
  */
 export function warn(message: any) {
-    const msg = typeof message === 'string' ? message : JSON.stringify(message);
+    const msg = toText(message);
     if (externalLogger) {
         externalLogger.warn(msg);
         return;
     }
-    const output = `[${getTimestamp()}] [WARN] ${msg}`;
-    process.stdout.write(
-        isTTY() ? pc.yellow(withNewline(output)) : withNewline(output),
-    );
+    const tty = isTTY(process.stderr);
+    const output = tty
+        ? pc.yellow(`[${getTimestamp()}] [WARN] ${msg}`)
+        : `[WARN] ${msg}`;
+    emit('stderr', withNewline(output));
 }
 
 /**
- * Logs a message to the console as an error.
+ * Logs an error to stderr.
  * @param error
  */
 export function error(error: any) {
-    const msg =
-        error instanceof Error ? error.stack || error.message : String(error);
     if (externalLogger) {
         externalLogger.error(error);
         return;
     }
-    const output = `[${getTimestamp()}] [ERROR] ${msg}`;
-    process.stderr.write(
-        isTTY() ? pc.red(withNewline(output)) : withNewline(output),
-    );
+    const detail =
+        error instanceof Error ? error.stack || error.message : String(error);
+    const tty = isTTY(process.stderr);
+    const output = tty
+        ? pc.red(`[${getTimestamp()}] [ERROR] ${detail}`)
+        : `[ERROR] ${detail}`;
+    emit('stderr', withNewline(output));
 }
 
 /**
@@ -130,14 +140,15 @@ export function error(error: any) {
  * @param message
  */
 export function verbose(message: any) {
-    if (!verboseEnabled) return;
-    const msg = typeof message === 'string' ? message : JSON.stringify(message);
+    if (!verboseEnabled || quietEnabled) return;
+    const msg = toText(message);
     if (externalLogger && externalLogger.verbose) {
         externalLogger.verbose(msg);
         return;
     }
-    const output = `[${getTimestamp()}] [DEBUG] ${msg}`;
-    process.stdout.write(
-        isTTY() ? pc.gray(withNewline(output)) : withNewline(output),
-    );
+    const tty = isTTY(process.stderr);
+    const output = tty
+        ? pc.gray(`[${getTimestamp()}] [DEBUG] ${msg}`)
+        : `[DEBUG] ${msg}`;
+    emit('stderr', withNewline(output));
 }

@@ -50,7 +50,7 @@ describe('CLI CWD Sensitivity (E2E)', () => {
         const result = await workspace.run('build', [], subDir);
 
         workspace.assertSuccess(result);
-        workspace.assertStdout(result, 'Build complete');
+        workspace.assertStderr(result, 'Build complete');
 
         // Verify output exists relative to project root (which is parent of subDir)
         const outPath = path.join(workspace.dir, 'out', 'CWD Test');

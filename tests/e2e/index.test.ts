@@ -44,7 +44,7 @@ describe('CLI Global Behavior (E2E)', () => {
         const result = await workspace.run('build', ['--verbose']);
 
         // Regardless of exit code the verbose messages go to stdout via the mock logger
-        const hasVerbose = result.stdout.some(
+        const hasVerbose = result.stderr.some(
             (line) =>
                 line.includes('Project Dir:') ||
                 line.includes('Executing command') ||
