@@ -3,7 +3,7 @@
 import { version, branch } from '../../package.json';
 /* eslint-enable @typescript-eslint/ban-ts-comment */
 import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 // Command files self-register into the registry at import time.
 import './commands/add';
 import './commands/build';
@@ -35,7 +35,12 @@ import {
     FetchTransport,
 } from './transport';
 import { error, info, log, warn, verbose } from './logger';
-import { projectDir, migrateStoreDirIfNeeded } from './helper';
+import {
+    discoveryStartDir,
+    findProjectDir,
+    migrateStoreDirIfNeeded,
+    setProjectRootAnchor,
+} from './helper';
 import { migrateGlobalConfigIfNeeded } from './templateManager';
 
 // Backward-compatible re-exports: flags used to live here and external
@@ -119,6 +124,14 @@ async function executeInvocation(valid: ValidInvocation): Promise<void> {
     setVerbose(options.verbose === true || options.debug === true);
     setQuiet(options.quiet === true);
     setDebug(options.debug === true);
+    // -C/--project anchors project discovery (CLI-5): it replaces the
+    // discovery start for this invocation without mutating process.cwd().
+    // Passing no --project clears the anchor (embedded hosts re-invoke).
+    setProjectRootAnchor(
+        typeof options.project === 'string'
+            ? resolve(options.project)
+            : undefined,
+    );
     if (typeof options.transport === 'string') {
         setTemplateTransport(
             options.transport === 'git'
@@ -153,7 +166,9 @@ async function executeInvocation(valid: ValidInvocation): Promise<void> {
 
     log('\n');
 
-    verbose('Project Dir:  ' + projectDir());
+    // Diagnostic only — non-throwing discovery so commands that legitimately
+    // run outside a project (new, migrate) never fail on this log line.
+    verbose('Project Dir:  ' + (findProjectDir() ?? discoveryStartDir()));
     verbose(
         `Executing command [${valid.command.name}] ${valid.positionals.length ? `with params [${valid.positionals.join(', ')}]` : ''}`,
     );

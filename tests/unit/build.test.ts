@@ -92,9 +92,7 @@ describe('buildCmd', () => {
     it('should throw when executed outside of a project directory', async () => {
         vi.mocked(resolveProjectConfig).mockReturnValue(undefined as any);
 
-        await expect(buildCmd()).rejects.toThrow(
-            'You must execute this command within a project directory!',
-        );
+        await expect(buildCmd()).rejects.toThrow('No pzstudio project found.');
     });
 
     it('should throw when both target flags are selected', async () => {

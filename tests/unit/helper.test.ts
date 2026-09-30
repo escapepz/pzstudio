@@ -10,6 +10,10 @@ import {
     migrateStoreDirIfNeeded,
     updateExperimentalScripts,
     setProjectDir,
+    setProjectRootAnchor,
+    discoveryStartDir,
+    findProjectDir,
+    projectDir,
     applyProjectDefaults,
     getStoreDir,
     parseModInfoText,
@@ -62,9 +66,20 @@ describe('Helper Library', () => {
     });
 
     describe('readProjectConfig', () => {
-        it('should return undefined if project.json does not exist', () => {
+        it('should return undefined if project.json does not exist at the given path', () => {
             vi.mocked(fs.existsSync).mockReturnValue(false);
-            expect(readProjectConfig()).toBeUndefined();
+            expect(
+                readProjectConfig('C:/nowhere/project.json'),
+            ).toBeUndefined();
+        });
+
+        it('should throw the structured discovery error when no project exists (fail-closed)', () => {
+            vi.mocked(fs.existsSync).mockReturnValue(false);
+            setProjectDir(undefined);
+            setProjectRootAnchor(undefined);
+            expect(() => readProjectConfig()).toThrow(
+                'No pzstudio project found.',
+            );
         });
 
         it('should throw a descriptive error if project.json is malformed JSON', () => {
@@ -217,6 +232,64 @@ describe('Helper Library', () => {
             setProjectDir('/custom/path');
             // Reset so it doesn't leak into other tests
             setProjectDir(undefined);
+        });
+    });
+
+    describe('project discovery (CLI-5)', () => {
+        beforeEach(() => {
+            setProjectDir(undefined);
+            setProjectRootAnchor(undefined);
+        });
+
+        it('should start discovery from cwd when no anchor is set', () => {
+            expect(discoveryStartDir()).toBe(process.cwd());
+        });
+
+        it('should prefer the -C anchor over the external project dir and cwd', () => {
+            setProjectDir('/external/project');
+            setProjectRootAnchor('C:/anchor/project');
+            expect(discoveryStartDir()).toBe('C:/anchor/project');
+        });
+
+        it('should fall back to the external project dir when no anchor is set', () => {
+            setProjectDir('/external/project');
+            expect(discoveryStartDir()).toBe('/external/project');
+        });
+
+        it('findProjectDir should walk up from the discovery start until project.json', () => {
+            vi.mocked(fs.existsSync).mockImplementation(
+                (p) => String(p).replace(/\\/g, '/') === 'C:/proj/project.json',
+            );
+            setProjectRootAnchor('C:/proj/sub/dir');
+            expect(findProjectDir()).toBe('C:/proj');
+        });
+
+        it('findProjectDir should return undefined without throwing outside a project', () => {
+            vi.mocked(fs.existsSync).mockReturnValue(false);
+            setProjectRootAnchor('C:/empty');
+            expect(findProjectDir()).toBeUndefined();
+        });
+
+        it('projectDir should fail closed with the structured discovery error', () => {
+            vi.mocked(fs.existsSync).mockReturnValue(false);
+            setProjectRootAnchor('C:/empty');
+            expect(() => projectDir()).toThrow('No pzstudio project found.');
+            try {
+                projectDir();
+                expect.unreachable('projectDir should have thrown');
+            } catch (e) {
+                expect((e as Error).message).toBe('No pzstudio project found.');
+                expect(String((e as any).cause)).toContain(
+                    "Searched from 'C:/empty'",
+                );
+                expect(String((e as any).tryHint)).toContain('-C');
+            }
+        });
+
+        it('projectDir should return the discovery start when project.json is there', () => {
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            setProjectRootAnchor('C:/proj');
+            expect(projectDir()).toBe('C:/proj');
         });
     });
 
@@ -602,6 +675,8 @@ describe('Helper Library', () => {
 
         it('should prioritize project.json outdir over VS Code settings', () => {
             setVsCodeSettings({ outdir: '/workspace/out' }, undefined);
+            // Discovery must succeed for projectDir() (fail-closed).
+            vi.mocked(fs.existsSync).mockReturnValue(true);
             const project = { outdir: '/project/out' } as any;
             expect(getOutDir(project)).toContain('out');
         });
@@ -679,6 +754,10 @@ describe('Helper Library', () => {
         } as any;
 
         it('should generate correct workshop text', () => {
+            // Only project.json exists: discovery succeeds, no description.txt.
+            vi.mocked(fs.existsSync).mockImplementation((p) =>
+                String(p).endsWith('project.json'),
+            );
             const text = generateWorkshopText(mockConfig);
             expect(text).toContain('version=1');
             expect(text).toContain('id=123456789');
@@ -688,6 +767,9 @@ describe('Helper Library', () => {
         });
 
         it('should handle missing title, tags, and visibility', () => {
+            vi.mocked(fs.existsSync).mockImplementation((p) =>
+                String(p).endsWith('project.json'),
+            );
             const minimalConfig: IProjectConfig = {
                 workshop: {},
                 mods: {},

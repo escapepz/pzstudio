@@ -13,6 +13,7 @@ import {
 } from '../helper';
 import { log, verbose, warn } from '../logger';
 import { hasFlag } from '../args';
+import { CliError } from '../errors';
 import { resolveTemplateDir, scaffoldProject } from '../templateManager';
 
 addHelp(
@@ -39,9 +40,7 @@ export function addCmd(modName: string, modId?: string) {
     const projectConfig = resolveProjectConfig();
     // Check if we are in a project directory
     if (!projectConfig) {
-        throw new Error(
-            'You must execute this command within a project directory!',
-        );
+        throw new CliError('No pzstudio project found.');
     }
 
     const isOffline = hasFlag('offline');

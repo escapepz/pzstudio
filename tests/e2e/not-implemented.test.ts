@@ -18,10 +18,7 @@ describe('Not Implemented Commands (E2E)', () => {
         // by the unit tests of the sync engine + watch helpers.
         const result = await workspace.run('watch');
         workspace.assertFailure(result);
-        workspace.assertStderr(
-            result,
-            'You must execute this command within a project directory!',
-        );
+        workspace.assertStderr(result, 'No pzstudio project found.');
     });
 
     it('should report not implemented for lang command', async () => {

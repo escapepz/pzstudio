@@ -31,9 +31,7 @@ describe('cleanCmd', () => {
     it('should throw when executed outside of a project directory', () => {
         vi.mocked(resolveProjectConfig).mockReturnValue(undefined as any);
 
-        expect(() => cleanCmd()).toThrow(
-            'You must execute this command within a project directory!',
-        );
+        expect(() => cleanCmd()).toThrow('No pzstudio project found.');
     });
 
     it('should remove both the main and development outputs when they exist', () => {

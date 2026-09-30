@@ -1,5 +1,6 @@
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
+import { CliError } from '../errors';
 import { info, log, verbose } from '../logger';
 import { projectDir, updateProjectConfig } from '../helper';
 import { validateProject, ValidationContext } from '@pzstudio/core';
@@ -62,9 +63,7 @@ const REQUIRED_KEYS = new Set(['name', 'description']);
 function readRawProjectConfig(): { path: string; config: IProjectConfig } {
     const path = join(projectDir(), 'project.json');
     if (!existsSync(path)) {
-        throw new Error(
-            'You must execute this command within a project directory!',
-        );
+        throw new CliError('No pzstudio project found.');
     }
     let config: any;
     try {

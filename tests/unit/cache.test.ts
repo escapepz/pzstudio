@@ -8,6 +8,8 @@ import path from 'path';
 
 vi.mock('../../packages/cli/src/lib/helper', () => ({
     projectDir: vi.fn(() => 'D:/project'),
+    discoveryStartDir: vi.fn(() => 'D:/cwd'),
+    findProjectDir: vi.fn(() => undefined),
     readProjectConfig: vi.fn(),
     resolveProjectConfig: vi.fn(),
     formatTitleToId: vi.fn((t) => t?.toLowerCase()),

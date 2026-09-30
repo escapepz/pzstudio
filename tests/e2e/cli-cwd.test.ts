@@ -64,9 +64,6 @@ describe('CLI CWD Sensitivity (E2E)', () => {
 
         const result = await workspace.run('build', [], outsideDir);
         workspace.assertFailure(result);
-        workspace.assertStderr(
-            result,
-            'You must execute this command within a project directory',
-        );
+        workspace.assertStderr(result, 'No pzstudio project found.');
     });
 });

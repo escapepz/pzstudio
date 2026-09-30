@@ -26,9 +26,7 @@ export function deleteCmd(modId: string) {
 
     // Check if we are in a project directory
     if (!projectConfig) {
-        throw new Error(
-            'You must execute this command within a project directory!',
-        );
+        throw new CliError('No pzstudio project found.');
     }
 
     // Validate params

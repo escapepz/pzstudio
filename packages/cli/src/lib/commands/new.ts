@@ -6,7 +6,8 @@ import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import {
     formatTitleToId,
-    projectDir,
+    discoveryStartDir,
+    findProjectDir,
     readProjectConfig,
     removeDirRecursive,
     resolveProjectConfig,
@@ -46,15 +47,20 @@ export async function newCmd(projectTitle: string, modId?: string) {
     const isOffline = hasFlag('offline');
     const forceUpdate = hasFlag('force-update');
 
-    // Destination: --path wins over the current working directory (issue #43)
+    // Destination: --path wins over the discovery start (issue #43; -C also
+    // steers the default destination since it replaces the discovery start).
     const destFlag = extractFlag('path');
-    const destDir = destFlag ? resolve(destFlag) : projectDir();
+    const destDir = destFlag ? resolve(destFlag) : discoveryStartDir();
     verbose(`Project destination directory: ${destDir}`);
 
-    // The "inside a project" guard only applies to cwd-based creation;
-    // with an explicit --path the user already chose the destination.
+    // The "inside a project" guard only applies to discovery-based creation;
+    // with an explicit --path the user already chose the destination. Use
+    // non-throwing discovery so creating a project OUTSIDE any project keeps
+    // working (fail-closed projectDir() would kill it).
     if (!destFlag) {
-        const existingProject = resolveProjectConfig();
+        const existingProject = findProjectDir()
+            ? resolveProjectConfig()
+            : undefined;
         if (existingProject) {
             throw new Error(
                 'You cannot execute this command within a project directory!',

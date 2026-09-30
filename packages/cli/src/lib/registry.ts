@@ -11,6 +11,8 @@
 export interface FlagSpec {
     /** Long option name without dashes (e.g. 'force-update' for --force-update). */
     name: string;
+    /** Short option character without dash (e.g. 'C' for -C). */
+    short?: string;
     /** Accepts a value (`--path <value>`); when omitted the flag is boolean. */
     takesValue?: boolean;
     /** Allowed values (value flags only); others are rejected as usage errors. */
@@ -76,6 +78,11 @@ export const GLOBAL_FLAGS: FlagSpec[] = [
         name: 'transport',
         takesValue: true,
         choices: ['git', 'fetch'],
+    },
+    {
+        name: 'project',
+        short: 'C',
+        takesValue: true,
     },
     { name: 'help' },
 ];

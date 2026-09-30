@@ -3,6 +3,7 @@ import { join } from 'path';
 import { expect } from '../expect';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
+import { CliError } from '../errors';
 import { hasFlag } from '../args';
 import { log, verbose } from '../logger';
 import {
@@ -35,9 +36,7 @@ export async function modinfoCmd(action: string, modId?: string) {
 
     const projectConfig = resolveProjectConfig();
     if (!projectConfig) {
-        throw new Error(
-            'You must execute this command within a project directory!',
-        );
+        throw new CliError('No pzstudio project found.');
     }
 
     if (action === 'generate') {

@@ -3,7 +3,7 @@ import { registerCommand } from '../registry';
 import { info, log, verbose } from '../logger';
 import {
     updateProjectConfig,
-    projectDir,
+    findProjectDir,
     resolveModInfoTargets,
     migrationHostOptions,
 } from '../helper';
@@ -70,11 +70,16 @@ export async function migrateCmd() {
         log('- config.json is already up to date.');
     }
 
-    // 2. Migrate project.json (if it exists)
-    const projectPath = join(projectDir(), 'project.json');
-    let project = existsSync(projectPath)
-        ? readProjectJsonStrict(projectPath)
+    // 2. Migrate project.json (if it exists). Non-throwing discovery: the
+    // migrate contract is to work outside a project (global config only).
+    const projectRoot = findProjectDir();
+    const projectPath = projectRoot
+        ? join(projectRoot, 'project.json')
         : undefined;
+    let project =
+        projectPath && existsSync(projectPath)
+            ? readProjectJsonStrict(projectPath)
+            : undefined;
 
     if (project) {
         let projectModified = false;
@@ -88,14 +93,14 @@ export async function migrateCmd() {
         // 3. Migrate mod.info files into project.json
         const mods = project.mods || {};
         for (const modId in mods) {
-            const rootModInfoPath = join(projectDir(), modId, 'mod.info');
+            const rootModInfoPath = join(projectRoot!, modId, 'mod.info');
             const modInfoFiles: string[] = [];
 
             if (existsSync(rootModInfoPath)) {
                 modInfoFiles.push(rootModInfoPath);
             } else {
                 // Check Build 42 branch folders
-                const targets = resolveModInfoTargets(modId);
+                const targets = resolveModInfoTargets(modId, projectRoot);
                 for (const targetDir of targets) {
                     const branchModInfoPath = join(targetDir, 'mod.info');
                     if (existsSync(branchModInfoPath)) {
@@ -148,7 +153,7 @@ export async function migrateCmd() {
             log('- project.json is already up to date.');
         }
     } else {
-        log('- No project.json found in current directory.');
+        log('- No project.json found.');
     }
 
     info('\nMigration complete.');

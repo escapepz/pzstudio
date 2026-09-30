@@ -28,7 +28,7 @@ describe('modinfo layout resolution', () => {
             isDirectory: () => true,
         } as any);
 
-        const targets = resolveModInfoTargets(modId);
+        const targets = resolveModInfoTargets(modId, 'D:/proj');
         expect(targets).toHaveLength(3);
         expect(targets[0]).toContain('common');
         expect(targets[1]).toContain('42');
@@ -49,7 +49,7 @@ describe('modinfo layout resolution', () => {
             isDirectory: () => true,
         } as any);
 
-        const targets = resolveModInfoTargets(modId);
+        const targets = resolveModInfoTargets(modId, 'D:/proj');
         expect(targets).toHaveLength(1);
         expect(targets[0]).toContain('common');
     });
@@ -70,7 +70,7 @@ describe('modinfo layout resolution', () => {
                 isDirectory: () => !pStr.endsWith('mod.info'),
             } as any;
         });
-        const targets = resolveModInfoTargets(modId);
+        const targets = resolveModInfoTargets(modId, 'D:/proj');
         expect(targets).toHaveLength(0);
     });
 
@@ -88,7 +88,7 @@ describe('modinfo layout resolution', () => {
             isDirectory: () => true,
         } as any);
 
-        const targets = resolveModInfoTargets(modId);
+        const targets = resolveModInfoTargets(modId, 'D:/proj');
         expect(targets).toHaveLength(1);
         expect(targets[0]).toContain('42.13.1');
     });
@@ -99,7 +99,7 @@ describe('modinfo layout resolution', () => {
             throw new Error('Permission denied');
         });
 
-        const targets = resolveModInfoTargets(modId);
+        const targets = resolveModInfoTargets(modId, 'D:/proj');
         expect(targets).toHaveLength(0);
     });
 });
