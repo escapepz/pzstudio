@@ -60,6 +60,61 @@ describe('list command (E2E)', () => {
         workspace.assertStdout(result, 'missing on disk');
     });
 
+    it('prints a parseable v1 envelope with semantic fields for --json (CLI-8)', async () => {
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: { title: 'P', visibility: 'public', tags: [] },
+                mods: {
+                    included_mod: { name: 'A', description: '' },
+                    excluded_mod: { name: 'B', description: '' },
+                    ghost_mod: { name: 'C', description: '' },
+                    dev_mod: {
+                        name: 'D',
+                        description: '',
+                        build: { devOnly: true },
+                    },
+                },
+                excludes: ['excluded_mod'],
+            }),
+        );
+        workspace.write('included_mod/.gitkeep', '');
+        workspace.write('excluded_mod/.gitkeep', '');
+        workspace.write('dev_mod/.gitkeep', '');
+
+        const result = await workspace.run('list', ['--json']);
+        workspace.assertSuccess(result);
+
+        const envelope = JSON.parse(result.stdout.join('\n'));
+        expect(envelope.schemaVersion).toBe(1);
+        expect(envelope.command).toBe('list');
+        expect(envelope.result.title).toBe('P');
+
+        const byId = Object.fromEntries(
+            envelope.result.mods.map((m: any) => [m.id, m]),
+        );
+        expect(byId.included_mod).toMatchObject({
+            onDisk: true,
+            excluded: false,
+            devOnly: false,
+        });
+        expect(byId.excluded_mod).toMatchObject({
+            onDisk: true,
+            excluded: true,
+            devOnly: false,
+        });
+        expect(byId.dev_mod).toMatchObject({
+            onDisk: true,
+            excluded: false,
+            devOnly: true,
+        });
+        expect(byId.ghost_mod).toMatchObject({
+            onDisk: false,
+            excluded: false,
+            devOnly: false,
+        });
+    });
+
     it('should report the dev-only status for mods with build.devOnly', async () => {
         workspace.write(
             'project.json',
