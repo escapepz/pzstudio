@@ -20,6 +20,17 @@
             },
             "type": "array"
         },
+        "experimental": {
+            "description": "Opt-in switches for experimental behaviour. Nothing here is enabled by default.",
+            "properties": {
+                "integration": {
+                    "default": false,
+                    "description": "Inject experimental helper scripts into the project's package.json on new/add/delete/rename. Disabled by default; must be enabled explicitly.",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
         "outdir": {
             "description": "The output directory for generated workshop files.",
             "type": "string"

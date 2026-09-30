@@ -103,6 +103,15 @@ export interface GlobalConfig {
     templates: Partial<Record<TemplateCategory, ITemplateConfig>>;
     outdir?: string;
     useSymlinks?: boolean;
+
+    /**
+     * Same shape and meaning as IProjectConfig.experimental. An explicit
+     * project.json setting always wins over this one; absent in both
+     * layers means disabled.
+     */
+    experimental?: {
+        integration?: boolean;
+    };
 }
 
 export interface IVsCodeSettings {
@@ -142,4 +151,19 @@ export interface IProjectConfig {
      * outside it, but nothing is blocked.
      */
     pzBuildCompatibility?: string;
+
+    /**
+     * Opt-in switches for experimental behaviour. Nothing here is enabled
+     * by default; every switch must be turned on explicitly (project.json
+     * first, global config second, disabled when absent in both).
+     */
+    experimental?: {
+        /**
+         * Injects experimental helper scripts (junction setup etc.) into
+         * the project's package.json on new/add/delete/rename.
+         * BREAKING (CLI-10): defaults to false; the previous silent
+         * injection requires an explicit opt-in now.
+         */
+        integration?: boolean;
+    };
 }

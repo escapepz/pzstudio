@@ -807,6 +807,9 @@ describe('Helper Library', () => {
         it('should run addProject dispatch without error when script exists', () => {
             vi.mocked(fs.existsSync).mockReturnValue(true);
             vi.mocked(logger.warn).mockClear();
+            vi.mocked(fs.readFileSync).mockReturnValue(
+                JSON.stringify({ experimental: { integration: true } }),
+            );
 
             expect(() =>
                 updateExperimentalScripts('addProject', '/nonexistent/dir'),
@@ -818,6 +821,9 @@ describe('Helper Library', () => {
         it('should run addMod dispatch without error when script exists', () => {
             vi.mocked(fs.existsSync).mockReturnValue(true);
             vi.mocked(logger.warn).mockClear();
+            vi.mocked(fs.readFileSync).mockReturnValue(
+                JSON.stringify({ experimental: { integration: true } }),
+            );
 
             expect(() =>
                 updateExperimentalScripts(
@@ -832,6 +838,9 @@ describe('Helper Library', () => {
         it('should run removeMod dispatch without error when script exists', () => {
             vi.mocked(fs.existsSync).mockReturnValue(true);
             vi.mocked(logger.warn).mockClear();
+            vi.mocked(fs.readFileSync).mockReturnValue(
+                JSON.stringify({ experimental: { integration: true } }),
+            );
 
             expect(() =>
                 updateExperimentalScripts(
@@ -872,6 +881,9 @@ describe('Helper Library', () => {
 
         it('should handle missing dispatch functions in script', () => {
             vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(
+                JSON.stringify({ experimental: { integration: true } }),
+            );
 
             // To truly test missing functions without it actually invoking the real ones,
             // we could stub it. But simply calling an unknown action covers the default switch branch.
