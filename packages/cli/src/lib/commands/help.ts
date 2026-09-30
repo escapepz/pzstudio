@@ -4,9 +4,11 @@ import { registerCommand, allCommands } from '../registry';
 import { log } from '../logger';
 
 function buildFullHelp(): string {
-    const lines = allCommands().map(
-        (c) => `    ${c.name.padEnd(15)}- ${c.summary}`,
-    );
+    // Hidden commands (CLI-7) stay registered and runnable but are not
+    // advertised in the generated listing.
+    const lines = allCommands()
+        .filter((c) => !c.hidden)
+        .map((c) => `    ${c.name.padEnd(15)}- ${c.summary}`);
     return `Available commands:\n${lines.join('\n')}`;
 }
 

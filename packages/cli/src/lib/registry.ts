@@ -47,6 +47,11 @@ export interface CommandDef {
     summary: string;
     /** Skip the "Command [x] completed." announcement (long/noisy commands). */
     silent?: boolean;
+    /**
+     * Keeps the command registered and runnable (old routes keep working)
+     * while omitting it from the generated help listing (CLI-7).
+     */
+    hidden?: boolean;
     /** Flags this command accepts (global flags --verbose/--transport/--help are always available). */
     flags?: FlagSpec[];
     /** Positional arguments this command accepts. */

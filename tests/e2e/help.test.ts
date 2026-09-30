@@ -138,7 +138,6 @@ describe('help — odd input shapes (E2E)', () => {
             'clean',
             'delete',
             'help',
-            'lang',
             'new',
             'outdir',
             'rename',
@@ -150,6 +149,18 @@ describe('help — odd input shapes (E2E)', () => {
             const found = result.stdout.some((line) => line.includes(cmd));
             expect(found, `Expected general help to list '${cmd}'`).toBe(true);
         }
+    });
+
+    it('should not list hidden commands (lang) in general help output', async () => {
+        // lang is an unimplemented stub: registered and runnable, but not
+        // advertised (CLI-7).
+        const result = await workspace.run('help');
+        workspace.assertSuccess(result);
+
+        const langListed = result.stdout.some((line) =>
+            /^\s{4}lang\s+- /.test(line),
+        );
+        expect(langListed).toBe(false);
     });
 });
 

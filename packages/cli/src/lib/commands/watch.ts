@@ -65,10 +65,10 @@ export async function watchCmd() {
     const outDir = projectConfig.outdir!;
     verbose(`Project root: ${projectPath}`);
     verbose(`Output root: ${outDir}`);
+    // Compact single-line banner (CLI-7): what is syncing and how to stop.
     info(
-        `Starting development sync for '${projectConfig.workshop.title}' (${variants.join(' + ')})...`,
+        `Syncing '${projectConfig.workshop.title}' (${variants.join(' + ')}) — press Ctrl+C to stop.`,
     );
-    info(`Press Ctrl+C to stop.`);
 
     const session = createDevSync(projectPath);
     // Initial full build: on failure the session is stopped and the command

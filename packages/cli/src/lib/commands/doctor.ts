@@ -2,6 +2,7 @@ import * as pc from 'picocolors';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { log } from '../logger';
+import { CliError } from '../errors';
 import { projectDir } from '../helper';
 import { extractFlag } from '../args';
 import { runProjectDoctor } from '../doctor';
@@ -38,7 +39,7 @@ export async function doctorCmd() {
     log(`PZ Studio doctor — ${title ? `'${title}'` : report.projectDir}`);
 
     if (report.diagnostics.length === 0) {
-        log('No problems found. Everything looks good.');
+        log('✓ Ready to develop.');
         return;
     }
 
@@ -64,13 +65,20 @@ export async function doctorCmd() {
         `\nSummary: ${errors} error(s), ${warnings} warning(s), ${infos} info(s).`,
     );
 
+    // Verdict follows the result (CLI-7): the report closes with what it
+    // means for the user, and the exit code stays 1 only for errors.
     if (errors > 0) {
-        throw new Error(
-            `Doctor found ${errors} error(s) in the project. See the report above.`,
+        log(`✗ Doctor found ${errors} blocking issues.`);
+        throw new CliError(
+            `Doctor found ${errors} blocking issues. See the report above.`,
         );
     }
     if (warnings === 0) {
-        log('No errors or warnings. Everything looks good.');
+        log('✓ Ready to develop.');
+    } else {
+        log(
+            `⚠ Doctor completed with ${warnings} warnings. You can continue, but review the items above.`,
+        );
     }
 }
 

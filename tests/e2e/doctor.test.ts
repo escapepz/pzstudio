@@ -51,7 +51,7 @@ describe('doctor command (E2E)', () => {
         const result = await workspace.run('doctor');
         workspace.assertSuccess(result);
         workspace.assertStdout(result, "'Healthy'");
-        workspace.assertStdout(result, 'No errors or warnings');
+        workspace.assertStdout(result, 'Ready to develop.');
     });
 
     it('should report a mod missing on disk as an error', async () => {
@@ -70,7 +70,8 @@ describe('doctor command (E2E)', () => {
         workspace.assertFailure(result);
         workspace.assertStdout(result, "Mod folder 'ghost' is declared");
         workspace.assertStdout(result, 'missing on disk');
-        workspace.assertStderr(result, 'Doctor found 1 error(s)');
+        workspace.assertStdout(result, 'blocking issues');
+        workspace.assertStderr(result, 'Doctor found 1 blocking issues');
     });
 
     it('should warn about the game build falling outside pzBuildCompatibility without failing', async () => {
@@ -94,5 +95,7 @@ describe('doctor command (E2E)', () => {
         workspace.assertSuccess(result);
         workspace.assertStdout(result, "targets PZ build '42.x'");
         workspace.assertStdout(result, '1 warning(s)');
+        // Warnings-only verdict (CLI-7): continue, review advised.
+        workspace.assertStdout(result, 'Doctor completed with 1 warnings');
     });
 });

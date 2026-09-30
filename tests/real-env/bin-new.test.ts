@@ -33,6 +33,8 @@ describe.skipIf(!hasLegacyTemplates())(
             expect(result.stderr).toContain(
                 "The project 'Real Env Project' has been created",
             );
+            // Golden path (CLI-7): next steps on stdout.
+            expect(result.stdout).toContain('Next:');
 
             const config = workspace.readJson(
                 path.join('real_mod', 'project.json'),

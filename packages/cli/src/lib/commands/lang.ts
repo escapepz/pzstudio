@@ -17,6 +17,9 @@ export function langCmd(_modId: string, _lang: string, _toLang?: string) {
 registerCommand({
     name: 'lang',
     summary: 'Add or copy a translation language.',
+    // Unimplemented stub: still reachable (old routes keep working) but no
+    // longer advertised in the generated help listing (CLI-7).
+    hidden: true,
     positionals: [
         { name: 'modId', required: true },
         { name: 'lang', required: true },
