@@ -166,7 +166,11 @@ export async function watchCmd() {
         await session.stop();
         resolveStopped();
     };
+    // The command owns its interruption (CLI-6): one handler, one message,
+    // exit 130. runCLI no longer installs a process-level handler, so
+    // Ctrl+C no longer double-reports.
     process.once('SIGINT', () => {
+        process.exitCode = 130;
         void shutdown();
     });
 

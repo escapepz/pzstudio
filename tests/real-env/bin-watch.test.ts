@@ -117,3 +117,93 @@ describe('real env: watch command', () => {
         }
     }, 90000);
 });
+
+/**
+ * Ctrl+C handling (CLI-6): watch owns its interruption — one handler, one
+ * message ('Development sync stopped.'), exit 130. POSIX only: Windows
+ * cannot deliver SIGINT to a spawned child reliably (the main suite kills
+ * with SIGKILL there).
+ */
+describe.skipIf(process.platform === 'win32')(
+    'real env: watch SIGINT (CLI-6)',
+    () => {
+        const PROJECT_TITLE = 'Real Env Watch';
+        const MOD_ID = 'watch_mod';
+
+        let workspace: RealEnvWorkspace;
+
+        beforeEach(() => {
+            workspace = new RealEnvWorkspace();
+        });
+
+        afterEach(async () => {
+            await workspace.cleanup();
+        });
+
+        it('stops gracefully with one message and exit code 130', async () => {
+            workspace.write(
+                'project.json',
+                JSON.stringify({
+                    workshop: {
+                        title: PROJECT_TITLE,
+                        visibility: 'public',
+                        tags: ['Build 42'],
+                    },
+                    mods: {
+                        [MOD_ID]: {
+                            name: 'Watch Mod',
+                            description: 'Watched.',
+                        },
+                    },
+                    excludes: [],
+                    schemaVersion: 2,
+                }),
+            );
+            workspace.write(
+                path.join(MOD_ID, '42', 'media', 'lua', 'shared', 'main.lua'),
+                '-- real env watch sigint\n',
+            );
+            workspace.write(
+                path.join('workshop', 'description.txt'),
+                'Real env watch sigint description',
+            );
+            seedWorkshopTemplateCache(workspace.home);
+
+            const spawned = spawnPz(['watch'], {
+                cwd: workspace.dir,
+                home: workspace.home,
+            });
+            // Interrupt only after the initial full build settled so the
+            // shutdown path (unsubscribe + session stop) is what runs.
+            await waitForCondition(
+                () =>
+                    fs.existsSync(
+                        path.join(
+                            defaultOutRoot(workspace.home),
+                            PROJECT_TITLE,
+                            'Contents',
+                            'mods',
+                        ),
+                    ) &&
+                    fs.existsSync(
+                        path.join(
+                            defaultOutRoot(workspace.home),
+                            `${PROJECT_TITLE} - dev_branch`,
+                            'Contents',
+                            'mods',
+                        ),
+                    ),
+                30000,
+                'both workshop outputs before sending SIGINT',
+            );
+
+            spawned.child.kill('SIGINT');
+            const exit = await spawned.exit;
+            expect(exit.code).toBe(130);
+            expect(spawned.getStderr()).toContain('Development sync stopped.');
+            expect(spawned.getStderr()).not.toContain(
+                'Process interrupted by user (SIGINT).',
+            );
+        }, 60000);
+    },
+);

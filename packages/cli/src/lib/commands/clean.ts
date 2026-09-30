@@ -3,6 +3,12 @@ import { resolveBuildOutputPath } from '@pzstudio/core';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { CliError } from '../errors';
+import {
+    OUTCOME_FAILURE,
+    OUTCOME_SUCCESS,
+    throwOnOutcomeFailures,
+    OperationOutcome,
+} from '../outcome';
 import { removeDirRecursive, resolveProjectConfig } from '../helper';
 import { log, verbose } from '../logger';
 
@@ -29,6 +35,7 @@ export function cleanCmd() {
     const devOutPath = resolveBuildOutputPath(projectConfig, 'development');
 
     let cleaned = false;
+    const outcomes: OperationOutcome[] = [];
     const failures: string[] = [];
 
     // Clean main output
@@ -38,8 +45,10 @@ export function cleanCmd() {
             removeDirRecursive(mainOutPath);
             verbose(`Cleaned: ${mainOutPath}`);
             cleaned = true;
+            outcomes.push(OUTCOME_SUCCESS);
         } catch (e) {
             failures.push(e instanceof Error ? e.message : String(e));
+            outcomes.push(OUTCOME_FAILURE);
         }
     }
 
@@ -51,20 +60,22 @@ export function cleanCmd() {
             removeDirRecursive(devOutPath);
             verbose(`Cleaned: ${devOutPath}`);
             cleaned = true;
+            outcomes.push(OUTCOME_SUCCESS);
         } catch (e) {
             failures.push(e instanceof Error ? e.message : String(e));
+            outcomes.push(OUTCOME_FAILURE);
         }
     }
 
-    if (failures.length > 0) {
-        throw new Error(failures.join('\n'));
+    // Nothing to do is a clean result, not a failure (CLI-6): the output
+    // directories are exactly what the command promises.
+    if (!cleaned && failures.length === 0) {
+        verbose(`Checked '${mainOutPath}' and '${devOutPath}'.`);
+        log('Already clean.');
+        return;
     }
 
-    if (!cleaned) {
-        throw new Error(
-            `No build output found to clean (checked '${mainOutPath}' and '${devOutPath}')`,
-        );
-    }
+    throwOnOutcomeFailures(outcomes, failures.join('\n'));
 
     const endTime = performance.now();
     log(`Clean complete in ${((endTime - startTime) / 1000).toFixed(2)}s!`);

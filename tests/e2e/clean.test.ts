@@ -48,7 +48,7 @@ describe('clean command e2e', () => {
         }
     });
 
-    it('should fail if neither output directory exists', async () => {
+    it('should succeed with Already clean when neither output exists', async () => {
         workspace.write(
             'project.json',
             JSON.stringify({
@@ -60,8 +60,8 @@ describe('clean command e2e', () => {
         );
 
         const result = await workspace.run('clean');
-        workspace.assertFailure(result);
-        workspace.assertStderr(result, 'No build output found to clean');
+        workspace.assertSuccess(result);
+        workspace.assertStdout(result, 'Already clean.');
     });
 
     it('should clean both main and development output directories', async () => {

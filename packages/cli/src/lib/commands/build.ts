@@ -4,6 +4,13 @@ import { registerCommand } from '../registry';
 import { CliError } from '../errors';
 import { hasFlag } from '../args';
 import {
+    OUTCOME_FAILURE,
+    OUTCOME_SUCCESS,
+    OUTCOME_WARNING,
+    OperationOutcome,
+    throwOnOutcomeFailures,
+} from '../outcome';
+import {
     FileOperation,
     collectIncludedModIds,
     planBuild,
@@ -134,7 +141,10 @@ export async function buildCmd() {
     );
 
     // Each variant is isolated: a locked output folder in one target must
-    // not prevent the other target from being built (--both).
+    // not prevent the other target from being built (--both). The recorded
+    // outcomes decide the exit code mechanically (CLI-6): any failure part
+    // fails the command after every variant got its chance.
+    const variantOutcomes: OperationOutcome[] = [];
     const variantErrors: string[] = [];
 
     // Build main workshop (Default/project.json target or explicit --production)
@@ -145,6 +155,7 @@ export async function buildCmd() {
                 warn(
                     'All mods are dev-only or excluded — nothing to build for the main workshop output. Use --development to build the dev_branch output.',
                 );
+                variantOutcomes.push(OUTCOME_WARNING);
             } else {
                 const devOnlyModIds = Object.keys(projectConfig.mods).filter(
                     (modId) =>
@@ -158,9 +169,11 @@ export async function buildCmd() {
                 }
                 log(`\nBuilding main workshop...`);
                 executeBuildPlan(planBuild({ ...planInput, variant: 'main' }));
+                variantOutcomes.push(OUTCOME_SUCCESS);
             }
         } catch (e) {
             variantErrors.push(e instanceof Error ? e.message : String(e));
+            variantOutcomes.push(OUTCOME_FAILURE);
         }
     }
 
@@ -175,20 +188,21 @@ export async function buildCmd() {
                 warn(
                     'All mods are excluded — nothing to build for the dev_branch workshop output.',
                 );
+                variantOutcomes.push(OUTCOME_WARNING);
             } else {
                 log(`\nBuilding dev_branch workshop...`);
                 executeBuildPlan(
                     planBuild({ ...planInput, variant: 'development' }),
                 );
+                variantOutcomes.push(OUTCOME_SUCCESS);
             }
         } catch (e) {
             variantErrors.push(e instanceof Error ? e.message : String(e));
+            variantOutcomes.push(OUTCOME_FAILURE);
         }
     }
 
-    if (variantErrors.length > 0) {
-        throw new Error(variantErrors.join('\n'));
-    }
+    throwOnOutcomeFailures(variantOutcomes, variantErrors.join('\n'));
 
     const endTime = performance.now();
     info(`Build complete in ${((endTime - startTime) / 1000).toFixed(2)}s!`);
