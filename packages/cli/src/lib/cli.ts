@@ -34,7 +34,7 @@ import {
     GitTransport,
     FetchTransport,
 } from './transport';
-import { error, info, log, warn, verbose } from './logger';
+import { error, info, log, verbose } from './logger';
 import {
     discoveryStartDir,
     findProjectDir,
@@ -63,15 +63,11 @@ export async function runCLI(
     cmdArgs?: string[],
     options?: RunCLIOptions,
 ) {
-    // Handle SIGINT for clean cleanup (process-level, not invocation-level)
-    if (process.listenerCount('SIGINT') === 0) {
-        process.on('SIGINT', () => {
-            log('\n');
-            warn('Process interrupted by user (SIGINT).');
-            process.exitCode = 130;
-        });
-    }
-
+    // No process-level SIGINT handler here (CLI-6): long-running commands
+    // own their interruption (watch cleans up and stops with exit 130);
+    // everything else keeps Node's default signal termination. A global
+    // handler would also leak into embedded hosts and double-report on
+    // Ctrl+C alongside the command's own handler.
     try {
         // ---- Parse phase (pure: no side effects, no output besides usage) ----
         // The legacy embedded shape runCLI(cmd, args, {flags}) converges onto

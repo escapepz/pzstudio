@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'fs';
+import * as logger from '../../packages/cli/src/lib/logger';
 import { cleanCmd } from '../../packages/cli/src/lib/commands/clean';
 import { resolveProjectConfig } from '../../packages/cli/src/lib/helper';
 
@@ -106,9 +107,9 @@ describe('cleanCmd', () => {
         );
     });
 
-    it('should throw when there is no build output to clean', () => {
-        expect(() => cleanCmd()).toThrow(
-            "No build output found to clean (checked '/out/Test Project' and '/out/Test Project - dev_branch')",
-        );
+    it('should succeed with Already clean when there is no build output (CLI-6)', () => {
+        // Nothing to clean is a clean result: exit 0, no throw.
+        cleanCmd();
+        expect(logger.log).toHaveBeenCalledWith('Already clean.');
     });
 });
