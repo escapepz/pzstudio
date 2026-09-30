@@ -1,6 +1,7 @@
 import { join } from 'path';
 import { existsSync, rmSync } from 'fs';
 import { expect } from '../expect';
+import { CliError } from '../errors';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { info, log, verbose, warn } from '../logger';
@@ -35,7 +36,10 @@ export function deleteCmd(modId: string) {
 
     // Fail fast: refuse to touch anything if the mod is unknown to the project
     if (!projectConfig.mods[modId]) {
-        throw new Error(`Mod '${modId}' not found in project.json!`);
+        throw new CliError(`Mod '${modId}' not found in project.json!`, {
+            cause: 'project.json only lists mods registered with pzstudio add.',
+            tryHint: `Run 'pzstudio list' to see the mods of this project.`,
+        });
     }
 
     const projectPath = projectDir();

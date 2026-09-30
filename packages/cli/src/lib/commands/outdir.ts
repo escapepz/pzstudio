@@ -1,6 +1,7 @@
 import { resolve } from 'path';
 import { existsSync, statSync } from 'fs';
 import { expect } from '../expect';
+import { CliError } from '../errors';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { log, verbose } from '../logger';
@@ -29,11 +30,19 @@ export function outdirCmd(newOutDir: string) {
     // check if the new path exists and is a directory
     if (!existsSync(newOutDir)) {
         verbose(`Validation failed: Path ${newOutDir} does not exist.`);
-        throw new Error(`The output directory "${newOutDir}" does not exist.`);
+        throw new CliError(
+            `The output directory "${newOutDir}" does not exist.`,
+            {
+                tryHint:
+                    'Create the directory first, then run pzstudio outdir again.',
+            },
+        );
     }
     if (!statSync(newOutDir).isDirectory()) {
         verbose(`Validation failed: Path ${newOutDir} is not a directory.`);
-        throw new Error(`"${newOutDir}" is not a directory.`);
+        throw new CliError(`"${newOutDir}" is not a directory.`, {
+            tryHint: 'Pass the path to a directory, not to a file.',
+        });
     }
 
     const config = readGlobalConfig();
