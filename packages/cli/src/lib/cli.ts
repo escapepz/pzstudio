@@ -21,15 +21,14 @@ import './commands/migrate';
 import './commands/modconfig';
 import './commands/modinfo';
 import { helpCmd } from './commands/help';
+import { setInvocationOptions } from './args';
 import {
-    cmd,
-    processArgs,
-    splitArgs,
-    setProcessArgsOverride,
-    hasFlag,
-    extractFlag,
-} from './args';
-import { getCommand } from './registry';
+    parseArgv,
+    normalizeLegacyInvocation,
+    validateInvocation,
+    CliUsageError,
+    ValidInvocation,
+} from './parser';
 import {
     setTemplateTransport,
     GitTransport,
@@ -42,6 +41,7 @@ import { migrateGlobalConfigIfNeeded } from './templateManager';
 // Backward-compatible re-exports: flags used to live here and external
 // code (tests, templates) may import them from this module.
 export { hasFlag, extractFlag } from './args';
+export { CliUsageError } from './parser';
 
 import { setVerbose } from './logger';
 
@@ -58,15 +58,7 @@ export async function runCLI(
     cmdArgs?: string[],
     options?: RunCLIOptions,
 ) {
-    if (options?.flags) {
-        setProcessArgsOverride([
-            cmdName ?? '',
-            ...(cmdArgs ?? []),
-            ...options.flags,
-        ]);
-    }
-
-    // Handle SIGINT for clean cleanup
+    // Handle SIGINT for clean cleanup (process-level, not invocation-level)
     if (process.listenerCount('SIGINT') === 0) {
         process.on('SIGINT', () => {
             log('\n');
@@ -75,103 +67,118 @@ export async function runCLI(
         });
     }
 
-    // Initialize verbose mode early
-    if (hasFlag('verbose')) {
-        setVerbose(true);
-    }
-
-    // Transport override: 'git' or 'fetch' (default: git when available)
-    const transportFlag = extractFlag('transport');
-    if (transportFlag === 'git' || transportFlag === 'fetch') {
-        setTemplateTransport(
-            transportFlag === 'git' ? new GitTransport() : new FetchTransport(),
-        );
-    } else if (transportFlag !== undefined) {
-        throw new Error(
-            `Invalid --transport value '${transportFlag}' (expected 'git' or 'fetch').`,
-        );
-    }
-
     try {
-        // Handle root-level help and version (side-effect free)
-        if (hasFlag('version')) {
-            log(`v${version}`);
-            return;
-        }
-
-        // Migrate legacy store and config on first CLI call
-        migrateStoreDirIfNeeded();
-        migrateGlobalConfigIfNeeded();
-
-        clear();
-        log('\n');
-
-        let buildDate = 'Unknown';
-        try {
-            const buildInfoPath = join(__dirname, '../build.json');
-            if (existsSync(buildInfoPath)) {
-                buildDate =
-                    JSON.parse(readFileSync(buildInfoPath, 'utf8')).buildDate ??
-                    'Unknown';
-            }
-        } catch (_e) {
-            // ignore
-        }
-
-        const currentCmd = cmdName ?? cmd();
-
-        if (!currentCmd) {
-            log(
-                `Project Zomboid Studio v${version} - @${branch} (${buildDate})\n`,
+        // ---- Parse phase (pure: no side effects, no output besides usage) ----
+        // The legacy embedded shape runCLI(cmd, args, {flags}) converges onto
+        // the same ParsedInvocation the executable path produces, then both
+        // go through the same semantic validation (CLI-1 contract).
+        let invocation;
+        if (cmdName !== undefined || options?.flags !== undefined) {
+            invocation = normalizeLegacyInvocation(
+                cmdName,
+                cmdArgs,
+                options?.flags,
             );
-        }
-
-        if (hasFlag('help') && !currentCmd) {
-            await helpCmd();
-            return;
-        }
-
-        const rawCmdArgs = cmdArgs ?? processArgs().slice(1);
-        const { positionals } = splitArgs(rawCmdArgs);
-        // Positional args are kept as strings: mod ids like "12345" must not
-        // be coerced to numbers (ArgTypeError in expect()).
-        const commandParams: string[] = positionals;
-
-        const registered = currentCmd ? getCommand(currentCmd) : undefined;
-
-        verbose('Project Dir:  ' + projectDir());
-
-        verbose(
-            `Executing command [${currentCmd}] ${commandParams.length ? `with params [${commandParams.join(', ')}]` : ''}`,
-        );
-
-        // Handle --help for specific command BEFORE executing it (allows help even outside projects)
-        if (hasFlag('help') && currentCmd) {
-            await helpCmd(currentCmd);
-            return;
-        }
-
-        if (currentCmd === undefined) {
-            await helpCmd();
-        } else if (registered) {
-            await registered.run({ positionals: commandParams });
-            if (!registered.silent) {
-                info(`Command [${registered.name}] completed.`);
-            }
         } else {
-            throw new Error(`Unknown command [${currentCmd}]`);
+            const parsed = await parseArgv(process.argv.slice(2), version);
+            if (parsed.kind === 'terminal') {
+                // --version (or Commander help control flow) already printed
+                // through CliIO; nothing left to execute.
+                return;
+            }
+            invocation = parsed.invocation;
         }
+        const valid = validateInvocation(invocation);
+
+        // ---- Execute phase ----
+        await executeInvocation(valid);
     } catch (e) {
+        if (e instanceof CliUsageError) {
+            if (!e.alreadyReported) {
+                error(e);
+            }
+            throw e;
+        }
         error(e);
         // Rethrow instead of process.exit(): this is a library entry point
         // (the VS Code extension bundles and calls it in-process). The bin
         // entry (src/index.ts) is responsible for setting the exit code.
         throw e;
-    } finally {
-        if (options?.flags) {
-            setProcessArgsOverride(undefined);
-        }
     }
 
     log('\n');
+}
+
+async function executeInvocation(valid: ValidInvocation): Promise<void> {
+    const options = valid.options;
+
+    // Global option wiring (from the parsed invocation, never process.argv).
+    setVerbose(options.verbose === true);
+    if (typeof options.transport === 'string') {
+        setTemplateTransport(
+            options.transport === 'git'
+                ? new GitTransport()
+                : new FetchTransport(),
+        );
+    }
+
+    // Help and the no-command banner are pure invocations: no migrations,
+    // no config creation, no project discovery, no template resolution.
+    if (options.help === true) {
+        await helpCmd(valid.command?.name);
+        return;
+    }
+    if (!valid.command) {
+        printBanner();
+        await helpCmd();
+        return;
+    }
+
+    // The help command is display-only: like the --help flag it must stay a
+    // pure invocation (no migrations, no config creation, no discovery).
+    if (valid.command.name === 'help') {
+        await helpCmd(valid.positionals[0]);
+        return;
+    }
+
+    // Real command: run store/config migrations before dispatch, then hand
+    // the parsed invocation to the command handler (business logic unchanged).
+    migrateStoreDirIfNeeded();
+    migrateGlobalConfigIfNeeded();
+
+    clear();
+    log('\n');
+
+    verbose('Project Dir:  ' + projectDir());
+    verbose(
+        `Executing command [${valid.command.name}] ${valid.positionals.length ? `with params [${valid.positionals.join(', ')}]` : ''}`,
+    );
+
+    setInvocationOptions(options);
+    try {
+        await valid.command.run({
+            positionals: valid.positionals,
+            options: valid.options,
+        });
+        if (!valid.command.silent) {
+            info(`Command [${valid.command.name}] completed.`);
+        }
+    } finally {
+        setInvocationOptions(undefined);
+    }
+}
+
+function printBanner(): void {
+    let buildDate = 'Unknown';
+    try {
+        const buildInfoPath = join(__dirname, '../build.json');
+        if (existsSync(buildInfoPath)) {
+            buildDate =
+                JSON.parse(readFileSync(buildInfoPath, 'utf8')).buildDate ??
+                'Unknown';
+        }
+    } catch (_e) {
+        // ignore
+    }
+    log(`Project Zomboid Studio v${version} - @${branch} (${buildDate})\n`);
 }

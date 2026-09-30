@@ -69,5 +69,6 @@ export function deleteCmd(modId: string) {
 registerCommand({
     name: 'delete',
     summary: 'Delete a mod from your project.',
+    positionals: [{ name: 'modId', required: true }],
     run: (ctx) => deleteCmd(ctx.positionals[0]),
 });

@@ -77,5 +77,6 @@ export async function doctorCmd() {
 registerCommand({
     name: 'doctor',
     summary: 'Check the project and environment for problems.',
+    flags: [{ name: 'game-build', takesValue: true }],
     run: () => doctorCmd(),
 });

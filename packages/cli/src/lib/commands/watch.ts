@@ -179,5 +179,6 @@ registerCommand({
     name: 'watch',
     summary: 'Watch for changes and keep your output directory synced.',
     silent: true,
+    flags: [{ name: 'production' }, { name: 'development' }, { name: 'both' }],
     run: () => watchCmd(),
 });

@@ -55,5 +55,6 @@ export function outdirCmd(newOutDir: string) {
 registerCommand({
     name: 'outdir',
     summary: 'Set your output directory.',
+    positionals: [{ name: 'path', required: true }],
     run: (ctx) => outdirCmd(ctx.positionals[0]),
 });

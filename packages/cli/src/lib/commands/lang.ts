@@ -17,6 +17,11 @@ export function langCmd(_modId: string, _lang: string, _toLang?: string) {
 registerCommand({
     name: 'lang',
     summary: 'Add or copy a translation language.',
+    positionals: [
+        { name: 'modId', required: true },
+        { name: 'lang', required: true },
+        { name: 'toLang', required: false },
+    ],
     run: (ctx) =>
         langCmd(ctx.positionals[0], ctx.positionals[1], ctx.positionals[2]),
 });

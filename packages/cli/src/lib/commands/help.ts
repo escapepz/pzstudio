@@ -38,5 +38,6 @@ registerCommand({
     name: 'help',
     summary: 'Displays help information.',
     silent: true,
+    positionals: [{ name: 'command', required: false }],
     run: (ctx) => helpCmd(ctx.positionals[0]),
 });

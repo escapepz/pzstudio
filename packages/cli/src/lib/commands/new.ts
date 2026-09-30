@@ -189,5 +189,15 @@ export async function newCmd(projectTitle: string, modId?: string) {
 registerCommand({
     name: 'new',
     summary: 'Create a new project.',
+    flags: [
+        { name: 'path', takesValue: true },
+        { name: 'offline' },
+        { name: 'force-update' },
+        { name: 'symlinks' },
+    ],
+    positionals: [
+        { name: 'title', required: true },
+        { name: 'modId', required: false },
+    ],
     run: (ctx) => newCmd(ctx.positionals[0], ctx.positionals[1]),
 });

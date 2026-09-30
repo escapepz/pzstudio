@@ -45,10 +45,10 @@ describe('new command e2e', () => {
 
     it('should fail if title is missing', async () => {
         const result = await workspace.run('new', []);
-        workspace.assertFailure(result);
+        workspace.assertFailure(result, 2);
         workspace.assertStderr(
             result,
-            "Expected param [projectTitle] to be 'string', but got 'undefined'",
+            "Missing required argument '<title>' for command [new]",
         );
     });
 

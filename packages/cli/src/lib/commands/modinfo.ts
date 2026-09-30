@@ -130,5 +130,10 @@ registerCommand({
     name: 'modinfo',
     summary: 'Generate mod.info files for your mods.',
     silent: true,
+    flags: [{ name: 'force' }],
+    positionals: [
+        { name: 'action', required: true },
+        { name: 'modId', required: false },
+    ],
     run: (ctx) => modinfoCmd(ctx.positionals[0], ctx.positionals[1]),
 });

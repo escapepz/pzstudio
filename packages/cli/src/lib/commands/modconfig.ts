@@ -351,5 +351,9 @@ export async function modconfigCmd(positionals: string[]) {
 registerCommand({
     name: 'modconfig',
     summary: 'View or change a mod configuration without editing project.json.',
+    positionals: [
+        { name: 'modId', required: true },
+        { name: 'action', required: false, variadic: true },
+    ],
     run: (ctx) => modconfigCmd(ctx.positionals),
 });
