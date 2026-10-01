@@ -64,7 +64,7 @@ export function defaultOutRoot(home: string): string {
 export function assertCliBuilt(): void {
     if (!fs.existsSync(CLI_BIN)) {
         throw new Error(
-            'packages/cli/dist/index.js is missing — build the CLI first (pnpm --filter pzstudio-cli... build).',
+            'packages/cli/dist/index.js is missing — build the CLI first (pnpm --filter @pzstudio/cli... build).',
         );
     }
 }

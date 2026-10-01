@@ -67,7 +67,7 @@ function seedWorkshopTemplateCache(home) {
     );
     if (!fs.existsSync(path.join(legacyWorkshop, 'Contents'))) {
         throw new Error(
-            'packages/cli/dist/.template-legacy is empty — build the CLI (pnpm --filter pzstudio-cli... build) after checking out the submodules.',
+            'packages/cli/dist/.template-legacy is empty — build the CLI (pnpm --filter @pzstudio/cli... build) after checking out the submodules.',
         );
     }
     const cache = path.join(
