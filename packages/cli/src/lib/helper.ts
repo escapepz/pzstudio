@@ -695,16 +695,16 @@ export function updateExperimentalScripts(
             return;
         }
 
-        const srcPath = resolve(
-            __dirname,
-            '../../scripts/experimental-package-scripts.js',
-        );
-        const distPath = resolve(
-            __dirname,
-            '../scripts/experimental-package-scripts.js',
-        );
-        const scriptPath = existsSync(srcPath) ? srcPath : distPath;
-        if (!existsSync(scriptPath)) {
+        // experimental-package-scripts.js is copied into dist/scripts by the
+        // build. The esbuild bundle sits at dist/index.js (co-located); the
+        // tsc layout emits dist/lib/helper.js (scripts resolved via dist).
+        const scriptCandidates = [
+            resolve(__dirname, 'scripts/experimental-package-scripts.js'),
+            resolve(__dirname, '../scripts/experimental-package-scripts.js'),
+            resolve(__dirname, '../../scripts/experimental-package-scripts.js'),
+        ];
+        const scriptPath = scriptCandidates.find((p) => existsSync(p));
+        if (!scriptPath) {
             return;
         }
 

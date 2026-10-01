@@ -212,10 +212,14 @@ function bootstrapLegacyTemplates(): void {
     }
 
     // Find the bundled .template-legacy directory. Probes cover, in order:
-    // the repo root during development (packages/cli/dist/lib -> repo root),
-    // the package root when published (dist/lib -> package root), the dist
-    // folder populated by the build script, and the working directory.
+    // the esbuild bundle (co-located dist/.template-legacy next to dist/
+    // index.js), the repo root during development on the tsc layout
+    // (packages/cli/dist/lib -> repo root), the package root when published
+    // on the tsc layout (dist/lib -> package root), the dist folder on the
+    // tsc layout (dist/lib -> dist/.template-legacy), and the working
+    // directory.
     const installRootPaths = [
+        join(__dirname, '.template-legacy'),
         join(__dirname, '..', '..', '..', '.template-legacy'),
         join(__dirname, '..', '..', '.template-legacy'),
         join(__dirname, '..', '.template-legacy'),

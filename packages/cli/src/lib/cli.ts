@@ -199,8 +199,15 @@ async function executeInvocation(valid: ValidInvocation): Promise<void> {
 function printBanner(): void {
     let buildDate = 'Unknown';
     try {
-        const buildInfoPath = join(__dirname, '../build.json');
-        if (existsSync(buildInfoPath)) {
+        // build.json lives in dist/ next to the runtime. The esbuild bundle
+        // sits at dist/index.js (co-located); the tsc layout emits
+        // dist/lib/cli.js with build.json one level up.
+        const candidates = [
+            join(__dirname, 'build.json'),
+            join(__dirname, '../build.json'),
+        ];
+        const buildInfoPath = candidates.find((p) => existsSync(p));
+        if (buildInfoPath) {
             buildDate =
                 JSON.parse(readFileSync(buildInfoPath, 'utf8')).buildDate ??
                 'Unknown';
