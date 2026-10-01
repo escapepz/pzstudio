@@ -29,7 +29,9 @@ export function registerDeleteCommand(
             );
             if (confirm !== t('Yes')) return;
 
-            await execute('delete', [modId], undefined, {
+            // The embedded API refuses destructive commands without --yes
+            // (CLI-9): our modal above IS the confirmation, so forward it.
+            await execute('delete', [modId], ['--yes'], {
                 projectDir: projectDir.fsPath,
             });
         },

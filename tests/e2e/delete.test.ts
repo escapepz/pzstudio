@@ -37,8 +37,8 @@ describe('delete command e2e', () => {
         workspace.write(`${modId}/mod.info`, `id=${modId}`);
         workspace.write(`other_mod/mod.info`, `id=other_mod`);
 
-        // 2. Run delete command
-        const result = await workspace.run('delete', [modId]);
+        // 2. Run delete command (embedded API: --yes IS the confirmation)
+        const result = await workspace.run('delete', [modId, '--yes']);
 
         try {
             workspace.assertSuccess(result);
@@ -83,7 +83,7 @@ describe('delete command e2e', () => {
             }),
         );
 
-        const result = await workspace.run('delete', [modId]);
+        const result = await workspace.run('delete', [modId, '--yes']);
 
         // As found in implementation, it logs error but doesn't exit(1) unless it throws
         workspace.assertSuccess(result);
@@ -150,7 +150,11 @@ describe('delete command e2e', () => {
         );
         workspace.write(`${modId}/mod.info`, `id=${modId}`);
 
-        const result = await workspace.run('delete', [modId, '--verbose']);
+        const result = await workspace.run('delete', [
+            modId,
+            '--verbose',
+            '--yes',
+        ]);
         workspace.assertSuccess(result);
 
         // Verify verbose output
@@ -165,5 +169,36 @@ describe('delete command e2e', () => {
         expect(workspace.exists(modId)).toBe(false);
         const config = workspace.readJson('project.json');
         expect(config.mods[modId]).toBeUndefined();
+    });
+
+    it('should refuse embedded deletion without --yes and keep the mod', async () => {
+        // CLI-9: embedded never prompts, but "host owns confirmation UI"
+        // does not mean "the library assumes confirmation happened" — an
+        // embedded call without --yes is a refusal (usage error, exit 2).
+        const modId = 'protected_mod';
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: { title: 'P', visibility: 'public', tags: [] },
+                mods: {
+                    [modId]: { name: 'P', description: 'D' },
+                },
+                excludes: [],
+            }),
+        );
+        workspace.write(`${modId}/mod.info`, `id=${modId}`);
+
+        const result = await workspace.run('delete', [modId]);
+
+        workspace.assertFailure(result, 2);
+        workspace.assertStderr(
+            result,
+            `Refusing 'delete' without explicit confirmation (embedded API)`,
+        );
+
+        // Nothing was mutated
+        expect(workspace.exists(modId)).toBe(true);
+        const config = workspace.readJson('project.json');
+        expect(config.mods[modId]).toBeDefined();
     });
 });

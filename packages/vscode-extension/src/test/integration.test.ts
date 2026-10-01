@@ -109,7 +109,7 @@ describe('PZ Studio extension (real VS Code host)', () => {
         );
     });
 
-    it('renames and deletes a mod through the api without prompting (embedded)', async () => {
+    it('renames and deletes a mod through the api with explicit --yes (embedded)', async () => {
         assert.ok(projectDir, 'fixture project dir env is missing');
 
         setProjectDir(projectDir);
@@ -125,10 +125,11 @@ describe('PZ Studio extension (real VS Code host)', () => {
         );
         fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
 
-        // Embedded contract (CLI-9): runCLI NEVER terminal-prompts — both
-        // destructive commands complete without --yes and without stdin.
+        // Embedded contract (CLI-9): runCLI NEVER terminal-prompts, and it
+        // REQUIRES --yes for destructive commands — the host passes it once
+        // its own confirmation UI has accepted.
         await runCLI('rename', ['scratch_mod', 'renamed_scratch'], {
-            flags: [],
+            flags: ['--yes'],
         });
         assert.strictEqual(
             fs.readFileSync(
@@ -141,7 +142,7 @@ describe('PZ Studio extension (real VS Code host)', () => {
         assert.ok(renamed.mods.renamed_scratch);
         assert.strictEqual(renamed.mods.scratch_mod, undefined);
 
-        await runCLI('delete', ['renamed_scratch'], { flags: [] });
+        await runCLI('delete', ['renamed_scratch'], { flags: ['--yes'] });
         assert.ok(!fs.existsSync(path.join(projectDir, 'renamed_scratch')));
         const deleted = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         assert.strictEqual(deleted.mods.renamed_scratch, undefined);
