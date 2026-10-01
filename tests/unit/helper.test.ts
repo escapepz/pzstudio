@@ -576,7 +576,7 @@ describe('Helper Library', () => {
             expect(templateManager.writeGlobalConfig).toHaveBeenCalledWith(
                 expect.objectContaining({ outdir: '/some/outdir' }),
             );
-            expect(logger.log).toHaveBeenCalledWith(
+            expect(logger.info).toHaveBeenCalledWith(
                 expect.stringContaining('Migrated'),
             );
         });

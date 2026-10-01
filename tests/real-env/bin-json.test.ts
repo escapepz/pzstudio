@@ -92,4 +92,36 @@ describe('real env: --json contract (CLI-8)', () => {
         expect(result.stdout.trim()).toBe('');
         expect(result.stderr).toContain('No pzstudio project found.');
     });
+
+    it('a pending config migration keeps stdout parseable (marker on stderr)', async () => {
+        // Regression: the startup config migration used to report through
+        // log() → stdout, which broke JSON.parse(stdout) for every --json
+        // invocation on a machine with an old config shape.
+        writeHealthyProject();
+        workspace.writeHome(
+            path.join('.pzstudio', 'config.json'),
+            JSON.stringify({ templates: {} }),
+        );
+
+        const result = await workspace.run(['list', '--json']);
+        expect(result.exitCode).toBe(0);
+
+        const envelope = JSON.parse(result.stdout);
+        expect(envelope.schemaVersion).toBe(1);
+        expect(envelope.command).toBe('list');
+        expect(result.stderr).toContain('Migrating config.json');
+        expect(result.stdout).not.toContain('Migrating');
+    });
+
+    it('a pending config migration still leaves stdout empty on runtime failure', async () => {
+        workspace.writeHome(
+            path.join('.pzstudio', 'config.json'),
+            JSON.stringify({ templates: {} }),
+        );
+
+        const result = await workspace.run(['list', '--json']);
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout.trim()).toBe('');
+        expect(result.stderr).toContain('Migrating config.json');
+    });
 });
