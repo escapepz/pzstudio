@@ -93,6 +93,6 @@ registerCommand({
     name: 'delete',
     summary: 'Delete a mod from your project.',
     positionals: [{ name: 'modId', required: true }],
-    flags: [{ name: 'yes' }, { name: 'dry-run' }],
+    flags: [{ name: 'dry-run' }],
     run: (ctx) => deleteCmd(ctx.positionals[0]),
 });

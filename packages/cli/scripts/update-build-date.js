@@ -42,11 +42,24 @@ if (fs.existsSync(expScriptSource)) {
     console.log(`Copied experimental-package-scripts.js to ${expScriptDest}`);
 }
 
-// Copy .template-legacy into dist so the built binary can bootstrap
-// templates offline (templateManager probes dist/.template-legacy). The
-// submodule container lives at the repo root in the monorepo layout
-// (packages/cli/scripts -> repo root); the package root is probed as a
-// fallback for standalone checkouts.
+// Remove dist/lib/*.js (intermediate tsc output — the bundled
+// dist/index.js and dist/api.js replace everything that matters for
+// runtime; only the .d.ts files are needed for TypeScript consumers).
+// The .d.ts files and dist/lib/commands/*.d.ts are kept.
+function removeJsFromLib(dir) {
+    if (!fs.existsSync(dir)) return;
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            removeJsFromLib(fullPath);
+        } else if (entry.name.endsWith('.js')) {
+            fs.unlinkSync(fullPath);
+        }
+    }
+}
+removeJsFromLib(path.join(distPath, 'lib'));
+console.log('Removed tsc intermediate .js files from dist/lib/');
 const templateLegacyCandidates = [
     path.join(__dirname, '../../../.template-legacy'),
     path.join(__dirname, '../../.template-legacy'),
