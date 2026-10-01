@@ -32,6 +32,9 @@ vi.mock('fs');
 vi.mock('../../packages/cli/src/lib/logger');
 vi.mock('../../packages/cli/src/lib/templateManager');
 
+// Real fs implementation for tests that need genuine existence probes.
+const actualFs = (await vi.importActual('fs')) as typeof import('fs');
+
 describe('Helper Library', () => {
     const defaultGlobalConfig = {
         templates: {},
@@ -805,7 +808,13 @@ describe('Helper Library', () => {
         });
 
         it('should run addProject dispatch without error when script exists', () => {
-            vi.mocked(fs.existsSync).mockReturnValue(true);
+            // Probe the real filesystem: the helper resolves the actual
+            // scripts/experimental-package-scripts.js from the package dir,
+            // so a blanket existsSync stub would select a candidate that
+            // never exists on disk and the require below would fail.
+            vi.mocked(fs.existsSync).mockImplementation((p) =>
+                actualFs.existsSync(p),
+            );
             vi.mocked(logger.warn).mockClear();
             vi.mocked(fs.readFileSync).mockReturnValue(
                 JSON.stringify({ experimental: { integration: true } }),
@@ -819,7 +828,9 @@ describe('Helper Library', () => {
         });
 
         it('should run addMod dispatch without error when script exists', () => {
-            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.existsSync).mockImplementation((p) =>
+                actualFs.existsSync(p),
+            );
             vi.mocked(logger.warn).mockClear();
             vi.mocked(fs.readFileSync).mockReturnValue(
                 JSON.stringify({ experimental: { integration: true } }),
@@ -836,7 +847,9 @@ describe('Helper Library', () => {
         });
 
         it('should run removeMod dispatch without error when script exists', () => {
-            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.existsSync).mockImplementation((p) =>
+                actualFs.existsSync(p),
+            );
             vi.mocked(logger.warn).mockClear();
             vi.mocked(fs.readFileSync).mockReturnValue(
                 JSON.stringify({ experimental: { integration: true } }),
