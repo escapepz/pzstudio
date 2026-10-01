@@ -74,7 +74,25 @@ If any check fails, diagnose, fix, rebuild (Step 1), pack (Step 2), then re-smok
 
 ---
 
-## Step 4 — Publish to `next`
+## Step 4 — Golden-path smoke (3 HOMEs)
+
+```bash
+node pack-golden.mjs <exact-tgz>
+```
+
+Installs the exact tarball once and walks the user golden path in three NON-REUSED isolated HOMEs:
+
+- **HOME_A offline:** `new "Offline Smoke" --offline` → `doctor` exits 0.
+- **HOME_B online:** `new "Smoke Mod"` → `doctor` → `build` — build resolves the workshop template through the real network path (git clone or zip fetch), with a hard timeout.
+- **HOME_C POSIX:** `watch` → banner → touch a Lua source → wait for the sync summary → SIGINT → exit 130 with exactly one `Development sync stopped.` message. Skipped on win32 (SIGINT delivery to children is unreliable there; CI ubuntu/macos verify it).
+
+The workshop template cache in HOME_C is seeded from the tarball's own `.template-legacy` bundle so the watch startup build is hermetic. Every scenario has hard timeouts and the script always terminates the child process trees it spawned, so CI can never hang.
+
+If any check fails, diagnose, fix, rebuild (Step 1), pack (Step 2), re-smoke (Step 3), then re-run the golden smoke. Do not repack without rebuilding.
+
+---
+
+## Step 5 — Publish to `next`
 
 ```bash
 npm publish "<exact-tgz>" --ignore-scripts --access public --tag next
@@ -82,13 +100,13 @@ npm publish "<exact-tgz>" --ignore-scripts --access public --tag next
 
 `--ignore-scripts` mirrors the pack step. Publish the **exact bytes** from the tgz — do not rebuild between pack and publish.
 
-If publish succeeds, proceed to Step 5. If it fails:
+If publish succeeds, proceed to Step 6. If it fails:
 
 **On failure DO NOT promote / DO NOT rebuild+republish the same version.** Published name@version pairs are not reusable. Fix the root cause, bump the patch version (e.g. `0.42200.1`), then rebuild → pack → smoke → publish the new version to `next`. Optionally `npm deprecate` the failed version.
 
 ---
 
-## Step 5 — Registry smoke
+## Step 6 — Registry smoke
 
 Verify the published package works end-to-end via the registry:
 
@@ -104,7 +122,7 @@ Both must succeed. If either fails, investigate (possible registry CDN lag; retr
 
 ---
 
-## Step 6 — Promote `next` → `latest`
+## Step 7 — Promote `next` → `latest`
 
 ```bash
 npm dist-tag add @pzstudio/cli@0.42200.0 latest
@@ -121,7 +139,7 @@ If a promoted release is broken in production:
 1. **Do not rebuild and republish the same version.** Versions are immutable once published.
 2. Fix the issue in the codebase.
 3. Bump the patch version in `packages/cli/package.json`.
-4. Follow Steps 1–6 with the new version.
+4. Follow Steps 1–7 with the new version.
 5. Optionally `npm deprecate @pzstudio/cli@<broken-version> "Fixed in @<new-version>"`.
 
 ---
