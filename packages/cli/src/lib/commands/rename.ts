@@ -141,6 +141,6 @@ registerCommand({
         { name: 'oldModId', required: true },
         { name: 'newModId', required: true },
     ],
-    flags: [{ name: 'yes' }, { name: 'dry-run' }],
+    flags: [{ name: 'dry-run' }],
     run: (ctx) => renameCmd(ctx.positionals[0], ctx.positionals[1]),
 });

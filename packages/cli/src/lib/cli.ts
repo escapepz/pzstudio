@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-ignore - necessary because we can't reliably predict if typescript will resolve this outside src without structural errors in some configs
-import { version, branch } from '../../package.json';
+import { version } from '../../package.json';
 /* eslint-enable @typescript-eslint/ban-ts-comment */
 import { existsSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
@@ -215,5 +215,5 @@ function printBanner(): void {
     } catch (_e) {
         // ignore
     }
-    log(`Project Zomboid Studio v${version} - @${branch} (${buildDate})\n`);
+    log(`Project Zomboid Studio v${version} (${buildDate})\n`);
 }

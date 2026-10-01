@@ -6,22 +6,10 @@
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "exports": {
-        ".": {
-            "types": "./dist/index.d.ts",
-            "import": "./dist/index.js",
-            "require": "./dist/index.js"
-        },
         "./api": {
             "types": "./dist/api.d.ts",
             "import": "./dist/api.js",
             "require": "./dist/api.js"
-        }
-    },
-    "typesVersions": {
-        "*": {
-            "api": [
-                "dist/api.d.ts"
-            ]
         }
     },
     "type": "commonjs",
@@ -31,8 +19,13 @@
     "bin": {
         "pzstudio": "./dist/index.js"
     },
+    "files": [
+        "dist",
+        "THIRD_PARTY_NOTICES.md"
+    ],
     "publishConfig": {
-        "tag": "latest"
+        "access": "public",
+        "tag": "next"
     },
     "repository": {
         "type": "git",
@@ -67,7 +60,7 @@
     ],
     "scripts": {
         "clean": "node -e \"require('fs').rmSync('./dist', { recursive: true, force: true })\"",
-        "build": "pnpm run clean && tsc -p tsconfig.build.json && node scripts/update-build-date.js",
+        "build": "pnpm run clean && tsc -p tsconfig.build.json && node scripts/bundle.js && node scripts/update-build-date.js",
         "watch": "pnpm run clean && tsc --watch"
     },
     "dependencies": {
@@ -76,6 +69,7 @@
     "devDependencies": {
         "@types/node": "^20.0.0",
         "typescript": "^5.9.3",
+        "esbuild": "^0.27.2",
         "@pzstudio/core": "workspace:*",
         "@pzstudio/platform": "workspace:*",
         "@pzstudio/platform-node": "workspace:*",

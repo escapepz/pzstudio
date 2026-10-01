@@ -96,4 +96,6 @@ export const GLOBAL_FLAGS: FlagSpec[] = [
         takesValue: true,
     },
     { name: 'help' },
+    /** Used by confirmDestructive (lib/interaction.ts) to bypass the consent gate. */
+    { name: 'yes' },
 ];
