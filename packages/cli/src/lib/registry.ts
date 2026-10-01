@@ -17,6 +17,12 @@ export interface FlagSpec {
     takesValue?: boolean;
     /** Allowed values (value flags only); others are rejected as usage errors. */
     choices?: readonly string[];
+    /**
+     * Names of flags this one must not be combined with. Enforced by
+     * validateInvocation() so both hosts share the same usage-error
+     * semantics (e.g. build/watch --production vs --development vs --both).
+     */
+    conflicts?: string[];
 }
 
 export interface PositionalSpec {

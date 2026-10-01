@@ -34,7 +34,7 @@ describe('help command (E2E)', () => {
 
     it('should fail for an unknown command (no entry in help registry)', async () => {
         const result = await workspace.run('help', ['nonexistent-command']);
-        workspace.assertFailure(result);
+        workspace.assertFailure(result, 2);
         workspace.assertStderr(result, 'Unknown command [nonexistent-command]');
     });
 });
@@ -97,14 +97,14 @@ describe('help — odd input shapes (E2E)', () => {
     it('should fail for a numeric string argument (no matching help entry)', async () => {
         // '123' is a valid string arg but has no matching help entry
         const result = await workspace.run('help', ['123']);
-        workspace.assertFailure(result);
+        workspace.assertFailure(result, 2);
         workspace.assertStderr(result, 'Unknown command [123]');
     });
 
     it('should fail for a boolean-like string argument', async () => {
         // 'true' is a valid string arg but has no matching help entry
         const result = await workspace.run('help', ['true']);
-        workspace.assertFailure(result);
+        workspace.assertFailure(result, 2);
         workspace.assertStderr(result, 'Unknown command [true]');
     });
 
@@ -177,7 +177,7 @@ describe('help — registry behavior for unknown commands (E2E)', () => {
 
     it('should fail for an unregistered command name', async () => {
         const result = await workspace.run('help', ['nonexistent']);
-        workspace.assertFailure(result);
+        workspace.assertFailure(result, 2);
         workspace.assertStderr(result, 'Unknown command [nonexistent]');
     });
 

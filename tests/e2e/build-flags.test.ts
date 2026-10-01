@@ -127,17 +127,18 @@ describe('build --production --development conflict (E2E)', () => {
         workspace.cleanup();
     });
 
-    it('should fail with an error when both --production and --development are given', async () => {
+    it('should fail as a usage error when both --production and --development are given', async () => {
         writeMinimalProject(workspace, { outdir: 'out' });
 
         const result = await workspace.run('build', [
             '--production',
             '--development',
         ]);
-        workspace.assertFailure(result, 1);
+        // Mutually exclusive options are semantic validation (CLI-1) → exit 2
+        workspace.assertFailure(result, 2);
         workspace.assertStderr(
             result,
-            'Use either --production or --development, not both',
+            'Conflicting options: --production cannot be combined with --development',
         );
     });
 });

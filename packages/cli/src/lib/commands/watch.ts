@@ -45,16 +45,8 @@ export async function watchCmd() {
     const isProduction = hasFlag('production');
     const isDevelopment = hasFlag('development');
     const isBoth = hasFlag('both');
-    if (isProduction && isDevelopment) {
-        throw new Error(
-            'Conflicting targets selected: Use either --production or --development, not both.',
-        );
-    }
-    if (isBoth && (isProduction || isDevelopment)) {
-        throw new Error(
-            'Conflicting targets selected: --both cannot be combined with --production or --development.',
-        );
-    }
+    // Mutually exclusive flag combinations are rejected by
+    // validateInvocation (CLI-1) before the handler runs.
     const variants = resolveWatchVariants({
         production: isProduction,
         development: isDevelopment,
@@ -182,6 +174,10 @@ registerCommand({
     name: 'watch',
     summary: 'Watch for changes and keep your output directory synced.',
     silent: true,
-    flags: [{ name: 'production' }, { name: 'development' }, { name: 'both' }],
+    flags: [
+        { name: 'production', conflicts: ['development', 'both'] },
+        { name: 'development', conflicts: ['production', 'both'] },
+        { name: 'both', conflicts: ['production', 'development'] },
+    ],
     run: () => watchCmd(),
 });

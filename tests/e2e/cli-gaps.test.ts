@@ -24,9 +24,9 @@ describe('CLI Gaps e2e', () => {
     });
 
     describe('Gap 5: help for unknown commands', () => {
-        it('should throw an error for an unknown command in help', async () => {
+        it('should throw a usage error for an unknown command in help', async () => {
             const result = await workspace.run('help', ['nonexistent']);
-            workspace.assertFailure(result);
+            workspace.assertFailure(result, 2);
             workspace.assertStderr(result, 'Unknown command [nonexistent]');
         });
 
