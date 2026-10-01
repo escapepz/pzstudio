@@ -28,7 +28,7 @@ Commands that opt in print **exactly one JSON envelope on stdout and no human re
 | Case | stdout | stderr | exit |
 |---|---|---|---|
 | 1. Command executed and produced a domain result | the envelope; diagnostics only on stderr | error/progress lines | follows the **result** — e.g. `doctor` with blocking issues prints the envelope (`result.status: "error"`) and still exits 1 |
-| 2. Runtime failure before a result exists | **empty** (at most the blank separator line the lifecycle prints before dispatch — `trim()` before judging) | the formatted error | 1 |
+| 2. Runtime failure before a result exists | **empty** — judge with `trim()`; the pinned contract is `stdout.trim() === ''` (`bin-json.test.ts`) | the formatted error | 1 |
 | 3. Parser/usage failure | **empty** | the usage error | 2 |
 
 Machine consumers must **not** assume the envelope exists on non-zero exits.
@@ -115,12 +115,17 @@ await runCLI('delete', [modId], { flags: ['--yes'] });      // never prompts; --
 await runCLI('build', [], { flags: ['--verbose'] });        // flags instead of argv
 ```
 
+`@pzstudio/cli/api` is the only importable surface: the package root is the
+executable entry and `require('@pzstudio/cli')` throws
+`ERR_PACKAGE_PATH_NOT_EXPORTED` (see `08-mechanics.md` → Embedding API).
+
 ### Invocation semantics
 
-- Shape: `runCLI(cmdName?, cmdArgs?, options?: { flags?: string[] })`. Passing either a
-  command name or `options.flags` selects the **embedded** path: the tokens are
-  structured against the same registry schema the executable parser uses
-  (`normalizeLegacyInvocation`) and flow through the same `validateInvocation`.
+- Shape: `runCLI(cmdName?, cmdArgs?, options?: { flags?: string[] })` — `flags` is the
+  only option. Passing either a command name or `options.flags` selects the
+  **embedded** path: the tokens are structured against the same registry schema the
+  executable parser uses (`normalizeLegacyInvocation`) and flow through the same
+  `validateInvocation`.
 - **Rejects like a promise, never exits the host process.** Runtime failures reject with
   the thrown error; usage failures reject with `CliUsageError`. The host decides exit
   codes/UI. Pinned: a rejected `runCLI` is followed by a successful new invocation in
@@ -131,8 +136,9 @@ await runCLI('build', [], { flags: ['--verbose'] });        // flags instead of 
   (embedded API). Pass { flags: ['--yes'] } once your host UI has confirmed, or use
   --dry-run to preview.` The host passes `--yes` after its own UI has confirmed, or
   uses `--dry-run` for previews.
-- Per-invocation state: verbose/quiet/debug derive from the passed flags; the `-C`
-  anchor derives from `options.project` (absent → cleared). The external anchor
+- Per-invocation state: verbose/quiet/debug derive from the passed flags; the
+  `-C/--project` anchor derives from the `flags` array itself (`--project <dir>` or
+  `-C <dir>`; an invocation without that flag clears the anchor). The external anchor
   (`setProjectDir`) and the transport singleton persist until changed.
 - Output goes through the logger bridge (`setLogger`) and/or the real streams per the
   stream contract (see `08-mechanics.md`); hosts that capture output can swap the CliIO

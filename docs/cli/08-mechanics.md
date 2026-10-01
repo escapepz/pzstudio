@@ -156,7 +156,7 @@ mutation in `new` (addProject+addMod), `add` (addMod), `delete` (removeMod),
 flowchart TD
     A["updateExperimentalScripts(action, ...)"] --> G{"experimental.integration<br/>enabled for this project?"}
     G -- "no (DEFAULT)" --> X["verbose: Experimental integration is disabled (default) ...<br/>return — no files touched"]
-    G -- yes --> B["locate script: src/scripts or dist/scripts"]
+    G -- yes --> B["locate script<br/>(relative to the running layout:<br/>bundled dist/, compiled dist/,<br/>or the package scripts/ dir)"]
     B --> C{"found?"}
     C -- no --> X2["return silently"]
     C -- yes --> D{"project has<br/>package.json?"}
@@ -187,7 +187,13 @@ With the default (disabled), none of this happens — `new`/`add` no longer writ
 
 ## Embedding API (api.ts) — the host contract
 
-The VS Code extension bundles `@pzstudio/cli/api` in-process. Surface groups:
+The VS Code extension bundles `@pzstudio/cli/api` in-process. **`@pzstudio/cli/api`
+is the only library surface**: the package root is the executable entry and is not
+importable — `require('@pzstudio/cli')` throws `ERR_PACKAGE_PATH_NOT_EXPORTED`
+(pinned by the release smoke). The executable bundle (`dist/index.js`) and the
+embedder bundle (`dist/api.js`) each carry their own copy of the CLI's internal
+state, so mixing both in one process is not a supported way to share the anchor
+or transport singletons. Surface groups:
 
 | Group | Exports |
 |---|---|
@@ -216,7 +222,8 @@ The VS Code extension bundles `@pzstudio/cli/api` in-process. Surface groups:
   `flags: ['--yes']` once its own UI has confirmed — "host owns the confirmation
   UI" never means "the library assumes confirmation happened".
 - Per-invocation state is re-derived every call: verbose/quiet/debug from the passed
-  flags, the `-C` anchor from `options.project` (absent → cleared), interaction mode
+  flags, the `-C/--project` anchor from the `flags` array itself (`--project <dir>`
+  or `-C <dir>` — an invocation without that flag clears the anchor), interaction mode
   forced to `embedded`. The external anchor (`setProjectDir`) and the transport
   singleton persist across calls until changed.
 - Unknown options passed by the host are rejected through the same
