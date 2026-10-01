@@ -91,7 +91,7 @@ describe('migrate command e2e', () => {
 
         try {
             workspace.assertSuccess(result);
-            workspace.assertStdout(result, 'Migrating config.json');
+            workspace.assertStderr(result, 'Migrating config.json');
 
             // 3. Verify upgraded config.json
             const upgraded = JSON.parse(fs.readFileSync(configPath, 'utf8'));

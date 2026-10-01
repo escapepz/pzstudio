@@ -18,7 +18,7 @@ import {
     TemplateCategory,
     ITemplateConfig,
 } from '@pzstudio/core';
-import { log, warn, verbose } from './logger';
+import { info, warn, verbose } from './logger';
 import { CliError } from './errors';
 import {
     GlobalConfig,
@@ -432,7 +432,8 @@ export function migrateStoreDirIfNeeded() {
             config.outdir = outDirContent;
             writeGlobalConfig(config);
 
-            log(`- Migrated legacy .pzstudio file to directory structure`);
+            // Progress to stderr (CLI-2): keeps stdout pure for --json runs.
+            info(`- Migrated legacy .pzstudio file to directory structure`);
         } catch (e) {
             warn(`Failed to migrate legacy store: ${e}`);
         }

@@ -11,7 +11,7 @@ import {
     cpSync,
     symlinkSync,
 } from 'fs';
-import { log, warn, verbose } from './logger';
+import { info, log, warn, verbose } from './logger';
 import type {
     TemplateCategory,
     GlobalConfig,
@@ -403,7 +403,9 @@ export function migrateGlobalConfigIfNeeded(): void {
 
         const migrationCheck = migration.checkConfig(config);
         if (migrationCheck.needsMigration) {
-            log(`- Migrating config.json: ${migrationCheck.reason}`);
+            // Progress to stderr (CLI-2): --json runs must keep stdout to
+            // exactly one JSON document.
+            info(`- Migrating config.json: ${migrationCheck.reason}`);
             const upgraded = migration.upgradeConfig(
                 config,
                 migrationHostOptions(),
