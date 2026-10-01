@@ -2,6 +2,7 @@ import { expect } from '../expect';
 import { addHelp, getHelp } from '../help';
 import { registerCommand, allCommands } from '../registry';
 import { log } from '../logger';
+import { CliUsageError, suggestCommands } from '../parser';
 
 function buildFullHelp(): string {
     // Hidden commands (CLI-7) stay registered and runnable but are not
@@ -31,7 +32,12 @@ export function helpCmd(command?: string) {
         if (helpText) {
             log(helpText);
         } else {
-            throw new Error(`Unknown command [${command}]`);
+            // Asking help for a command that does not exist is a usage
+            // error (exit 2), not a runtime failure — same classification
+            // and suggestion as the parser's unknown-command path.
+            throw new CliUsageError(
+                `Unknown command [${command}].${suggestCommands(command)}`,
+            );
         }
     }
 }

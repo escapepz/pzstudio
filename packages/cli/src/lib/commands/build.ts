@@ -98,20 +98,10 @@ export async function buildCmd() {
         `Flags: production=${isProduction}, development=${isDevelopment}, both=${isBoth}`,
     );
 
-    // Conflict detection
-    if (isProduction && isDevelopment) {
-        throw new Error(
-            'Conflicting targets selected: Use either --production or --development, not both.',
-        );
-    }
-    if (isBoth && (isProduction || isDevelopment)) {
-        throw new Error(
-            'Conflicting targets selected: --both cannot be combined with --production or --development.',
-        );
-    }
-
     // Target resolution: explicit flags win over project.json build.target,
-    // which in turn wins over the default (main only).
+    // which in turn wins over the default (main only). Mutually exclusive
+    // flag combinations are rejected by validateInvocation (CLI-1) before
+    // the handler runs.
     const configTarget = projectConfig.build?.target;
     let buildMain = false;
     let buildDev = false;
@@ -212,6 +202,10 @@ registerCommand({
     name: 'build',
     summary: 'Build your project and package it for the workshop.',
     silent: true,
-    flags: [{ name: 'production' }, { name: 'development' }, { name: 'both' }],
+    flags: [
+        { name: 'production', conflicts: ['development', 'both'] },
+        { name: 'development', conflicts: ['production', 'both'] },
+        { name: 'both', conflicts: ['production', 'development'] },
+    ],
     run: () => buildCmd(),
 });

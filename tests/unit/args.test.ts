@@ -286,6 +286,67 @@ describe('Shared semantic validation', () => {
         const valid = validateInvocation(invocation);
         expect(valid.command.name).toBe('build');
     });
+
+    it('rejects mutually exclusive build targets as a usage error', () => {
+        expect(() =>
+            validateInvocation(
+                normalizeLegacyInvocation(
+                    'build',
+                    [],
+                    ['--production', '--development'],
+                ),
+            ),
+        ).toThrow(
+            /Conflicting options: --production cannot be combined with --development/,
+        );
+        expect(() =>
+            validateInvocation(
+                normalizeLegacyInvocation(
+                    'build',
+                    [],
+                    ['--both', '--production'],
+                ),
+            ),
+        ).toThrow(
+            /Conflicting options: --production cannot be combined with --both/,
+        );
+    });
+
+    it('rejects mutually exclusive watch targets as a usage error', () => {
+        expect(() =>
+            validateInvocation(
+                normalizeLegacyInvocation(
+                    'watch',
+                    [],
+                    ['--production', '--development'],
+                ),
+            ),
+        ).toThrow(/Conflicting options: --production/);
+        expect(() =>
+            validateInvocation(
+                normalizeLegacyInvocation(
+                    'watch',
+                    [],
+                    ['--both', '--development'],
+                ),
+            ),
+        ).toThrow(
+            /Conflicting options: --development cannot be combined with --both/,
+        );
+    });
+
+    it('does not suggest hidden commands (lang stays unlisted)', () => {
+        const invocation = normalizeLegacyInvocation('langg', [], []);
+        let message = '';
+        try {
+            validateInvocation(invocation);
+        } catch (e) {
+            message = (e as Error).message;
+        }
+        expect(message).toContain('Unknown command [langg]');
+        expect(message).not.toContain('lang,');
+        expect(message).not.toMatch(/\blang\?/);
+    });
 });
 
 describe('Flag readers over the current invocation', () => {

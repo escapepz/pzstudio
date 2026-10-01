@@ -95,15 +95,9 @@ describe('buildCmd', () => {
         await expect(buildCmd()).rejects.toThrow('No pzstudio project found.');
     });
 
-    it('should throw when both target flags are selected', async () => {
-        vi.mocked(hasFlag).mockImplementation(
-            (name: string) => name === 'production' || name === 'development',
-        );
-
-        await expect(buildCmd()).rejects.toThrow(
-            'Conflicting targets selected',
-        );
-    });
+    // Mutually exclusive target flags (--production/--development/--both)
+    // are rejected by validateInvocation (CLI-1) before the handler runs;
+    // conflict pins live in tests/unit/args.test.ts.
 
     it('should plan and execute a main build by default', async () => {
         await buildCmd();
@@ -453,16 +447,6 @@ describe('buildCmd', () => {
             .mock.calls.filter((call) => call[0] === '/templates/workshop');
         expect(templateCopies).toHaveLength(1);
         expect(templateCopies[0][1]).toContain('Test Project - dev_branch');
-    });
-
-    it('should throw when --both is combined with another target flag', async () => {
-        vi.mocked(hasFlag).mockImplementation(
-            (name: string) => name === 'both' || name === 'production',
-        );
-
-        await expect(buildCmd()).rejects.toThrow(
-            'Conflicting targets selected: --both',
-        );
     });
 
     it('should still build the dev output when the main output is locked', async () => {

@@ -410,6 +410,7 @@ export function normalizeLegacyInvocation(
 function suggestCommands(name: string): string {
     const lower = name.toLowerCase();
     const candidates = allCommands()
+        .filter((c) => !c.hidden)
         .map((c) => c.name)
         .filter((n) => {
             const shared = [...n].filter((ch) => lower.includes(ch)).length;
@@ -420,6 +421,7 @@ function suggestCommands(name: string): string {
         ? ` Did you mean one of: ${candidates.join(', ')}?`
         : '';
 }
+export { suggestCommands };
 
 /**
  * Single semantic validation layer shared by the executable and embedded
@@ -465,6 +467,18 @@ export function validateInvocation(
         ) {
             throw new CliUsageError(
                 `Invalid --${flag.name} value '${value}' (expected one of: ${flag.choices.join(', ')}).`,
+            );
+        }
+    }
+
+    // Mutually exclusive options: declared per flag in the registry, so the
+    // executable and embedded hosts share one conflict semantics (exit 2).
+    for (const flag of declared) {
+        if (!flag.conflicts || !options[flag.name]) continue;
+        const clash = flag.conflicts.find((other) => options[other]);
+        if (clash) {
+            throw new CliUsageError(
+                `Conflicting options: --${flag.name} cannot be combined with --${clash}.`,
             );
         }
     }
