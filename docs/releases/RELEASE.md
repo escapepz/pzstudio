@@ -62,10 +62,13 @@ This script performs all acceptance gate checks in an **isolated OS temp project
 
 - `npm install <exact-tgz>` into the temp project.
 - `npm ls --omit=dev` — must be clean (no unmet deps, no extraneous).
+- **Metadata:** version matches the source `package.json`; the only runtime dep is `@parcel/watcher`; no `workspace:*` references; no root `main`/`types` (embedders must use `@pzstudio/cli/api`); the packed `LICENSE` matches the repo `LICENSE.md` byte-for-byte.
 - **Bin smoke:** `pzstudio --version` and `pzstudio --help` succeed; pure invocation leaves no `~/.pzstudio`.
-- **Library smoke:** `require("@pzstudio/cli/api")` returns the API object; embedded `runCLI("new", ..., { flags: ["--offline"] })` creates a real project from the bundled `/api` surface (proving `__dirname`-relative resource resolution survives bundling).
-- **Negative smoke:** `require("@pzstudio/cli")` yields `ERR_PACKAGE_PATH_NOT_EXPORTED`.
-- **Type consumer:** isolated `tsc --noEmit` with `module: NodeNext, moduleResolution: NodeNext, strict: true` compiles the import from `@pzstudio/cli/api` exit 0.
+- **Library smoke:** `require("@pzstudio/cli/api")` returns the API functions; embedded `runCLI("new", ..., { flags: ["--offline"] })` creates a real project from the bundled `/api` surface, and the bin surface does the same (proving `__dirname`-relative resource resolution survives bundling on both entries).
+- **Negative smoke:** `require("@pzstudio/cli")` yields `ERR_PACKAGE_PATH_NOT_EXPORTED` — there is no supported package-root library import.
+- **Type consumer:** isolated `tsc --noEmit` with `module: NodeNext, moduleResolution: NodeNext, strict: true, skipLibCheck: false` compiles the import from `@pzstudio/cli/api` exit 0.
+- **Packlist:** read directly from the exact tarball (`tar -tzf`) — required entries present (including `dist/.template-legacy/` and `dist/vendor/`), no `src/`, `tests/`, `docs/`, `.tmp/`, lockfiles, or tsc intermediate `dist/lib/*.js`.
+- The real `~/.pzstudio` is untouched by the whole run (existence sentinel).
 
 If any check fails, diagnose, fix, rebuild (Step 1), pack (Step 2), then re-smoke. Do not repack without rebuilding.
 
