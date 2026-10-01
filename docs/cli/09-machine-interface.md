@@ -108,7 +108,7 @@ The JSON branch runs **before** the human header/report, so stdout stays clean.
 ## Embedded API — `runCLI` (the host contract)
 
 ```ts
-import { runCLI, setProjectDir } from 'pzstudio-cli/api';
+import { runCLI, setProjectDir } from '@pzstudio/cli/api';
 
 setProjectDir(projectDir);                                  // external anchor
 await runCLI('delete', [modId], { flags: ['--yes'] });      // never prompts; --yes required

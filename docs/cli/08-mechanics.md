@@ -187,7 +187,7 @@ With the default (disabled), none of this happens — `new`/`add` no longer writ
 
 ## Embedding API (api.ts) — the host contract
 
-The VS Code extension bundles `pzstudio-cli/api` in-process. Surface groups:
+The VS Code extension bundles `@pzstudio/cli/api` in-process. Surface groups:
 
 | Group | Exports |
 |---|---|
