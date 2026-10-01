@@ -6,7 +6,7 @@ vi.mock('vscode', async () => {
     const { createVscodeMock } = await import('../helpers/vscode-mock');
     return createVscodeMock();
 });
-vi.mock('pzstudio-cli/api', () => ({
+vi.mock('@pzstudio/cli/api', () => ({
     createDevSync: vi.fn(),
     warn: vi.fn(),
     log: vi.fn(),
@@ -36,7 +36,7 @@ vi.mock('pzstudio-cli/api', () => ({
 
 import * as vscode from 'vscode';
 import { DevSyncController } from '../../packages/vscode-extension/src/util/devsync';
-import { createDevSync, log, warn } from 'pzstudio-cli/api';
+import { createDevSync, log, warn } from '@pzstudio/cli/api';
 
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 

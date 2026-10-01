@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { runCLI, setProjectDir } from 'pzstudio-cli/api';
+import { runCLI, setProjectDir } from '@pzstudio/cli/api';
 import {
     defaultOutRoot,
     RealEnvWorkspace,

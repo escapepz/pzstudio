@@ -97,7 +97,7 @@ jobs:
                   Set-MpPreference -ExclusionProcess "node.exe"
 
             - name: Build CLI and its workspace dependencies
-              run: pnpm --filter pzstudio-cli... build
+              run: pnpm --filter @pzstudio/cli... build
 
             - name: Real-environment e2e
               run: pnpm test:real-env

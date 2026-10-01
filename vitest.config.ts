@@ -7,7 +7,7 @@ export default defineConfig({
             // The extension imports the CLI by package name; pin it to the
             // built CLI output so vi.mock() and the real import resolve to
             // the same module id from anywhere in the test graph.
-            'pzstudio-cli': fileURLToPath(
+            '@pzstudio/cli': fileURLToPath(
                 new URL('./packages/cli/dist', import.meta.url),
             ),
             // Workspace packages resolve to their sources in tests so the

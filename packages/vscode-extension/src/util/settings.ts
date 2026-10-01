@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { setVsCodeSettings } from 'pzstudio-cli/api';
+import { setVsCodeSettings } from '@pzstudio/cli/api';
 
 export function updateVsCodeSettings(): void {
     const config = vscode.workspace.getConfiguration('pzstudio');

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { setLogger, setProjectDir, setVsCodeSettings } from 'pzstudio-cli/api';
+import { setLogger, setProjectDir, setVsCodeSettings } from '@pzstudio/cli/api';
 import { createPZLogger } from './util/logger';
 import { initExtensionL10n } from './util/l10n';
 import {

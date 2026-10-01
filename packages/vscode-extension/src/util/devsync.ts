@@ -5,8 +5,8 @@ import {
     summarizeApplyResult,
     warn,
     WATCH_DEBOUNCE_MS,
-} from 'pzstudio-cli/api';
-import type { BuildSession, FileDelta } from 'pzstudio-cli/api';
+} from '@pzstudio/cli/api';
+import type { BuildSession, FileDelta } from '@pzstudio/cli/api';
 
 /**
  * Desktop auto-sync: ONE core BuildSession driven by a workspace

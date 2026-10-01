@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { runCLI, setProjectDir } from 'pzstudio-cli/api';
+import { runCLI, setProjectDir } from '@pzstudio/cli/api';
 
 /**
  * Desktop integration tests running inside a real VS Code extension host

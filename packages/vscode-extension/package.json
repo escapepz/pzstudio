@@ -484,7 +484,7 @@
         "esbuild": "^0.27.2"
     },
     "dependencies": {
-        "pzstudio-cli": "workspace:*"
+        "@pzstudio/cli": "workspace:*"
     },
     "l10n": "./l10n"
 }
