@@ -3,6 +3,7 @@ import { join } from 'path';
 import fs from 'fs';
 import * as logger from '../../packages/cli/src/lib/logger';
 import { renameCmd } from '../../packages/cli/src/lib/commands/rename';
+import { setInvocationOptions } from '../../packages/cli/src/lib/args';
 import {
     projectDir,
     readProjectConfig,
@@ -35,6 +36,9 @@ describe('renameCmd', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        // Destructive gate (CLI-9): unit tests invoke the command directly
+        // in embedded mode — publish --yes as the confirmation intent.
+        setInvocationOptions({ yes: true });
         vi.mocked(projectDir).mockReturnValue('/proj' as any);
         // Fresh copy per call: renameCmd mutates the config it receives
         vi.mocked(readProjectConfig).mockImplementation(

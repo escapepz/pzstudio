@@ -7,8 +7,9 @@ import { hasFlag } from './args';
  * How the current invocation may talk to the user (CLI-9). Set once per
  * runCLI invocation, never by business handlers:
  * - 'embedded' — runCLI(cmd, args, {flags}) library calls: NEVER prompt.
- *   Hosts (the VS Code extension) own their confirmation UI and pass
- *   --yes-equivalent intent themselves.
+ *   Destructive actions still require explicit confirmation intent via
+ *   --yes; a host (the VS Code extension) passes it after its own
+ *   confirmation UI. No flags and no --yes is a refusal, never a proceed.
  * - 'interactive' — executable attached to a TTY: destructive actions
  *   prompt for confirmation unless --yes was given.
  * - 'non-interactive' — executable without a TTY (CI, pipes): never
@@ -66,8 +67,10 @@ export function setStdinReader(reader: StdinReader | undefined): void {
 /**
  * The single consent gate for destructive mutations. Business handlers
  * call this before their first mutation; the policy stays here:
- * - embedded: proceed immediately (no terminal prompting, ever).
- * - --yes passed: proceed.
+ * - --yes passed: proceed (every mode — it IS the explicit confirmation
+ *   intent; in embedded mode the host passes it after its own UI).
+ * - embedded without --yes: refuse as a usage error — "the host owns the
+ *   confirmation UI" must never mean "the library assumes it happened".
  * - non-interactive: refuse as a usage error (exit 2) with the exact
  *   command to re-run.
  * - interactive: print the question through CliIO and read one line; any
@@ -78,8 +81,13 @@ export function confirmDestructive(
     args: string[],
     question: string,
 ): void {
-    if (interactionMode === 'embedded') return;
     if (hasFlag('yes')) return;
+
+    if (interactionMode === 'embedded') {
+        throw new CliUsageError(
+            `Refusing '${command}' without explicit confirmation (embedded API). Pass { flags: ['--yes'] } once your host UI has confirmed, or use --dry-run to preview.`,
+        );
+    }
 
     if (interactionMode === 'non-interactive') {
         throw new CliUsageError(

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { join } from 'path';
 import fs from 'fs';
 import { deleteCmd } from '../../packages/cli/src/lib/commands/delete';
+import { setInvocationOptions } from '../../packages/cli/src/lib/args';
 import {
     projectDir,
     resolveProjectConfig,
@@ -33,6 +34,9 @@ describe('deleteCmd', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        // Destructive gate (CLI-9): unit tests invoke the command directly
+        // in embedded mode — publish --yes as the confirmation intent.
+        setInvocationOptions({ yes: true });
         vi.mocked(projectDir).mockReturnValue('/proj' as any);
         // Fresh copy per call: deleteCmd mutates the config it receives
         vi.mocked(resolveProjectConfig).mockImplementation(

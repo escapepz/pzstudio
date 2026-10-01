@@ -101,7 +101,11 @@ describe('Global --verbose flag behavior (E2E)', () => {
         );
         fs.mkdirSync(path.join(workspace.dir, 'vmod'), { recursive: true });
 
-        const result = await workspace.run('delete', ['vmod', '--verbose']);
+        const result = await workspace.run('delete', [
+            'vmod',
+            '--verbose',
+            '--yes',
+        ]);
         workspace.assertSuccess(result);
 
         const hasVerbose = result.stderr.some(

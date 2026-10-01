@@ -27,7 +27,16 @@ export function registerRenameCommand(
             });
             if (!newName) return;
 
-            await execute('rename', [modId, newName], undefined, {
+            const confirm = await vscode.window.showWarningMessage(
+                t("Rename mod '{0}' to '{1}'?", modId, newName),
+                { modal: true },
+                t('Yes'),
+            );
+            if (confirm !== t('Yes')) return;
+
+            // The embedded API refuses destructive commands without --yes
+            // (CLI-9): our modal above IS the confirmation, so forward it.
+            await execute('rename', [modId, newName], ['--yes'], {
                 projectDir: projectDir.fsPath,
             });
         },

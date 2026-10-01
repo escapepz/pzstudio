@@ -39,8 +39,12 @@ describe('rename command e2e', () => {
             `print("${oldModId}")`,
         );
 
-        // 2. Run rename command
-        const result = await workspace.run('rename', [oldModId, newModId]);
+        // 2. Run rename command (embedded API: --yes IS the confirmation)
+        const result = await workspace.run('rename', [
+            oldModId,
+            newModId,
+            '--yes',
+        ]);
 
         try {
             workspace.assertSuccess(result);
@@ -181,7 +185,11 @@ describe('rename command e2e', () => {
             }),
         );
 
-        const result = await workspace.run('rename', [oldModId, newModId]);
+        const result = await workspace.run('rename', [
+            oldModId,
+            newModId,
+            '--yes',
+        ]);
 
         try {
             workspace.assertSuccess(result);
@@ -248,7 +256,11 @@ describe('rename command e2e', () => {
             `id=${oldModId}\nname=Display Name`,
         );
 
-        const result = await workspace.run('rename', [oldModId, newModId]);
+        const result = await workspace.run('rename', [
+            oldModId,
+            newModId,
+            '--yes',
+        ]);
         workspace.assertSuccess(result);
 
         const config = workspace.readJson('project.json');
@@ -260,5 +272,37 @@ describe('rename command e2e', () => {
         const modInfo = workspace.read(`${newModId}/mod.info`);
         expect(modInfo).toContain(`id=${newModId}`);
         expect(modInfo).toContain('name=Display Name');
+    });
+
+    it('should refuse embedded rename without --yes and change nothing', async () => {
+        // CLI-9: embedded never prompts, but an embedded call without --yes
+        // is a refusal (usage error, exit 2), never a proceed.
+        const oldModId = 'guarded_mod';
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: { title: 'P', visibility: 'public', tags: [] },
+                mods: {
+                    [oldModId]: { name: 'G', description: 'D' },
+                },
+                excludes: [],
+            }),
+        );
+        workspace.write(`${oldModId}/mod.info`, `id=${oldModId}`);
+
+        const result = await workspace.run('rename', [oldModId, 'new_mod']);
+
+        workspace.assertFailure(result, 2);
+        workspace.assertStderr(
+            result,
+            `Refusing 'rename' without explicit confirmation (embedded API)`,
+        );
+
+        // Nothing was mutated
+        expect(workspace.exists(oldModId)).toBe(true);
+        expect(workspace.exists('new_mod')).toBe(false);
+        const config = workspace.readJson('project.json');
+        expect(config.mods[oldModId]).toBeDefined();
+        expect(config.mods['new_mod']).toBeUndefined();
     });
 });

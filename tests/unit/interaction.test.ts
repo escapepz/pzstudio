@@ -21,7 +21,24 @@ describe('interaction policy (CLI-9)', () => {
         expect(getInteractionMode()).toBe('embedded');
     });
 
-    it('embedded mode never prompts and always proceeds', () => {
+    it('embedded mode never prompts and refuses without --yes', () => {
+        const reader = vi.fn(() => 'y');
+        setStdinReader(reader);
+        expect(() =>
+            confirmDestructive('delete', ['some_mod'], 'Delete?'),
+        ).toThrow(CliUsageError);
+        expect(() =>
+            confirmDestructive('delete', ['some_mod'], 'Delete?'),
+        ).toThrow(
+            "Refusing 'delete' without explicit confirmation (embedded API). " +
+                "Pass { flags: ['--yes'] } once your host UI has confirmed, " +
+                'or use --dry-run to preview.',
+        );
+        expect(reader).not.toHaveBeenCalled();
+    });
+
+    it('embedded mode proceeds with --yes without prompting', () => {
+        setInvocationOptions({ yes: true });
         const reader = vi.fn(() => 'y');
         setStdinReader(reader);
         expect(() =>
