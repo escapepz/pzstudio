@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { runCLI, setProjectDir } from 'pzstudio-cli/api';
+import { runCLI, setProjectDir } from '@pzstudio/cli/api';
 import { resolveFlags } from './flags';
 import { resolveProjectDir, warnNoProject } from './project';
 import { t } from './l10n';

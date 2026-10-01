@@ -6,7 +6,7 @@ vi.mock('vscode', async () => {
     const { createVscodeMock } = await import('../helpers/vscode-mock');
     return createVscodeMock();
 });
-vi.mock('pzstudio-cli/api', () => ({
+vi.mock('@pzstudio/cli/api', () => ({
     runCLI: vi.fn(async () => {}),
     setProjectDir: vi.fn(),
     setLogger: vi.fn(),
@@ -137,7 +137,7 @@ describe('BuildTaskProvider', () => {
         const writes = await runTask('production');
 
         const { runCLI, setProjectDir } =
-            (await import('pzstudio-cli/api')) as {
+            (await import('@pzstudio/cli/api')) as {
                 runCLI: import('vitest').Mock;
                 setProjectDir: import('vitest').Mock;
             };
@@ -152,7 +152,7 @@ describe('BuildTaskProvider', () => {
     it('runs build in-process with the both flag', async () => {
         const writes = await runTask('both');
 
-        const { runCLI } = (await import('pzstudio-cli/api')) as {
+        const { runCLI } = (await import('@pzstudio/cli/api')) as {
             runCLI: import('vitest').Mock;
         };
         expect(runCLI).toHaveBeenCalledWith('build', [], {
@@ -164,7 +164,7 @@ describe('BuildTaskProvider', () => {
     it('runs clean without branch flags', async () => {
         const writes = await runTask('clean');
 
-        const { runCLI } = (await import('pzstudio-cli/api')) as {
+        const { runCLI } = (await import('@pzstudio/cli/api')) as {
             runCLI: import('vitest').Mock;
         };
         expect(runCLI).toHaveBeenCalledWith('clean', [], { flags: [] });
@@ -177,14 +177,14 @@ describe('BuildTaskProvider', () => {
         ).workspaceFolders = [];
         const writes = await runTask('production');
         expect(writes.join('')).toContain('skipped: no PZ project');
-        const { runCLI } = (await import('pzstudio-cli/api')) as {
+        const { runCLI } = (await import('@pzstudio/cli/api')) as {
             runCLI: import('vitest').Mock;
         };
         expect(runCLI).not.toHaveBeenCalled();
     });
 
     it('reports CLI failures through the terminal', async () => {
-        const { runCLI } = (await import('pzstudio-cli/api')) as {
+        const { runCLI } = (await import('@pzstudio/cli/api')) as {
             runCLI: import('vitest').Mock;
         };
         asMock(runCLI).mockRejectedValueOnce(new Error('boom'));

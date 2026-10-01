@@ -7,7 +7,7 @@ vi.mock('vscode', async () => {
     const { createVscodeMock } = await import('../helpers/vscode-mock');
     return createVscodeMock();
 });
-vi.mock('pzstudio-cli/api', () => ({
+vi.mock('@pzstudio/cli/api', () => ({
     runCLI: vi.fn(async () => {}),
     setProjectDir: vi.fn(),
     setLogger: vi.fn(),
@@ -63,7 +63,7 @@ describe('createCommandRunner', () => {
         expect(asMock(vscode.window.showWarningMessage)).toHaveBeenCalledWith(
             expect.stringContaining('no PZ project (project.json)'),
         );
-        const { runCLI } = (await import('pzstudio-cli/api')) as {
+        const { runCLI } = (await import('@pzstudio/cli/api')) as {
             runCLI: import('vitest').Mock;
         };
         expect(runCLI).not.toHaveBeenCalled();
@@ -77,7 +77,7 @@ describe('createCommandRunner', () => {
         await runner('build', ['someMod'], ['--extra']);
 
         const { runCLI, setProjectDir } =
-            (await import('pzstudio-cli/api')) as {
+            (await import('@pzstudio/cli/api')) as {
                 runCLI: import('vitest').Mock;
                 setProjectDir: import('vitest').Mock;
             };
@@ -103,7 +103,7 @@ describe('createCommandRunner', () => {
         await runner('build');
 
         expect(asMock(output.show)).toHaveBeenCalledWith(true);
-        const { runCLI } = (await import('pzstudio-cli/api')) as {
+        const { runCLI } = (await import('@pzstudio/cli/api')) as {
             runCLI: import('vitest').Mock;
         };
         expect(runCLI).toHaveBeenCalledWith('build', [], {
@@ -142,7 +142,7 @@ describe('createCommandRunner', () => {
         await runner('clean', [], [], { projectDir: 'C:/somewhere/proj' });
 
         const { runCLI, setProjectDir } =
-            (await import('pzstudio-cli/api')) as {
+            (await import('@pzstudio/cli/api')) as {
                 runCLI: import('vitest').Mock;
                 setProjectDir: import('vitest').Mock;
             };

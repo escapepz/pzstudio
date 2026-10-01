@@ -59,7 +59,7 @@ vi.mock('vscode', async () =>
 import * as vscode from 'vscode';
 ```
 
-The factory result IS the mocked module: reach the `vi.fn()` stubs directly through the imported namespace (`vscode.window.showInputBox`, `vscode.workspace.fs.readFile`, ...). URIs are segment-based (`new (vscode.Uri as ...)(['proj', 'media'])`) and `fsPath` mirrors the platform separator, so `path.dirname`/`startsWith` logic behaves the same on every OS. `l10n.t` is a pass-through that substitutes `{0}`-style args, so assertions compare against the English bundle keys. External extension dependencies (`pzstudio-cli/api`) are mocked per test file with `vi.mock('pzstudio-cli/api', ...)`.
+The factory result IS the mocked module: reach the `vi.fn()` stubs directly through the imported namespace (`vscode.window.showInputBox`, `vscode.workspace.fs.readFile`, ...). URIs are segment-based (`new (vscode.Uri as ...)(['proj', 'media'])`) and `fsPath` mirrors the platform separator, so `path.dirname`/`startsWith` logic behaves the same on every OS. `l10n.t` is a pass-through that substitutes `{0}`-style args, so assertions compare against the English bundle keys. External extension dependencies (`@pzstudio/cli/api`) are mocked per test file with `vi.mock('@pzstudio/cli/api', ...)`.
 
 ## Running Tests
 

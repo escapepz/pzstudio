@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { runProjectDoctor, DoctorReport } from 'pzstudio-cli/api';
+import { runProjectDoctor, DoctorReport } from '@pzstudio/cli/api';
 
 /**
  * The shared diagnostics run reduced for UI consumption: counts for the

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { resolveModInfoTargets, setProjectDir } from 'pzstudio-cli/api';
+import { resolveModInfoTargets, setProjectDir } from '@pzstudio/cli/api';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { ExecutePZCommand } from '../util/execute';

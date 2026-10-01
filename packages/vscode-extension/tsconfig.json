@@ -14,7 +14,7 @@
         "typeRoots": ["./node_modules/@types", "../../node_modules/@types"],
         "baseUrl": ".",
         "paths": {
-            "pzstudio-cli/*": ["../cli/dist/*"]
+            "@pzstudio/cli/*": ["../cli/dist/*"]
         }
     },
     "include": ["./src/**/*.ts"],

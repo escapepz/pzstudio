@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ILogger } from 'pzstudio-cli/api';
+import { ILogger } from '@pzstudio/cli/api';
 import { t } from './l10n';
 
 export function getTimestamp(): string {
