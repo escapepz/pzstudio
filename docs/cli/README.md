@@ -6,8 +6,11 @@ intentionally omitted; see source files for implementation.
 
 Described contract: the post-MVP parser/streams/errors/safety architecture
 (Commander parser, stream contract, structured error model, fail-closed discovery,
-exit matrix 0/1/2/130, machine JSON, consent gate, experimental opt-in) — commits
-`6c8a58d`..`28da5fe` on `42.20.0-dev`.
+exit matrix 0/1/2/130, machine JSON, consent gate, experimental opt-in), the
+hardening round (stdout purity, embedded `--yes` consent, usage-error
+classification), and the self-contained packaging contract (only
+`@pzstudio/cli/api` is importable) — commits `6c8a58d`..`acafa4f` on
+`42.20.0-dev`.
 
 Files in this directory:
 - `00-overview.md` — Four-layer architecture, command inventory, global flags, exit codes
