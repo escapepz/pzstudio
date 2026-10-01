@@ -3,8 +3,6 @@
     "version": "0.42200.0",
     "pzBuildCompatibility": "42.x",
     "description": "Effortlessly create and maintain Lua mods for Project Zomboid with intuitive structuring.",
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
     "exports": {
         "./api": {
             "types": "./dist/api.d.ts",
@@ -60,7 +58,7 @@
     ],
     "scripts": {
         "clean": "node -e \"require('fs').rmSync('./dist', { recursive: true, force: true })\"",
-        "build": "pnpm run clean && tsc -p tsconfig.build.json && node scripts/bundle.js && node scripts/update-build-date.js",
+        "build": "pnpm run clean && tsc -p tsconfig.build.json && node scripts/bundle-types.js && node scripts/bundle.js && node scripts/update-build-date.js",
         "watch": "pnpm run clean && tsc --watch"
     },
     "dependencies": {
