@@ -459,14 +459,17 @@ const forbiddenPatterns = [
     'docs/',
     '.tmp/',
     'pnpm-lock.yaml',
-    'dist/lib/*.js', // tsc intermediates must not ship (declarations only)
 ];
 for (const fp of forbiddenPatterns) {
-    const found = [...filePaths].some((p) =>
-        fp.endsWith('*') ? p.startsWith(fp.slice(0, -1)) : p.startsWith(fp),
-    );
+    const found = [...filePaths].some((p) => p.startsWith(fp));
     check(`packlist excludes ${fp}`, !found);
 }
+// tsc intermediates must not ship — only declarations survive in dist/lib
+const libJs = [...filePaths].filter((p) => /^dist\/lib\/.*\.js$/.test(p));
+check(
+    'packlist excludes dist/lib/*.js (tsc intermediates)',
+    libJs.length === 0,
+);
 
 // ─── Cleanup ────────────────────────────────────────────────────────────────
 
