@@ -225,9 +225,19 @@ export async function newCmd(projectTitle: string, modId?: string) {
     info(`The project '${projectTitle}' has been created at '${projectPath}'`);
 
     // Golden path (CLI-7): tell the user what to do next — verify with
-    // doctor, then start the Development Sync Engine.
+    // doctor, then start the Development Sync Engine. Both install shapes
+    // are shown because the primary onboarding journey (npx) never
+    // installs the package globally.
     log(
-        `Next: cd '${projectPath}' then run 'pzstudio doctor' to verify the project and 'pzstudio watch' to start developing.`,
+        `Next: cd '${projectPath}'\n` +
+            '\n' +
+            'If installed globally:\n' +
+            '    pzstudio doctor\n' +
+            '    pzstudio watch\n' +
+            '\n' +
+            'Using npx:\n' +
+            '    npx -y @pzstudio/cli@latest doctor\n' +
+            '    npx -y @pzstudio/cli@latest watch',
     );
 }
 

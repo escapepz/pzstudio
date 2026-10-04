@@ -63,7 +63,7 @@ flowchart TD
     V -- yes --> CM["COMMIT: renameSync(staging, dest)<br/>destination exists from here on"]
     CL --> ERR4["ERR: No project was created.<br/>Cause + Try (exit 1)"]
     CM --> HOOK["POST-COMMIT: experimental hooks<br/>(non-fatal, opt-in only)"]
-    HOOK --> OK["stderr: The project 'title' has been created at 'path'<br/>stdout: Next: cd 'path' then run 'pzstudio doctor' ...<br/>and 'pzstudio watch' to start developing."]
+    HOOK --> OK["stderr: The project 'title' has been created at 'path'<br/>stdout: Next: cd 'path' — globally: 'pzstudio doctor' / 'pzstudio watch'<br/>or via npx: 'npx -y @pzstudio/cli@latest doctor' / 'watch'"]
 
     style ERR1 fill:#c0392b,color:#fff
     style ERR2 fill:#c0392b,color:#fff
@@ -80,9 +80,11 @@ Key behaviors:
   debris, no `.staging-` leftovers (`tests/real-env/bin-contract-gate.test.ts:256-274`).
 - Failures during validation/preflight (before staging exists) keep their original
   messages and are not wrapped.
-- **Golden path** (CLI-7): on success stdout ends with the
-  `Next: cd '<path>' then run 'pzstudio doctor' ... 'pzstudio watch' ...` line
-  (`packages/cli/src/lib/commands/new.ts:227-231`).
+- **Golden path** (CLI-7): on success stdout ends with a `Next:` block telling
+  the user to `cd '<path>'`, then `pzstudio doctor` + `pzstudio watch` when the
+  package is installed globally, or the `npx -y @pzstudio/cli@latest`
+  equivalents on the zero-install path
+  (`packages/cli/src/lib/commands/new.ts:227-241`).
 - The success message itself (`The project '...' has been created at '...'`) is `info`
   → stderr.
 

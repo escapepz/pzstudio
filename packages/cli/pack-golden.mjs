@@ -27,6 +27,7 @@ import {
     existsSync,
     mkdirSync,
     mkdtempSync,
+    readFileSync,
     readdirSync,
     rmSync,
     writeFileSync,
@@ -383,10 +384,56 @@ if (!IS_POSIX) {
         check('watch prints the sync banner', bannerOk);
 
         if (bannerOk && child.exitCode === null) {
+            // The banner prints BEFORE session.start() runs the initial
+            // full build. Wait for both workshop outputs to materialize
+            // first — a probe written during the initial build is absorbed
+            // into its snapshot and never produces an incremental batch.
+            const mainModsDir = join(
+                home,
+                'Zomboid',
+                'Workshop',
+                'Watch Smoke',
+                'Contents',
+                'mods',
+                'watch_smoke',
+            );
+            const devModsDir = join(
+                home,
+                'Zomboid',
+                'Workshop',
+                'Watch Smoke - dev_branch',
+                'Contents',
+                'mods',
+                'watch_smoke_dev',
+            );
+            const settled = await waitFor(
+                () => existsSync(mainModsDir) && existsSync(devModsDir),
+                120000,
+            );
+            check('watch initial full build settled', settled);
+
             // Touch a Lua source so the next coalesced batch syncs it.
-            const modsDir = join(projectDir, 'mods');
-            const modName = readdirSync(modsDir)[0];
-            const luaDir = join(modsDir, modName, 'media', 'lua', 'shared');
+            // Mod folders live at the project root (the id is a project.json
+            // `mods` key, not a `mods/` subdirectory), and the probe goes
+            // into the existing 42/ branch folder — mod-root files do not
+            // sync when branch folders exist (docs/cli/07).
+            const project = JSON.parse(
+                readFileSync(join(projectDir, 'project.json'), 'utf8'),
+            );
+            const modKey = Object.keys(project.mods ?? {})[0];
+            if (!modKey) {
+                throw new Error(
+                    'project.json lists no mods — cannot place the watch probe',
+                );
+            }
+            const luaDir = join(
+                projectDir,
+                modKey,
+                '42',
+                'media',
+                'lua',
+                'shared',
+            );
             mkdirSync(luaDir, { recursive: true });
             writeFileSync(
                 join(luaDir, 'golden_probe.lua'),

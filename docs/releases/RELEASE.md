@@ -22,7 +22,7 @@ Before starting, verify:
 From the repo root:
 
 ```bash
-pnpm build --filter @pzstudio/cli
+pnpm --filter @pzstudio/cli... build
 ```
 
 This runs, in order:
