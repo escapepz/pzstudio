@@ -4,11 +4,9 @@ import path from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { runCLI, setProjectDir } from '@pzstudio/cli/api';
 import {
-    defaultOutRoot,
     RealEnvWorkspace,
     seedWorkshopTemplateCache,
     spawnPz,
-    waitForCondition,
 } from '../helpers/real-env';
 
 /**
@@ -168,19 +166,18 @@ describe('CLI-GATE: real binary contract suite', () => {
                     cwd: workspace.dir,
                     home: workspace.home,
                 });
-                await waitForCondition(
-                    () =>
-                        fs.existsSync(
-                            path.join(
-                                defaultOutRoot(workspace.home),
-                                PROJECT_TITLE,
-                                'Contents',
-                                'mods',
-                            ),
-                        ),
+                // The SIGINT handler is installed only after the initial
+                // build finishes AND the watcher subscription attaches — a
+                // signal sent earlier kills the child with Node's default
+                // SIGINT death (exit code null). Wait for the session's
+                // ready line, then give the subscribe() hop a beat to
+                // settle before interrupting.
+                await spawned.waitFor(
+                    ({ stderr }) => stderr.includes('Watching for changes'),
                     30000,
-                    'the production workshop output before sending SIGINT',
+                    'the watcher-ready line before sending SIGINT',
                 );
+                await new Promise((resolve) => setTimeout(resolve, 750));
 
                 spawned.child.kill('SIGINT');
                 const exit = await spawned.exit;
