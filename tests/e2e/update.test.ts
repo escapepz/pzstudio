@@ -49,6 +49,18 @@ vi.mock('child_process', async (importOriginal) => {
     };
 });
 
+/**
+ * True when stderr reports a clone FAILURE for the given template category.
+ * The URL alone is not enough since the stream contract (CLI-2) puts the
+ * "Cloning template from <url>" progress line on stderr for every category.
+ */
+const stderrHasCloneFailure = (result: E2EResult, category: string) =>
+    result.stderr.some(
+        (l) =>
+            l.includes('Failed to clone template from') &&
+            l.includes(`pzstudio-template-${category}`),
+    );
+
 describe('update command (E2E) - Mocked', () => {
     let workspace: E2ETestWorkspace;
 
@@ -64,8 +76,8 @@ describe('update command (E2E) - Mocked', () => {
     it('should successfully refresh all template caches', async () => {
         const result = await workspace.run('update');
         workspace.assertSuccess(result);
-        workspace.assertStdout(result, 'Refreshing global template caches');
-        workspace.assertStdout(result, "Updating 'project' templates");
+        workspace.assertStderr(result, 'Refreshing global template caches');
+        workspace.assertStderr(result, "Updating 'project' templates");
         workspace.assertStderr(
             result,
             'All template caches refreshed successfully!',
@@ -137,18 +149,9 @@ describe('update — per-category failure isolation (E2E)', () => {
         );
 
         // Other categories should NOT have clone failures in stderr
-        const hasModCloneFail = result.stderr.some((l) =>
-            l.includes('pzstudio-template-mod'),
-        );
-        const hasWorkshopCloneFail = result.stderr.some((l) =>
-            l.includes('pzstudio-template-workshop'),
-        );
-        const hasLangCloneFail = result.stderr.some((l) =>
-            l.includes('pzstudio-template-language'),
-        );
-        expect(hasModCloneFail).toBe(false);
-        expect(hasWorkshopCloneFail).toBe(false);
-        expect(hasLangCloneFail).toBe(false);
+        expect(stderrHasCloneFailure(result, 'mod')).toBe(false);
+        expect(stderrHasCloneFailure(result, 'workshop')).toBe(false);
+        expect(stderrHasCloneFailure(result, 'language')).toBe(false);
     });
 
     it('should warn only about mod clone failure when mod is the only failing category', async () => {
@@ -162,18 +165,9 @@ describe('update — per-category failure isolation (E2E)', () => {
             "Failed to clone template from 'https://github.com/escapepz/pzstudio-template-mod.git'",
         );
 
-        const hasProjectCloneFail = result.stderr.some((l) =>
-            l.includes('pzstudio-template-project'),
-        );
-        const hasWorkshopCloneFail = result.stderr.some((l) =>
-            l.includes('pzstudio-template-workshop'),
-        );
-        const hasLangCloneFail = result.stderr.some((l) =>
-            l.includes('pzstudio-template-language'),
-        );
-        expect(hasProjectCloneFail).toBe(false);
-        expect(hasWorkshopCloneFail).toBe(false);
-        expect(hasLangCloneFail).toBe(false);
+        expect(stderrHasCloneFailure(result, 'project')).toBe(false);
+        expect(stderrHasCloneFailure(result, 'workshop')).toBe(false);
+        expect(stderrHasCloneFailure(result, 'language')).toBe(false);
     });
 
     it('should warn only about workshop clone failure when workshop is the only failing category', async () => {
@@ -187,18 +181,9 @@ describe('update — per-category failure isolation (E2E)', () => {
             "Failed to clone template from 'https://github.com/escapepz/pzstudio-template-workshop.git'",
         );
 
-        const hasProjectCloneFail = result.stderr.some((l) =>
-            l.includes('pzstudio-template-project'),
-        );
-        const hasModCloneFail = result.stderr.some((l) =>
-            l.includes('pzstudio-template-mod'),
-        );
-        const hasLangCloneFail = result.stderr.some((l) =>
-            l.includes('pzstudio-template-language'),
-        );
-        expect(hasProjectCloneFail).toBe(false);
-        expect(hasModCloneFail).toBe(false);
-        expect(hasLangCloneFail).toBe(false);
+        expect(stderrHasCloneFailure(result, 'project')).toBe(false);
+        expect(stderrHasCloneFailure(result, 'mod')).toBe(false);
+        expect(stderrHasCloneFailure(result, 'language')).toBe(false);
     });
 
     it('should warn only about language clone failure when language is the only failing category', async () => {
@@ -212,18 +197,9 @@ describe('update — per-category failure isolation (E2E)', () => {
             "Failed to clone template from 'https://github.com/escapepz/pzstudio-template-language.git'",
         );
 
-        const hasProjectCloneFail = result.stderr.some((l) =>
-            l.includes('pzstudio-template-project'),
-        );
-        const hasModCloneFail = result.stderr.some((l) =>
-            l.includes('pzstudio-template-mod'),
-        );
-        const hasWorkshopCloneFail = result.stderr.some((l) =>
-            l.includes('pzstudio-template-workshop'),
-        );
-        expect(hasProjectCloneFail).toBe(false);
-        expect(hasModCloneFail).toBe(false);
-        expect(hasWorkshopCloneFail).toBe(false);
+        expect(stderrHasCloneFailure(result, 'project')).toBe(false);
+        expect(stderrHasCloneFailure(result, 'mod')).toBe(false);
+        expect(stderrHasCloneFailure(result, 'workshop')).toBe(false);
     });
 
     it('should warn about exactly two categories when project and language fail together', async () => {
@@ -241,13 +217,7 @@ describe('update — per-category failure isolation (E2E)', () => {
             "Failed to clone template from 'https://github.com/escapepz/pzstudio-template-language.git'",
         );
 
-        const hasModCloneFail = result.stderr.some((l) =>
-            l.includes('pzstudio-template-mod'),
-        );
-        const hasWorkshopCloneFail = result.stderr.some((l) =>
-            l.includes('pzstudio-template-workshop'),
-        );
-        expect(hasModCloneFail).toBe(false);
-        expect(hasWorkshopCloneFail).toBe(false);
+        expect(stderrHasCloneFailure(result, 'mod')).toBe(false);
+        expect(stderrHasCloneFailure(result, 'workshop')).toBe(false);
     });
 });

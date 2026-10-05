@@ -8,7 +8,7 @@ import { BuildSession, BuildSessionHost } from '@pzstudio/core';
 import { NodeFileSystem } from '@pzstudio/platform-node';
 import { gatherPlanInput, resolveProjectConfig, setProjectDir } from './helper';
 import { resolveTemplateDir } from './templateManager';
-import { log, verbose, warn } from './logger';
+import { info, verbose, warn } from './logger';
 
 export interface DevSyncOptions {
     /**
@@ -50,7 +50,7 @@ export function createDevSync(
             : (level, message) => {
                   if (level === 'warn') warn(message);
                   else if (level === 'verbose') verbose(message);
-                  else log(message);
+                  else info(message);
               },
     };
     return new BuildSession(host);

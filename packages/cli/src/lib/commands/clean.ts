@@ -10,7 +10,7 @@ import {
     OperationOutcome,
 } from '../outcome';
 import { removeDirRecursive, resolveProjectConfig } from '../helper';
-import { log, verbose } from '../logger';
+import { info, log, verbose } from '../logger';
 
 addHelp(
     'clean',
@@ -40,7 +40,7 @@ export function cleanCmd() {
 
     // Clean main output
     if (existsSync(mainOutPath)) {
-        log(`Cleaning main output directory at '${mainOutPath}'...`);
+        info(`Cleaning main output directory at '${mainOutPath}'...`);
         try {
             removeDirRecursive(mainOutPath);
             verbose(`Cleaned: ${mainOutPath}`);
@@ -55,7 +55,7 @@ export function cleanCmd() {
     // Clean development output — always attempted, even when the main
     // output could not be deleted.
     if (existsSync(devOutPath)) {
-        log(`Cleaning development output directory at '${devOutPath}'...`);
+        info(`Cleaning development output directory at '${devOutPath}'...`);
         try {
             removeDirRecursive(devOutPath);
             verbose(`Cleaned: ${devOutPath}`);

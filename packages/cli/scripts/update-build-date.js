@@ -19,14 +19,6 @@ const buildInfo = {
 fs.writeFileSync(buildPath, JSON.stringify(buildInfo, null, 4) + '\n', 'utf8');
 console.log(`Updated buildDate to ${today} in ${buildPath}`);
 
-// Copy pzstudio.cmd to dist
-const cmdSource = path.join(__dirname, '../pzstudio.cmd');
-const cmdDest = path.join(distPath, 'pzstudio.cmd');
-if (fs.existsSync(cmdSource)) {
-    fs.copyFileSync(cmdSource, cmdDest);
-    console.log(`Copied pzstudio.cmd to ${cmdDest}`);
-}
-
 // Copy experimental-package-scripts.js to dist/scripts
 const expScriptSource = path.join(__dirname, 'experimental-package-scripts.js');
 const scriptsDistDir = path.join(distPath, 'scripts');

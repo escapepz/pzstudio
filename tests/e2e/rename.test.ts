@@ -48,7 +48,7 @@ describe('rename command e2e', () => {
 
         try {
             workspace.assertSuccess(result);
-            workspace.assertStdout(
+            workspace.assertStderr(
                 result,
                 `Renaming mod '${oldModId}' to '${newModId}'`,
             );

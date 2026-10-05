@@ -36,7 +36,7 @@ describe('clean command e2e', () => {
 
         try {
             workspace.assertSuccess(result);
-            workspace.assertStdout(result, 'Cleaning main output directory');
+            workspace.assertStderr(result, 'Cleaning main output directory');
             workspace.assertStdout(result, 'Clean complete');
 
             // 3. Verify filesystem
