@@ -14,7 +14,7 @@ import {
  * Real-environment pin of the CLI-2 stream contract on the built binary:
  * human progress never reaches stdout. stdout carries command data and
  * results only; stderr carries progress, lifecycle messages, warnings and
- * errors. Assertions pin the CHANNEL and semantic text â€” the [INFO] prefix,
+ * errors. Assertions pin the CHANNEL and semantic text — the [INFO] prefix,
  * timestamps and colors are presentation (TTY-gated) and deliberately not
  * asserted. `--json` stays a strict JSON.parse(stdout) with no filtering.
  */
@@ -153,7 +153,7 @@ describe('real env: stream contract (CLI-2)', () => {
 
             const result = await workspace.run(['build', '--quiet']);
             expect(result.exitCode).toBe(0);
-            // stdout stays empty/data-only â€” and normal progress is gone
+            // stdout stays empty/data-only — and normal progress is gone
             // from stderr too: --quiet suppresses info/verbose diagnostics.
             expect(result.stdout.trim()).toBe('');
             expect(result.stderr).not.toContain('Building main workshop');
@@ -185,7 +185,7 @@ describe('real env: stream contract (CLI-2)', () => {
         const result = await workspace.run(['list', '--json']);
         expect(result.exitCode).toBe(0);
         // JSON.parse over the raw stdout: any progress line on stdout would
-        // throw here â€” the channel invariant enforced mechanically.
+        // throw here — the channel invariant enforced mechanically.
         const envelope = JSON.parse(result.stdout);
         expect(envelope.schemaVersion).toBe(1);
         expect(envelope.command).toBe('list');
@@ -194,8 +194,8 @@ describe('real env: stream contract (CLI-2)', () => {
 
 /**
  * Watch (CLI-2 + CLI-6): stdout stays whitespace-only through the initial
- * build, an incremental edit sync and the stop. The full SIGINT flow (edit â†’
- * sync â†’ 130 + one stop line) is POSIX-only â€” Windows cannot deliver SIGINT
+ * build, an incremental edit sync and the stop. The full SIGINT flow (edit →
+ * sync → 130 + one stop line) is POSIX-only — Windows cannot deliver SIGINT
  * to a spawned child reliably.
  */
 describe('real env: watch keeps stdout clean (CLI-2)', () => {
@@ -273,7 +273,16 @@ describe('real env: watch keeps stdout clean (CLI-2)', () => {
                     );
                     expect(spawned.getStdout().trim()).toBe('');
 
-                    // Edit a watched .lua source file â†’ incremental sync.
+                    // The watcher subscribes AFTER session.start() prints
+                    // "Watching for changes...", so a single edit can land
+                    // before the subscription is active on fast runners.
+                    // Wait for the ready line, then touch the source until a
+                    // batch syncs — whichever touch lands after attach wins.
+                    await spawned.waitFor(
+                        ({ stderr }) => stderr.includes('Watching for changes'),
+                        20000,
+                        'the watcher-ready line on stderr',
+                    );
                     const sourceLua = path.join(
                         workspace.dir,
                         MOD_ID,
@@ -283,16 +292,26 @@ describe('real env: watch keeps stdout clean (CLI-2)', () => {
                         'shared',
                         'main.lua',
                     );
-                    fs.writeFileSync(
-                        sourceLua,
-                        '-- stream fixture edited\n',
-                        'utf8',
-                    );
-                    await spawned.waitFor(
-                        ({ stderr }) => stderr.includes('file(s) synced'),
-                        20000,
-                        'the incremental sync summary on stderr',
-                    );
+                    let synced = false;
+                    for (let touch = 0; touch < 30 && !synced; touch++) {
+                        fs.writeFileSync(
+                            sourceLua,
+                            `-- stream fixture edited ${touch}\n`,
+                            'utf8',
+                        );
+                        try {
+                            await spawned.waitFor(
+                                ({ stderr }) =>
+                                    stderr.includes('file(s) synced'),
+                                1500,
+                                'the incremental sync summary on stderr',
+                            );
+                            synced = true;
+                        } catch {
+                            // Subscription not attached yet — touch again.
+                        }
+                    }
+                    expect(synced).toBe(true);
                     // The edited content reached the output for real.
                     expect(
                         fs.readFileSync(
