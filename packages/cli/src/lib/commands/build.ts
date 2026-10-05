@@ -21,7 +21,7 @@ import {
     removeDirRecursive,
     resolveProjectConfig,
 } from '../helper';
-import { info, log, verbose, warn } from '../logger';
+import { info, verbose, warn } from '../logger';
 import { resolveTemplateDir, scaffoldProject } from '../templateManager';
 
 addHelp(
@@ -51,7 +51,7 @@ export function executeBuildPlan(operations: FileOperation[]) {
                 if (operation.level === 'warn') warn(operation.message);
                 else if (operation.level === 'verbose')
                     verbose(operation.message);
-                else log(operation.message);
+                else info(operation.message);
                 break;
             case 'removeDir':
                 removeDirRecursive(operation.path);
@@ -157,7 +157,7 @@ export async function buildCmd() {
                         `Dev-only mods skipped in the main build: ${devOnlyModIds.join(', ')} — they are built into the dev_branch output (--development).`,
                     );
                 }
-                log(`\nBuilding main workshop...`);
+                info(`\nBuilding main workshop...`);
                 executeBuildPlan(planBuild({ ...planInput, variant: 'main' }));
                 variantOutcomes.push(OUTCOME_SUCCESS);
             }
@@ -180,7 +180,7 @@ export async function buildCmd() {
                 );
                 variantOutcomes.push(OUTCOME_WARNING);
             } else {
-                log(`\nBuilding dev_branch workshop...`);
+                info(`\nBuilding dev_branch workshop...`);
                 executeBuildPlan(
                     planBuild({ ...planInput, variant: 'development' }),
                 );

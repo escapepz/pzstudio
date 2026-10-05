@@ -172,8 +172,8 @@ describe('build modInfo: auto-if-missing (E2E)', () => {
         workspace.assertSuccess(result);
 
         // The build should log the "already exists" skip message
-        workspace.assertStdout(result, 'Skipping');
-        workspace.assertStdout(result, 'auto-if-missing');
+        workspace.assertStderr(result, 'Skipping');
+        workspace.assertStderr(result, 'auto-if-missing');
 
         // The pre-existing mod.info content should be preserved (not regenerated)
         const modInfoPath = path.join(

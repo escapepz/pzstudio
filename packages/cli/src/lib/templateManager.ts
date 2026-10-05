@@ -11,7 +11,7 @@ import {
     cpSync,
     symlinkSync,
 } from 'fs';
-import { info, log, warn, verbose } from './logger';
+import { info, warn, verbose } from './logger';
 import type {
     TemplateCategory,
     GlobalConfig,
@@ -235,7 +235,7 @@ function bootstrapLegacyTemplates(): void {
     }
 
     if (bundledLegacyDir) {
-        log(`- Bootstrapping legacy templates to ${globalLegacyDir}...`);
+        info(`- Bootstrapping legacy templates to ${globalLegacyDir}...`);
         try {
             mkdirSync(dirname(globalLegacyDir), { recursive: true });
             cpSync(bundledLegacyDir, globalLegacyDir, { recursive: true });
@@ -590,7 +590,7 @@ export function scaffoldProject(
             }
             mkdirSync(dirname(destDir), { recursive: true });
             symlinkSync(templateDir, destDir, 'junction');
-            log(`  - Created template junction: ${basename(destDir)}`);
+            info(`  - Created template junction: ${basename(destDir)}`);
             return;
         } catch (_e) {
             warn(
@@ -605,7 +605,7 @@ export function scaffoldProject(
         mkdirSync(destDir, { recursive: true });
     }
 
-    log(`- Scaffolding into ${destDir}...`);
+    info(`- Scaffolding into ${destDir}...`);
 
     const filter = createIgnoreFilter(templateDir, options);
 
@@ -646,7 +646,7 @@ export function scaffoldTemplateFolder(
             }
             mkdirSync(dirname(destDir), { recursive: true });
             symlinkSync(templateDir, destDir, 'junction');
-            log(`  - Linked shared folder: ${basename(destDir)}`);
+            info(`  - Linked shared folder: ${basename(destDir)}`);
             return;
         } catch (_e) {
             warn(

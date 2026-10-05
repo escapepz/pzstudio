@@ -225,7 +225,7 @@ describe('buildCmd', () => {
                 String(call[0]).replace(/\\/g, '/').endsWith('mod.info'),
             );
         expect(modInfoWrite).toBeUndefined();
-        expect(logger.log).toHaveBeenCalledWith(
+        expect(logger.info).toHaveBeenCalledWith(
             expect.stringContaining(
                 'already exists, build.modInfo: "auto-if-missing"',
             ),
@@ -281,7 +281,7 @@ describe('buildCmd', () => {
                 String(call[0]).replace(/\\/g, '/').endsWith('mod.info'),
             );
         expect(modInfoWrite).toBeUndefined();
-        expect(logger.log).toHaveBeenCalledWith(
+        expect(logger.info).toHaveBeenCalledWith(
             expect.stringContaining(
                 'already exists, build.modInfo: "auto-if-missing"',
             ),

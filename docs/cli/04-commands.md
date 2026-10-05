@@ -36,6 +36,14 @@ Legend used in the diagrams:
 - `WARN` (orange) — the command continues; a warning is printed to stderr.
 - Rounded/gray — successful exit of the command.
 
+Stream routing (CLI-2, pinned since 0.42200.1): human **progress** lines
+(`Building main workshop...`, `Cleaning ... directory...`, `Deleting mod ...`,
+`Renaming mod ...`, `Refreshing/Updating templates...`, scaffold/clone steps)
+print to **stderr**. `LOG`/`stdout:` labels mark **data and results** (reports,
+verdicts, dry-run `Would:` plans, the `Next:` block, JSON envelopes) which stay
+on stdout. Since 0.42200.1 `build` prints nothing on stdout at all, and the
+`[INFO]`/timestamp/color prefixes are presentation, not stable API.
+
 ---
 
 ## pzstudio new
@@ -164,7 +172,7 @@ flowchart TD
     BOTH --> DV
 
     AGG["aggregateOutcomeSeverity:<br/>failure > warning > success"] -- "any failure" --> ERR4["throw CliError with collected errors<br/>exit 1"]
-    AGG -- "success or warnings only" --> OK["LOG: Build complete in <n>s!<br/>exit 0"]
+    AGG -- "success or warnings only" --> OK["stderr: Build complete in <n>s!<br/>exit 0"]
 
     style ERR1 fill:#c0392b,color:#fff
     style ERR2 fill:#c0392b,color:#fff
@@ -180,6 +188,8 @@ Exit semantics are mechanical, not prose (CLI-6,
 a failed variant no longer aborts the other one under `--both` — every variant gets its
 chance, then any `failure` outcome fails the command via a structured `CliError` (the old
 `Unexpected error:` wrapper is gone). Warnings never flip the exit code.
+Build progress (`Building main workshop...`, plan plan-messages, the `Build complete`
+timing) prints to stderr — stdout stays empty on a successful build (CLI-2).
 
 The workshop template resolution can touch the network (clone) when the cache is missing
 or invalid — see `08-mechanics.md` → Template resolution during build/watch.

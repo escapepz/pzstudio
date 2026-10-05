@@ -42,8 +42,8 @@ describe('delete command e2e', () => {
 
         try {
             workspace.assertSuccess(result);
-            workspace.assertStdout(result, `Deleting mod '${modId}' directory`);
-            workspace.assertStdout(
+            workspace.assertStderr(result, `Deleting mod '${modId}' directory`);
+            workspace.assertStderr(
                 result,
                 `Deleting mod '${modId}' from project.json`,
             );

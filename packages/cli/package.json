@@ -1,6 +1,6 @@
 {
     "name": "@pzstudio/cli",
-    "version": "0.42200.0",
+    "version": "0.42200.1",
     "pzBuildCompatibility": "42.x",
     "description": "Effortlessly create and maintain Lua mods for Project Zomboid with intuitive structuring.",
     "exports": {

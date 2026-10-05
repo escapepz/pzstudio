@@ -10,6 +10,9 @@ Command-line interface for Project Zomboid Studio — effortlessly create and ma
 
 Zero-install on any machine with Node 20+:
 
+> On first use, `new` downloads the current templates from GitHub. Use
+> `--offline` to scaffold from bundled templates without network access.
+
 ```bash
 # Create a new mod project (created in the current directory —
 # use --path <dir> to choose another location)
@@ -53,8 +56,32 @@ npm install --save-dev @pzstudio/cli
 npm exec -- pzstudio new "My First Mod"
 
 # with pnpm:
+pnpm add -D @pzstudio/cli
 pnpm exec pzstudio doctor
 ```
+
+Two pnpm mental models:
+
+- `pnpm dlx @pzstudio/cli …` runs the package **anywhere** — it fetches into
+  an ephemeral store and never touches your project. Good for one-off
+  commands.
+- `pnpm add -D @pzstudio/cli` + `pnpm exec pzstudio …` runs the version
+  pinned **where the local dependency is installed**. pnpm resolves binaries
+  from the local `node_modules` only — it does not walk up the directory
+  tree like npm — so run `pnpm exec` at the install root.
+
+pnpm (v10+) blocks install scripts by default. `@pzstudio/cli` ships the
+native `@parcel/watcher` binding used by `pzstudio watch`, so if the watcher
+fails to start, approve its build script once:
+
+```bash
+pnpm approve-builds @parcel/watcher
+pnpm install
+```
+
+The approval persists in the project config (`allowBuilds`), so this is a
+one-time step per project. Approve only the packages you trust — avoid
+`--all`.
 
 ## Command mental model
 

@@ -66,7 +66,7 @@ export function deleteCmd(modId: string) {
     );
 
     // Delete mod directory
-    log(`Deleting mod '${modId}' directory...`);
+    info(`Deleting mod '${modId}' directory...`);
     if (existsSync(modPath)) {
         verbose(`Removing mod directory: ${modPath}`);
         rmSync(modPath, { force: true, recursive: true });
@@ -77,7 +77,7 @@ export function deleteCmd(modId: string) {
     }
 
     // Delete mod from project.json
-    log(`Deleting mod '${modId}' from project.json...`);
+    info(`Deleting mod '${modId}' from project.json...`);
     delete projectConfig.mods[modId];
     projectConfig.excludes = projectConfig.excludes.filter(
         (e: string) => e !== modId,

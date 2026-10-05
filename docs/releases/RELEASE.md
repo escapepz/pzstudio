@@ -6,6 +6,17 @@ deviate unless the deviation is recorded here.
 
 ---
 
+## Version parameter
+
+Resolve the release version from the package once per run and use `${VERSION}`
+everywhere below — never hardcode a version into a command:
+
+```bash
+VERSION="$(node -p "require('./packages/cli/package.json').version")"
+```
+
+---
+
 ## Preflight
 
 Before starting, verify:
@@ -115,7 +126,7 @@ Verify the published package works end-to-end via the registry:
 npx -y @pzstudio/cli@next --version
 
 # Via pnpm dlx
-pnpm dlx @pzstudio/cli@0.42200.0 --version
+pnpm dlx @pzstudio/cli@${VERSION} --version
 ```
 
 Both must succeed. If either fails, investigate (possible registry CDN lag; retry after 60 s).
@@ -125,7 +136,7 @@ Both must succeed. If either fails, investigate (possible registry CDN lag; retr
 ## Step 7 — Promote `next` → `latest`
 
 ```bash
-npm dist-tag add @pzstudio/cli@0.42200.0 latest
+npm dist-tag add @pzstudio/cli@${VERSION} latest
 ```
 
 This makes the version the default for `npm install @pzstudio/cli` without a tag.

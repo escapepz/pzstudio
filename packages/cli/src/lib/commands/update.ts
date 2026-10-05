@@ -7,7 +7,7 @@ import {
     OperationOutcome,
     aggregateOutcomeSeverity,
 } from '../outcome';
-import { info, log, verbose, warn } from '../logger';
+import { info, verbose, warn } from '../logger';
 import { resolveTemplateDir, TemplateCategory } from '../templateManager';
 
 addHelp(
@@ -25,7 +25,7 @@ addHelp(
 );
 
 export async function updateCmd() {
-    log(`\nRefreshing global template caches...`);
+    info(`\nRefreshing global template caches...`);
 
     const categories: TemplateCategory[] = [
         'project',
@@ -39,7 +39,7 @@ export async function updateCmd() {
     const outcomes: OperationOutcome[] = [];
     for (const category of categories) {
         try {
-            log(`- Updating '${category}' templates...`);
+            info(`- Updating '${category}' templates...`);
             verbose(`Requesting template resolution for category: ${category}`);
             const path = resolveTemplateDir(category, false, true);
             verbose(`Templates for '${category}' updated at: ${path}`);

@@ -10,7 +10,7 @@ import {
 import { tmpdir } from 'os';
 import { join, dirname, resolve as resolvePath } from 'path';
 import { unzipSync } from 'fflate';
-import { log, warn, verbose } from './logger';
+import { info, warn, verbose } from './logger';
 import { TemplateResolutionError } from '@pzstudio/core';
 import type { TemplateTransport } from '@pzstudio/platform';
 
@@ -120,7 +120,7 @@ export class GitTransport implements TemplateTransport {
         validateRef(ref);
         const { normalizedUrl } = parseGitHubTarget(url);
 
-        log(
+        info(
             `- Cloning template from ${normalizedUrl}${ref ? ` (ref: ${ref})` : ''}...`,
         );
 
@@ -156,7 +156,7 @@ export class GitTransport implements TemplateTransport {
     refresh(cacheDir: string, ref: string | undefined): boolean {
         validateRef(ref);
 
-        log(`- Refreshing template cache at ${cacheDir}...`);
+        info(`- Refreshing template cache at ${cacheDir}...`);
         const git = (args: string[]) =>
             spawnSync('git', args, {
                 cwd: cacheDir,
@@ -195,7 +195,7 @@ export class GitTransport implements TemplateTransport {
         for (const target of resetTargets) {
             if (git(['reset', '--hard', target]).status === 0) {
                 if (target !== resetTargets[0]) {
-                    log(`  - Refreshed using ${target}.`);
+                    info(`  - Refreshed using ${target}.`);
                 }
                 resetSucceeded = true;
                 break;
@@ -277,7 +277,7 @@ export class FetchTransport implements TemplateTransport {
             try {
                 verbose(`- Fetching template archive from ${archiveUrl}...`);
                 const zip = this.fetchArchive(archiveUrl);
-                log(
+                info(
                     `- Downloaded template ${owner}/${repo}${ref ? ` (ref: ${ref})` : ''}.`,
                 );
                 this.extract(zip, destDir);

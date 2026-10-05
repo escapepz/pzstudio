@@ -129,7 +129,7 @@ export async function newCmd(projectTitle: string, modId?: string) {
         forceUpdate,
     );
 
-    log(`- Creating project '${projectTitle}' dir '${modId}' ...`);
+    info(`- Creating project '${projectTitle}' dir '${modId}' ...`);
 
     // PRE-COMMIT: everything is scaffolded into a staging directory next to
     // the destination (same parent, same volume), so the commit below is an
@@ -145,11 +145,11 @@ export async function newCmd(projectTitle: string, modId?: string) {
         });
 
         // Copy mod template into the project mod folder
-        log(`- Creating mod '${modId}'...`);
+        info(`- Creating mod '${modId}'...`);
         scaffoldProject(templateModPath, join(stagingPath, modId), useSymlinks);
 
         // Link or copy shared template folders
-        log(`- Creating shared template folders...`);
+        info(`- Creating shared template folders...`);
 
         scaffoldTemplateFolder(
             templateModPath,
@@ -173,7 +173,7 @@ export async function newCmd(projectTitle: string, modId?: string) {
         }
 
         // Copy workshop template
-        log(`- Creating workshop folder...`);
+        info(`- Creating workshop folder...`);
         scaffoldProject(
             templateWorkshopPath,
             join(stagingPath, 'workshop'),
@@ -182,7 +182,7 @@ export async function newCmd(projectTitle: string, modId?: string) {
 
         // Update config — validated inside the staging copy so an incomplete
         // scaffold never reaches the commit.
-        log(`- Updating project config...`);
+        info(`- Updating project config...`);
         const newProjectConfigPath = join(stagingPath, 'project.json');
         const newProjectConfig = readProjectConfig(newProjectConfigPath);
         if (!newProjectConfig) {

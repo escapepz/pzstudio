@@ -12,7 +12,7 @@ import {
     updateExperimentalScripts,
     updateProjectConfig,
 } from '../helper';
-import { log, verbose } from '../logger';
+import { info, log, verbose } from '../logger';
 import { scaffoldProject } from '../templateManager';
 import { confirmDestructive } from '../interaction';
 import { hasFlag } from '../args';
@@ -94,7 +94,7 @@ export function renameCmd(oldModId: string, newModId: string) {
 
     // Rename mod
     if (folderExists) {
-        log(`- Renaming mod '${oldModId}' to '${newModId}'...`);
+        info(`- Renaming mod '${oldModId}' to '${newModId}'...`);
         verbose(`Copying ${oldPath} to ${newPath}`);
         scaffoldProject(oldPath, newPath, false, false);
         verbose(`Removing old mod directory: ${oldPath}`);
