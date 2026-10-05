@@ -173,29 +173,19 @@ describe.skipIf(process.platform === 'win32')(
                 cwd: workspace.dir,
                 home: workspace.home,
             });
-            // Interrupt only after the initial full build settled so the
-            // shutdown path (unsubscribe + session stop) is what runs.
-            await waitForCondition(
-                () =>
-                    fs.existsSync(
-                        path.join(
-                            defaultOutRoot(workspace.home),
-                            PROJECT_TITLE,
-                            'Contents',
-                            'mods',
-                        ),
-                    ) &&
-                    fs.existsSync(
-                        path.join(
-                            defaultOutRoot(workspace.home),
-                            `${PROJECT_TITLE} - dev_branch`,
-                            'Contents',
-                            'mods',
-                        ),
-                    ),
+            // Interrupt only after the session is ready: the SIGINT handler
+            // is installed after the initial build AND the watcher
+            // subscription attach, so a signal sent while filesystem
+            // artifacts still appear would kill the child with Node's
+            // default SIGINT death (exit code null) instead of the
+            // graceful 130 path. The ready line prints after the full
+            // build; a short beat covers the subscribe() hop.
+            await spawned.waitFor(
+                ({ stderr }) => stderr.includes('Watching for changes'),
                 30000,
-                'both workshop outputs before sending SIGINT',
+                'the watcher-ready line before sending SIGINT',
             );
+            await new Promise((resolve) => setTimeout(resolve, 750));
 
             spawned.child.kill('SIGINT');
             const exit = await spawned.exit;
