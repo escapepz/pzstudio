@@ -412,37 +412,59 @@ if (!IS_POSIX) {
             );
             check('watch initial full build settled', settled);
 
-            // Touch a Lua source so the next coalesced batch syncs it.
-            // Mod folders live at the project root (the id is a project.json
-            // `mods` key, not a `mods/` subdirectory), and the probe goes
-            // into the existing 42/ branch folder — mod-root files do not
-            // sync when branch folders exist (docs/cli/07).
-            const project = JSON.parse(
-                readFileSync(join(projectDir, 'project.json'), 'utf8'),
-            );
-            const modKey = Object.keys(project.mods ?? {})[0];
-            if (!modKey) {
-                throw new Error(
-                    'project.json lists no mods — cannot place the watch probe',
+            if (settled && child.exitCode === null) {
+                // The watcher subscribes AFTER session.start() prints
+                // "Watching for changes...", so a probe written between the
+                // settled outputs and the subscription attach is silently
+                // absorbed (the bin-streams real-env suite caught exactly
+                // this race on fast CI runners). Wait for the ready line,
+                // then touch the probe with fresh content until a coalesced
+                // batch syncs — whichever touch lands after attach wins.
+                const readyOk = await waitFor(
+                    () => output.includes('Watching for changes'),
+                    90000,
                 );
-            }
-            const luaDir = join(
-                projectDir,
-                modKey,
-                '42',
-                'media',
-                'lua',
-                'shared',
-            );
-            mkdirSync(luaDir, { recursive: true });
-            writeFileSync(
-                join(luaDir, 'golden_probe.lua'),
-                'function GoldenProbe() end\n',
-                'utf8',
-            );
+                check('watch session reports ready', readyOk);
 
-            const summaryOk = await waitFor(summarySeen, 90000);
-            check('watch reports a synced batch', summaryOk);
+                // The probe goes into the existing 42/ branch folder —
+                // mod-root files do not sync when branch folders exist
+                // (docs/cli/07). Mod folders live at the project root (the
+                // id is a project.json `mods` key, not a `mods/` directory).
+                const project = JSON.parse(
+                    readFileSync(join(projectDir, 'project.json'), 'utf8'),
+                );
+                const modKey = Object.keys(project.mods ?? {})[0];
+                if (!modKey) {
+                    throw new Error(
+                        'project.json lists no mods — cannot place the watch probe',
+                    );
+                }
+                const luaDir = join(
+                    projectDir,
+                    modKey,
+                    '42',
+                    'media',
+                    'lua',
+                    'shared',
+                );
+                mkdirSync(luaDir, { recursive: true });
+                const probePath = join(luaDir, 'golden_probe.lua');
+
+                let summaryOk = false;
+                for (
+                    let touch = 0;
+                    touch < 30 && !summaryOk && child.exitCode === null;
+                    touch++
+                ) {
+                    writeFileSync(
+                        probePath,
+                        `function GoldenProbe() end // touch ${touch}\n`,
+                        'utf8',
+                    );
+                    summaryOk = await waitFor(summarySeen, 3000);
+                }
+                check('watch reports a synced batch', summaryOk);
+            }
         }
         if (!bannerOk) {
             console.error(`    output so far: ${output.slice(-600)}`);
