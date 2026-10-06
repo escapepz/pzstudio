@@ -51,6 +51,7 @@ extension bridge (`createPzStudio(...)` API v2) or any UX changes. It is:
 | [`08-configuration-and-localization.md`](08-configuration-and-localization.md) | All `pzstudio.*` settings, config precedence, l10n layers and limits |
 | [`09-embedded-cli-bridge.md`](09-embedded-cli-bridge.md) | `@pzstudio/cli/api` contract: embedded `runCLI`, module state, stream mapping |
 | [`10-ui-ux-audit-findings.md`](10-ui-ux-audit-findings.md) | Audit findings (UX-01…) with code paths, severity and suggested direction |
+| [`12-project-cockpit.md`](12-project-cockpit.md) | Project Cockpit interaction spec v1 — normative UX reference for the planned Cockpit surface (approved design, not current behavior) |
 
 ## Current mental model
 
