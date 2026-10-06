@@ -2,7 +2,15 @@ export { runCLI, RunCLIOptions } from './lib/cli';
 export { setLogger, ILogger } from './lib/logger';
 // Direct logger access for hosts that run long-lived sessions (the
 // extension auto-sync reports sync errors through the bridged channel).
-export { log, info, warn, verbose } from './lib/logger';
+// Published under the historical names but bound to the RAW legacy tier
+// (R1, doc 11 §8.0/§12): these route by the legacy slots only and never
+// consult an active invocation context.
+export {
+    rawLog as log,
+    rawInfo as info,
+    rawWarn as warn,
+    rawVerbose as verbose,
+} from './lib/logger';
 export {
     resolveModInfoTargets,
     setProjectDir,

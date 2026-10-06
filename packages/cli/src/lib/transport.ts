@@ -13,6 +13,7 @@ import { unzipSync } from 'fflate';
 import { info, warn, verbose } from './logger';
 import { TemplateResolutionError } from '@pzstudio/core';
 import type { TemplateTransport } from '@pzstudio/platform';
+import { getActiveInvocationContext } from './invocation';
 
 export type { TemplateTransport };
 
@@ -419,12 +420,27 @@ export function setTemplateTransport(
 }
 
 /**
- * Returns the active transport, or the default for this host: git when the
- * git binary is available, else the HTTPS fetch transport.
+ * Rule R1 (doc 11 §8.0): raw, ambient-blind transport resolution — the
+ * sticky legacy slot, else the host default (git when the git binary is
+ * available, else the HTTPS fetch transport). Never consults the active
+ * invocation context. Legacy non-engine wrappers (DevSync plan input,
+ * template ops) compose their transport dependency from this.
  */
-export function getTemplateTransport(): TemplateTransport {
+export function legacyTransport(): TemplateTransport {
     if (activeTransport) {
         return activeTransport;
     }
     return isGitAvailable() ? new GitTransport() : new FetchTransport();
+}
+
+/**
+ * Returns the active transport, or the default for this host: git when the
+ * git binary is available, else the HTTPS fetch transport.
+ */
+export function getTemplateTransport(): TemplateTransport {
+    const ctx = getActiveInvocationContext();
+    if (ctx) {
+        return ctx.templateTransport;
+    }
+    return legacyTransport();
 }

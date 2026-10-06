@@ -1,6 +1,7 @@
 import * as pc from 'picocolors';
 import { getCliIO } from './parser';
 import { formatError } from './errors';
+import { getActiveInvocationContext, type PzStudioLogger } from './invocation';
 
 export interface ILogger {
     log(message: string): void;
@@ -76,11 +77,15 @@ function emit(stream: 'stdout' | 'stderr', text: string): void {
     }
 }
 
-/**
- * Logs a data message to stdout.
- * @param message
- */
-export function log(message: any) {
+/* --------------------------------------------------------------------------
+ * Raw tier — today's implementation verbatim: routes by the legacy slots
+ * ONLY (externalLogger + the persisted verbose/quiet/debug flags). The
+ * published @pzstudio/cli/api exports under the historical names and the
+ * legacyLogger() accessor route here (R1, doc 11 §8.0/§12) — they never
+ * consult the active invocation context.
+ * ----------------------------------------------------------------------- */
+
+export function rawLog(message: any) {
     const msg = toText(message);
     if (externalLogger) {
         externalLogger.log(msg);
@@ -89,11 +94,7 @@ export function log(message: any) {
     emit('stdout', withNewline(msg));
 }
 
-/**
- * Logs a progress message to stderr.
- * @param message
- */
-export function info(message: any) {
+export function rawInfo(message: any) {
     const msg = toText(message);
     if (externalLogger) {
         externalLogger.info(msg);
@@ -107,11 +108,7 @@ export function info(message: any) {
     emit('stderr', withNewline(output));
 }
 
-/**
- * Logs a warning to stderr.
- * @param message
- */
-export function warn(message: any) {
+export function rawWarn(message: any) {
     const msg = toText(message);
     if (externalLogger) {
         externalLogger.warn(msg);
@@ -124,14 +121,7 @@ export function warn(message: any) {
     emit('stderr', withNewline(output));
 }
 
-/**
- * Logs an error to stderr. The rendering is owned by formatError (CLI-3):
- * usage errors print their message, structured CliErrors print the
- * Problem/Cause/Try block, and anything unexpected prints the wrapped
- * message — with the full stack only when --debug is enabled.
- * @param error
- */
-export function error(error: any) {
+function rawError(error: any) {
     if (externalLogger) {
         externalLogger.error(error);
         return;
@@ -144,11 +134,7 @@ export function error(error: any) {
     emit('stderr', withNewline(output));
 }
 
-/**
- * Logs a diagnostic message if verbose mode is enabled.
- * @param message
- */
-export function verbose(message: any) {
+export function rawVerbose(message: any) {
     if (!verboseEnabled || quietEnabled) return;
     const msg = toText(message);
     if (externalLogger && externalLogger.verbose) {
@@ -160,4 +146,98 @@ export function verbose(message: any) {
         ? pc.gray(`[${getTimestamp()}] [DEBUG] ${msg}`)
         : `[DEBUG] ${msg}`;
     emit('stderr', withNewline(output));
+}
+
+/**
+ * Rule R1 (doc 11 §8.0): the raw legacy logger as a PzStudioLogger — every
+ * method routes exactly like the raw tier above (externalLogger ?? the raw
+ * stdout/stderr sink, with the same gating) and never consults the active
+ * invocation context. Legacy non-engine wrappers (DevSync, doctor, template
+ * ops) compose their logger dependency from this.
+ */
+export function legacyLogger(): PzStudioLogger {
+    return {
+        log: (message) => rawLog(message),
+        info: (message) => rawInfo(message),
+        warn: (message) => rawWarn(message),
+        error: (err) => rawError(err),
+        verbose: (message) => rawVerbose(message),
+    };
+}
+
+/* --------------------------------------------------------------------------
+ * Engine tier — the internal context-aware logging layer (doc 11 §12):
+ * the active InvocationContext logger while a run is installed, else the
+ * raw tier. Command handlers, helpers and the engine lifecycle call these.
+ * This is NOT the published surface: api.ts re-exports the raw tier under
+ * these historical names instead (R1).
+ * ----------------------------------------------------------------------- */
+
+/**
+ * Logs a data message to stdout.
+ * @param message
+ */
+export function log(message: any) {
+    const ctx = getActiveInvocationContext();
+    if (ctx) {
+        ctx.logger.log(toText(message));
+        return;
+    }
+    rawLog(message);
+}
+
+/**
+ * Logs a progress message to stderr.
+ * @param message
+ */
+export function info(message: any) {
+    const ctx = getActiveInvocationContext();
+    if (ctx) {
+        ctx.logger.info(toText(message));
+        return;
+    }
+    rawInfo(message);
+}
+
+/**
+ * Logs a warning to stderr.
+ * @param message
+ */
+export function warn(message: any) {
+    const ctx = getActiveInvocationContext();
+    if (ctx) {
+        ctx.logger.warn(toText(message));
+        return;
+    }
+    rawWarn(message);
+}
+
+/**
+ * Logs an error to stderr. The rendering is owned by formatError (CLI-3):
+ * usage errors print their message, structured CliErrors print the
+ * Problem/Cause/Try block, and anything unexpected prints the wrapped
+ * message — with the full stack only when --debug is enabled.
+ * @param error
+ */
+export function error(error: any) {
+    const ctx = getActiveInvocationContext();
+    if (ctx) {
+        ctx.logger.error(error);
+        return;
+    }
+    rawError(error);
+}
+
+/**
+ * Logs a diagnostic message if verbose mode is enabled.
+ * @param message
+ */
+export function verbose(message: any) {
+    const ctx = getActiveInvocationContext();
+    if (ctx) {
+        if (!ctx.verbose || ctx.quiet) return;
+        ctx.logger.verbose?.(toText(message));
+        return;
+    }
+    rawVerbose(message);
 }

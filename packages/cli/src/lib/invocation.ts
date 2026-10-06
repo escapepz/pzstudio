@@ -64,9 +64,9 @@ export type PzStudioSettingsProvider = (
 ) => PzStudioHostSettings | undefined;
 
 /**
- * How the current invocation may talk to the user. Same union as
- * interaction.ts's, re-declared here as a context-pure type so this module
- * never imports a state-owner module; the two are structurally compatible.
+ * How the current invocation may talk to the user. Canonical pure type
+ * owner (doc 11 §8.0): interaction.ts imports and re-exports this union —
+ * this module never imports a state-owner module.
  */
 export type InteractionMode = 'interactive' | 'non-interactive' | 'embedded';
 

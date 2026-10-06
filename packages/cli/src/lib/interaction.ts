@@ -2,6 +2,7 @@ import fs from 'fs';
 import { CliError } from './errors';
 import { CliUsageError, getCliIO } from './parser';
 import { hasFlag } from './args';
+import { getActiveInvocationContext, type InteractionMode } from './invocation';
 
 /**
  * How the current invocation may talk to the user (CLI-9). Set once per
@@ -15,8 +16,11 @@ import { hasFlag } from './args';
  * - 'non-interactive' — executable without a TTY (CI, pipes): never
  *   prompt; destructive actions are refused with exit 2 unless --yes
  *   was given.
+ *
+ * The union itself is owned by invocation.ts (context-pure type, doc 11
+ * §8.0) and re-exported here for import compatibility.
  */
-export type InteractionMode = 'interactive' | 'non-interactive' | 'embedded';
+export type { InteractionMode };
 
 let interactionMode: InteractionMode = 'embedded';
 
@@ -25,6 +29,10 @@ export function setInteractionMode(mode: InteractionMode): void {
 }
 
 export function getInteractionMode(): InteractionMode {
+    const ctx = getActiveInvocationContext();
+    if (ctx) {
+        return ctx.interactionMode;
+    }
     return interactionMode;
 }
 
@@ -83,13 +91,14 @@ export function confirmDestructive(
 ): void {
     if (hasFlag('yes')) return;
 
-    if (interactionMode === 'embedded') {
+    const mode = getInteractionMode();
+    if (mode === 'embedded') {
         throw new CliUsageError(
             `Refusing '${command}' without explicit confirmation (embedded API). Pass { flags: ['--yes'] } once your host UI has confirmed, or use --dry-run to preview.`,
         );
     }
 
-    if (interactionMode === 'non-interactive') {
+    if (mode === 'non-interactive') {
         throw new CliUsageError(
             `Refusing '${command}' without confirmation in a non-interactive session. Try: pzstudio ${command}${args.length ? ' ' + args.join(' ') : ''} --yes`,
         );

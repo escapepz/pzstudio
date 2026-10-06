@@ -21,6 +21,10 @@ import {
 import { info, warn, verbose } from './logger';
 import { CliError } from './errors';
 import {
+    getActiveInvocationContext,
+    type PzStudioHostSettings,
+} from './invocation';
+import {
     GlobalConfig,
     readGlobalConfig,
     writeGlobalConfig,
@@ -65,6 +69,34 @@ export function setVsCodeSettings(
 }
 
 export function getVsCodeSettings(): IVsCodeSettings | undefined {
+    const ctx = getActiveInvocationContext();
+    if (ctx) {
+        const wsTemplates = ctx.settings?.workspace?.templates || {};
+        const userTemplates = ctx.settings?.user?.templates || {};
+
+        const templates: Partial<Record<TemplateCategory, ITemplateConfig>> =
+            {};
+        for (const cat of [
+            'project',
+            'mod',
+            'workshop',
+            'language',
+        ] as TemplateCategory[]) {
+            const val = wsTemplates[cat] ?? userTemplates[cat];
+            if (val) templates[cat] = val;
+        }
+
+        return {
+            templates:
+                Object.keys(templates).length > 0 ? templates : undefined,
+            outdir:
+                ctx.settings?.workspace?.outdir ?? ctx.settings?.user?.outdir,
+            useSymlinks:
+                ctx.settings?.workspace?.useSymlinks ??
+                ctx.settings?.user?.useSymlinks,
+        };
+    }
+
     if (!vscodeWorkspaceSettings && !vscodeUserSettings) return undefined;
 
     const wsTemplates = vscodeWorkspaceSettings?.templates || {};
@@ -93,6 +125,27 @@ export function getVsCodeSettings(): IVsCodeSettings | undefined {
 export function getResolvedTemplates(
     globalConfig: GlobalConfig,
 ): Partial<Record<TemplateCategory, ITemplateConfig>> | undefined {
+    const ctx = getActiveInvocationContext();
+    if (ctx) {
+        const wsTemplates = ctx.settings?.workspace?.templates || {};
+        const userTemplates = ctx.settings?.user?.templates || {};
+        const globalTemplates = globalConfig.templates || {};
+
+        const merged: Partial<Record<TemplateCategory, ITemplateConfig>> = {};
+        for (const cat of [
+            'project',
+            'mod',
+            'workshop',
+            'language',
+        ] as TemplateCategory[]) {
+            const val =
+                wsTemplates[cat] ?? userTemplates[cat] ?? globalTemplates[cat];
+            if (val) merged[cat] = val;
+        }
+
+        return merged;
+    }
+
     const wsTemplates = vscodeWorkspaceSettings?.templates || {};
     const userTemplates = vscodeUserSettings?.templates || {};
     const globalTemplates = globalConfig.templates || {};
@@ -115,11 +168,33 @@ export function getResolvedTemplates(
 export function getResolvedUseSymlinks(
     globalConfig: GlobalConfig,
 ): boolean | undefined {
+    const ctx = getActiveInvocationContext();
+    if (ctx) {
+        return (
+            ctx.settings?.workspace?.useSymlinks ??
+            ctx.settings?.user?.useSymlinks ??
+            globalConfig.useSymlinks
+        );
+    }
     return (
         vscodeWorkspaceSettings?.useSymlinks ??
         vscodeUserSettings?.useSymlinks ??
         globalConfig.useSymlinks
     );
+}
+
+/**
+ * Rule R1 (doc 11 §8.0): the two vscode settings slots, raw — ambient-blind
+ * (never consults the active invocation context). undefined = no host
+ * layer. Legacy non-engine wrappers (DevSync plan input, doctor, template
+ * ops) compose their settings dependency from this.
+ */
+export function legacySettings(): PzStudioHostSettings | undefined {
+    if (!vscodeWorkspaceSettings && !vscodeUserSettings) return undefined;
+    return {
+        workspace: vscodeWorkspaceSettings,
+        user: vscodeUserSettings,
+    };
 }
 
 /**
@@ -204,6 +279,10 @@ export function setProjectRootAnchor(dir: string | undefined) {
  * process working directory.
  */
 export function discoveryStartDir(): string {
+    const ctx = getActiveInvocationContext();
+    if (ctx) {
+        return ctx.anchor ?? ctx.projectDir ?? process.cwd();
+    }
     return projectRootAnchor ?? externalProjectDir ?? process.cwd();
 }
 
@@ -248,6 +327,36 @@ export function findProjectDir(): string | undefined {
  */
 export function projectDir(): string {
     const start = discoveryStartDir();
+    const found = findProjectRoot(start);
+    if (!found) {
+        throw new CliError('No pzstudio project found.', {
+            cause: `Searched from '${start}' up to the filesystem root for a project.json.`,
+            tryHint: `Run 'pzstudio new <title>' to create a project, or point at one with 'pzstudio -C <dir> <command>'.`,
+        });
+    }
+    return found;
+}
+
+/**
+ * Rule R1 (doc 11 §8.0): the raw discovery START — `projectRootAnchor ??
+ * externalProjectDir`, with NO cwd fallback. Ambient-blind (never consults
+ * the active invocation context). Distinct from legacyProjectDir(): an
+ * anchor may point inside a project; the start is only where a walk begins.
+ */
+export function legacyDiscoveryStart(): string | undefined {
+    return projectRootAnchor ?? externalProjectDir;
+}
+
+/**
+ * Rule R1 (doc 11 §8.0): the existing projectDir() algorithm over raw state
+ * ONLY — start from legacyDiscoveryStart() ?? process.cwd(), walk upward to
+ * the nearest project.json, fail-closed with the same structured error.
+ * Never the bare discovery start, never the presence-branched projectDir().
+ * Legacy non-engine wrappers (resolveModInfoTargets' default arg, DevSync
+ * plan input) compose their project root from this.
+ */
+export function legacyProjectDir(): string {
+    const start = legacyDiscoveryStart() ?? process.cwd();
     const found = findProjectRoot(start);
     if (!found) {
         throw new CliError('No pzstudio project found.', {
@@ -452,6 +561,35 @@ export function getStoreDir() {
  * @returns {string} The output directory
  */
 export function getOutDir(project?: IProjectConfig, config?: GlobalConfig) {
+    const ctx = getActiveInvocationContext();
+    if (ctx) {
+        // 1. Try project config (projectDir() resolves from the context)
+        if (project && project.outdir) {
+            return resolve(projectDir(), project.outdir);
+        }
+
+        // 2. Try workspace settings
+        if (ctx.settings?.workspace?.outdir) {
+            return resolve(ctx.settings.workspace.outdir);
+        }
+
+        // 3. Try user settings
+        if (ctx.settings?.user?.outdir) {
+            return resolve(ctx.settings.user.outdir);
+        }
+
+        // 4. Try global config
+        const global = config ?? readGlobalConfig(false);
+        if (global.outdir) {
+            return resolve(global.outdir);
+        }
+
+        // This should technically never be reached because readGlobalConfig has a final fallback
+        const defaultPath = join(homedir(), 'Zomboid', 'Workshop');
+        verbose(`Defaulting output directory to: ${defaultPath}`);
+        return defaultPath;
+    }
+
     // 1. Try project config
     if (project && project.outdir) {
         return resolve(projectDir(), project.outdir);
