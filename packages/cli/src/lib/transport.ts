@@ -420,17 +420,58 @@ export function setTemplateTransport(
 }
 
 /**
+ * The host-default template transport, resolved fresh on EVERY delegated
+ * use. The git-availability probe (a spawnSync side effect) belongs to
+ * actual template acquisition, not to transport acquisition: before the
+ * engine migration getTemplateTransport() probed the host and constructed
+ * the default on every request, so runs that never touch templates
+ * (--version, --help, usage errors, non-template commands) never probed
+ * git. Handing the invocation composition a lazy default preserves that
+ * timing — including per-use freshness: the wrapper stores no resolved
+ * git/fetch transport, each use re-reads the current host capability —
+ * while the installed context stays self-contained (a concrete
+ * TemplateTransport, no per-field fallback; R0, doc 11 §8.0/§8.1). Owned
+ * by this module (the state owner of the host default, Appendix B);
+ * invocation.ts only receives it and never constructs a default.
+ */
+class LazyHostDefaultTransport implements TemplateTransport {
+    get name(): 'git' | 'fetch' {
+        return resolveHostDefaultTransport().name;
+    }
+
+    download(url: string, ref: string | undefined, destDir: string): void {
+        resolveHostDefaultTransport().download(url, ref, destDir);
+    }
+
+    refresh(cacheDir: string, ref: string | undefined): boolean {
+        return resolveHostDefaultTransport().refresh(cacheDir, ref);
+    }
+
+    isCacheValid(dir: string): boolean {
+        return resolveHostDefaultTransport().isCacheValid(dir);
+    }
+}
+
+/** The pre-migration host-default selection, evaluated per request. */
+function resolveHostDefaultTransport(): GitTransport | FetchTransport {
+    return isGitAvailable() ? new GitTransport() : new FetchTransport();
+}
+
+/**
  * Rule R1 (doc 11 §8.0): raw, ambient-blind transport resolution — the
  * sticky legacy slot, else the host default (git when the git binary is
- * available, else the HTTPS fetch transport). Never consults the active
- * invocation context. Legacy non-engine wrappers (DevSync plan input,
+ * available, else the HTTPS fetch transport), materialized lazily so the
+ * availability probe is paid on actual use — never on acquisition, and
+ * re-evaluated per use exactly like the pre-migration getTemplateTransport()
+ * requests. Never consults the active invocation context. The runCLI
+ * composition and legacy non-engine wrappers (DevSync plan input,
  * template ops) compose their transport dependency from this.
  */
 export function legacyTransport(): TemplateTransport {
     if (activeTransport) {
         return activeTransport;
     }
-    return isGitAvailable() ? new GitTransport() : new FetchTransport();
+    return new LazyHostDefaultTransport();
 }
 
 /**
