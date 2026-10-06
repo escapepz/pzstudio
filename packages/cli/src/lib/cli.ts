@@ -31,25 +31,41 @@ import {
 } from './parser';
 import {
     setTemplateTransport,
+    legacyTransport,
     GitTransport,
     FetchTransport,
 } from './transport';
-import { error, info, log, verbose } from './logger';
+import {
+    error,
+    info,
+    log,
+    verbose,
+    legacyLogger,
+    setQuiet,
+    setVerbose,
+    setDebug,
+} from './logger';
 import {
     discoveryStartDir,
     findProjectDir,
+    getExternalProjectDir,
+    legacySettings,
     migrateStoreDirIfNeeded,
     setProjectRootAnchor,
 } from './helper';
 import { migrateGlobalConfigIfNeeded } from './templateManager';
 import { setInteractionMode } from './interaction';
+import {
+    installInvocationContext,
+    withEngineLock,
+    type InvocationContext,
+    type InvocationInputs,
+} from './invocation';
 
 // Backward-compatible re-exports: flags used to live here and external
 // code (tests, templates) may import them from this module.
 export { hasFlag, extractFlag } from './args';
 export { CliUsageError } from './parser';
-
-import { setQuiet, setVerbose, setDebug } from './logger';
 
 export interface RunCLIOptions {
     /**
@@ -69,19 +85,67 @@ export async function runCLI(
     // everything else keeps Node's default signal termination. A global
     // handler would also leak into embedded hosts and double-report on
     // Ctrl+C alongside the command's own handler.
-    try {
-        // CLI-9: the interaction policy is decided once per invocation from
-        // the invocation shape — never by command handlers. The legacy
-        // embedded shape is the library boundary (VS Code extension): it
-        // must never terminal-prompt. The executable prompts only on a real
-        // TTY; anything else (pipes, CI) refuses destructive actions.
-        setInteractionMode(
+
+    // Composition (doc 11 §8.1): the fully-resolved legacy InvocationInputs
+    // are built from the raw legacy facade slots via the owner defaults —
+    // before any engine call. The raw legacy logger comes from logger.ts,
+    // the sticky legacy transport from transport.ts, the externally
+    // anchored project dir is read raw (runCLI never writes it, §13.1).
+    //
+    // CLI-9: the interaction policy is decided once per invocation from
+    // the invocation shape — never by command handlers. The legacy
+    // embedded shape is the library boundary (VS Code extension): it
+    // must never terminal-prompt. The executable prompts only on a real
+    // TTY; anything else (pipes, CI) refuses destructive actions.
+    const inputs: InvocationInputs = {
+        logger: legacyLogger(),
+        templateTransport: legacyTransport(),
+        projectDir: getExternalProjectDir(),
+        interactionMode:
             cmdName !== undefined || options?.flags !== undefined
                 ? 'embedded'
                 : process.stdout.isTTY
                   ? 'interactive'
                   : 'non-interactive',
-        );
+    };
+
+    // The engine lock spans the ENTIRE invocation lifecycle (§9): the
+    // context is installed for exactly one run and restored in the
+    // finally — on success, usage errors, thrown commands, parse errors
+    // and terminal control flow alike. Overlapping runCLI calls queue
+    // FIFO instead of racing (the §9 classified intentional hardening).
+    return withEngineLock(async () => {
+        const installed = installInvocationContext(inputs);
+        try {
+            return await runInvocationLifecycle(
+                cmdName,
+                cmdArgs,
+                options,
+                installed.context,
+            );
+        } finally {
+            installed.restore();
+        }
+    });
+}
+
+/**
+ * The invocation lifecycle under the installed context (doc 11 §8.1):
+ * write-through → normalize → parse → settings → validate → help/banner →
+ * dispatch → execute → error reporting. On this legacy facade path the
+ * runtime values are additionally written through to the legacy slots per
+ * §13.1; every emitter routes through the context logger.
+ */
+async function runInvocationLifecycle(
+    cmdName: string | undefined,
+    cmdArgs: string[] | undefined,
+    options: RunCLIOptions | undefined,
+    ctx: InvocationContext,
+): Promise<void> {
+    try {
+        // §13.1 write-through: interaction mode is set per runCLI call,
+        // before parsing, from the composed invocation shape.
+        setInteractionMode(ctx.interactionMode);
         // ---- Parse phase (pure: no side effects, no output besides usage) ----
         // The legacy embedded shape runCLI(cmd, args, {flags}) converges onto
         // the same ParsedInvocation the executable path produces, then both
@@ -102,10 +166,14 @@ export async function runCLI(
             }
             invocation = parsed.invocation;
         }
+        // Settings resolution (§8.1): on the legacy facade path the host
+        // settings ARE the legacy facade slots, read raw once post-parse —
+        // no provider call exists on this path.
+        ctx.settings = legacySettings();
         const valid = validateInvocation(invocation);
 
         // ---- Execute phase ----
-        await executeInvocation(valid);
+        await executeInvocation(valid, ctx);
     } catch (e) {
         if (e instanceof CliUsageError) {
             if (!e.alreadyReported) {
@@ -123,30 +191,47 @@ export async function runCLI(
     log('\n');
 }
 
-async function executeInvocation(valid: ValidInvocation): Promise<void> {
+async function executeInvocation(
+    valid: ValidInvocation,
+    ctx: InvocationContext,
+): Promise<void> {
     const options = valid.options;
 
     // Global option wiring (from the parsed invocation, never process.argv).
     // --debug implies verbose; --quiet suppresses non-essential stderr
     // (info/verbose); errors and warnings always print. setDebug gates the
     // stack trace of unexpected errors in the runCLI catch path.
-    setVerbose(options.verbose === true || options.debug === true);
-    setQuiet(options.quiet === true);
-    setDebug(options.debug === true);
+    // The runtime fields are filled on the invocation context (§8.1) and,
+    // on this legacy facade path, written through to the legacy slots per
+    // §13.1 (they persist post-run).
+    ctx.verbose = options.verbose === true || options.debug === true;
+    ctx.quiet = options.quiet === true;
+    ctx.debug = options.debug === true;
+    setVerbose(ctx.verbose);
+    setQuiet(ctx.quiet);
+    setDebug(ctx.debug);
     // -C/--project anchors project discovery (CLI-5): it replaces the
     // discovery start for this invocation without mutating process.cwd().
     // Passing no --project clears the anchor (embedded hosts re-invoke).
-    setProjectRootAnchor(
+    // §13.1: the legacy slot receives exactly the parsed-flag value (set or
+    // cleared per run, persisting post-run); the context anchor follows the
+    // context rule (parsed --project ?? the input projectDir tier).
+    const anchor =
         typeof options.project === 'string'
             ? resolve(options.project)
-            : undefined,
-    );
+            : undefined;
+    ctx.anchor = anchor ?? ctx.projectDir;
+    setProjectRootAnchor(anchor);
+    // --transport overrides the invocation's transport (the context readers
+    // branch to the context) and preserves the legacy sticky slot write
+    // (§13.1) — written only when the flag is present.
     if (typeof options.transport === 'string') {
-        setTemplateTransport(
+        const transport =
             options.transport === 'git'
                 ? new GitTransport()
-                : new FetchTransport(),
-        );
+                : new FetchTransport();
+        ctx.templateTransport = transport;
+        setTemplateTransport(transport);
     }
 
     // Help and the no-command banner are pure invocations: no migrations,
@@ -182,6 +267,10 @@ async function executeInvocation(valid: ValidInvocation): Promise<void> {
         `Executing command [${valid.command.name}] ${valid.positionals.length ? `with params [${valid.positionals.join(', ')}]` : ''}`,
     );
 
+    // §13.1: publish the parsed options for the invocation being executed —
+    // set before dispatch, cleared in the finally (net-zero post-run). The
+    // context carries the same map for the engine-tier flag readers.
+    ctx.invocationOptions = options;
     setInvocationOptions(options);
     try {
         await valid.command.run({
@@ -192,6 +281,7 @@ async function executeInvocation(valid: ValidInvocation): Promise<void> {
             info(`Command [${valid.command.name}] completed.`);
         }
     } finally {
+        ctx.invocationOptions = {};
         setInvocationOptions(undefined);
     }
 }
