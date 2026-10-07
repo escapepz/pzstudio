@@ -8,8 +8,8 @@ vi.mock('vscode', async () => {
     return createVscodeMock();
 });
 // Every runtime api import across the activation graph (extension.ts plus
-// the still-legacy consumers it wires: task provider, devsync controller,
-// doctor util, modinfo command).
+// the still-legacy consumers it wires: devsync controller, doctor util,
+// modinfo command — the task provider consumes the v2 instance only).
 vi.mock('@pzstudio/cli/api', () => ({
     createPzStudio: vi.fn(() => ({ run: vi.fn(async () => {}) })),
     setLogger: vi.fn(),
@@ -150,7 +150,8 @@ describe('extension activation (host instance wiring)', () => {
             warn: expect.any(Function),
             error: expect.any(Function),
         });
-        // Task provider (migrates in commit 8) still registered.
+        // Task provider (v2 via the host instance since commit 8) still
+        // registered.
         expect(asMock(vscode.tasks.registerTaskProvider)).toHaveBeenCalledTimes(
             1,
         );
