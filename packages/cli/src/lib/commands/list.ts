@@ -4,7 +4,7 @@ import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { CliError } from '../errors';
 import { printJsonEnvelope } from '../json';
-import { log, verbose } from '../logger';
+import { engineIo, log, verbose } from '../logger';
 import { hasFlag } from '../args';
 import { projectDir, readProjectConfig } from '../helper';
 
@@ -21,7 +21,7 @@ addHelp(
 );
 
 export function listCmd() {
-    const projectConfig = readProjectConfig();
+    const projectConfig = readProjectConfig(undefined, true, engineIo());
 
     // Check if we are in a project directory
     if (!projectConfig) {

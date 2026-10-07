@@ -11,7 +11,7 @@ import {
 } from '../../packages/cli/src/lib/helper';
 import {
     scaffoldProject,
-    resolveTemplateDir,
+    resolveTemplateDirForEngine,
 } from '../../packages/cli/src/lib/templateManager';
 import { hasFlag } from '../../packages/cli/src/lib/args';
 
@@ -73,7 +73,7 @@ describe('buildCmd', () => {
             () => JSON.parse(JSON.stringify(project)) as any,
         );
         vi.mocked(scaffoldProject).mockReturnValue(undefined as any);
-        vi.mocked(resolveTemplateDir).mockReturnValue(
+        vi.mocked(resolveTemplateDirForEngine).mockReturnValue(
             '/templates/workshop' as any,
         );
         vi.mocked(resolveModInfoTargets).mockReturnValue([] as any);

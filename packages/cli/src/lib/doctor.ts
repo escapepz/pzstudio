@@ -16,7 +16,7 @@ import {
     setProjectDir,
 } from './helper';
 import { probeTemplateCacheDir } from './templateManager';
-import { legacyLogger } from './logger';
+import { legacyLogger, engineIo } from './logger';
 import type { PzStudioHostSettings, PzStudioLogger } from './invocation';
 
 export interface ProjectDoctorOptions {
@@ -30,8 +30,9 @@ export interface ProjectDoctorOptions {
 /**
  * Explicit dependencies for the doctor core (doc 11 §17 commit 5, R1):
  * `settings` may be a snapshot or an accessor (resolved once — a doctor
- * run is finite); the logger is the run's sink (threaded into the io
- * scopes in commit 6). No anchor, no ambient context.
+ * run is finite); the logger is the run's sink, threaded into the plan
+ * io scopes (doc 11 §17 commit 6, Appendix C). No anchor, no ambient
+ * context.
  */
 export interface ProjectDoctorCoreDeps {
     settings?: PzStudioHostSettings | (() => PzStudioHostSettings | undefined);
@@ -49,22 +50,30 @@ function resolveDep<T>(dep: T | (() => T)): T {
  * project.json or an unreadable global config never throw here — they are
  * exactly the findings doctor reports. The core uses only its explicit
  * dependencies (R1): outdir tiers resolve against projectPath with the
- * supplied settings layers, the template probe reads the supplied layers —
- * no temporary global anchor, no ambient invocation context, lock-free.
+ * supplied settings layers, the template probe reads the supplied layers,
+ * and every config/outdir/probe emission routes through the supplied
+ * logger's io scope (commit 6, Appendix C) — no temporary global anchor,
+ * no ambient invocation context, lock-free.
  */
 export async function runProjectDoctorCore(
     projectPath: string,
     deps: ProjectDoctorCoreDeps,
 ): Promise<DoctorReport> {
     const settings = resolveDep(deps.settings);
+    const io = { logger: deps.logger };
 
     let outDir: string | undefined;
     try {
-        const config = readProjectConfig(join(projectPath, 'project.json'));
+        const config = readProjectConfig(
+            join(projectPath, 'project.json'),
+            true,
+            io,
+        );
         if (config) {
             outDir = getOutDir(config, undefined, {
                 projectDir: projectPath,
                 settings,
+                logger: deps.logger,
             });
         }
     } catch {
@@ -75,7 +84,10 @@ export async function runProjectDoctorCore(
 
     let template: { dir: string; name: string } | undefined;
     try {
-        template = probeTemplateCacheDir('project', { settings });
+        template = probeTemplateCacheDir('project', {
+            settings,
+            logger: deps.logger,
+        });
     } catch {
         // No template configured or unreadable global config: nothing
         // to check.
@@ -92,26 +104,55 @@ export async function runProjectDoctorCore(
 }
 
 /**
- * Legacy facade export (§13): the historical save → set project → run →
- * restore anchor dance is preserved exactly — restored on every
- * success/failure path — because this is a library call that must not leak
- * global state into its host (the extension process). The run delegates to
- * the explicit core with RAW legacy deps (ambient-blind, lock-free); a
- * concurrent v2 invocation's context is never inherited.
+ * Shared §13 composition: the historical save → set project → run →
+ * restore anchor dance (restored on every success/failure path — a
+ * library call must not leak global state into its host) around the
+ * explicit core with RAW legacy settings and the given emission target.
  */
-export async function runProjectDoctor(
+async function runProjectDoctorWithLogger(
     projectPath: string,
-    options: ProjectDoctorOptions = {},
+    options: ProjectDoctorOptions,
+    logger: PzStudioLogger,
 ): Promise<DoctorReport> {
     const previousProjectDir = getExternalProjectDir();
     setProjectDir(projectPath);
     try {
         return await runProjectDoctorCore(projectPath, {
             settings: legacySettings(),
-            logger: legacyLogger(),
+            logger,
             gameBuild: options.gameBuild,
         });
     } finally {
         setProjectDir(previousProjectDir);
     }
+}
+
+/**
+ * Legacy facade export (§13): delegates to the explicit core with RAW
+ * legacy deps (ambient-blind, lock-free); a concurrent v2 invocation's
+ * context is never inherited. Published signature and raw-legacy default
+ * are frozen: the engine's own doctor command supplies its invocation
+ * logger through the internal engine path below, never by widening this
+ * facade.
+ */
+export async function runProjectDoctor(
+    projectPath: string,
+    options: ProjectDoctorOptions = {},
+): Promise<DoctorReport> {
+    return runProjectDoctorWithLogger(projectPath, options, legacyLogger());
+}
+
+/**
+ * INTERNAL engine-command path (doc 11 §12/§13 — not re-exported from
+ * `@pzstudio/cli/api`): the §13 facade composition with ONLY the emission
+ * target swapped for the context-aware engineIo() logger, so the doctor
+ * command's plan-input emissions follow the active invocation logger.
+ * Settings stay raw legacy and the anchor dance is preserved; ambient
+ * awareness enters only through this explicit engine caller.
+ */
+export async function runProjectDoctorForEngine(
+    projectPath: string,
+    options: ProjectDoctorOptions = {},
+): Promise<DoctorReport> {
+    return runProjectDoctorWithLogger(projectPath, options, engineIo().logger);
 }

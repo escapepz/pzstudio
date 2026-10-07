@@ -1,7 +1,11 @@
 import * as pc from 'picocolors';
 import { getCliIO } from './parser';
 import { formatError } from './errors';
-import { getActiveInvocationContext, type PzStudioLogger } from './invocation';
+import {
+    getActiveInvocationContext,
+    type IoScope,
+    type PzStudioLogger,
+} from './invocation';
 
 export interface ILogger {
     log(message: string): void;
@@ -173,6 +177,62 @@ export function rawVerbose(message: any) {
         return;
     }
     sinkVerbose(msg);
+}
+
+/* --------------------------------------------------------------------------
+ * Explicit-io emission adapters (doc 11 §17 commit 6, Appendix C): route
+ * one emission to the supplied io scope's logger, else — R1 default
+ * routing — to the RAW legacy tier, ambient-blind and legacy bit-identical
+ * (never the engine tier, which would inherit an active v2 ambient). The
+ * threaded non-engine paths call these instead of the engine-tier log()
+ * family; the adapters never consult the active invocation context.
+ * ----------------------------------------------------------------------- */
+
+export function emitInfo(io: IoScope | undefined, message: string): void {
+    if (io) {
+        io.logger.info(message);
+        return;
+    }
+    rawInfo(message);
+}
+
+export function emitWarn(io: IoScope | undefined, message: string): void {
+    if (io) {
+        io.logger.warn(message);
+        return;
+    }
+    rawWarn(message);
+}
+
+export function emitVerbose(io: IoScope | undefined, message: string): void {
+    if (io) {
+        io.logger.verbose?.(message);
+        return;
+    }
+    rawVerbose(message);
+}
+
+/**
+ * The io scope ENGINE call sites hand the io-threaded helpers (doc 11 §12
+ * vs §17 commit 6 / Appendix C): its logger is the context-aware engine
+ * tier — the active InvocationContext logger while a run is installed,
+ * else the raw legacy tier. Command handlers and internal engine wrappers
+ * pass this so engine-reachable helper emissions keep their §12 ambient
+ * routing on both doors (v2 instance logger / legacy raw sink). The
+ * threaded helpers' own omitted-io default stays RAW legacy (R1):
+ * ambient awareness enters only where an engine caller explicitly passes
+ * this scope.
+ */
+export function engineIo(): IoScope {
+    return {
+        logger: {
+            log: (message) => log(message),
+            info: (message) => info(message),
+            warn: (message) => warn(message),
+            error: (err) => error(err),
+            verbose: (message) => verbose(message),
+        },
+    };
 }
 
 /**

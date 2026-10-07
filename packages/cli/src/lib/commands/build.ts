@@ -22,7 +22,10 @@ import {
     resolveProjectConfig,
 } from '../helper';
 import { info, verbose, warn } from '../logger';
-import { resolveTemplateDir, scaffoldProject } from '../templateManager';
+import {
+    resolveTemplateDirForEngine,
+    scaffoldProject,
+} from '../templateManager';
 
 addHelp(
     'build',
@@ -123,7 +126,7 @@ export async function buildCmd() {
     }
     verbose(`Targets: main=${buildMain}, development=${buildDev}`);
 
-    const templateWorkshopPath = resolveTemplateDir('workshop');
+    const templateWorkshopPath = resolveTemplateDirForEngine('workshop');
     const planInput = gatherPlanInput(
         projectPath,
         projectConfig,

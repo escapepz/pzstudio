@@ -11,7 +11,14 @@ import {
     cpSync,
     symlinkSync,
 } from 'fs';
-import { info, warn, verbose } from './logger';
+import {
+    emitInfo,
+    emitWarn,
+    emitVerbose,
+    engineIo,
+    info,
+    warn,
+} from './logger';
 import type {
     TemplateCategory,
     GlobalConfig,
@@ -19,7 +26,11 @@ import type {
 } from '@pzstudio/core';
 import { DEFAULT_TEMPLATES } from '@pzstudio/core';
 import type { TemplateTransport } from '@pzstudio/platform';
-import type { PzStudioHostSettings } from './invocation';
+import type {
+    IoScope,
+    PzStudioHostSettings,
+    PzStudioLogger,
+} from './invocation';
 import {
     getVsCodeSettings,
     mergeHostSettingsLayers,
@@ -211,7 +222,14 @@ export function getConfigPath(): string {
     return join(getConfigDir(), 'config.json');
 }
 
-function bootstrapLegacyTemplates(): void {
+/**
+ * Bootstraps the bundled legacy templates into ~/.pzstudio (one-time, cold
+ * caches only). `io` (doc 11 §17 commit 6, Appendix C) is the emission
+ * target of the bootstrap info/warn: the v2 non-engine paths thread the
+ * instance logger, every omitted scope routes raw legacy (R1) — the
+ * bootstrap emission can never inherit an active v2 ambient.
+ */
+function bootstrapLegacyTemplates(io?: IoScope | undefined): void {
     const globalLegacyDir = join(getConfigDir(), '.template-legacy');
     if (existsSync(globalLegacyDir) && isDirNonEmpty(globalLegacyDir)) {
         return;
@@ -241,18 +259,24 @@ function bootstrapLegacyTemplates(): void {
     }
 
     if (bundledLegacyDir) {
-        info(`- Bootstrapping legacy templates to ${globalLegacyDir}...`);
+        emitInfo(
+            io,
+            `- Bootstrapping legacy templates to ${globalLegacyDir}...`,
+        );
         try {
             mkdirSync(dirname(globalLegacyDir), { recursive: true });
             cpSync(bundledLegacyDir, globalLegacyDir, { recursive: true });
         } catch (e) {
-            warn(`Failed to bootstrap legacy templates: ${e}`);
+            emitWarn(io, `Failed to bootstrap legacy templates: ${e}`);
         }
     }
 }
 
-function getEmbeddedTemplateDir(category: TemplateCategory): string {
-    bootstrapLegacyTemplates();
+function getEmbeddedTemplateDir(
+    category: TemplateCategory,
+    io?: IoScope | undefined,
+): string {
+    bootstrapLegacyTemplates(io);
     const globalLegacyDir = join(getConfigDir(), '.template-legacy');
     return join(globalLegacyDir, `.template-${category}`);
 }
@@ -284,7 +308,10 @@ function isDirNonEmpty(dir: string): boolean {
  * template transport (git by default). An explicitly supplied transport
  * (doc 11 commit 5 — the explicit-scope cores) is used as-is so a legacy
  * non-engine operation stays ambient-blind (R1); the default remains the
- * engine-scope reader.
+ * engine-scope reader. The published signature is frozen (§13: unchanged
+ * signatures); the clone-failure warning routes raw legacy here (omitted
+ * io → R1 default) — the internal WithIo variant below carries the io
+ * scope for the io-threaded callers.
  * @param url The repository URL or user/repo shorthand
  * @param dest The destination directory
  * @param ref Optional branch or tag
@@ -297,18 +324,38 @@ export function cloneRemoteTemplate(
     ref?: string,
     transport?: TemplateTransport,
 ): boolean {
+    return cloneRemoteTemplateWithIo(url, dest, ref, transport, undefined);
+}
+
+/**
+ * INTERNAL io-threaded clone (doc 11 §17 commit 6, Appendix C — not
+ * re-exported from `@pzstudio/cli/api`): the §13 clone with an explicit io
+ * scope as the emission target of the clone-failure warning. The v2
+ * non-engine paths thread the instance logger; an omitted scope routes
+ * raw legacy (R1); the transport's own emissions belong to the
+ * transport's constructor sink, not to this scope.
+ */
+export function cloneRemoteTemplateWithIo(
+    url: string,
+    dest: string,
+    ref?: string,
+    transport?: TemplateTransport,
+    io?: IoScope | undefined,
+): boolean {
     try {
         (transport ?? getTemplateTransport()).download(url, ref, dest);
         return true;
     } catch (err) {
-        warn(`- ${(err as Error).message}`);
+        emitWarn(io, `- ${(err as Error).message}`);
         return false;
     }
 }
 
 /**
  * Refreshes a cached template repository using the active transport (or an
- * explicitly supplied one — doc 11 commit 5, R1).
+ * explicitly supplied one — doc 11 commit 5, R1). Emits nothing here:
+ * every refresh emission belongs to the transport, whose routing is its
+ * own constructor sink. Signature unchanged (§13).
  * @param dir The cache directory
  * @param ref Optional branch or tag
  * @param transport Optional explicit transport override
@@ -327,11 +374,19 @@ import { migration } from '@pzstudio/core';
 
 /**
  * Reads the global pzstudio config from ~/.pzstudio/config.json
+ * @param validate Whether to validate (and migrate) the config
+ *   (default: true)
+ * @param io Optional explicit io scope (doc 11 §17 commit 6, Appendix C):
+ *   the config-read verbose and the migration/validation warnings route to
+ *   its logger; an omitted scope means raw legacy routing (R1).
  */
-export function readGlobalConfig(validate: boolean = true): GlobalConfig {
+export function readGlobalConfig(
+    validate: boolean = true,
+    io?: IoScope | undefined,
+): GlobalConfig {
     const configPath = getConfigPath();
     const configDir = getConfigDir();
-    verbose(`Reading global config from: ${configPath}`);
+    emitVerbose(io, `Reading global config from: ${configPath}`);
 
     // Default values for global config
     const defaultConfig: GlobalConfig = {
@@ -364,7 +419,8 @@ export function readGlobalConfig(validate: boolean = true): GlobalConfig {
             // Apply migration FIRST so we validate the modern shape
             const migrationCheck = migration.checkConfig(config);
             if (migrationCheck.needsMigration) {
-                verbose(
+                emitVerbose(
+                    io,
                     `[MIGRATION] Global config ${basename(configPath)} needs migration: ${migrationCheck.reason}`,
                 );
                 config = migration.upgradeConfig(
@@ -376,10 +432,11 @@ export function readGlobalConfig(validate: boolean = true): GlobalConfig {
             const context = new ValidationContext(basename(configPath));
             validateConfig(config, context);
             if (context.hasErrors()) {
-                warn(
+                emitWarn(
+                    io,
                     `Validation failed for global config ${basename(configPath)}:\n${context.formatErrors()}`,
                 );
-                warn('Continuing with in-memory defaults.');
+                emitWarn(io, 'Continuing with in-memory defaults.');
                 return defaultConfig;
             }
         }
@@ -411,7 +468,7 @@ export function migrateGlobalConfigIfNeeded(): void {
     if (!existsSync(configPath)) {
         try {
             // Write initial config with all defaults materialized
-            const config = readGlobalConfig(false);
+            const config = readGlobalConfig(false, engineIo());
             writeGlobalConfig(config);
         } catch (_e) {
             warn(
@@ -474,13 +531,26 @@ export function validateTemplateManifest(
  * resolveTemplateDir, the transport to acquire/refresh with. Supplied by
  * the explicit-scope cores; an omitted scope keeps the engine-scope
  * readers, and an omitted transport inside a scope falls back to the
- * engine-scope reader (the DevSync core always supplies it).
+ * engine-scope reader (the DevSync core always supplies it). `logger`
+ * (doc 11 §17 commit 6, Appendix C) is the emission target of every
+ * threaded emission on the scope path — the instance logger for the v2
+ * non-engine paths; an omitted logger means raw legacy routing (R1).
  */
 export interface TemplateScope {
     isOffline?: boolean;
     forceUpdate?: boolean;
     settings?: PzStudioHostSettings | undefined;
     templateTransport?: TemplateTransport | undefined;
+    logger?: PzStudioLogger | undefined;
+}
+
+/**
+ * Normalizes a TemplateScope into an io scope (commit 6, Appendix C): the
+ * scope's logger when supplied, else undefined — the R1 raw legacy default
+ * the emit* adapters apply. An omitted scope resolves to undefined too.
+ */
+function scopeIo(scope: TemplateScope | undefined): IoScope | undefined {
+    return scope?.logger ? { logger: scope.logger } : undefined;
 }
 
 /**
@@ -495,7 +565,7 @@ export function probeTemplateCacheDir(
     category: TemplateCategory,
     scope?: TemplateScope,
 ): { dir: string; name: string } | undefined {
-    const globalConfig = readGlobalConfig(false);
+    const globalConfig = readGlobalConfig(false, scopeIo(scope));
     const vscodeSettings = scope
         ? mergeHostSettingsLayers(scope.settings)
         : getVsCodeSettings();
@@ -530,20 +600,62 @@ export function probeTemplateCacheDir(
  * engine-scope readers (context-aware settings/transport — correct inside
  * an invocation, byte-identical legacy behavior otherwise), and the
  * explicit-scope form `resolveTemplateDir(category, { isOffline?,
- * forceUpdate?, settings?, templateTransport? })` resolves everything from
- * caller-supplied dependencies (doc 11 §17 commit 5, R1): no ambient
- * context, no legacy anchor. The DevSync plan input uses the scope form
- * with its per-apply raw/instance deps.
+ * forceUpdate?, settings?, templateTransport?, logger? })` resolves
+ * everything from caller-supplied dependencies (doc 11 §17 commit 5, R1):
+ * no ambient context, no legacy anchor. The DevSync plan input uses the
+ * scope form with its per-apply raw/instance deps. Emissions on both
+ * shapes route through the explicit io scope's logger, else raw legacy
+ * (commit 6, Appendix C) — never the engine tier, so no template emission
+ * can inherit an active v2 ambient. The published positional signature is
+ * frozen: the engine's own commands supply the invocation logger through
+ * the internal engine path below, never by widening this export; the
+ * scope form carries its logger in the scope.
  */
 export function resolveTemplateDir(
     category: TemplateCategory,
     isOfflineOrScope?: boolean | TemplateScope,
     forceUpdate?: boolean,
 ): string {
+    return resolveTemplateDirWithIo(
+        category,
+        isOfflineOrScope,
+        forceUpdate,
+        undefined,
+    );
+}
+
+/**
+ * INTERNAL engine-command path (doc 11 §12 — not re-exported from
+ * `@pzstudio/cli/api`): the positional form's engine-scope settings/
+ * transport readers with ONLY the emission target set to the
+ * context-aware engineIo() logger, so command template emissions follow
+ * the active invocation logger. Ambient awareness enters only through
+ * this explicit engine caller.
+ */
+export function resolveTemplateDirForEngine(
+    category: TemplateCategory,
+    isOffline?: boolean,
+    forceUpdate?: boolean,
+): string {
+    return resolveTemplateDirWithIo(
+        category,
+        isOffline,
+        forceUpdate,
+        engineIo(),
+    );
+}
+
+function resolveTemplateDirWithIo(
+    category: TemplateCategory,
+    isOfflineOrScope?: boolean | TemplateScope,
+    forceUpdate?: boolean,
+    ioArg?: IoScope | undefined,
+): string {
     const scope =
         isOfflineOrScope && typeof isOfflineOrScope === 'object'
             ? isOfflineOrScope
             : undefined;
+    const io = scope ? scopeIo(scope) : ioArg;
     const isOffline = scope
         ? scope.isOffline === true
         : isOfflineOrScope === true;
@@ -552,7 +664,7 @@ export function resolveTemplateDir(
         ? (scope.templateTransport ?? getTemplateTransport())
         : getTemplateTransport();
 
-    const globalConfig = readGlobalConfig(false);
+    const globalConfig = readGlobalConfig(false, io);
     const vscodeSettings = scope
         ? mergeHostSettingsLayers(scope.settings)
         : getVsCodeSettings();
@@ -566,9 +678,9 @@ export function resolveTemplateDir(
     }
 
     const cacheDir = getCachePathFromUrl(templateConfig.url);
-    const legacyDir = getEmbeddedTemplateDir(category);
-    verbose(`Resolved cacheDir: ${cacheDir}`);
-    verbose(`Resolved legacyDir: ${legacyDir}`);
+    const legacyDir = getEmbeddedTemplateDir(category, io);
+    emitVerbose(io, `Resolved cacheDir: ${cacheDir}`);
+    emitVerbose(io, `Resolved legacyDir: ${legacyDir}`);
 
     // If offline, try cache first, then legacy for defaults
     if (isOffline) {
@@ -576,7 +688,8 @@ export function resolveTemplateDir(
             return cacheDir;
         }
         if (isDirNonEmpty(legacyDir)) {
-            warn(
+            emitWarn(
+                io,
                 `Template not found in cache. Falling back to offline legacy template.`,
             );
             return legacyDir;
@@ -594,20 +707,21 @@ export function resolveTemplateDir(
             ) {
                 return cacheDir;
             }
-            warn(`Failed to refresh template cache. Re-cloning...`);
+            emitWarn(io, `Failed to refresh template cache. Re-cloning...`);
             rmSync(cacheDir, { recursive: true, force: true });
         } else {
             return cacheDir;
         }
     } else if (existsSync(cacheDir)) {
         // Invalid cache: clean up before re-clone
-        warn(`Template cache at ${cacheDir} is invalid. Re-cloning...`);
+        emitWarn(io, `Template cache at ${cacheDir} is invalid. Re-cloning...`);
         rmSync(cacheDir, { recursive: true, force: true });
     }
 
     // Re-clone or initial clone
     if (!isOfficialTemplate(templateConfig.url)) {
-        warn(
+        emitWarn(
+            io,
             `⚠ Cloning from community template '${templateConfig.url}'. Not verified by PZStudio.`,
         );
     }
@@ -615,23 +729,27 @@ export function resolveTemplateDir(
     mkdirSync(dirname(cacheDir), { recursive: true });
 
     if (
-        cloneRemoteTemplate(
+        cloneRemoteTemplateWithIo(
             templateConfig.url,
             cacheDir,
             templateConfig.ref,
             transport,
+            io,
         )
     ) {
         if (validateTemplateManifest(cacheDir, category)) {
             return cacheDir;
         }
     } else {
-        warn(`Failed to clone template from '${templateConfig.url}'.`);
+        emitWarn(io, `Failed to clone template from '${templateConfig.url}'.`);
     }
 
     // Fallback to legacy for official templates only if clone/cache failed
     if (isOfficialTemplate(templateConfig.url) && isDirNonEmpty(legacyDir)) {
-        warn(`Falling back to offline legacy template for '${category}'.`);
+        emitWarn(
+            io,
+            `Falling back to offline legacy template for '${category}'.`,
+        );
         return legacyDir;
     }
 

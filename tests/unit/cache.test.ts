@@ -54,12 +54,9 @@ describe('Local Template Cache (US2)', () => {
 
         await addCmd('MyMod', 'mymod');
 
-        expect(templateManager.resolveTemplateDir).not.toHaveBeenCalledWith(
-            'mod',
-            expect.anything(),
-            expect.anything(),
-            expect.anything(),
-        );
+        expect(
+            templateManager.resolveTemplateDirForEngine,
+        ).not.toHaveBeenCalledWith('mod', expect.anything(), expect.anything());
         expect(templateManager.scaffoldProject).toHaveBeenCalledWith(
             expect.stringContaining('.template-mod'),
             expect.stringContaining('mymod'),
@@ -75,7 +72,7 @@ describe('Local Template Cache (US2)', () => {
             workshop: { title: 'old' },
             mods: {},
         } as any);
-        vi.mocked(templateManager.resolveTemplateDir).mockReturnValue(
+        vi.mocked(templateManager.resolveTemplateDirForEngine).mockReturnValue(
             'D:/mock-template-project',
         );
         vi.mocked(fs.existsSync).mockImplementation((p: any) =>
@@ -87,11 +84,8 @@ describe('Local Template Cache (US2)', () => {
 
         await newCmd('NewProject', 'newproj');
 
-        expect(templateManager.resolveTemplateDir).not.toHaveBeenCalledWith(
-            'mod',
-            expect.anything(),
-            expect.anything(),
-            expect.anything(),
-        );
+        expect(
+            templateManager.resolveTemplateDirForEngine,
+        ).not.toHaveBeenCalledWith('mod', expect.anything(), expect.anything());
     });
 });

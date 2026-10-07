@@ -64,6 +64,19 @@ export type PzStudioSettingsProvider = (
 ) => PzStudioHostSettings | undefined;
 
 /**
+ * Explicit IO scope for the v2-reachable non-engine emission paths (doc 11
+ * §12/§17 commit 6, Appendix C): the logger every emission on a threaded
+ * path routes to. Omitting the scope means RAW legacy routing (R1) — the
+ * raw legacy logger sink, ambient-blind, never "whichever ambient context
+ * currently exists". Owned here because it is context-pure and every
+ * threaded module (helper.ts / templateManager.ts / transport.ts) already
+ * imports this module.
+ */
+export interface IoScope {
+    logger: PzStudioLogger;
+}
+
+/**
  * How the current invocation may talk to the user. Canonical pure type
  * owner (doc 11 §8.0): interaction.ts imports and re-exports this union —
  * this module never imports a state-owner module.

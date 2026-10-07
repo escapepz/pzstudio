@@ -18,11 +18,13 @@ import {
     TemplateCategory,
     ITemplateConfig,
 } from '@pzstudio/core';
-import { info, warn, verbose } from './logger';
+import { emitWarn, emitVerbose, engineIo, info, warn, verbose } from './logger';
 import { CliError } from './errors';
 import {
     getActiveInvocationContext,
+    type IoScope,
     type PzStudioHostSettings,
+    type PzStudioLogger,
 } from './invocation';
 import {
     GlobalConfig,
@@ -269,14 +271,15 @@ export function removeDirRecursive(target: string): void {
  * @returns {IProjectConfig | undefined} The resolved configuration, or undefined if no project.json exists.
  */
 export function resolveProjectConfig(): IProjectConfig | undefined {
-    const project = readProjectConfig();
+    const io = engineIo();
+    const project = readProjectConfig(undefined, true, io);
     if (!project) return undefined;
 
-    const global = readGlobalConfig(false);
+    const global = readGlobalConfig(false, io);
 
     return {
         ...project,
-        outdir: getOutDir(project, global),
+        outdir: getOutDir(project, global, undefined, io),
     };
 }
 
@@ -288,13 +291,13 @@ export function resolveProjectConfig(): IProjectConfig | undefined {
  * host settings layers supplied by the caller. Never reads an ambient
  * invocation context and never depends on the legacy project anchor;
  * non-engine operations (DevSync plan input) compose their config from
- * this. Emissions inside readProjectConfig/readGlobalConfig/getOutDir
- * still route through the engine tier here; the io-scope threading is
- * commit 6 (Appendix C).
+ * this. Emissions route through the supplied io scope's logger (commit 6,
+ * Appendix C); an omitted scope means raw legacy routing.
  */
 export function resolveProjectConfigFor(
     dir: string,
     settings?: PzStudioHostSettings | undefined,
+    io?: IoScope | undefined,
 ): IProjectConfig | undefined {
     const start = findProjectRoot(dir);
     if (!start) {
@@ -303,16 +306,17 @@ export function resolveProjectConfigFor(
             tryHint: `Run 'pzstudio new <title>' to create a project, or point at one with 'pzstudio -C <dir> <command>'.`,
         });
     }
-    const project = readProjectConfig(join(start, 'project.json'));
+    const project = readProjectConfig(join(start, 'project.json'), true, io);
     if (!project) return undefined;
 
-    const global = readGlobalConfig(false);
+    const global = readGlobalConfig(false, io);
 
     return {
         ...project,
         outdir: getOutDir(project, global, {
             projectDir: start,
             settings,
+            logger: io?.logger,
         }),
     };
 }
@@ -444,11 +448,16 @@ export function legacyProjectDir(): string {
  * Uses atomic read (readFileSync) to avoid require cache issues.
  * @param path Optional path to the project config
  * @param validate Whether to validate the config (default: true)
+ * @param io Optional explicit io scope (doc 11 §17 commit 6, Appendix C):
+ *   the migration warning and the defaults verboses route to its logger;
+ *   an omitted scope means raw legacy routing (R1 — ambient-blind, never
+ *   the active invocation context).
  * @returns {IProjectConfig} The current project config
  */
 export function readProjectConfig(
     path?: string,
     validate: boolean = true,
+    io?: IoScope | undefined,
 ): IProjectConfig | undefined {
     const configPath = path ?? join(projectDir(), 'project.json');
     if (!existsSync(configPath)) return undefined;
@@ -470,7 +479,8 @@ export function readProjectConfig(
         // Apply migration FIRST so we validate the modern shape
         const migrationCheck = migration.checkProject(config);
         if (migrationCheck.needsMigration) {
-            warn(
+            emitWarn(
+                io,
                 `[MIGRATION] ${basename(configPath)} needs migration: ${migrationCheck.reason}`,
             );
             config = migration.upgradeProject(config);
@@ -487,17 +497,25 @@ export function readProjectConfig(
         }
     }
 
-    return applyProjectDefaults(config);
+    return applyProjectDefaults(config, io);
 }
 
 /**
  * Applies safe defaults to a project config, reporting each defaulting
  * decision to the CLI logger. The pure logic lives in @pzstudio/core.
  * @param config The original project config
+ * @param io Optional explicit io scope (doc 11 §17 commit 6): the
+ *   defaulting verboses route to its logger; an omitted scope means raw
+ *   legacy routing (R1).
  * @returns The config with defaults applied
  */
-export function applyProjectDefaults(config: any): IProjectConfig {
-    return applyProjectDefaultsPure(config, verbose);
+export function applyProjectDefaults(
+    config: any,
+    io?: IoScope | undefined,
+): IProjectConfig {
+    return applyProjectDefaultsPure(config, (message) =>
+        emitVerbose(io, message),
+    );
 }
 
 /**
@@ -609,7 +627,7 @@ export function migrateStoreDirIfNeeded() {
             writeFileSync(backupPath, outDirContent);
 
             // Save to config.json
-            const config = readGlobalConfig();
+            const config = readGlobalConfig(true, engineIo());
             config.outdir = outDirContent;
             writeGlobalConfig(config);
 
@@ -629,11 +647,14 @@ export function getStoreDir() {
  * Explicit scope for getOutDir (doc 11 §17 commit 5, R1): the project root
  * a relative project outdir resolves against, and the host settings layers
  * for tiers 2/3. Supplied by the explicit-scope cores; the ambient-branched
- * 2-arg form is unchanged.
+ * 2-arg form is unchanged. `logger` (commit 6, Appendix C) is the emission
+ * target of the default-path verbose; an omitted logger means raw legacy
+ * routing (R1).
  */
 export interface OutDirScope {
     projectDir: string;
     settings?: PzStudioHostSettings | undefined;
+    logger?: PzStudioLogger | undefined;
 }
 
 /**
@@ -646,14 +667,24 @@ export interface OutDirScope {
  *   host layer > global config > default — from caller-supplied
  *   dependencies instead of the ambient context / legacy slots. Never
  *   reorders or drops a tier.
+ * @param io Optional explicit io scope (doc 11 §17 commit 6) for the
+ *   ambient-branched form's emissions (the default-path verbose): engine
+ *   call sites pass engineIo() so the emission follows the active
+ *   invocation logger; an omitted scope routes raw legacy (R1). Ignored
+ *   when `scope` is supplied — the scope form carries its own logger.
  * @returns {string} The output directory
  */
 export function getOutDir(
     project?: IProjectConfig,
     config?: GlobalConfig,
     scope?: OutDirScope,
+    io?: IoScope | undefined,
 ) {
     if (scope) {
+        const io: IoScope | undefined = scope.logger
+            ? { logger: scope.logger }
+            : undefined;
+
         // 1. Try project config (resolved against the scope's project root)
         if (project && project.outdir) {
             return resolve(scope.projectDir, project.outdir);
@@ -670,14 +701,14 @@ export function getOutDir(
         }
 
         // 4. Try global config
-        const global = config ?? readGlobalConfig(false);
+        const global = config ?? readGlobalConfig(false, io);
         if (global.outdir) {
             return resolve(global.outdir);
         }
 
         // This should technically never be reached because readGlobalConfig has a final fallback
         const defaultPath = join(homedir(), 'Zomboid', 'Workshop');
-        verbose(`Defaulting output directory to: ${defaultPath}`);
+        emitVerbose(io, `Defaulting output directory to: ${defaultPath}`);
         return defaultPath;
     }
 
@@ -699,14 +730,14 @@ export function getOutDir(
         }
 
         // 4. Try global config
-        const global = config ?? readGlobalConfig(false);
+        const global = config ?? readGlobalConfig(false, io);
         if (global.outdir) {
             return resolve(global.outdir);
         }
 
         // This should technically never be reached because readGlobalConfig has a final fallback
         const defaultPath = join(homedir(), 'Zomboid', 'Workshop');
-        verbose(`Defaulting output directory to: ${defaultPath}`);
+        emitVerbose(io, `Defaulting output directory to: ${defaultPath}`);
         return defaultPath;
     }
 
@@ -726,14 +757,14 @@ export function getOutDir(
     }
 
     // 4. Try global config
-    const global = config ?? readGlobalConfig(false);
+    const global = config ?? readGlobalConfig(false, io);
     if (global.outdir) {
         return resolve(global.outdir);
     }
 
     // This should technically never be reached because readGlobalConfig has a final fallback
     const defaultPath = join(homedir(), 'Zomboid', 'Workshop');
-    verbose(`Defaulting output directory to: ${defaultPath}`);
+    emitVerbose(io, `Defaulting output directory to: ${defaultPath}`);
     return defaultPath;
 }
 
@@ -927,11 +958,16 @@ export function resolveModInfoTargets(
  * auto-enables experimental behaviour.
  */
 export function isExperimentalIntegrationEnabled(projectPath: string): boolean {
-    const project = readProjectConfig(join(projectPath, 'project.json'), false);
+    const io = engineIo();
+    const project = readProjectConfig(
+        join(projectPath, 'project.json'),
+        false,
+        io,
+    );
     const projectValue = project?.experimental?.integration;
     if (projectValue !== undefined) return projectValue === true;
 
-    const globalValue = readGlobalConfig(false).experimental?.integration;
+    const globalValue = readGlobalConfig(false, io).experimental?.integration;
     if (globalValue !== undefined) return globalValue === true;
 
     return false;

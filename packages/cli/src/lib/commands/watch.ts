@@ -7,7 +7,7 @@ import type { FileDelta } from '@pzstudio/core';
 import { summarizeApplyResult } from '@pzstudio/core';
 import { projectDir, resolveProjectConfig } from '../helper';
 import { info, verbose, warn } from '../logger';
-import { createDevSync } from '../devsync';
+import { createDevSyncForEngine } from '../devsync';
 import { isWatchPathIgnored, resolveWatchVariants } from '../watch-shared';
 
 type ParcelWatcher = typeof import('@parcel/watcher');
@@ -62,7 +62,11 @@ export async function watchCmd() {
         `Syncing '${projectConfig.workshop.title}' (${variants.join(' + ')}) — press Ctrl+C to stop.`,
     );
 
-    const session = createDevSync(projectPath);
+    // Engine command: plan-input emissions must follow the active invocation
+    // logger (doc 11 §12) via the internal engine path, while the §13 raw
+    // legacy settings/transport composition and the anchor side effect stay
+    // with the (signature-frozen) facade export.
+    const session = createDevSyncForEngine(projectPath);
     // Initial full build: on failure the session is stopped and the command
     // exits — watching an output that could not be built helps nobody.
     try {

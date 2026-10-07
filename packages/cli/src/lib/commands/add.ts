@@ -14,7 +14,10 @@ import {
 import { log, verbose, warn } from '../logger';
 import { hasFlag } from '../args';
 import { CliError } from '../errors';
-import { resolveTemplateDir, scaffoldProject } from '../templateManager';
+import {
+    resolveTemplateDirForEngine,
+    scaffoldProject,
+} from '../templateManager';
 
 addHelp(
     'add',
@@ -60,7 +63,11 @@ export function addCmd(modName: string, modId?: string) {
         verbose(`Using local .template-mod from project root`);
     } else {
         verbose(`Resolving remote/default mod template...`);
-        templateModPath = resolveTemplateDir('mod', isOffline, forceUpdate);
+        templateModPath = resolveTemplateDirForEngine(
+            'mod',
+            isOffline,
+            forceUpdate,
+        );
         verbose(`Mod template path: ${templateModPath}`);
     }
 

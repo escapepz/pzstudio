@@ -6,7 +6,7 @@ import { CliError } from '../errors';
 import { printJsonEnvelope } from '../json';
 import { projectDir } from '../helper';
 import { extractFlag, hasFlag } from '../args';
-import { runProjectDoctor } from '../doctor';
+import { runProjectDoctorForEngine } from '../doctor';
 
 addHelp(
     'doctor',
@@ -35,7 +35,13 @@ function severityColor(text: string, severity: string): string {
 
 export async function doctorCmd() {
     const gameBuild = extractFlag('game-build');
-    const report = await runProjectDoctor(projectDir(), { gameBuild });
+    // Engine command: plan-input emissions must follow the active invocation
+    // logger (doc 11 §12) via the internal engine path; the §13 raw legacy
+    // settings composition and the anchor dance stay with the
+    // (signature-frozen) facade export.
+    const report = await runProjectDoctorForEngine(projectDir(), {
+        gameBuild,
+    });
 
     const counts = { errors: 0, warnings: 0, infos: 0 };
     for (const diagnostic of report.diagnostics) {

@@ -14,10 +14,10 @@ import {
     updateExperimentalScripts,
     updateProjectConfig,
 } from '../helper';
-import { info, log, verbose, warn } from '../logger';
+import { engineIo, info, log, verbose, warn } from '../logger';
 import { extractFlag, hasFlag } from '../args';
 import {
-    resolveTemplateDir,
+    resolveTemplateDirForEngine,
     readGlobalConfig,
     scaffoldProject,
     scaffoldTemplateFolder,
@@ -69,9 +69,9 @@ export async function newCmd(projectTitle: string, modId?: string) {
     }
 
     const useSymlinks =
-        hasFlag('symlinks') || readGlobalConfig(false).useSymlinks;
+        hasFlag('symlinks') || readGlobalConfig(false, engineIo()).useSymlinks;
 
-    const templateProjectPath = resolveTemplateDir(
+    const templateProjectPath = resolveTemplateDirForEngine(
         'project',
         isOffline,
         forceUpdate,
@@ -105,7 +105,11 @@ export async function newCmd(projectTitle: string, modId?: string) {
         templateModPath = cwdTemplateModPath;
         verbose(`Using local .template-mod from CWD`);
     } else {
-        templateModPath = resolveTemplateDir('mod', isOffline, forceUpdate);
+        templateModPath = resolveTemplateDirForEngine(
+            'mod',
+            isOffline,
+            forceUpdate,
+        );
     }
 
     let templateWorkshopPath: string;
@@ -116,14 +120,14 @@ export async function newCmd(projectTitle: string, modId?: string) {
         templateWorkshopPath = cwdTemplateWorkshopPath;
         verbose(`Using local .template-workshop from CWD`);
     } else {
-        templateWorkshopPath = resolveTemplateDir(
+        templateWorkshopPath = resolveTemplateDirForEngine(
             'workshop',
             isOffline,
             forceUpdate,
         );
     }
 
-    const templateLanguagePath = resolveTemplateDir(
+    const templateLanguagePath = resolveTemplateDirForEngine(
         'language',
         isOffline,
         forceUpdate,
@@ -184,7 +188,11 @@ export async function newCmd(projectTitle: string, modId?: string) {
         // scaffold never reaches the commit.
         info(`- Updating project config...`);
         const newProjectConfigPath = join(stagingPath, 'project.json');
-        const newProjectConfig = readProjectConfig(newProjectConfigPath);
+        const newProjectConfig = readProjectConfig(
+            newProjectConfigPath,
+            true,
+            engineIo(),
+        );
         if (!newProjectConfig) {
             throw new Error(
                 `The project template did not produce a valid '${newProjectConfigPath}'.`,

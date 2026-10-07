@@ -12,7 +12,7 @@ import {
     removeDirRecursive,
 } from '../../packages/cli/src/lib/helper';
 import {
-    resolveTemplateDir,
+    resolveTemplateDirForEngine,
     readGlobalConfig,
     scaffoldProject,
     scaffoldTemplateFolder,
@@ -50,7 +50,7 @@ describe('newCmd --path (issue #43)', () => {
         vi.mocked(readGlobalConfig).mockReturnValue({
             useSymlinks: false,
         } as any);
-        vi.mocked(resolveTemplateDir).mockImplementation(
+        vi.mocked(resolveTemplateDirForEngine).mockImplementation(
             (category: any) => `/tpl/${category}` as any,
         );
         vi.mocked(scaffoldProject).mockReturnValue(undefined as any);

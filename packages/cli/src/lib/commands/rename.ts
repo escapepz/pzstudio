@@ -12,7 +12,7 @@ import {
     updateExperimentalScripts,
     updateProjectConfig,
 } from '../helper';
-import { info, log, verbose } from '../logger';
+import { engineIo, info, log, verbose } from '../logger';
 import { scaffoldProject } from '../templateManager';
 import { confirmDestructive } from '../interaction';
 import { hasFlag } from '../args';
@@ -31,7 +31,7 @@ addHelp(
 
 export function renameCmd(oldModId: string, newModId: string) {
     const projectPath = projectDir();
-    const projectConfig = readProjectConfig();
+    const projectConfig = readProjectConfig(undefined, true, engineIo());
 
     // Check if we are in a project directory
     if (!projectConfig) {
