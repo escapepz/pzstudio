@@ -458,6 +458,19 @@ function resolveHostDefaultTransport(): GitTransport | FetchTransport {
 }
 
 /**
+ * The REAL host-default template transport (doc 11 §8.1/§12, Appendix B —
+ * owned by this module): git when the git binary is available, else fetch,
+ * materialized lazily so the availability probe is paid on actual template
+ * use — never on composition, and re-evaluated per use. NO sticky-slot
+ * consultation: a v2 instance whose transport was omitted must never
+ * consume `activeTransport` (R0); the legacy accessor below composes
+ * slot ?? this default.
+ */
+export function hostDefaultTransport(): TemplateTransport {
+    return new LazyHostDefaultTransport();
+}
+
+/**
  * Rule R1 (doc 11 §8.0): raw, ambient-blind transport resolution — the
  * sticky legacy slot, else the host default (git when the git binary is
  * available, else the HTTPS fetch transport), materialized lazily so the
@@ -468,10 +481,7 @@ function resolveHostDefaultTransport(): GitTransport | FetchTransport {
  * template ops) compose their transport dependency from this.
  */
 export function legacyTransport(): TemplateTransport {
-    if (activeTransport) {
-        return activeTransport;
-    }
-    return new LazyHostDefaultTransport();
+    return activeTransport ?? hostDefaultTransport();
 }
 
 /**
