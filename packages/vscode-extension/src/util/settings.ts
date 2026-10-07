@@ -61,13 +61,12 @@ export function readPzStudioHostSettings(
 
 /**
  * TRANSITIONAL COMPATIBILITY BRIDGE (doc 11 §17 commit 7, corrected):
- * pushes the same snapshot into the raw legacy settings slots. The
- * not-yet-migrated legacy consumers — build task provider (commit 8),
- * DevSync (commit 9), doctor (commit 10) — read ONLY these slots (R1:
- * `legacySettings()` / the legacy facade), never the v2 provider, so this
- * push is what keeps the extension's workspace/global settings alive for
- * them during the consumer-migration window. Remove with the legacy bridge
- * retirement once the last of them migrated (commit 11).
+ * pushes the same snapshot into the raw legacy settings slots. After the
+ * consumer migrations (task provider commit 8, DevSync commit 9, doctor
+ * and modinfo commit 10) no extension consumer reads these slots anymore
+ * — every engine/operation path resolves through the v2 instance
+ * provider. The push survives deliberately until the facade-setter
+ * retirement (doc 11 §17 commit 11) and is never consumed by the v2 path.
  */
 export function updateVsCodeSettings(): void {
     const layers = readLayerSnapshot();
@@ -76,7 +75,7 @@ export function updateVsCodeSettings(): void {
 
 /**
  * Re-pushes the snapshot whenever a pzstudio.* setting changes — the same
- * freshness the legacy consumers had before the migration.
+ * freshness the bridge had while legacy consumers still existed.
  */
 export function subscribeToConfigurationChanges(): vscode.Disposable {
     return vscode.workspace.onDidChangeConfiguration((e) => {

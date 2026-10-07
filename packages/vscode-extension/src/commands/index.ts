@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { PzStudio } from '@pzstudio/cli/api';
 import { ExecutePZCommand } from '../util/execute';
 import { registerBuildCommand } from './build';
 import { registerCleanCommand } from './clean';
@@ -15,6 +16,7 @@ import { registerConfigureCommand } from './configure';
 export function registerAllCommands(
     context: vscode.ExtensionContext,
     execute: ExecutePZCommand,
+    studio: PzStudio,
 ): vscode.Disposable[] {
     return [
         registerBuildCommand(execute),
@@ -25,7 +27,7 @@ export function registerAllCommands(
         registerDeleteCommand(execute),
         registerRenameCommand(execute),
         registerLangCommand(execute),
-        registerModinfoCommand(execute),
+        registerModinfoCommand(execute, studio),
         ...registerModStateCommands(execute),
         registerConfigureCommand(execute),
     ];

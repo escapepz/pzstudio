@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { resolveModInfoTargets, setProjectDir } from '@pzstudio/cli/api';
+import type { PzStudio } from '@pzstudio/cli/api';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { ExecutePZCommand } from '../util/execute';
@@ -9,6 +9,7 @@ import { t } from '../util/l10n';
 
 export function registerModinfoCommand(
     execute: ExecutePZCommand,
+    studio: PzStudio,
 ): vscode.Disposable {
     return vscode.commands.registerCommand(
         'pzstudio.modinfoGenerate',
@@ -25,12 +26,14 @@ export function registerModinfoCommand(
             const { modId, projectDir } = picked;
 
             // Generation never overwrites silently: when a mod.info already
-            // exists in a branch folder, ask before passing --force.
+            // exists in a branch folder, ask before passing --force. The
+            // target branches resolve through the host instance with the
+            // explicit project — no legacy project anchor write (doc 11 §17
+            // commit 10).
             let extraFlags: string[] | undefined;
-            setProjectDir(projectDir.fsPath);
-            const existing = resolveModInfoTargets(modId).filter((dir) =>
-                existsSync(join(dir, 'mod.info')),
-            );
+            const existing = studio
+                .resolveModInfoTargets(modId, projectDir.fsPath)
+                .filter((dir) => existsSync(join(dir, 'mod.info')));
             if (existing.length > 0) {
                 const overwrite = await vscode.window.showWarningMessage(
                     t(

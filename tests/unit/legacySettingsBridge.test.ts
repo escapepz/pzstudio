@@ -4,20 +4,18 @@
  * TRANSITIONAL SETTINGS BRIDGE regression tests (doc 11 §17 commit 7 as
  * corrected).
  *
- * During the consumer-migration window the extension still hosts LEGACY
- * consumers — `runProjectDoctor` and the modinfo command (the build task
- * provider joined the v2 host instance in commit 8, the DevSync controller
- * in commit 9 — the `createDevSync` cases below now pin the frozen §13
- * legacy facade rather than an extension consumer). Per
- * R1 they read ONLY the raw legacy settings slots (`legacySettings()` /
- * the legacy facade), never
- * the v2 provider or an ambient context, so the extension must keep
- * pushing the configured workspace/global snapshot via
- * `updateVsCodeSettings()`. These tests prove, with NON-DEFAULT settings,
- * that each legacy operation sees the configured values right after the
- * activation-time push — and the mirror cases prove the slots are the sole
- * source (no push = the values are lost), which is exactly what would
- * happen if the bridge were dropped early.
+ * After commit 10 no extension consumer reads the raw legacy settings
+ * slots anymore — the runner, task provider, DevSync controller, doctor
+ * and modinfo all run on the v2 host instance (the `runCLI`,
+ * `createDevSync` and `runProjectDoctor` cases below now pin the frozen
+ * §13 legacy facades for external consumers, not an extension wiring).
+ * The push itself is deliberately STILL in place: its removal is the
+ * next frozen commit's scope (doc 11 §17 commit 11), so these tests keep
+ * proving the bridge behavior itself — with NON-DEFAULT settings the
+ * push feeds exactly the configured workspace/global layers to the
+ * legacy slots (the mirror cases prove the slots are the legacy facades'
+ * sole source), and the v2 provider serves the identical snapshot so the
+ * two tiers never drift while both exist.
  *
  * Everything runs against the real `@pzstudio/cli/api` (the same module the
  * extension bundle inlines): only `vscode` is mocked.
@@ -217,9 +215,10 @@ describe('transitional settings bridge (legacy consumers keep their settings)', 
         const proj = makeProject('Bridge Task');
 
         // The engine build the task provider used to perform through the
-        // legacy slots (it reads the same workspace/global layers via its v2
-        // instance provider since commit 8 — the push bridge is what keeps
-        // the still-legacy doctor consumer fed). No template
+        // legacy slots (it reads the same workspace/global layers via its
+        // v2 instance provider since commit 8; doctor joined it in commit
+        // 10, so nothing reads the push anymore — it survives only until
+        // the bridge retirement). No template
         // layers pushed: with any template layer present the
         // engine stops falling through to global defaults for the other
         // categories (pre-existing CLI semantics) — the template layer's
