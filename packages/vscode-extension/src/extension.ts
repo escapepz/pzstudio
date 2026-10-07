@@ -33,19 +33,18 @@ export async function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('PZ Studio');
 
     // One extension logger for both tiers: the legacy slot still feeds the
-    // not-yet-migrated consumers (devsync, doctor, modinfo), and the same
-    // instance is handed to the v2 host instance below (runner, task
-    // provider). The legacy slot write is retired in commit 11 (doc 11
-    // §12/§14).
+    // not-yet-migrated consumers (doctor, modinfo), and the same instance is
+    // handed to the v2 host instance below (runner, task provider, DevSync).
+    // The legacy slot write is retired in commit 11 (doc 11 §12/§14).
     const pzLogger = createPZLogger(outputChannel);
     setLogger(pzLogger);
 
     // TRANSITIONAL COMPATIBILITY BRIDGE (doc 11 §17 commit 7, corrected):
-    // the still-legacy consumers (build task provider, DevSync, doctor)
-    // read only the raw legacy settings slots (R1), so the same snapshot
-    // the v2 provider serves must keep being pushed to them until the last
-    // of them migrates — removed with the legacy bridge retirement
-    // (commit 11), never consumed by the v2 path.
+    // the still-legacy consumer (doctor, migrating in commit 10) reads only
+    // the raw legacy settings slots (R1), so the same snapshot the v2
+    // provider serves must keep being pushed to it until it migrates —
+    // removed with the legacy bridge retirement (commit 11), never consumed
+    // by the v2 path.
     updateVsCodeSettings();
     context.subscriptions.push(subscribeToConfigurationChanges());
 
@@ -83,7 +82,9 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     // Development Sync Engine: one controller shared by the palette toggle.
-    const devSync = new DevSyncController();
+    // The session comes from the host instance (per-apply settings
+    // freshness, instance-logger routing — commit 9).
+    const devSync = new DevSyncController(studio, pzLogger);
 
     context.subscriptions.push(
         outputChannel,

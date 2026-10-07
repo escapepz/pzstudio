@@ -8,8 +8,13 @@ vi.mock('vscode', async () => {
     return createVscodeMock();
 });
 // Every runtime api import across the activation graph (extension.ts plus
-// the still-legacy consumers it wires: devsync controller, doctor util,
-// modinfo command — the task provider consumes the v2 instance only).
+// the consumers it wires). The v2 consumers — runner, task provider and the
+// DevSync controller (commit 9) — consume the created instance only; the
+// still-legacy doors are doctor (runProjectDoctor) and modinfo
+// (resolveModInfoTargets + setProjectDir). `createDevSync`, `log` and
+// `warn` are deliberately ABSENT: any runtime import of the published
+// legacy session factory or raw logger exports would surface as an
+// undefined call inside activate.
 vi.mock('@pzstudio/cli/api', () => ({
     createPzStudio: vi.fn(() => ({ run: vi.fn(async () => {}) })),
     setLogger: vi.fn(),
@@ -18,9 +23,6 @@ vi.mock('@pzstudio/cli/api', () => ({
     runCLI: vi.fn(async () => {}),
     runProjectDoctor: vi.fn(async () => ({})),
     resolveModInfoTargets: vi.fn(() => []),
-    createDevSync: vi.fn(),
-    log: vi.fn(),
-    warn: vi.fn(),
     summarizeApplyResult: vi.fn(() => ''),
     WATCH_DEBOUNCE_MS: 300,
 }));
@@ -141,8 +143,12 @@ describe('extension activation (host instance wiring)', () => {
         await activate(context as never);
 
         // The legacy logger slot is still populated at activate (retired in
-        // commit 11) for the not-yet-migrated consumers: devsync controller,
-        // doctor util, task provider, modinfo command.
+        // commit 11) for the not-yet-migrated consumers: doctor util and
+        // modinfo command — the runner, task provider and DevSync controller
+        // run on the v2 instance. The transitional settings bridge still
+        // pushes at activate: doctor reads only the raw legacy slots until
+        // commit 10, so the push (and its listener) must remain until the
+        // bridge retirement (commit 11).
         expect(setLogger).toHaveBeenCalledTimes(1);
         expect(asMock(setLogger).mock.calls[0][0]).toMatchObject({
             log: expect.any(Function),
@@ -150,6 +156,11 @@ describe('extension activation (host instance wiring)', () => {
             warn: expect.any(Function),
             error: expect.any(Function),
         });
+        expect(setVsCodeSettings).toHaveBeenCalledTimes(1);
+        expect(asMock(setVsCodeSettings).mock.calls[0]).toEqual([
+            expect.any(Object),
+            expect.any(Object),
+        ]);
         // Task provider (v2 via the host instance since commit 8) still
         // registered.
         expect(asMock(vscode.tasks.registerTaskProvider)).toHaveBeenCalledTimes(

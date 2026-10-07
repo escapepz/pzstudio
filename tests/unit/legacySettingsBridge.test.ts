@@ -5,8 +5,10 @@
  * corrected).
  *
  * During the consumer-migration window the extension still hosts LEGACY
- * consumers — `createDevSync`, `runProjectDoctor` and the modinfo command
- * (the build task provider joined the v2 host instance in commit 8). Per
+ * consumers — `runProjectDoctor` and the modinfo command (the build task
+ * provider joined the v2 host instance in commit 8, the DevSync controller
+ * in commit 9 — the `createDevSync` cases below now pin the frozen §13
+ * legacy facade rather than an extension consumer). Per
  * R1 they read ONLY the raw legacy settings slots (`legacySettings()` /
  * the legacy facade), never
  * the v2 provider or an ambient context, so the extension must keep
@@ -217,7 +219,7 @@ describe('transitional settings bridge (legacy consumers keep their settings)', 
         // The engine build the task provider used to perform through the
         // legacy slots (it reads the same workspace/global layers via its v2
         // instance provider since commit 8 — the push bridge is what keeps
-        // the still-legacy DevSync and doctor consumers fed). No template
+        // the still-legacy doctor consumer fed). No template
         // layers pushed: with any template layer present the
         // engine stops falling through to global defaults for the other
         // categories (pre-existing CLI semantics) — the template layer's
