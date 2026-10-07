@@ -1,12 +1,11 @@
 import * as vscode from 'vscode';
-import {
-    createDevSync,
-    log,
-    summarizeApplyResult,
-    warn,
-    WATCH_DEBOUNCE_MS,
+import type {
+    BuildSession,
+    FileDelta,
+    PzStudio,
+    PzStudioLogger,
 } from '@pzstudio/cli/api';
-import type { BuildSession, FileDelta } from '@pzstudio/cli/api';
+import { summarizeApplyResult, WATCH_DEBOUNCE_MS } from '@pzstudio/cli/api';
 
 /**
  * Desktop auto-sync: ONE core BuildSession driven by a workspace
@@ -15,13 +14,26 @@ import type { BuildSession, FileDelta } from '@pzstudio/cli/api';
  *
  * Events are collected and flushed on a debounce so a burst of saves becomes
  * one sync pass; the session itself serializes and classifies the deltas.
+ *
+ * The session is created by the activation-created host instance
+ * (studio.createDevSync): its settings provider is consulted on every plan
+ * input with the session's projectDir, and its logger owns every emission —
+ * the batch summaries/errors below and the session/plan-input lines inside
+ * the CLI alike (doc 11 §12/§14, commit 9). No legacy facade import.
  */
 export class DevSyncController implements vscode.Disposable {
+    private readonly studio: PzStudio;
+    private readonly logger: PzStudioLogger;
     private session: BuildSession | undefined;
     private watcher: vscode.FileSystemWatcher | undefined;
     private pending: FileDelta[] = [];
     private timer: ReturnType<typeof setTimeout> | undefined;
     private starting = false;
+
+    constructor(studio: PzStudio, logger: PzStudioLogger) {
+        this.studio = studio;
+        this.logger = logger;
+    }
 
     get active(): boolean {
         return this.session !== undefined;
@@ -38,7 +50,7 @@ export class DevSyncController implements vscode.Disposable {
         }
         this.starting = true;
         try {
-            const session = createDevSync(projectDir);
+            const session = this.studio.createDevSync(projectDir);
             await session.start(['main', 'development']);
 
             const watcher = vscode.workspace.createFileSystemWatcher(
@@ -53,7 +65,7 @@ export class DevSyncController implements vscode.Disposable {
         } catch (e) {
             // The session owns its error logging; stop the half-started
             // session so the next toggle begins from a clean slate.
-            warn(e instanceof Error ? e.message : String(e));
+            this.logger.warn(e instanceof Error ? e.message : String(e));
             await this.stop();
             throw e;
         } finally {
@@ -105,10 +117,10 @@ export class DevSyncController implements vscode.Disposable {
         // say what the batch did, same wording the CLI watch prints.
         const summary = summarizeApplyResult(result);
         if (summary) {
-            log(`- ${summary}.`);
+            this.logger.log(`- ${summary}.`);
         }
         for (const message of result.errors) {
-            warn(`- ${message}`);
+            this.logger.warn(`- ${message}`);
         }
     }
 }
