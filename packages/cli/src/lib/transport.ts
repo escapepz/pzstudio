@@ -10,10 +10,10 @@ import {
 import { tmpdir } from 'os';
 import { join, dirname, resolve as resolvePath } from 'path';
 import { unzipSync } from 'fflate';
-import { info, warn, verbose } from './logger';
+import { emitInfo, emitVerbose, emitWarn } from './logger';
 import { TemplateResolutionError } from '@pzstudio/core';
 import type { TemplateTransport } from '@pzstudio/platform';
-import { getActiveInvocationContext } from './invocation';
+import { getActiveInvocationContext, type IoScope } from './invocation';
 
 export type { TemplateTransport };
 
@@ -114,14 +114,26 @@ function isGitAvailable(): boolean {
     return !result.error && result.status === 0;
 }
 
+/**
+ * Template acquisition transport with an optional constructor io sink (doc
+ * 11 §12/§17 commit 6, Appendix C): every emission routes to the supplied
+ * scope's logger; the DEFAULT — an omitted sink — is the RAW legacy logger
+ * (R1: ambient-blind, legacy bit-identical), never the active invocation
+ * context's logger. A v2 instance default transport is constructed by
+ * studio.ts with the instance logger; a host-provided transport owns its
+ * own routing.
+ */
 export class GitTransport implements TemplateTransport {
     readonly name = 'git' as const;
+
+    constructor(private readonly io?: IoScope | undefined) {}
 
     download(url: string, ref: string | undefined, destDir: string): void {
         validateRef(ref);
         const { normalizedUrl } = parseGitHubTarget(url);
 
-        info(
+        emitInfo(
+            this.io,
             `- Cloning template from ${normalizedUrl}${ref ? ` (ref: ${ref})` : ''}...`,
         );
 
@@ -157,7 +169,7 @@ export class GitTransport implements TemplateTransport {
     refresh(cacheDir: string, ref: string | undefined): boolean {
         validateRef(ref);
 
-        info(`- Refreshing template cache at ${cacheDir}...`);
+        emitInfo(this.io, `- Refreshing template cache at ${cacheDir}...`);
         const git = (args: string[]) =>
             spawnSync('git', args, {
                 cwd: cacheDir,
@@ -167,13 +179,15 @@ export class GitTransport implements TemplateTransport {
 
         const ok = (result: ReturnType<typeof spawnSync>, what: string) => {
             if (result.error) {
-                warn(
+                emitWarn(
+                    this.io,
                     `- Failed to run git ${what}: ${result.error.message}${errnoSuffix(result.error)}`,
                 );
                 return false;
             }
             if (result.status !== 0) {
-                warn(
+                emitWarn(
+                    this.io,
                     `- git ${what} failed (exit ${result.status}).${gitResultError(result)}`,
                 );
                 return false;
@@ -196,14 +210,17 @@ export class GitTransport implements TemplateTransport {
         for (const target of resetTargets) {
             if (git(['reset', '--hard', target]).status === 0) {
                 if (target !== resetTargets[0]) {
-                    info(`  - Refreshed using ${target}.`);
+                    emitInfo(this.io, `  - Refreshed using ${target}.`);
                 }
                 resetSucceeded = true;
                 break;
             }
         }
         if (!resetSucceeded) {
-            warn(`- git reset failed: no matching ref for '${ref}'.`);
+            emitWarn(
+                this.io,
+                `- git reset failed: no matching ref for '${ref}'.`,
+            );
             return false;
         }
 
@@ -263,9 +280,15 @@ fetch(url, { signal: AbortSignal.timeout(${FETCH_TIMEOUT_MS}) })
  * Downloads the repository archive through codeload.github.com and extracts
  * it with fflate — no git binary required. The same flow maps cleanly onto
  * a browser host (fetch + JS unzip) for the vscode.dev extension.
+ *
+ * Like GitTransport, the optional constructor io sink routes every
+ * emission (doc 11 §17 commit 6, Appendix C); the default is the raw
+ * legacy logger (R1 — ambient-blind).
  */
 export class FetchTransport implements TemplateTransport {
     readonly name = 'fetch' as const;
+
+    constructor(private readonly io?: IoScope | undefined) {}
 
     download(url: string, ref: string | undefined, destDir: string): void {
         validateRef(ref);
@@ -276,9 +299,13 @@ export class FetchTransport implements TemplateTransport {
 
         for (const archiveUrl of candidateUrls) {
             try {
-                verbose(`- Fetching template archive from ${archiveUrl}...`);
+                emitVerbose(
+                    this.io,
+                    `- Fetching template archive from ${archiveUrl}...`,
+                );
                 const zip = this.fetchArchive(archiveUrl);
-                info(
+                emitInfo(
+                    this.io,
                     `- Downloaded template ${owner}/${repo}${ref ? ` (ref: ${ref})` : ''}.`,
                 );
                 this.extract(zip, destDir);
@@ -307,7 +334,8 @@ export class FetchTransport implements TemplateTransport {
             url = undefined;
         }
         if (!url) {
-            warn(
+            emitWarn(
+                this.io,
                 `Fetch cache at ${cacheDir} has no manifest; cannot refresh (delete it to re-download).`,
             );
             return false;
@@ -317,7 +345,10 @@ export class FetchTransport implements TemplateTransport {
             this.download(url, ref, cacheDir);
             return true;
         } catch (err) {
-            warn(`- Re-download failed: ${(err as Error).message}`);
+            emitWarn(
+                this.io,
+                `- Re-download failed: ${(err as Error).message}`,
+            );
             return false;
         }
     }
@@ -435,26 +466,35 @@ export function setTemplateTransport(
  * invocation.ts only receives it and never constructs a default.
  */
 class LazyHostDefaultTransport implements TemplateTransport {
+    constructor(private readonly io?: IoScope | undefined) {}
+
     get name(): 'git' | 'fetch' {
-        return resolveHostDefaultTransport().name;
+        return resolveHostDefaultTransport(this.io).name;
     }
 
     download(url: string, ref: string | undefined, destDir: string): void {
-        resolveHostDefaultTransport().download(url, ref, destDir);
+        resolveHostDefaultTransport(this.io).download(url, ref, destDir);
     }
 
     refresh(cacheDir: string, ref: string | undefined): boolean {
-        return resolveHostDefaultTransport().refresh(cacheDir, ref);
+        return resolveHostDefaultTransport(this.io).refresh(cacheDir, ref);
     }
 
     isCacheValid(dir: string): boolean {
-        return resolveHostDefaultTransport().isCacheValid(dir);
+        return resolveHostDefaultTransport(this.io).isCacheValid(dir);
     }
 }
 
-/** The pre-migration host-default selection, evaluated per request. */
-function resolveHostDefaultTransport(): GitTransport | FetchTransport {
-    return isGitAvailable() ? new GitTransport() : new FetchTransport();
+/**
+ * The pre-migration host-default selection, evaluated per request. The io
+ * scope (commit 6) travels into the constructed transport: with a scope
+ * the transport's emissions route to that logger; without one they route
+ * raw legacy (R1 — ambient-blind, legacy bit-identical).
+ */
+function resolveHostDefaultTransport(
+    io?: IoScope | undefined,
+): GitTransport | FetchTransport {
+    return isGitAvailable() ? new GitTransport(io) : new FetchTransport(io);
 }
 
 /**
@@ -464,10 +504,15 @@ function resolveHostDefaultTransport(): GitTransport | FetchTransport {
  * use — never on composition, and re-evaluated per use. NO sticky-slot
  * consultation: a v2 instance whose transport was omitted must never
  * consume `activeTransport` (R0); the legacy accessor below composes
- * slot ?? this default.
+ * slot ?? this default. The optional io scope (doc 11 §17 commit 6) is the
+ * emission sink handed to the constructed Git/Fetch transport — studio.ts
+ * passes the instance logger so v2 template emissions land in the
+ * instance's sink; the legacy composition omits it (raw legacy default).
  */
-export function hostDefaultTransport(): TemplateTransport {
-    return new LazyHostDefaultTransport();
+export function hostDefaultTransport(
+    io?: IoScope | undefined,
+): TemplateTransport {
+    return new LazyHostDefaultTransport(io);
 }
 
 /**

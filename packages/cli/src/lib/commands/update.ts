@@ -8,7 +8,10 @@ import {
     aggregateOutcomeSeverity,
 } from '../outcome';
 import { info, verbose, warn } from '../logger';
-import { resolveTemplateDir, TemplateCategory } from '../templateManager';
+import {
+    resolveTemplateDirForEngine,
+    TemplateCategory,
+} from '../templateManager';
 
 addHelp(
     'update',
@@ -41,7 +44,7 @@ export async function updateCmd() {
         try {
             info(`- Updating '${category}' templates...`);
             verbose(`Requesting template resolution for category: ${category}`);
-            const path = resolveTemplateDir(category, false, true);
+            const path = resolveTemplateDirForEngine(category, false, true);
             verbose(`Templates for '${category}' updated at: ${path}`);
             outcomes.push(OUTCOME_SUCCESS);
         } catch (e: any) {

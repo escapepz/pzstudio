@@ -43,6 +43,7 @@ import {
     log,
     verbose,
     legacyLogger,
+    engineIo,
     setQuiet,
     setVerbose,
     setDebug,
@@ -285,8 +286,8 @@ async function executeInvocation(
     if (typeof options.transport === 'string') {
         const transport =
             options.transport === 'git'
-                ? new GitTransport()
-                : new FetchTransport();
+                ? new GitTransport(engineIo())
+                : new FetchTransport(engineIo());
         ctx.templateTransport = transport;
         facade.writeStickyTransport(transport);
     }

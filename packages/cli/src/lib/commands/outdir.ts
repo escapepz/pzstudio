@@ -4,7 +4,7 @@ import { expect } from '../expect';
 import { CliError } from '../errors';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
-import { log, verbose } from '../logger';
+import { engineIo, log, verbose } from '../logger';
 import { readGlobalConfig, writeGlobalConfig } from '../templateManager';
 
 addHelp(
@@ -45,7 +45,7 @@ export function outdirCmd(newOutDir: string) {
         });
     }
 
-    const config = readGlobalConfig();
+    const config = readGlobalConfig(true, engineIo());
     verbose(`Current outdir: ${config.outdir}`);
 
     // check if the new path is the same as the old one

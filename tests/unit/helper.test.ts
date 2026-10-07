@@ -120,7 +120,11 @@ describe('Helper Library', () => {
 
             const config = readProjectConfig();
             expect(config).toBeDefined();
-            expect(logger.warn).toHaveBeenCalledWith(
+            // Migration commit 6 (Appendix C): the [MIGRATION] warning is a
+            // threaded non-engine emission — it routes through the emitWarn
+            // adapter (raw legacy by default), never the engine-tier warn.
+            expect(logger.emitWarn).toHaveBeenCalledWith(
+                undefined,
                 expect.stringContaining('[MIGRATION]'),
             );
         });
@@ -137,11 +141,12 @@ describe('Helper Library', () => {
 
             // Clear warn history from previous tests in this describe block
             // (vi.restoreAllMocks does not reset call records on vi.mock() module fns)
-            vi.mocked(logger.warn).mockClear();
+            vi.mocked(logger.emitWarn).mockClear();
 
             const config = readProjectConfig();
             expect(config).toBeDefined();
-            expect(logger.warn).not.toHaveBeenCalledWith(
+            expect(logger.emitWarn).not.toHaveBeenCalledWith(
+                undefined,
                 expect.stringContaining('[MIGRATION]'),
             );
             // applyProjectDefaults silently defaults modInfo to 'auto-if-missing'
