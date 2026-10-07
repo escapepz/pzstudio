@@ -198,6 +198,41 @@ export function legacySettings(): PzStudioHostSettings | undefined {
 }
 
 /**
+ * Merges one host settings snapshot the way the engine merges the context
+ * layers (workspace over user), for the explicit-scope cores. undefined =
+ * no host layer. Distinct from getVsCodeSettings(): that one is the
+ * engine-scope presence-branched reader (and returns the empty merged
+ * shape, never undefined, while a context is installed); this is the pure
+ * layer merge the explicit cores apply to a caller-supplied snapshot.
+ */
+export function mergeHostSettingsLayers(
+    settings: PzStudioHostSettings | undefined,
+): IVsCodeSettings | undefined {
+    if (!settings) return undefined;
+
+    const wsTemplates = settings.workspace?.templates || {};
+    const userTemplates = settings.user?.templates || {};
+
+    const templates: Partial<Record<TemplateCategory, ITemplateConfig>> = {};
+    for (const cat of [
+        'project',
+        'mod',
+        'workshop',
+        'language',
+    ] as TemplateCategory[]) {
+        const val = wsTemplates[cat] ?? userTemplates[cat];
+        if (val) templates[cat] = val;
+    }
+
+    return {
+        templates: Object.keys(templates).length > 0 ? templates : undefined,
+        outdir: settings.workspace?.outdir ?? settings.user?.outdir,
+        useSymlinks:
+            settings.workspace?.useSymlinks ?? settings.user?.useSymlinks,
+    };
+}
+
+/**
  * Deletes a directory tree with retries. ENOTEMPTY/EBUSY/EPERM happen on
  * Windows when another program (the game, Steam, an editor or an antivirus)
  * briefly holds handles inside the folder — a bare rmSync gets exactly one
@@ -242,6 +277,43 @@ export function resolveProjectConfig(): IProjectConfig | undefined {
     return {
         ...project,
         outdir: getOutDir(project, global),
+    };
+}
+
+/**
+ * Explicit-scope core of resolveProjectConfig() (doc 11 §17 commit 5, R1):
+ * resolves the project config for ONE explicit directory — walking upward
+ * from `dir` to the nearest project.json exactly like the engine's
+ * projectDir() walk, fail-closed with the same structured error — with the
+ * host settings layers supplied by the caller. Never reads an ambient
+ * invocation context and never depends on the legacy project anchor;
+ * non-engine operations (DevSync plan input) compose their config from
+ * this. Emissions inside readProjectConfig/readGlobalConfig/getOutDir
+ * still route through the engine tier here; the io-scope threading is
+ * commit 6 (Appendix C).
+ */
+export function resolveProjectConfigFor(
+    dir: string,
+    settings?: PzStudioHostSettings | undefined,
+): IProjectConfig | undefined {
+    const start = findProjectRoot(dir);
+    if (!start) {
+        throw new CliError('No pzstudio project found.', {
+            cause: `Searched from '${dir}' up to the filesystem root for a project.json.`,
+            tryHint: `Run 'pzstudio new <title>' to create a project, or point at one with 'pzstudio -C <dir> <command>'.`,
+        });
+    }
+    const project = readProjectConfig(join(start, 'project.json'));
+    if (!project) return undefined;
+
+    const global = readGlobalConfig(false);
+
+    return {
+        ...project,
+        outdir: getOutDir(project, global, {
+            projectDir: start,
+            settings,
+        }),
     };
 }
 
@@ -554,13 +626,61 @@ export function getStoreDir() {
 }
 
 /**
+ * Explicit scope for getOutDir (doc 11 §17 commit 5, R1): the project root
+ * a relative project outdir resolves against, and the host settings layers
+ * for tiers 2/3. Supplied by the explicit-scope cores; the ambient-branched
+ * 2-arg form is unchanged.
+ */
+export interface OutDirScope {
+    projectDir: string;
+    settings?: PzStudioHostSettings | undefined;
+}
+
+/**
  * Returns the output directory following the hierarchy:
  * project.json > config.json > .pzstudio.bak > default
  * @param project Optional project config to use
  * @param config Optional global config to use
+ * @param scope Optional explicit scope (doc 11 commit 5): resolves the
+ *   exact same tier order — project config > workspace host layer > user
+ *   host layer > global config > default — from caller-supplied
+ *   dependencies instead of the ambient context / legacy slots. Never
+ *   reorders or drops a tier.
  * @returns {string} The output directory
  */
-export function getOutDir(project?: IProjectConfig, config?: GlobalConfig) {
+export function getOutDir(
+    project?: IProjectConfig,
+    config?: GlobalConfig,
+    scope?: OutDirScope,
+) {
+    if (scope) {
+        // 1. Try project config (resolved against the scope's project root)
+        if (project && project.outdir) {
+            return resolve(scope.projectDir, project.outdir);
+        }
+
+        // 2. Try workspace settings
+        if (scope.settings?.workspace?.outdir) {
+            return resolve(scope.settings.workspace.outdir);
+        }
+
+        // 3. Try user settings
+        if (scope.settings?.user?.outdir) {
+            return resolve(scope.settings.user.outdir);
+        }
+
+        // 4. Try global config
+        const global = config ?? readGlobalConfig(false);
+        if (global.outdir) {
+            return resolve(global.outdir);
+        }
+
+        // This should technically never be reached because readGlobalConfig has a final fallback
+        const defaultPath = join(homedir(), 'Zomboid', 'Workshop');
+        verbose(`Defaulting output directory to: ${defaultPath}`);
+        return defaultPath;
+    }
+
     const ctx = getActiveInvocationContext();
     if (ctx) {
         // 1. Try project config (projectDir() resolves from the context)
@@ -753,12 +873,14 @@ import { workshopText, modInfoText } from '@pzstudio/core';
 /**
  * Returns the branch folders (direct subdirectories) of a mod.
  * @param modId The mod id
- * @param baseDir The directory containing the mod folder (defaults to projectDir())
+ * @param baseDir The directory containing the mod folder. The implicit
+ *   default is the RAW resolved project root — `legacyProjectDir()` (R1:
+ *   ambient-blind; never the context-aware `projectDir()`).
  * @returns {string[]} An array of absolute paths to branch folders
  */
 export function getModBranchFolders(
     modId: string,
-    baseDir: string = projectDir(),
+    baseDir: string = legacyProjectDir(),
 ): string[] {
     const modDir = join(baseDir, modId);
     if (!existsSync(modDir)) return [];
@@ -778,12 +900,18 @@ export function getModBranchFolders(
  * 1. Only existing nested folders that contain a 'media' directory.
  * 2. Root-level mod.info is NOT a target for Build 42 generation.
  * @param modId The mod id (folder name inside baseDir)
- * @param baseDir The directory containing the mod folder (defaults to projectDir())
+ * @param baseDir The directory containing the mod folder. The implicit
+ *   default is the RAW resolved project root — `legacyProjectDir()`
+ *   (doc 11 §8.0/§13: the same walk-up + fail-closed algorithm over raw
+ *   legacy state, ambient-blind; an anchor nested below a project root
+ *   still resolves the project's real root). Never the context-aware
+ *   `projectDir()` — a legacy non-engine default must not inherit an
+ *   active v2 ambient (R1).
  * @returns {string[]} An array of absolute paths to valid branch folders
  */
 export function resolveModInfoTargets(
     modId: string,
-    baseDir: string = projectDir(),
+    baseDir: string = legacyProjectDir(),
 ): string[] {
     const branchFolders = getModBranchFolders(modId, baseDir);
     return branchFolders.filter((folder) => {

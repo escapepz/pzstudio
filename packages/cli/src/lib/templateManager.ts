@@ -18,7 +18,13 @@ import type {
     ITemplateConfig,
 } from '@pzstudio/core';
 import { DEFAULT_TEMPLATES } from '@pzstudio/core';
-import { getVsCodeSettings, migrationHostOptions } from './helper';
+import type { TemplateTransport } from '@pzstudio/platform';
+import type { PzStudioHostSettings } from './invocation';
+import {
+    getVsCodeSettings,
+    mergeHostSettingsLayers,
+    migrationHostOptions,
+} from './helper';
 import { getTemplateTransport } from './transport';
 
 export type { TemplateCategory, GlobalConfig, ITemplateConfig };
@@ -253,10 +259,13 @@ function getEmbeddedTemplateDir(category: TemplateCategory): string {
 
 /**
  * Checks if a cache directory is usable for the active template transport
- * (git caches require .git; fetch caches only need content).
+ * (git caches require .git; fetch caches only need content). An explicitly
+ * supplied transport (the explicit-scope cores, doc 11 commit 5) is used
+ * as-is; the default stays the engine-scope reader — correct inside an
+ * invocation, and the legacy behavior for the exported helpers.
  */
-function isCacheValid(dir: string): boolean {
-    return getTemplateTransport().isCacheValid(dir);
+function isCacheValid(dir: string, transport?: TemplateTransport): boolean {
+    return (transport ?? getTemplateTransport()).isCacheValid(dir);
 }
 
 function isDirNonEmpty(dir: string): boolean {
@@ -272,19 +281,24 @@ function isDirNonEmpty(dir: string): boolean {
 /**
  * Clones a remote template from a GitHub repository.
  * Kept as an exported API; the actual download is delegated to the active
- * template transport (git by default).
+ * template transport (git by default). An explicitly supplied transport
+ * (doc 11 commit 5 — the explicit-scope cores) is used as-is so a legacy
+ * non-engine operation stays ambient-blind (R1); the default remains the
+ * engine-scope reader.
  * @param url The repository URL or user/repo shorthand
  * @param dest The destination directory
  * @param ref Optional branch or tag
+ * @param transport Optional explicit transport override
  * @returns True if the clone was successful
  */
 export function cloneRemoteTemplate(
     url: string,
     dest: string,
     ref?: string,
+    transport?: TemplateTransport,
 ): boolean {
     try {
-        getTemplateTransport().download(url, ref, dest);
+        (transport ?? getTemplateTransport()).download(url, ref, dest);
         return true;
     } catch (err) {
         warn(`- ${(err as Error).message}`);
@@ -293,13 +307,19 @@ export function cloneRemoteTemplate(
 }
 
 /**
- * Refreshes a cached template repository using the active transport.
+ * Refreshes a cached template repository using the active transport (or an
+ * explicitly supplied one — doc 11 commit 5, R1).
  * @param dir The cache directory
  * @param ref Optional branch or tag
+ * @param transport Optional explicit transport override
  * @returns True if the refresh was successful
  */
-export function refreshCachedTemplate(dir: string, ref?: string): boolean {
-    return getTemplateTransport().refresh(dir, ref);
+export function refreshCachedTemplate(
+    dir: string,
+    ref?: string,
+    transport?: TemplateTransport,
+): boolean {
+    return (transport ?? getTemplateTransport()).refresh(dir, ref);
 }
 
 import { ValidationContext, validateConfig } from '@pzstudio/core';
@@ -449,16 +469,36 @@ export function validateTemplateManifest(
 }
 
 /**
+ * Explicit scope for the template readers (doc 11 §17 commit 5, R1): the
+ * host settings layers for the template-config override tier and, for
+ * resolveTemplateDir, the transport to acquire/refresh with. Supplied by
+ * the explicit-scope cores; an omitted scope keeps the engine-scope
+ * readers, and an omitted transport inside a scope falls back to the
+ * engine-scope reader (the DevSync core always supplies it).
+ */
+export interface TemplateScope {
+    isOffline?: boolean;
+    forceUpdate?: boolean;
+    settings?: PzStudioHostSettings | undefined;
+    templateTransport?: TemplateTransport | undefined;
+}
+
+/**
  * Resolves the template cache directory a category would use — WITHOUT any
  * side effect (no clone, no refresh, no cache cleanup). Returns undefined
  * when nothing would resolve for the category. Doctor uses this to report
- * the template state without triggering a download.
+ * the template state without triggering a download. With an explicit scope
+ * the settings come from the caller-supplied snapshot (ambient-blind, R1);
+ * without one the engine-scope reader applies.
  */
 export function probeTemplateCacheDir(
     category: TemplateCategory,
+    scope?: TemplateScope,
 ): { dir: string; name: string } | undefined {
     const globalConfig = readGlobalConfig(false);
-    const vscodeSettings = getVsCodeSettings();
+    const vscodeSettings = scope
+        ? mergeHostSettingsLayers(scope.settings)
+        : getVsCodeSettings();
     const templates = vscodeSettings?.templates ?? globalConfig.templates;
     const templateConfig = templates?.[category];
     if (!templateConfig) return undefined;
@@ -484,14 +524,38 @@ export function probeTemplateCacheDir(
  * 3. Cache missing or invalid: clone from config or hardcoded default → cache
  * 4. Clone fails → fall back to local .template-legacy
  * 5. Nothing found → throw actionable error
+ *
+ * Two call shapes: the legacy positional form
+ * `resolveTemplateDir(category, isOffline?, forceUpdate?)` keeps the
+ * engine-scope readers (context-aware settings/transport — correct inside
+ * an invocation, byte-identical legacy behavior otherwise), and the
+ * explicit-scope form `resolveTemplateDir(category, { isOffline?,
+ * forceUpdate?, settings?, templateTransport? })` resolves everything from
+ * caller-supplied dependencies (doc 11 §17 commit 5, R1): no ambient
+ * context, no legacy anchor. The DevSync plan input uses the scope form
+ * with its per-apply raw/instance deps.
  */
 export function resolveTemplateDir(
     category: TemplateCategory,
-    isOffline?: boolean,
+    isOfflineOrScope?: boolean | TemplateScope,
     forceUpdate?: boolean,
 ): string {
+    const scope =
+        isOfflineOrScope && typeof isOfflineOrScope === 'object'
+            ? isOfflineOrScope
+            : undefined;
+    const isOffline = scope
+        ? scope.isOffline === true
+        : isOfflineOrScope === true;
+    const force = scope ? scope.forceUpdate === true : forceUpdate === true;
+    const transport = scope
+        ? (scope.templateTransport ?? getTemplateTransport())
+        : getTemplateTransport();
+
     const globalConfig = readGlobalConfig(false);
-    const vscodeSettings = getVsCodeSettings();
+    const vscodeSettings = scope
+        ? mergeHostSettingsLayers(scope.settings)
+        : getVsCodeSettings();
     const templates = vscodeSettings?.templates ?? globalConfig.templates;
     const templateConfig = templates?.[category];
 
@@ -508,7 +572,7 @@ export function resolveTemplateDir(
 
     // If offline, try cache first, then legacy for defaults
     if (isOffline) {
-        if (isCacheValid(cacheDir)) {
+        if (isCacheValid(cacheDir, transport)) {
             return cacheDir;
         }
         if (isDirNonEmpty(legacyDir)) {
@@ -523,9 +587,11 @@ export function resolveTemplateDir(
     }
 
     // Online mode: use cache if valid and not forcing update
-    if (isCacheValid(cacheDir)) {
-        if (forceUpdate) {
-            if (refreshCachedTemplate(cacheDir, templateConfig.ref)) {
+    if (isCacheValid(cacheDir, transport)) {
+        if (force) {
+            if (
+                refreshCachedTemplate(cacheDir, templateConfig.ref, transport)
+            ) {
                 return cacheDir;
             }
             warn(`Failed to refresh template cache. Re-cloning...`);
@@ -548,7 +614,14 @@ export function resolveTemplateDir(
 
     mkdirSync(dirname(cacheDir), { recursive: true });
 
-    if (cloneRemoteTemplate(templateConfig.url, cacheDir, templateConfig.ref)) {
+    if (
+        cloneRemoteTemplate(
+            templateConfig.url,
+            cacheDir,
+            templateConfig.ref,
+            transport,
+        )
+    ) {
         if (validateTemplateManifest(cacheDir, category)) {
             return cacheDir;
         }
