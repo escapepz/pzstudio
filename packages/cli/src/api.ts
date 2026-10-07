@@ -1,4 +1,15 @@
 export { runCLI, RunCLIOptions } from './lib/cli';
+export { createPzStudio } from './lib/studio';
+export type {
+    PzStudio,
+    PzStudioOptions,
+    PzRunOptions,
+    PzStudioLogger,
+    PzStudioHostSettings,
+    PzStudioSettingsLayer,
+    PzStudioSettingsContext,
+    PzStudioSettingsProvider,
+} from './lib/studio';
 export { setLogger, ILogger } from './lib/logger';
 // Direct logger access for hosts that run long-lived sessions (the
 // extension auto-sync reports sync errors through the bridged channel).

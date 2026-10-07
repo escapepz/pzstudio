@@ -78,6 +78,50 @@ function emit(stream: 'stdout' | 'stderr', text: string): void {
 }
 
 /* --------------------------------------------------------------------------
+ * Sink tier — the pure stdout/stderr formatting + CliIO emit this module
+ * owns: no legacy slot, no persisted flag, no gating of its own (callers
+ * gate). Shared verbatim by the raw tier (externalLogger unset) and the
+ * real default engine logger (below).
+ * ----------------------------------------------------------------------- */
+
+function sinkLog(msg: string): void {
+    emit('stdout', withNewline(msg));
+}
+
+function sinkInfo(msg: string): void {
+    const tty = isTTY(process.stderr);
+    const output = tty
+        ? pc.cyan(`[${getTimestamp()}] [INFO] ${msg}`)
+        : `[INFO] ${msg}`;
+    emit('stderr', withNewline(output));
+}
+
+function sinkWarn(msg: string): void {
+    const tty = isTTY(process.stderr);
+    const output = tty
+        ? pc.yellow(`[${getTimestamp()}] [WARN] ${msg}`)
+        : `[WARN] ${msg}`;
+    emit('stderr', withNewline(output));
+}
+
+function sinkError(err: any, debug: boolean): void {
+    const detail = formatError(err, { debug });
+    const tty = isTTY(process.stderr);
+    const output = tty
+        ? pc.red(`[${getTimestamp()}] [ERROR] ${detail}`)
+        : `[ERROR] ${detail}`;
+    emit('stderr', withNewline(output));
+}
+
+function sinkVerbose(msg: string): void {
+    const tty = isTTY(process.stderr);
+    const output = tty
+        ? pc.gray(`[${getTimestamp()}] [DEBUG] ${msg}`)
+        : `[DEBUG] ${msg}`;
+    emit('stderr', withNewline(output));
+}
+
+/* --------------------------------------------------------------------------
  * Raw tier — today's implementation verbatim: routes by the legacy slots
  * ONLY (externalLogger + the persisted verbose/quiet/debug flags). The
  * published @pzstudio/cli/api exports under the historical names and the
@@ -91,7 +135,7 @@ export function rawLog(message: any) {
         externalLogger.log(msg);
         return;
     }
-    emit('stdout', withNewline(msg));
+    sinkLog(msg);
 }
 
 export function rawInfo(message: any) {
@@ -101,11 +145,7 @@ export function rawInfo(message: any) {
         return;
     }
     if (quietEnabled) return;
-    const tty = isTTY(process.stderr);
-    const output = tty
-        ? pc.cyan(`[${getTimestamp()}] [INFO] ${msg}`)
-        : `[INFO] ${msg}`;
-    emit('stderr', withNewline(output));
+    sinkInfo(msg);
 }
 
 export function rawWarn(message: any) {
@@ -114,11 +154,7 @@ export function rawWarn(message: any) {
         externalLogger.warn(msg);
         return;
     }
-    const tty = isTTY(process.stderr);
-    const output = tty
-        ? pc.yellow(`[${getTimestamp()}] [WARN] ${msg}`)
-        : `[WARN] ${msg}`;
-    emit('stderr', withNewline(output));
+    sinkWarn(msg);
 }
 
 function rawError(error: any) {
@@ -126,12 +162,7 @@ function rawError(error: any) {
         externalLogger.error(error);
         return;
     }
-    const detail = formatError(error, { debug: debugEnabled });
-    const tty = isTTY(process.stderr);
-    const output = tty
-        ? pc.red(`[${getTimestamp()}] [ERROR] ${detail}`)
-        : `[ERROR] ${detail}`;
-    emit('stderr', withNewline(output));
+    sinkError(error, debugEnabled);
 }
 
 export function rawVerbose(message: any) {
@@ -141,11 +172,36 @@ export function rawVerbose(message: any) {
         externalLogger.verbose(msg);
         return;
     }
-    const tty = isTTY(process.stderr);
-    const output = tty
-        ? pc.gray(`[${getTimestamp()}] [DEBUG] ${msg}`)
-        : `[DEBUG] ${msg}`;
-    emit('stderr', withNewline(output));
+    sinkVerbose(msg);
+}
+
+/**
+ * The REAL default engine logger (doc 11 §8.0/§8.1, Appendix B — owned by
+ * this module): the pure sink tier with the invocation's own verbosity read
+ * from the installed InvocationContext at emit time. It NEVER consults
+ * `externalLogger` nor the persisted verbose/quiet/debug flags (R0: a v2
+ * instance whose logger was omitted must not consume facade values) — it is
+ * the mirror of the raw tier, sourced from the context instead of the slots:
+ * quiet gates info, verbose+quiet gate verbose, debug adds the stack to
+ * unexpected-error reports. The v2 front door (studio.ts) resolves an
+ * omitted instance logger against this.
+ */
+export function defaultEngineLogger(): PzStudioLogger {
+    return {
+        log: (message) => sinkLog(message),
+        info: (message) => {
+            if (getActiveInvocationContext()?.quiet) return;
+            sinkInfo(message);
+        },
+        warn: (message) => sinkWarn(message),
+        error: (err) =>
+            sinkError(err, getActiveInvocationContext()?.debug ?? false),
+        verbose: (message) => {
+            const ctx = getActiveInvocationContext();
+            if (!ctx || !ctx.verbose || ctx.quiet) return;
+            sinkVerbose(message);
+        },
+    };
 }
 
 /**

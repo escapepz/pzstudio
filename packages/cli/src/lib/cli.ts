@@ -28,12 +28,14 @@ import {
     validateInvocation,
     CliUsageError,
     ValidInvocation,
+    type ParsedInvocation,
 } from './parser';
 import {
     setTemplateTransport,
     legacyTransport,
     GitTransport,
     FetchTransport,
+    type TemplateTransport,
 } from './transport';
 import {
     error,
@@ -58,6 +60,7 @@ import { setInteractionMode } from './interaction';
 import {
     installInvocationContext,
     withEngineLock,
+    type InteractionMode,
     type InvocationContext,
     type InvocationInputs,
 } from './invocation';
@@ -74,6 +77,56 @@ export interface RunCLIOptions {
      */
     flags?: string[];
 }
+
+/**
+ * The facade-side divergence of the shared invocation lifecycle (doc 11
+ * §8.1 + §13.1): how host settings resolve post-parse, and which runtime
+ * values are additionally written through to the legacy module slots. The
+ * legacy facade (below) preserves every §13.1 side effect; the v2 facade
+ * (studio.ts) writes nothing (R0) and resolves settings from its provider
+ * with the effective project. One lifecycle, two front doors — no forked
+ * behavior.
+ */
+export interface LifecycleFacade {
+    /**
+     * Post-parse settings resolution (§8.1: after parsing, before
+     * validate/help/dispatch). Legacy: the raw facade slots, no provider.
+     * v2: the provider invoked exactly once with the effective project.
+     */
+    resolveSettings(invocation: ParsedInvocation, ctx: InvocationContext): void;
+    /** §13.1: interaction mode, per run call, before parsing. */
+    writeInteractionMode(mode: InteractionMode): void;
+    /** §13.1: verbosity flags persist post-run. */
+    writeVerbosity(verbose: boolean, quiet: boolean, debug: boolean): void;
+    /** §13.1: the anchor slot is set from --project or cleared, per run. */
+    writeAnchor(anchor: string | undefined): void;
+    /** §13.1: the sticky transport slot, written only when --transport is present. */
+    writeStickyTransport(transport: TemplateTransport): void;
+    /** §13.1: parsed options published for dispatch; cleared in the finally. */
+    writeInvocationOptions(
+        options: Record<string, string | boolean | undefined> | undefined,
+    ): void;
+}
+
+/**
+ * The legacy facade behavior of the shared lifecycle: the raw legacy
+ * settings slots (no provider exists on this path) and every §13.1
+ * write-through, verbatim. The facade owns no logic of its own (§13.1).
+ */
+const legacyFacade: LifecycleFacade = {
+    resolveSettings: (_invocation, ctx) => {
+        ctx.settings = legacySettings();
+    },
+    writeInteractionMode: (mode) => setInteractionMode(mode),
+    writeVerbosity: (verbose, quiet, debug) => {
+        setVerbose(verbose);
+        setQuiet(quiet);
+        setDebug(debug);
+    },
+    writeAnchor: (anchor) => setProjectRootAnchor(anchor),
+    writeStickyTransport: (transport) => setTemplateTransport(transport),
+    writeInvocationOptions: (options) => setInvocationOptions(options),
+};
 
 export async function runCLI(
     cmdName?: string,
@@ -122,6 +175,7 @@ export async function runCLI(
                 cmdArgs,
                 options,
                 installed.context,
+                legacyFacade,
             );
         } finally {
             installed.restore();
@@ -130,22 +184,25 @@ export async function runCLI(
 }
 
 /**
- * The invocation lifecycle under the installed context (doc 11 §8.1):
- * write-through → normalize → parse → settings → validate → help/banner →
- * dispatch → execute → error reporting. On this legacy facade path the
- * runtime values are additionally written through to the legacy slots per
- * §13.1; every emitter routes through the context logger.
+ * The invocation lifecycle under the installed context (doc 11 §8.1) —
+ * shared by both front doors: write-through hook → normalize → parse →
+ * settings → validate → help/banner → dispatch → execute → error reporting.
+ * The facade parameter carries the only divergence between the doors: on
+ * the legacy facade path the runtime values are additionally written
+ * through to the legacy slots per §13.1; on the v2 path the facade is a
+ * no-op there. Every emitter routes through the context logger.
  */
-async function runInvocationLifecycle(
+export async function runInvocationLifecycle(
     cmdName: string | undefined,
     cmdArgs: string[] | undefined,
     options: RunCLIOptions | undefined,
     ctx: InvocationContext,
+    facade: LifecycleFacade,
 ): Promise<void> {
     try {
-        // §13.1 write-through: interaction mode is set per runCLI call,
+        // §13.1 (legacy facade): interaction mode is set per runCLI call,
         // before parsing, from the composed invocation shape.
-        setInteractionMode(ctx.interactionMode);
+        facade.writeInteractionMode(ctx.interactionMode);
         // ---- Parse phase (pure: no side effects, no output besides usage) ----
         // The legacy embedded shape runCLI(cmd, args, {flags}) converges onto
         // the same ParsedInvocation the executable path produces, then both
@@ -166,14 +223,14 @@ async function runInvocationLifecycle(
             }
             invocation = parsed.invocation;
         }
-        // Settings resolution (§8.1): on the legacy facade path the host
-        // settings ARE the legacy facade slots, read raw once post-parse —
-        // no provider call exists on this path.
-        ctx.settings = legacySettings();
+        // Settings resolution (§8.1): post-parse, before validate. On the
+        // legacy facade path the host settings ARE the legacy facade slots,
+        // read raw once — no provider call exists on this path.
+        facade.resolveSettings(invocation, ctx);
         const valid = validateInvocation(invocation);
 
         // ---- Execute phase ----
-        await executeInvocation(valid, ctx);
+        await executeInvocation(valid, ctx, facade);
     } catch (e) {
         if (e instanceof CliUsageError) {
             if (!e.alreadyReported) {
@@ -194,44 +251,44 @@ async function runInvocationLifecycle(
 async function executeInvocation(
     valid: ValidInvocation,
     ctx: InvocationContext,
+    facade: LifecycleFacade,
 ): Promise<void> {
     const options = valid.options;
 
     // Global option wiring (from the parsed invocation, never process.argv).
     // --debug implies verbose; --quiet suppresses non-essential stderr
-    // (info/verbose); errors and warnings always print. setDebug gates the
-    // stack trace of unexpected errors in the runCLI catch path.
+    // (info/verbose); errors and warnings always print. debug gates the
+    // stack trace of unexpected errors in the lifecycle catch path.
     // The runtime fields are filled on the invocation context (§8.1) and,
-    // on this legacy facade path, written through to the legacy slots per
+    // on the legacy facade path, written through to the legacy slots per
     // §13.1 (they persist post-run).
     ctx.verbose = options.verbose === true || options.debug === true;
     ctx.quiet = options.quiet === true;
     ctx.debug = options.debug === true;
-    setVerbose(ctx.verbose);
-    setQuiet(ctx.quiet);
-    setDebug(ctx.debug);
+    facade.writeVerbosity(ctx.verbose, ctx.quiet, ctx.debug);
     // -C/--project anchors project discovery (CLI-5): it replaces the
     // discovery start for this invocation without mutating process.cwd().
     // Passing no --project clears the anchor (embedded hosts re-invoke).
-    // §13.1: the legacy slot receives exactly the parsed-flag value (set or
-    // cleared per run, persisting post-run); the context anchor follows the
-    // context rule (parsed --project ?? the input projectDir tier).
+    // §13.1 (legacy facade): the legacy slot receives exactly the
+    // parsed-flag value (set or cleared per run, persisting post-run); the
+    // context anchor follows the context rule (parsed --project ?? the
+    // input projectDir tier).
     const anchor =
         typeof options.project === 'string'
             ? resolve(options.project)
             : undefined;
     ctx.anchor = anchor ?? ctx.projectDir;
-    setProjectRootAnchor(anchor);
+    facade.writeAnchor(anchor);
     // --transport overrides the invocation's transport (the context readers
     // branch to the context) and preserves the legacy sticky slot write
-    // (§13.1) — written only when the flag is present.
+    // (§13.1, legacy facade only) — written only when the flag is present.
     if (typeof options.transport === 'string') {
         const transport =
             options.transport === 'git'
                 ? new GitTransport()
                 : new FetchTransport();
         ctx.templateTransport = transport;
-        setTemplateTransport(transport);
+        facade.writeStickyTransport(transport);
     }
 
     // Help and the no-command banner are pure invocations: no migrations,
@@ -271,7 +328,7 @@ async function executeInvocation(
     // set before dispatch, cleared in the finally (net-zero post-run). The
     // context carries the same map for the engine-tier flag readers.
     ctx.invocationOptions = options;
-    setInvocationOptions(options);
+    facade.writeInvocationOptions(options);
     try {
         await valid.command.run({
             positionals: valid.positionals,
@@ -282,7 +339,7 @@ async function executeInvocation(
         }
     } finally {
         ctx.invocationOptions = {};
-        setInvocationOptions(undefined);
+        facade.writeInvocationOptions(undefined);
     }
 }
 
