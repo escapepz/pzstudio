@@ -33,9 +33,10 @@ export async function activate(context: vscode.ExtensionContext) {
     const outputChannel = vscode.window.createOutputChannel('PZ Studio');
 
     // One extension logger for both tiers: the legacy slot still feeds the
-    // not-yet-migrated consumers (task provider, devsync, doctor), and the
-    // same instance is handed to the v2 host instance below. The legacy
-    // slot write is retired in commit 11 (doc 11 §12/§14).
+    // not-yet-migrated consumers (devsync, doctor, modinfo), and the same
+    // instance is handed to the v2 host instance below (runner, task
+    // provider). The legacy slot write is retired in commit 11 (doc 11
+    // §12/§14).
     const pzLogger = createPZLogger(outputChannel);
     setLogger(pzLogger);
 
@@ -95,7 +96,7 @@ export async function activate(context: vscode.ExtensionContext) {
         ...registerExplorerCommands(projectExplorer),
         vscode.tasks.registerTaskProvider(
             PZ_TASK_TYPE,
-            new BuildTaskProvider(),
+            new BuildTaskProvider(studio),
         ),
         // Re-read pzstudio.language and repaint the tree when it changes.
         vscode.workspace.onDidChangeConfiguration(async (e) => {

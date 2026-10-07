@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { runCLI, setProjectDir } from '@pzstudio/cli/api';
+import type { PzStudio } from '@pzstudio/cli/api';
 import { resolveFlags } from '../util/flags';
 import { resolveProjectDir } from '../util/project';
 
@@ -14,9 +14,12 @@ export interface PZTaskDefinition extends vscode.TaskDefinition {
 /**
  * Runs a pzstudio command as a VS Code task so builds are available from
  * Terminal > Run Task and Ctrl+Shift+B (after configuring the default build
- * task). Execution is in-process (runCLI), consistent with the commands:
- * detailed logs go to the PZ output channel, the task terminal shows the
- * start/complete/failed status lines.
+ * task). Execution is in-process through the host PzStudio instance
+ * (studio.run), consistent with the commands: detailed logs go to the PZ
+ * output channel, the task terminal shows the start/complete/failed status
+ * lines. No busy guard: a task started while another command is in-flight
+ * queues on the engine invocation lock and runs after it (intentional
+ * serialization, doc 11 §9).
  */
 class PZTaskTerminal implements vscode.Pseudoterminal {
     private readonly writeEmitter = new vscode.EventEmitter<string>();
@@ -24,7 +27,10 @@ class PZTaskTerminal implements vscode.Pseudoterminal {
     private readonly closeEmitter = new vscode.EventEmitter<void>();
     onDidClose: vscode.Event<void> = this.closeEmitter.event;
 
-    constructor(private readonly target: PZTaskTarget) {}
+    constructor(
+        private readonly target: PZTaskTarget,
+        private readonly studio: PzStudio,
+    ) {}
 
     open(): void {
         void this.run();
@@ -46,7 +52,6 @@ class PZTaskTerminal implements vscode.Pseudoterminal {
                 );
                 return;
             }
-            setProjectDir(dir.fsPath);
 
             const flags = [...resolveFlags(command)];
             if (this.target === 'production') {
@@ -57,7 +62,10 @@ class PZTaskTerminal implements vscode.Pseudoterminal {
                 flags.push('--both');
             }
 
-            await runCLI(command, [], { flags });
+            await this.studio.run(command, [], {
+                flags,
+                projectDir: dir.fsPath,
+            });
             this.writeLine(`pzstudio ${command} completed.`);
         } catch (e) {
             this.writeLine(
@@ -76,12 +84,14 @@ class PZTaskTerminal implements vscode.Pseudoterminal {
 }
 
 export class BuildTaskProvider implements vscode.TaskProvider {
+    constructor(private readonly studio: PzStudio) {}
+
     provideTasks(): vscode.Task[] {
         return [
-            createTask('production'),
-            createTask('development'),
-            createTask('both'),
-            createTask('clean'),
+            createTask('production', this.studio),
+            createTask('development', this.studio),
+            createTask('both', this.studio),
+            createTask('clean', this.studio),
         ];
     }
 
@@ -94,13 +104,13 @@ export class BuildTaskProvider implements vscode.TaskProvider {
             target === 'both' ||
             target === 'clean'
         ) {
-            return createTask(target);
+            return createTask(target, this.studio);
         }
         return undefined;
     }
 }
 
-function createTask(target: PZTaskTarget): vscode.Task {
+function createTask(target: PZTaskTarget, studio: PzStudio): vscode.Task {
     const definition: PZTaskDefinition = { type: PZ_TASK_TYPE, target };
     const name =
         target === 'clean' ? 'pzstudio: clean' : `pzstudio: build (${target})`;
@@ -109,6 +119,8 @@ function createTask(target: PZTaskTarget): vscode.Task {
         vscode.TaskScope.Workspace,
         name,
         PZ_TASK_TYPE,
-        new vscode.CustomExecution(async () => new PZTaskTerminal(target)),
+        new vscode.CustomExecution(
+            async () => new PZTaskTerminal(target, studio),
+        ),
     );
 }

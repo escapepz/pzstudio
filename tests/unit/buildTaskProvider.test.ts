@@ -1,6 +1,7 @@
 'use strict';
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import path from 'path';
 
 vi.mock('vscode', async () => {
     const { createVscodeMock } = await import('../helpers/vscode-mock');
@@ -15,12 +16,25 @@ vi.mock('@pzstudio/cli/api', () => ({
 }));
 
 import * as vscode from 'vscode';
+// The REAL engine lock primitive (side-effect-free module): the queued-task
+// test below models the host instance's studio.run faithfully —
+// createPzStudio.run wraps its whole lifecycle in withEngineLock (doc 11 §9).
+import { withEngineLock } from '../../packages/cli/src/lib/invocation';
 import {
     BuildTaskProvider,
     PZ_TASK_TYPE,
 } from '../../packages/vscode-extension/src/providers/buildTaskProvider';
 
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
+
+/** Minimal PzStudio stub: the task terminal only ever calls studio.run. */
+interface StudioStub {
+    run: import('vitest').Mock;
+}
+
+function studioStub(implementation?: () => Promise<void>): StudioStub {
+    return { run: vi.fn(implementation ?? (async () => {})) };
+}
 
 const TaskCtor = vscode.Task as unknown as new (
     definition: unknown,
@@ -62,7 +76,7 @@ describe('BuildTaskProvider', () => {
     });
 
     it('provides the four default tasks', () => {
-        const tasks = new BuildTaskProvider().provideTasks();
+        const tasks = new BuildTaskProvider(studioStub()).provideTasks();
         expect(tasks.map((t) => (t as { name: string }).name)).toEqual([
             'pzstudio: build (production)',
             'pzstudio: build (development)',
@@ -79,7 +93,7 @@ describe('BuildTaskProvider', () => {
     });
 
     it('resolves hand-declared tasks with a valid target', () => {
-        const provider = new BuildTaskProvider();
+        const provider = new BuildTaskProvider(studioStub());
         const task = provider.resolveTask({
             definition: { type: PZ_TASK_TYPE, target: 'development' },
         } as never) as { name: string } | undefined;
@@ -88,7 +102,7 @@ describe('BuildTaskProvider', () => {
     });
 
     it('ignores tasks with an unknown target', () => {
-        const provider = new BuildTaskProvider();
+        const provider = new BuildTaskProvider(studioStub());
         expect(
             provider.resolveTask({
                 definition: { type: PZ_TASK_TYPE, target: 'bogus' },
@@ -96,8 +110,9 @@ describe('BuildTaskProvider', () => {
         ).toBeUndefined();
     });
 
-    async function runTask(target: string) {
-        const provider = new BuildTaskProvider();
+    /** Opens the terminal for one task and starts capturing its writes. */
+    async function startTask(target: string, studio: StudioStub) {
+        const provider = new BuildTaskProvider(studio as never);
         provider.provideTasks();
         // createTask is internal — go through resolveTask to reach it.
         const task = new TaskCtor(
@@ -112,7 +127,6 @@ describe('BuildTaskProvider', () => {
         };
         const terminal = (await resolved.execution.callback()) as {
             open: () => void;
-            onDidWrite: { event: unknown };
         };
         // The terminal fires writes through its EventEmitter; capture them.
         const writes: string[] = [];
@@ -125,49 +139,71 @@ describe('BuildTaskProvider', () => {
             writes.push(v);
         });
         terminal.open();
-        await vi.waitFor(() => {
+        const done = vi.waitFor(() => {
             expect(
                 writes.some((w) => /completed\.|failed:|skipped:/.test(w)),
             ).toBe(true);
         });
+        return { writes, done };
+    }
+
+    async function runTask(target: string, studio: StudioStub) {
+        const { writes, done } = await startTask(target, studio);
+        await done;
         return writes;
     }
 
-    it('runs build in-process with the production flag', async () => {
-        const writes = await runTask('production');
+    it('runs build through the host instance with the production flag', async () => {
+        const studio = studioStub();
+        const writes = await runTask('production', studio);
 
+        expect(studio.run).toHaveBeenCalledTimes(1);
+        expect(studio.run).toHaveBeenCalledWith('build', [], {
+            flags: ['--production'],
+            projectDir: path.sep + path.join('proj'),
+        });
+        // The legacy engine doors left the task provider with the v2 cutover.
         const { runCLI, setProjectDir } =
             (await import('@pzstudio/cli/api')) as {
                 runCLI: import('vitest').Mock;
                 setProjectDir: import('vitest').Mock;
             };
-        expect(setProjectDir).toHaveBeenCalledWith(expect.any(String));
-        expect(runCLI).toHaveBeenCalledWith('build', [], {
-            flags: ['--production'],
-        });
+        expect(runCLI).not.toHaveBeenCalled();
+        expect(setProjectDir).not.toHaveBeenCalled();
         expect(writes.join('')).toContain('pzstudio build started...');
         expect(writes.join('')).toContain('pzstudio build completed.');
     });
 
-    it('runs build in-process with the both flag', async () => {
-        const writes = await runTask('both');
+    it('runs build through the host instance with the development flag', async () => {
+        const studio = studioStub();
+        const writes = await runTask('development', studio);
 
-        const { runCLI } = (await import('@pzstudio/cli/api')) as {
-            runCLI: import('vitest').Mock;
-        };
-        expect(runCLI).toHaveBeenCalledWith('build', [], {
+        expect(studio.run).toHaveBeenCalledWith('build', [], {
+            flags: ['--development'],
+            projectDir: path.sep + path.join('proj'),
+        });
+        expect(writes.join('')).toContain('pzstudio build completed.');
+    });
+
+    it('runs build through the host instance with the both flag', async () => {
+        const studio = studioStub();
+        const writes = await runTask('both', studio);
+
+        expect(studio.run).toHaveBeenCalledWith('build', [], {
             flags: ['--both'],
+            projectDir: path.sep + path.join('proj'),
         });
         expect(writes.join('')).toContain('pzstudio build completed.');
     });
 
     it('runs clean without branch flags', async () => {
-        const writes = await runTask('clean');
+        const studio = studioStub();
+        const writes = await runTask('clean', studio);
 
-        const { runCLI } = (await import('@pzstudio/cli/api')) as {
-            runCLI: import('vitest').Mock;
-        };
-        expect(runCLI).toHaveBeenCalledWith('clean', [], { flags: [] });
+        expect(studio.run).toHaveBeenCalledWith('clean', [], {
+            flags: [],
+            projectDir: path.sep + path.join('proj'),
+        });
         expect(writes.join('')).toContain('pzstudio clean completed.');
     });
 
@@ -175,20 +211,87 @@ describe('BuildTaskProvider', () => {
         (
             vscode.workspace as unknown as { workspaceFolders: unknown }
         ).workspaceFolders = [];
-        const writes = await runTask('production');
+        const studio = studioStub();
+        const writes = await runTask('production', studio);
         expect(writes.join('')).toContain('skipped: no PZ project');
-        const { runCLI } = (await import('@pzstudio/cli/api')) as {
-            runCLI: import('vitest').Mock;
-        };
-        expect(runCLI).not.toHaveBeenCalled();
+        expect(studio.run).not.toHaveBeenCalled();
     });
 
-    it('reports CLI failures through the terminal', async () => {
-        const { runCLI } = (await import('@pzstudio/cli/api')) as {
-            runCLI: import('vitest').Mock;
-        };
-        asMock(runCLI).mockRejectedValueOnce(new Error('boom'));
-        const writes = await runTask('production');
+    it('reports run failures through the terminal', async () => {
+        const studio = studioStub(async () => {
+            throw new Error('boom');
+        });
+        const writes = await runTask('production', studio);
         expect(writes.join('')).toContain('pzstudio build failed: boom');
+    });
+
+    it('has no task-specific busy guard: concurrent tasks both dispatch', async () => {
+        const studio = studioStub();
+        const first = await startTask('production', studio);
+        const second = await startTask('production', studio);
+        await Promise.all([first.done, second.done]);
+
+        // No refusal, no warning — both tasks reach the host instance (they
+        // serialize on the engine lock instead, doc 11 §9).
+        expect(studio.run).toHaveBeenCalledTimes(2);
+        expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
+    });
+
+    it('queues a task behind an in-flight engine invocation and completes FIFO without deadlock', async () => {
+        const events: string[] = [];
+        let releaseA!: () => void;
+        const gateA = new Promise<void>((r) => {
+            releaseA = r;
+        });
+
+        // Operation A acquires and holds the engine invocation.
+        const opA = withEngineLock(async () => {
+            events.push('a:start');
+            await gateA;
+            events.push('a:end');
+        });
+        try {
+            await vi.waitFor(() => expect(events).toContain('a:start'));
+
+            // The task terminal runs through the host instance; the stub's
+            // run enters the same lock the real createPzStudio.run does, so
+            // the queued behavior asserted below is the engine's contract.
+            const studio: StudioStub = {
+                run: vi.fn(() =>
+                    withEngineLock(async () => {
+                        events.push('task:start');
+                        events.push('task:end');
+                    }),
+                ),
+            };
+
+            const { writes, done } = await startTask('production', studio);
+
+            // The task dispatches but is QUEUED: it must not execute while A
+            // holds the lock (A's gate is still closed), and the terminal
+            // has reported the start but not the completion.
+            await vi.waitFor(() => expect(studio.run).toHaveBeenCalledTimes(1));
+            expect(events).toEqual(['a:start']);
+            expect(writes.join('')).toContain('pzstudio build started...');
+            expect(writes.join('')).not.toContain('completed.');
+
+            releaseA();
+            await done;
+            await opA;
+
+            // FIFO: A ran to completion first, then the task — no interleave,
+            // no dropped task, no deadlock; terminal status lines unchanged.
+            expect(events).toEqual([
+                'a:start',
+                'a:end',
+                'task:start',
+                'task:end',
+            ]);
+            expect(writes.join('')).toContain('pzstudio build completed.');
+        } finally {
+            // Never leave a parked invocation holding the lock.
+            releaseA();
+            await Promise.allSettled([opA]);
+        }
     });
 });

@@ -4,10 +4,11 @@
  * TRANSITIONAL SETTINGS BRIDGE regression tests (doc 11 §17 commit 7 as
  * corrected).
  *
- * During the consumer-migration window the extension still hosts three
- * LEGACY consumers — the build task provider (runCLI), legacy
- * `createDevSync`, and legacy `runProjectDoctor`. Per R1 they read ONLY the
- * raw legacy settings slots (`legacySettings()` / the legacy facade), never
+ * During the consumer-migration window the extension still hosts LEGACY
+ * consumers — `createDevSync`, `runProjectDoctor` and the modinfo command
+ * (the build task provider joined the v2 host instance in commit 8). Per
+ * R1 they read ONLY the raw legacy settings slots (`legacySettings()` /
+ * the legacy facade), never
  * the v2 provider or an ambient context, so the extension must keep
  * pushing the configured workspace/global snapshot via
  * `updateVsCodeSettings()`. These tests prove, with NON-DEFAULT settings,
@@ -213,10 +214,11 @@ describe('transitional settings bridge (legacy consumers keep their settings)', 
         updateVsCodeSettings(); // the activation-time push
         const proj = makeProject('Bridge Task');
 
-        // The operation PZTaskTerminal.run performs after resolving the
-        // project (the resolution→setProjectDir→runCLI wiring is pinned by
-        // buildTaskProvider.test.ts; this proves the settings dependency).
-        // No template layers pushed: with any template layer present the
+        // The engine build the task provider used to perform through the
+        // legacy slots (it reads the same workspace/global layers via its v2
+        // instance provider since commit 8 — the push bridge is what keeps
+        // the still-legacy DevSync and doctor consumers fed). No template
+        // layers pushed: with any template layer present the
         // engine stops falling through to global defaults for the other
         // categories (pre-existing CLI semantics) — the template layer's
         // reach is proven by the doctor tests below.
