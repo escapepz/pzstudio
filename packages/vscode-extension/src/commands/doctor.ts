@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import { t } from '../util/l10n';
 import { asProjectNode } from '../providers/projectExplorer';
 import { resolveProjectDir, warnNoProject } from '../util/project';
-import {
-    runProjectDiagnostics,
+import type {
+    ProjectDiagnosticsRunner,
     ProjectDiagnosticsSummary,
 } from '../util/doctor';
 
@@ -19,7 +19,9 @@ const SEVERITY_ICONS: Record<string, string> = {
  * engine and lists the findings in a quick-pick. Findings themselves come
  * from @pzstudio/core — this command only renders them.
  */
-export function registerDoctorCommand(): vscode.Disposable {
+export function registerDoctorCommand(
+    runProjectDiagnostics: ProjectDiagnosticsRunner,
+): vscode.Disposable {
     return vscode.commands.registerCommand(
         'pzstudio.doctor',
         async (node?: unknown) => {

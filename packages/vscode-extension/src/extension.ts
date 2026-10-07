@@ -14,7 +14,7 @@ import {
 } from './util/settings';
 import { createCommandRunner } from './util/execute';
 import { DevSyncController } from './util/devsync';
-import { runProjectDiagnostics } from './util/doctor';
+import { createProjectDiagnostics } from './util/doctor';
 import { registerAllCommands } from './commands';
 import { registerExplorerCommands } from './commands/explorer';
 import { registerWatchCommand } from './commands/watch';
@@ -32,19 +32,19 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const outputChannel = vscode.window.createOutputChannel('PZ Studio');
 
-    // One extension logger for both tiers: the legacy slot still feeds the
-    // not-yet-migrated consumers (doctor, modinfo), and the same instance is
-    // handed to the v2 host instance below (runner, task provider, DevSync).
-    // The legacy slot write is retired in commit 11 (doc 11 §12/§14).
+    // One extension logger for both tiers. No extension consumer reads the
+    // legacy slot anymore — runner, task provider, DevSync, doctor and
+    // modinfo all run on the v2 host instance below — but the slot writes
+    // stay for this transitional commit and are removed with the
+    // facade-setter retirement (doc 11 §12/§14, next frozen commit).
     const pzLogger = createPZLogger(outputChannel);
     setLogger(pzLogger);
 
     // TRANSITIONAL COMPATIBILITY BRIDGE (doc 11 §17 commit 7, corrected):
-    // the still-legacy consumer (doctor, migrating in commit 10) reads only
-    // the raw legacy settings slots (R1), so the same snapshot the v2
-    // provider serves must keep being pushed to it until it migrates —
-    // removed with the legacy bridge retirement (commit 11), never consumed
-    // by the v2 path.
+    // no extension consumer reads the raw legacy settings slots anymore
+    // (doctor moved to the v2 instance in commit 10), but the push stays
+    // for this transitional commit and is removed with the facade-setter
+    // retirement (next frozen commit), never consumed by the v2 path.
     updateVsCodeSettings();
     context.subscriptions.push(subscribeToConfigurationChanges());
 
@@ -57,6 +57,11 @@ export async function activate(context: vscode.ExtensionContext) {
         logger: pzLogger,
         settings: (ctx) => readPzStudioHostSettings(ctx),
     });
+
+    // Shared diagnostics run (doctor quick-pick + explorer badge) bound to
+    // the host instance — explicit project context, no legacy anchor
+    // juggling (doc 11 §17 commit 10).
+    const runProjectDiagnostics = createProjectDiagnostics(studio);
 
     const projectExplorer = new ProjectExplorerProvider(
         context.extensionUri,
@@ -89,9 +94,9 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         outputChannel,
         devSync,
-        ...registerAllCommands(context, executePZCommand),
+        ...registerAllCommands(context, executePZCommand, studio),
         registerWatchCommand(devSync),
-        registerDoctorCommand(),
+        registerDoctorCommand(runProjectDiagnostics),
         treeView,
         projectJsonWatcher,
         ...registerExplorerCommands(projectExplorer),

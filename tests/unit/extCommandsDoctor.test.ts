@@ -7,22 +7,19 @@ vi.mock('vscode', async () => {
     return createVscodeMock();
 });
 
-// The doctor util is the api surface to the CLI bundle; the command test
-// only covers rendering, so the engine call is stubbed here.
-vi.mock('../../packages/vscode-extension/src/util/doctor', () => ({
-    runProjectDiagnostics: vi.fn(),
-}));
-
+// The doctor command only renders: the diagnostics runner is injected (the
+// instance-bound factory is pinned in extUtilDoctor.test.ts), so the tests
+// stub a plain runner.
 import * as vscode from 'vscode';
 import { registerDoctorCommand } from '../../packages/vscode-extension/src/commands/doctor';
-import { runProjectDiagnostics } from '../../packages/vscode-extension/src/util/doctor';
+import type { ProjectDiagnosticsRunner } from '../../packages/vscode-extension/src/util/doctor';
 
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 const UriCtor = vscode.Uri as unknown as new (parts: string[]) => vscode.Uri;
 
 /** Registers the command and returns its handler. */
-async function setupHandler() {
-    registerDoctorCommand();
+async function setupHandler(runner: ProjectDiagnosticsRunner) {
+    registerDoctorCommand(runner);
     const calls = asMock(vscode.commands.registerCommand).mock.calls as Array<
         [string, (node?: unknown) => Promise<void>]
     >;
@@ -34,12 +31,17 @@ async function setupHandler() {
 const projectNode = { projectDir: new UriCtor(['proj']) };
 
 describe('pzstudio.doctor', () => {
+    let runProjectDiagnostics: ReturnType<typeof vi.fn>;
+
     beforeEach(() => {
         vi.clearAllMocks();
+        runProjectDiagnostics = vi.fn();
     });
 
     it('lists findings in a quick-pick with severity icons and counts', async () => {
-        const { handler } = await setupHandler();
+        const { handler } = await setupHandler(
+            runProjectDiagnostics as never as ProjectDiagnosticsRunner,
+        );
         asMock(runProjectDiagnostics).mockResolvedValue({
             errors: 1,
             warnings: 1,
@@ -90,7 +92,9 @@ describe('pzstudio.doctor', () => {
     });
 
     it('reports a clean project without opening the quick-pick', async () => {
-        const { handler } = await setupHandler();
+        const { handler } = await setupHandler(
+            runProjectDiagnostics as never as ProjectDiagnosticsRunner,
+        );
         asMock(runProjectDiagnostics).mockResolvedValue({
             errors: 0,
             warnings: 0,
@@ -109,7 +113,9 @@ describe('pzstudio.doctor', () => {
     });
 
     it('warns instead of running when the workspace has no project', async () => {
-        const { handler } = await setupHandler();
+        const { handler } = await setupHandler(
+            runProjectDiagnostics as never as ProjectDiagnosticsRunner,
+        );
         asMock(vscode.workspace.fs.stat).mockRejectedValue(new Error('ENOENT'));
 
         await handler(undefined);
