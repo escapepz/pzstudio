@@ -1038,7 +1038,7 @@ through the vitest source aliases).
 | `util/devsync.ts` controller | `createDevSync(dir)` (anchors globally); direct `log`/`warn` api imports; `WATCH_DEBOUNCE_MS`; `summarizeApplyResult` | `studio.createDevSync(dir)` — instance logger routed through the session host **and** the plan-input io scope (Appendix C); summary line via instance logger; imports of `log`/`warn` dropped | **medium** — log routing + per-apply settings freshness must be preserved exactly (tests pin both) | 9 |
 | `util/doctor.ts` | `runProjectDoctor(dir.fsPath)` (global save/restore inside) | `studio.runProjectDoctor(dir.fsPath)` — explicit context, no anchor juggling; same `DoctorReport` → same badge/quick-pick | low | 10 |
 | `commands/modinfo.ts` | `setProjectDir(dir)`; `resolveModInfoTargets(modId)` (implicit anchor); Node `existsSync` probe | `studio.resolveModInfoTargets(modId, dir)`; drop `setProjectDir`; Node probe unchanged (Track B for web fs) | low (signature already supports explicit baseDir) | 10 |
-| `util/settings.ts` | `updateVsCodeSettings()` pushes `inspect()` layers; config listener re-pushes | pure context-aware reader `readPzStudioHostSettings(ctx): PzStudioHostSettings` passed as provider at factory; CLI-facing push listener deleted; language listener untouched | **medium** — must read the identical `workspaceValue`/`globalValue` layers (UX-05 blind spot preserved bit-for-bit) | 7 (+11 cleanup) |
+| `util/settings.ts` | `updateVsCodeSettings()` pushes `inspect()` layers; config listener re-pushes | pure context-aware reader `readPzStudioHostSettings(ctx): PzStudioHostSettings` passed as provider at factory; push/listener pair RETAINED as the transitional compatibility bridge (R1: legacy consumers read only the slots — see commit 7 correction) until removed at 11; language listener untouched | **medium** — must read the identical `workspaceValue`/`globalValue` layers (UX-05 blind spot preserved bit-for-bit) | 7 (+11 cleanup) |
 | `util/logger.ts` | `createPZLogger(channel)` → `setLogger` | unchanged implementation; handed to factory instead of `setLogger`; `setLogger` call removed at 11 | none | 7, 11 |
 | `commands/*` (all runner-driven) | call `execute(...)` only | untouched | none | — |
 | `commands/watch.ts`, `commands/doctor.ts` | controller / diagnostics (bypass runner) | untouched signatures; internals arrive via 9 / 10 | none | 9, 10 |
@@ -1059,6 +1059,12 @@ sync summaries route by the legacy slots — `externalLogger`, i.e. the same
 OutputChannel as always — and never into the v2 instance's logger. The
 window is therefore purely import hygiene (the direct api imports should
 become instance calls), closed at commit 9; no routing caveat remains.
+**Settings window (commits 7→11), corrected:** the push/listener pair
+(`util/settings.ts`) is retained through the same window — task provider,
+DevSync and doctor read only the raw legacy settings slots until their
+migration commits (8–10), and the push is their sole settings source. The
+v2 runner never consumes the slots (R0), so the two tiers coexist without
+cross-feed; the push dies with the bridge retirement at commit 11.
 
 ## 15. Browser / Node boundary implications
 
@@ -1502,7 +1508,16 @@ contexts too late (the §8.1 bug earlier revisions fixed). Merging 1+2 or
   (`logger`, `settings: (ctx) => readPzStudioHostSettings(ctx)` — context
   ignored in MVP); runner calls `studio.run(command, args, { flags,
   projectDir })`; `setProjectDir` leaves the runner; settings become a
-  context-aware pure provider; CLI-facing push listener deleted.
+  context-aware pure provider. *Corrected during implementation (rev 3.1
+  sequencing): the CLI-facing push/listener pair is RETAINED through this
+  commit as the transitional compatibility bridge — the still-legacy
+  consumers (task provider, DevSync, doctor) read only the raw legacy
+  settings slots (R1: `legacySettings()` / the legacy facade resolve), so
+  deleting the push here would silently strip their workspace/global
+  settings until their own migration commits. The push feeds the slots and
+  never the v2 path (R0: the instance consumes only its provider); it is
+  deleted with the last legacy consumer's migration (commit 11), which is
+  also where the extension stops calling `setVsCodeSettings`.*
 - **Files**: `extension.ts`, `util/execute.ts`, `util/settings.ts`,
   `util/logger.ts` (unchanged impl, new wiring), unit test mocks.
 - **Behavior contract**: runner UX strings, guard, progress, swallow,
