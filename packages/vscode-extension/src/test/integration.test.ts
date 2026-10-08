@@ -2,7 +2,8 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { runCLI, setProjectDir } from '@pzstudio/cli/api';
+import { runCLI, setProjectDir, createPzStudio } from '@pzstudio/cli/api';
+import type { PzStudioLogger } from '@pzstudio/cli/api';
 
 /**
  * Desktop integration tests running inside a real VS Code extension host
@@ -146,5 +147,114 @@ describe('PZ Studio extension (real VS Code host)', () => {
         assert.ok(!fs.existsSync(path.join(projectDir, 'renamed_scratch')));
         const deleted = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         assert.strictEqual(deleted.mods.renamed_scratch, undefined);
+    });
+
+    it('isolates a second test-owned PzStudio instance from the migrated runner path under overlapping execution', async function () {
+        // The overlap runs a real build (template cache + engine lifecycle)
+        // next to a second instance's run; give it more than the default.
+        this.timeout(120000);
+        assert.ok(fakeHome, 'fixture fake home env is missing');
+
+        // The build command's modal confirmation would block the host: the
+        // scenario runs pzstudio.build through the migrated runner, so the
+        // setting is disabled for this test (and restored afterwards).
+        const config = vscode.workspace.getConfiguration('pzstudio');
+        await config.update(
+            'confirmBeforeRun',
+            false,
+            vscode.ConfigurationTarget.Global,
+        );
+
+        // A second project the workspace does NOT contain (the fixture
+        // project is the single workspace project, so the runner resolves
+        // it without a picker) with its OWN recording logger.
+        const secondProject = path.join(fakeHome, 'iso-second-project');
+        fs.mkdirSync(secondProject, { recursive: true });
+        fs.writeFileSync(
+            path.join(secondProject, 'project.json'),
+            JSON.stringify({
+                workshop: {
+                    title: 'Iso Second Project',
+                    visibility: 'public',
+                    tags: [],
+                },
+                mods: {},
+                excludes: [],
+            }),
+        );
+        const secondCalls: string[] = [];
+        const secondLogger: PzStudioLogger = {
+            log: (m) => secondCalls.push(String(m)),
+            info: (m) => secondCalls.push(String(m)),
+            warn: (m) => secondCalls.push(String(m)),
+            error: (e) => secondCalls.push(String(e)),
+        };
+        const secondStudio = createPzStudio({
+            projectDir: secondProject,
+            logger: secondLogger,
+        });
+
+        // Meaningful disk assertion: remove the fixture's earlier build
+        // output so only THIS scenario's runner build can recreate it.
+        const fixtureOut = path.join(
+            fakeHome,
+            'Zomboid',
+            'Workshop',
+            PROJECT_TITLE,
+        );
+        fs.rmSync(fixtureOut, { recursive: true, force: true });
+
+        try {
+            // Overlap: the extension command (runner → the host-owned
+            // instance → engine) and the second instance's run are both in
+            // flight in this extension-host process. The engine lock is
+            // process-wide FIFO within the inlined api module (pinned by
+            // the vitest suites); this scenario proves what the unit tests
+            // cannot: the real runner path and an independently created
+            // instance keep their sinks and project identities apart in the
+            // real host.
+            const runnerBuild =
+                vscode.commands.executeCommand('pzstudio.build');
+            const secondRun = secondStudio.run('list');
+            await Promise.all([runnerBuild, secondRun]);
+        } finally {
+            await config.update(
+                'confirmBeforeRun',
+                true,
+                vscode.ConfigurationTarget.Global,
+            );
+        }
+
+        // The second instance's sink: its own project only — never the
+        // fixture project the runner built.
+        assert.ok(
+            secondCalls.some((line) =>
+                line.includes("No mods in project 'Iso Second Project'."),
+            ),
+            `second instance did not resolve its own project: ${secondCalls.join('\n')}`,
+        );
+        assert.ok(
+            !secondCalls.some((line) => line.includes(PROJECT_TITLE)),
+            'the runner project leaked into the second instance logger',
+        );
+
+        // The runner's sink (project identity on disk): the extension build
+        // landed under the fixture project in the default outdir, and the
+        // second project contributed nothing there.
+        assert.ok(
+            fs.existsSync(path.join(fixtureOut, 'workshop.txt')),
+            `runner build output missing: ${path.join(fixtureOut, 'workshop.txt')}`,
+        );
+        assert.ok(
+            !fs.existsSync(
+                path.join(
+                    fakeHome,
+                    'Zomboid',
+                    'Workshop',
+                    'Iso Second Project',
+                ),
+            ),
+            'the second instance wrote into the runner outdir',
+        );
     });
 });
