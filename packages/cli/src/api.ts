@@ -10,6 +10,7 @@ export type {
     PzStudioSettingsContext,
     PzStudioSettingsProvider,
 } from './lib/studio';
+/** @deprecated doc 11 §17 commit 11: extension runtime retired; external consumers retained until major-version removal per OPEN QUESTION A1; R0/R1 isolation means the facade slots exist only as storage. */
 export { setLogger, ILogger } from './lib/logger';
 // Direct logger access for hosts that run long-lived sessions (the
 // extension auto-sync reports sync errors through the bridged channel).
@@ -22,11 +23,11 @@ export {
     rawWarn as warn,
     rawVerbose as verbose,
 } from './lib/logger';
-export {
-    resolveModInfoTargets,
-    setProjectDir,
-    setVsCodeSettings,
-} from './lib/helper';
+export { resolveModInfoTargets } from './lib/helper';
+/** @deprecated doc 11 §17 commit 11: extension runtime retired; external consumers retained until major-version removal per OPEN QUESTION A1; R0/R1 isolation means the facade slots exist only as storage. */
+export { setProjectDir } from './lib/helper';
+/** @deprecated doc 11 §17 commit 11: extension runtime retired; external consumers retained until major-version removal per OPEN QUESTION A1; R0/R1 isolation means the facade slots exist only as storage. */
+export { setVsCodeSettings } from './lib/helper';
 export {
     collectIncludedModIds,
     planBuild,
