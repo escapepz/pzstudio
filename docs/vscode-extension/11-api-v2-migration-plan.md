@@ -1,5 +1,25 @@
 # 11 — API v2 Design and Migration Plan (`createPzStudio`)
 
+> **Implementation status (Commit 12).** This document began as a
+> design-only pass (revision 5, verified against the implementation at
+> `63d2c9c`); that provenance is retained below. The implementation
+> sequence it planned has since been **executed in full**: engine commits
+> 1–4, explicit cores 5–6, extension consumer migrations 7–10, and the
+> legacy bridge retirement in commit 11 (`e5d4b49`) plus its corrective
+> verification (`720da83`). **Commit 12 — `test(cli,ext): isolation
+> hardening and API v2 docs` — is the final implementation/acceptance
+> commit**: it lands the remaining §16 acceptance matrix (two-instance
+> overlap, published-logger raw routing, destructive/hygiene pins, bundle
+> gates, the real-host isolation scenario) and rewrites
+> [`09-embedded-cli-bridge.md`](09-embedded-cli-bridge.md) for the v2
+> architecture. The contracts in §8.0/§8.1/§9 (isolation rules R0/R1,
+> invocation lifecycle, engine lock) and §13/§13.1 (legacy facade +
+> write-through) are frozen and authoritative for the implemented code;
+> the UX findings of §19 remain deferred exactly as recorded. Everything
+> below the header keeps its historical tense where it describes the
+> design pass and is verified as implemented by the §16 matrix and the
+> suites named in it.
+
 **Design-only pass, revision 5.** Written at revision `63d2c9c` (branch
 `42.20.0-dev`). No source file has been changed for this document; every
 claim below was verified against the implementation at that revision. This
