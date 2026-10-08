@@ -125,14 +125,37 @@ function withNonDefaultConfig(customOut: string, withTemplates = true) {
  * extUtilSettings reader snapshot shape). An external consumer of the
  * legacy facade sets up the slots DIRECTLY like this — same layer shapes,
  * same workspaceValue/globalValue semantics (§10).
+ *
+ * withWorkshopTemplate: template resolution REPLACES the global config
+ * templates wholesale when the host layers define any template
+ * (`vscodeSettings?.templates ?? globalConfig.templates`,
+ * templateManager.ts) — per-category fallback against the global defaults
+ * does not exist. A slot-fed build therefore needs the workshop category
+ * pushed alongside the project one. The pushed workshop entry keeps the
+ * OFFICIAL default URL (DEFAULT_TEMPLATES.workshop): the offline legacy
+ * fallback only exists for official templates, so this mirrors a consumer
+ * who customized the project template but left workshop at its default —
+ * and keeps the test hermetic (blocked clone → embedded legacy template,
+ * the same path the empty-slots test takes).
  */
-function pushLegacyLayers(customOut: string): void {
+function pushLegacyLayers(
+    customOut: string,
+    withWorkshopTemplate = false,
+): void {
     setVsCodeSettings(
         {
             templates: {
                 project: {
                     url: 'https://github.com/bridge/workshop-fixture.git',
                 },
+                ...(withWorkshopTemplate
+                    ? {
+                          workshop: {
+                              url: 'https://github.com/escapepz/pzstudio-template-workshop.git',
+                              ref: '42.0',
+                          },
+                      }
+                    : {}),
             },
             outdir: customOut,
             useSymlinks: false,
@@ -177,15 +200,16 @@ describe('legacy CLI facade settings (external consumers feed the slots directly
         temps = [];
     });
 
-    // Skip: requires the CLI's global config to have a workshop template entry,
-    // which depends on test-fixture template setup unrelated to the facade
-    // settings contract this file pins. The three tests below exercise the
-    // same facade contract without the build bootstrap path.
-    it.skip('runCLI build lands in the configured outdir', async () => {
-        pushLegacyLayers(customOut);
+    it('runCLI build lands in the configured outdir', async () => {
         const proj = makeProject('Facade Build');
         withNonDefaultConfig(customOut, false);
-        pushLegacyLayers(customOut);
+        // Build resolves the workshop template category, so the pushed
+        // workshop layer (official default URL) rides along — see
+        // pushLegacyLayers. Hermetic: the clone fails instantly in this
+        // network-blocked suite and the CLI falls back to the embedded
+        // legacy template — the same offline path the empty-slots test
+        // below exercises.
+        pushLegacyLayers(customOut, true);
         setProjectDir(proj);
         await runCLI('build', [], { flags: [] });
 
