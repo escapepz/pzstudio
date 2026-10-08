@@ -1,17 +1,8 @@
 import * as vscode from 'vscode';
-import {
-    createPzStudio,
-    setLogger,
-    setProjectDir,
-    setVsCodeSettings,
-} from '@pzstudio/cli/api';
+import { createPzStudio } from '@pzstudio/cli/api';
 import { createPZLogger } from './util/logger';
 import { initExtensionL10n } from './util/l10n';
-import {
-    readPzStudioHostSettings,
-    updateVsCodeSettings,
-    subscribeToConfigurationChanges,
-} from './util/settings';
+import { readPzStudioHostSettings } from './util/settings';
 import { createCommandRunner } from './util/execute';
 import { DevSyncController } from './util/devsync';
 import { createProjectDiagnostics } from './util/doctor';
@@ -32,27 +23,15 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const outputChannel = vscode.window.createOutputChannel('PZ Studio');
 
-    // One extension logger for both tiers. No extension consumer reads the
-    // legacy slot anymore — runner, task provider, DevSync, doctor and
-    // modinfo all run on the v2 host instance below — but the slot writes
-    // stay for this transitional commit and are removed with the
-    // facade-setter retirement (doc 11 §12/§14, next frozen commit).
+    // One host-owned PzStudio instance for the entire extension lifetime
+    // (doc 11 §17 commit 11): project context comes from the tree picker /
+    // active editor on every command run (runner, task provider), the
+    // session from the DevSync controller, or the explicit path the doctor /
+    // modinfo handler resolves. The logger and settings provider below own
+    // every v2-reachable emission path — the legacy facade slots are no
+    // longer written by the extension runtime.
     const pzLogger = createPZLogger(outputChannel);
-    setLogger(pzLogger);
 
-    // TRANSITIONAL COMPATIBILITY BRIDGE (doc 11 §17 commit 7, corrected):
-    // no extension consumer reads the raw legacy settings slots anymore
-    // (doctor moved to the v2 instance in commit 10), but the push stays
-    // for this transitional commit and is removed with the facade-setter
-    // retirement (next frozen commit), never consumed by the v2 path.
-    updateVsCodeSettings();
-    context.subscriptions.push(subscribeToConfigurationChanges());
-
-    // One host instance for the generic runner (doc 11 §17 commit 7): the
-    // settings provider reads the same workspace/global layers the push
-    // bridge feeds the legacy slots, fresh on every run — the context is
-    // intentionally ignored for now (UX-05 preserved until the later
-    // frozen commit).
     const studio = createPzStudio({
         logger: pzLogger,
         settings: (ctx) => readPzStudioHostSettings(ctx),
@@ -115,7 +94,7 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
-    setLogger(undefined);
-    setProjectDir(undefined);
-    setVsCodeSettings(undefined, undefined);
+    // Nothing to clean up: the host instance and all its owned state
+    // (logger, settings, transport) die with the extension context; DevSync
+    // stops via disposal (the controller is already in subscriptions).
 }

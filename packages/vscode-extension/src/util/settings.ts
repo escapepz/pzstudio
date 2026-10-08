@@ -1,15 +1,13 @@
 import * as vscode from 'vscode';
-import { setVsCodeSettings } from '@pzstudio/cli/api';
 import type {
     PzStudioHostSettings,
     PzStudioSettingsContext,
 } from '@pzstudio/cli/api';
 
 /**
- * The one workspace/global inspect() snapshot both tiers consume: the v2
- * provider returns it per run, the transitional compatibility bridge pushes
- * it into the legacy slots. Identical layer shapes and
- * workspaceValue/globalValue semantics as the pre-migration push bridge.
+ * The one workspace/global inspect() snapshot the v2 provider consumes.
+ * Identical layer shapes and workspaceValue/globalValue semantics as the
+ * pre-migration push bridge (doc 11 §10, commit 7).
  */
 function readLayerSnapshot(): PzStudioHostSettings {
     const config = vscode.workspace.getConfiguration('pzstudio');
@@ -47,7 +45,11 @@ function readLayerSnapshot(): PzStudioHostSettings {
 
 /**
  * Pure host settings reader for the v2 instance (doc 11 §10, commit 7):
- * returns the same workspace/global snapshot, read fresh at each call.
+ * the whole module's surface after the bridge retirement (commit 11).
+ * Returns the same workspace/global snapshot, read fresh at each call;
+ * the legacy push machinery (updateVsCodeSettings /
+ * subscribeToConfigurationChanges → setVsCodeSettings) is gone — an
+ * external consumer of the CLI's legacy facade feeds the slots directly.
  *
  * MVP: the context is accepted but INTENTIONALLY ignored — folder-scoped
  * multi-root settings are not resolved here yet, so UX-05 reproduces until
@@ -57,30 +59,4 @@ export function readPzStudioHostSettings(
     _context: PzStudioSettingsContext,
 ): PzStudioHostSettings {
     return readLayerSnapshot();
-}
-
-/**
- * TRANSITIONAL COMPATIBILITY BRIDGE (doc 11 §17 commit 7, corrected):
- * pushes the same snapshot into the raw legacy settings slots. After the
- * consumer migrations (task provider commit 8, DevSync commit 9, doctor
- * and modinfo commit 10) no extension consumer reads these slots anymore
- * — every engine/operation path resolves through the v2 instance
- * provider. The push survives deliberately until the facade-setter
- * retirement (doc 11 §17 commit 11) and is never consumed by the v2 path.
- */
-export function updateVsCodeSettings(): void {
-    const layers = readLayerSnapshot();
-    setVsCodeSettings(layers.workspace, layers.user);
-}
-
-/**
- * Re-pushes the snapshot whenever a pzstudio.* setting changes — the same
- * freshness the bridge had while legacy consumers still existed.
- */
-export function subscribeToConfigurationChanges(): vscode.Disposable {
-    return vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('pzstudio')) {
-            updateVsCodeSettings();
-        }
-    });
 }
