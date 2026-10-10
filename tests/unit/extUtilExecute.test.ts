@@ -129,6 +129,32 @@ describe('createCommandRunner', () => {
         });
     });
 
+    it('builds with the configured target for palette runs (no override)', async () => {
+        withSingleProject();
+        asMock(vscode.workspace.getConfiguration).mockImplementation(
+            () =>
+                ({
+                    get: vi.fn((key: string) =>
+                        key === 'build.target' ? 'production' : undefined,
+                    ),
+                    inspect: vi.fn(() => undefined),
+                    update: vi.fn(),
+                }) as never,
+        );
+        const output = vscode.window.createOutputChannel('test');
+        const studio = studioStub();
+        const runner = createCommandRunner(studio as never, output as never);
+
+        await runner('build');
+
+        // Normal Build semantics unchanged: the setting's flag, exactly
+        // once — the explicit-target override is task-only (UX-01).
+        expect(studio.run).toHaveBeenCalledWith('build', [], {
+            flags: ['--production'],
+            projectDir: path.sep + path.join('proj'),
+        });
+    });
+
     it('keeps the progress presentation', async () => {
         withSingleProject();
         const output = vscode.window.createOutputChannel('test');

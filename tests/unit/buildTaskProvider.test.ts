@@ -66,6 +66,19 @@ describe('BuildTaskProvider', () => {
             async (_o: unknown, task: () => unknown) => task(),
         );
         asMock(vscode.workspace.fs.readDirectory).mockResolvedValue([]);
+        // Fresh default configuration per test: resolveFlags reads
+        // pzstudio.* settings, and a target pinned by one test must not
+        // leak into the next.
+        asMock(vscode.workspace.getConfiguration).mockImplementation(
+            () =>
+                ({
+                    get: vi.fn(
+                        (_key: string, defaultValue?: unknown) => defaultValue,
+                    ),
+                    inspect: vi.fn(() => undefined),
+                    update: vi.fn(),
+                }) as never,
+        );
     });
 
     const folder = (name: string) => ({
@@ -205,6 +218,90 @@ describe('BuildTaskProvider', () => {
             projectDir: path.sep + path.join('proj'),
         });
         expect(writes.join('')).toContain('pzstudio clean completed.');
+    });
+
+    // UX-01: the task target must OVERRIDE pzstudio.build.target — every
+    // configured × task combination resolves to exactly one target flag
+    // (never the setting flag layered under the task flag, which the CLI
+    // rejects as conflicting options).
+    const CONFIGURED_TARGETS = [
+        'default',
+        'production',
+        'development',
+        'both',
+    ] as const;
+    const TASK_BUILD_TARGETS = ['production', 'development', 'both'] as const;
+    const TARGET_FLAG: Record<(typeof TASK_BUILD_TARGETS)[number], string> = {
+        production: '--production',
+        development: '--development',
+        both: '--both',
+    };
+
+    /** Pins pzstudio.build.target (verbose stays unset unless asked). */
+    function withConfiguredTarget(target: string, verbose = false) {
+        asMock(vscode.workspace.getConfiguration).mockImplementation(
+            () =>
+                ({
+                    get: vi.fn(
+                        (key: string) =>
+                            ({
+                                'build.target': target,
+                                verbose: verbose || undefined,
+                            })[key],
+                    ),
+                    inspect: vi.fn(() => undefined),
+                    update: vi.fn(),
+                }) as never,
+        );
+    }
+
+    describe.each(CONFIGURED_TARGETS)(
+        'with pzstudio.build.target=%s',
+        (configured) => {
+            beforeEach(() => {
+                withConfiguredTarget(configured);
+            });
+
+            it.each(TASK_BUILD_TARGETS)(
+                'task %s runs build with exactly one target flag',
+                async (taskTarget) => {
+                    const studio = studioStub();
+                    await runTask(taskTarget, studio);
+
+                    // Exact options match: exactly one explicit build-target
+                    // flag (the task's), no contradictory duplicate, and the
+                    // configured target is overridden, not appended to.
+                    expect(studio.run).toHaveBeenCalledTimes(1);
+                    expect(studio.run).toHaveBeenCalledWith('build', [], {
+                        flags: [TARGET_FLAG[taskTarget]],
+                        projectDir: path.sep + path.join('proj'),
+                    });
+                },
+            );
+
+            it('task clean runs clean with no build-target flag', async () => {
+                const studio = studioStub();
+                await runTask('clean', studio);
+
+                expect(studio.run).toHaveBeenCalledWith('clean', [], {
+                    flags: [],
+                    projectDir: path.sep + path.join('proj'),
+                });
+            });
+        },
+    );
+
+    it('keeps --verbose alongside the overriding task target', async () => {
+        withConfiguredTarget('production', true);
+        const studio = studioStub();
+        await runTask('development', studio);
+
+        // The task target wins over the setting; non-target flags are
+        // untouched — exactly one target flag, verbose preserved.
+        expect(studio.run).toHaveBeenCalledWith('build', [], {
+            flags: ['--verbose', '--development'],
+            projectDir: path.sep + path.join('proj'),
+        });
     });
 
     it('reports a skip when there is no project', async () => {

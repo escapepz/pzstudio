@@ -1,6 +1,16 @@
 import * as vscode from 'vscode';
 
-export function resolveFlags(command: string): string[] {
+/**
+ * `explicitBuildTarget` (a VS Code task target) replaces — never extends —
+ * the pzstudio.build.target setting for `build`: the CLI rejects
+ * conflicting target flags (UX-01), so a task asking for development while
+ * the setting says production must resolve to exactly `--development`.
+ * Only the `build` command reads it; `clean` never emits a target flag.
+ */
+export function resolveFlags(
+    command: string,
+    explicitBuildTarget?: string,
+): string[] {
     const config = vscode.workspace.getConfiguration('pzstudio');
     const flags: string[] = [];
 
@@ -25,7 +35,8 @@ export function resolveFlags(command: string): string[] {
     }
 
     if (command === 'build') {
-        const target = config.get<string>('build.target');
+        const target =
+            explicitBuildTarget ?? config.get<string>('build.target');
         if (target === 'production') {
             flags.push('--production');
         } else if (target === 'development') {
