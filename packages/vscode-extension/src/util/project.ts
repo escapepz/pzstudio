@@ -310,6 +310,20 @@ export async function readProjectSummary(
 }
 
 /**
+ * Why a project resolution produced no directory. `resolveProjectDir`'s
+ * `undefined` conflates the two cases that demand opposite feedback: a
+ * dismissed picker must abort silently (spec §13 — cancel means no side
+ * effects and no misleading "project not found" warning), while a
+ * project-less workspace legitimately deserves the warnNoProject message.
+ * Callers that need the distinction use resolveProjectDirResult; the rest
+ * keep the plain undefined convention.
+ */
+export type ProjectResolution =
+    | { status: 'resolved'; dir: vscode.Uri }
+    | { status: 'cancelled' }
+    | { status: 'no-project' };
+
+/**
  * Resolves the project a command should run against, without the caller
  * having to know the workspace layout:
  * 1. the project containing the active editor's file (most intent, no UI),
@@ -317,23 +331,23 @@ export async function readProjectSummary(
  * 3. a quick-pick of every discovered project (workspace roots and
  *    depth-1 subfolders — the same discovery the tree view uses), each
  *    labeled with its folder name and workshop title.
- * Returns undefined when the workspace has no project at all; callers
- * show a friendly warning instead of running the CLI.
+ * Reports 'cancelled' when the user dismisses that picker and
+ * 'no-project' when the workspace has none at all.
  */
-export async function resolveProjectDir(
+export async function resolveProjectDirResult(
     action: string,
-): Promise<vscode.Uri | undefined> {
+): Promise<ProjectResolution> {
     const activeFile = vscode.window.activeTextEditor?.document.uri.fsPath;
     if (activeFile) {
         const enclosing = await findEnclosingProjectDir(activeFile);
         if (enclosing) {
-            return enclosing;
+            return { status: 'resolved', dir: enclosing };
         }
     }
 
     const { dirs } = await findProjectDirs();
     if (dirs.length === 1) {
-        return dirs[0];
+        return { status: 'resolved', dir: dirs[0] };
     }
     if (dirs.length > 1) {
         const picks = await Promise.all(
@@ -354,7 +368,21 @@ export async function resolveProjectDir(
         const picked = await vscode.window.showQuickPick(picks, {
             placeHolder: t('Select the project to {0}', action),
         });
-        return picked?.dir;
+        if (!picked) {
+            return { status: 'cancelled' };
+        }
+        return { status: 'resolved', dir: picked.dir };
     }
-    return undefined;
+    return { status: 'no-project' };
+}
+
+/**
+ * Convenience wrapper over resolveProjectDirResult preserving the plain
+ * undefined convention (cancelled and no-project both map to undefined).
+ */
+export async function resolveProjectDir(
+    action: string,
+): Promise<vscode.Uri | undefined> {
+    const result = await resolveProjectDirResult(action);
+    return result.status === 'resolved' ? result.dir : undefined;
 }
