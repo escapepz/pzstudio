@@ -3,7 +3,8 @@ const { createIntegrationFixture } = require('./scripts/integration-fixture');
 
 /**
  * Desktop integration tests in a real VS Code instance (@vscode/test-electron
- * under the hood). The fixture project opens as the workspace; the fake home
+ * under the hood). A multi-root workspace opens (the fixture project folder
+ * plus a plain second folder with its own settings); the fake home
  * keeps the CLI api inside the extension host away from the real ~/.pzstudio.
  * Run with: pnpm --filter pzstudio42 test:integration
  */
@@ -15,7 +16,11 @@ module.exports = defineConfig({
     // supported host, independent of the current stable release.
     version: '1.102.0',
     extensionDevelopmentPath: __dirname,
-    workspaceFolder: fixture.projectDir,
+    // Multi-root workspace (fixture project folder + plain second folder
+    // with its own settings): the UX-05 resource-scoping scenario needs
+    // real per-folder configuration semantics only a .code-workspace
+    // provides. The fixture project stays the single DISCOVERED project.
+    workspaceFolder: fixture.workspaceFile,
     // --disable-extensions keeps the host hermetic (the dev extension still
     // loads); --disable-gpu avoids flaky GPU init in headless-ish
     // environments. Workspace trust is already disabled by test-electron
@@ -28,6 +33,8 @@ module.exports = defineConfig({
         // the fake home up inside the test instead (integration.test.ts).
         PZSTUDIO_TEST_PROJECT_DIR: fixture.projectDir,
         PZSTUDIO_TEST_FAKE_HOME: fixture.home,
+        PZSTUDIO_TEST_SECOND_DIR: fixture.secondDir,
+        PZSTUDIO_TEST_OUTDIR_B: fixture.outB,
     },
     mocha: {
         ui: 'bdd',

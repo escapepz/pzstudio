@@ -17,6 +17,10 @@ vi.mock('@pzstudio/cli/api', () => ({
 }));
 
 import * as vscode from 'vscode';
+import {
+    configurationStore,
+    defaultGetConfiguration,
+} from '../helpers/vscode-mock';
 import { createCommandRunner } from '../../packages/vscode-extension/src/util/execute';
 
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
@@ -444,5 +448,120 @@ describe('createCommandRunner', () => {
             expect.stringContaining('no PZ project (project.json)'),
         );
         expect(studio.run).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * UX-05: the runner resolves the project first, then the flags — so the
+ * flag settings must be read for THAT project's folder resource. Two
+ * projects in two folders get different flags; the project-less global
+ * update stays resource-less and borrows nothing.
+ */
+describe('createCommandRunner (UX-05 project-scoped flag resolution)', () => {
+    const UriCtor = vscode.Uri as unknown as new (
+        parts: string[],
+    ) => vscode.Uri;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        configurationStore.reset();
+        asMock(vscode.workspace.getConfiguration).mockImplementation(
+            defaultGetConfiguration as never,
+        );
+        asMock(vscode.window.withProgress).mockImplementation(
+            async (_o: unknown, task: () => unknown) => task(),
+        );
+        (
+            vscode.window as unknown as { activeTextEditor: unknown }
+        ).activeTextEditor = undefined;
+    });
+
+    function withTwoProjectFolders() {
+        const folderA = new UriCtor(['ws', 'project-a']);
+        const folderB = new UriCtor(['ws', 'project-b']);
+        (
+            vscode.workspace as unknown as { workspaceFolders: unknown }
+        ).workspaceFolders = [
+            { uri: folderA, name: 'project-a' },
+            { uri: folderB, name: 'project-b' },
+        ];
+        configurationStore.folders[folderA.fsPath] = {
+            'pzstudio.build.target': 'production',
+        };
+        configurationStore.folders[folderB.fsPath] = {
+            'pzstudio.build.target': 'development',
+        };
+        return { folderA, folderB };
+    }
+
+    it('resolves the configured target per project folder for explicit-context runs', async () => {
+        const { folderA, folderB } = withTwoProjectFolders();
+        const output = vscode.window.createOutputChannel('test');
+        const studio = studioStub();
+        const runner = createCommandRunner(studio as never, output as never);
+
+        await runner('build', [], [], { projectDir: folderA.fsPath });
+        await runner('build', [], [], { projectDir: folderB.fsPath });
+
+        expect(asMock(studio.run).mock.calls[0][2]).toEqual({
+            flags: ['--production'],
+            projectDir: folderA.fsPath,
+        });
+        expect(asMock(studio.run).mock.calls[1][2]).toEqual({
+            flags: ['--development'],
+            projectDir: folderB.fsPath,
+        });
+    });
+
+    it('resolves the flags for the auto-resolved project, not resource-less', async () => {
+        const single = new UriCtor(['solo', 'proj']);
+        (
+            vscode.workspace as unknown as { workspaceFolders: unknown }
+        ).workspaceFolders = [{ uri: single, name: 'proj' }];
+        configurationStore.folders[single.fsPath] = {
+            'pzstudio.verbose': true,
+        };
+        asMock(vscode.workspace.fs.stat).mockImplementation(
+            async (uri: { path: string }) => {
+                if (uri.path.endsWith('project.json')) {
+                    return { type: vscode.FileType.File };
+                }
+                throw new Error('ENOENT');
+            },
+        );
+        asMock(vscode.workspace.fs.readDirectory).mockResolvedValue([]);
+
+        const output = vscode.window.createOutputChannel('test');
+        const studio = studioStub();
+        const runner = createCommandRunner(studio as never, output as never);
+
+        await runner('build');
+
+        expect(asMock(studio.run)).toHaveBeenCalledWith('build', [], {
+            flags: ['--verbose'],
+            projectDir: single.fsPath,
+        });
+    });
+
+    it('resolves no folder flags for the project-less global update', async () => {
+        const { folderA } = withTwoProjectFolders();
+        configurationStore.folders[folderA.fsPath]['pzstudio.verbose'] = true;
+        (
+            vscode.workspace as unknown as { workspaceFolders: unknown }
+        ).workspaceFolders = [{ uri: folderA, name: 'project-a' }];
+        asMock(vscode.workspace.fs.stat).mockRejectedValue(new Error('ENOENT'));
+        asMock(vscode.workspace.fs.readDirectory).mockResolvedValue([]);
+
+        const output = vscode.window.createOutputChannel('test');
+        const studio = studioStub();
+        const runner = createCommandRunner(studio as never, output as never);
+
+        // UX-03 + §6F: update runs without a project and without borrowing
+        // any opened folder's resource-scoped flags.
+        await runner('update', [], [], { requiresProject: false });
+
+        expect(asMock(studio.run)).toHaveBeenCalledWith('update', [], {
+            flags: [],
+        });
     });
 });

@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { runCLI, setProjectDir, createPzStudio } from '@pzstudio/cli/api';
 import type { PzStudioLogger } from '@pzstudio/cli/api';
+import { readPzStudioHostSettings } from '../util/settings';
 
 /**
  * Desktop integration tests running inside a real VS Code extension host
@@ -255,6 +256,71 @@ describe('PZ Studio extension (real VS Code host)', () => {
                 ),
             ),
             'the second instance wrote into the runner outdir',
+        );
+    });
+
+    // UX-05: resource-scoped settings must follow the operated project's
+    // folder. The multi-root fixture gives folder A (the fixture project)
+    // one folder-scoped setting and folder B (a plain folder with a
+    // depth-2 project) its own outdir; the workspace file sets a
+    // workspace-level value the folder tier must beat.
+    it('resolves resource-scoped settings per workspace folder (UX-05)', async function () {
+        this.timeout(60000);
+        const secondDir = process.env.PZSTUDIO_TEST_SECOND_DIR ?? '';
+        const outdirB = process.env.PZSTUDIO_TEST_OUTDIR_B ?? '';
+        assert.ok(projectDir, 'fixture project dir env is missing');
+        assert.ok(secondDir && outdirB, 'multi-root fixture env is missing');
+
+        // A depth-2 project under folder B: outside project discovery
+        // (root + depth-1) but its resource still belongs to folder B.
+        const innerProjectB = path.join(secondDir, 'sub', 'inner');
+
+        // Real host configuration semantics first: the folder tier exists
+        // per folder, distinct from the workspace tier.
+        const inspectA = vscode.workspace
+            .getConfiguration('pzstudio', vscode.Uri.file(projectDir))
+            .inspect<boolean>('useSymlinks');
+        assert.strictEqual(inspectA?.workspaceFolderValue, false);
+        assert.strictEqual(inspectA?.workspaceValue, true);
+        const inspectB = vscode.workspace
+            .getConfiguration('pzstudio', vscode.Uri.file(innerProjectB))
+            .inspect<string>('outdir');
+        assert.strictEqual(inspectB?.workspaceFolderValue, outdirB);
+
+        // The extension adapter composes the layers per project resource.
+        const forA = readPzStudioHostSettings({ projectDir });
+        assert.strictEqual(forA.workspace?.useSymlinks, false); // folder beats workspace
+        assert.strictEqual(forA.workspace?.outdir, undefined); // A sets no outdir
+        const forB = readPzStudioHostSettings({ projectDir: innerProjectB });
+        assert.strictEqual(forB.workspace?.outdir, outdirB); // owning (nested) folder
+        assert.strictEqual(forB.workspace?.useSymlinks, true); // workspace fallback
+
+        // A resource-less (project-less global) resolution borrows no
+        // folder value.
+        const resourceLess = readPzStudioHostSettings({});
+        assert.strictEqual(resourceLess.workspace?.useSymlinks, true);
+        assert.strictEqual(resourceLess.workspace?.outdir, undefined);
+
+        // End to end through the real engine: a doctor run for the
+        // depth-2 project consumes folder B's outdir — the outDirMissing
+        // finding names it.
+        const studio = createPzStudio({
+            settings: readPzStudioHostSettings,
+        });
+        const report = await studio.runProjectDoctor(innerProjectB);
+        const missing = report.diagnostics.filter(
+            (d) => d.code === 'filesystem.outDirMissing',
+        );
+        assert.strictEqual(
+            missing.length,
+            1,
+            `expected one outDirMissing finding, got: ${report.diagnostics
+                .map((d) => d.code)
+                .join(', ')}`,
+        );
+        assert.ok(
+            missing[0].message.includes(path.resolve(outdirB)),
+            `doctor did not consume folder B's outdir: ${missing[0].message}`,
         );
     });
 });

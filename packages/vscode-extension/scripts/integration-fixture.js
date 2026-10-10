@@ -95,19 +95,95 @@ function removeDirBestEffort(dir) {
     }
 }
 
+/**
+ * UX-05 multi-root fixture additions:
+ * - folder A (the fixture project) sets ONLY `pzstudio.useSymlinks=false`
+ *   at folder scope — a value the build path never reads, so every
+ *   pre-existing assertion (default outdir under the fake home) keeps its
+ *   meaning;
+ * - folder B is a plain folder (no root project.json → invisible to
+ *   project discovery) carrying its own folder-scoped outdir/build
+ *   target, plus a depth-2 project the root+depth-1 discovery never
+ *   sees but whose resource still belongs to folder B;
+ * - the workspace file sets a workspace-level `pzstudio.useSymlinks=true`
+ *   so folder A's folder value provably BEATS the workspace tier.
+ */
+function writeMultiRootFixture(projectDir, secondDir, home) {
+    fs.mkdirSync(path.join(projectDir, '.vscode'), { recursive: true });
+    fs.writeFileSync(
+        path.join(projectDir, '.vscode', 'settings.json'),
+        JSON.stringify({ 'pzstudio.useSymlinks': false }, null, 4),
+    );
+
+    const outB = path.join(home, 'folderBOut');
+    fs.mkdirSync(path.join(secondDir, '.vscode'), { recursive: true });
+    fs.writeFileSync(
+        path.join(secondDir, '.vscode', 'settings.json'),
+        JSON.stringify(
+            {
+                'pzstudio.outdir': outB,
+                'pzstudio.build.target': 'production',
+            },
+            null,
+            4,
+        ),
+    );
+    fs.mkdirSync(path.join(secondDir, 'sub', 'inner'), { recursive: true });
+    fs.writeFileSync(
+        path.join(secondDir, 'sub', 'inner', 'project.json'),
+        JSON.stringify(
+            {
+                workshop: {
+                    title: 'Inner B Project',
+                    visibility: 'public',
+                    tags: [],
+                },
+                mods: {},
+                excludes: [],
+                schemaVersion: 2,
+            },
+            null,
+            4,
+        ),
+    );
+
+    const workspaceFile = path.join(home, 'pzstudio-ext.code-workspace');
+    fs.writeFileSync(
+        workspaceFile,
+        JSON.stringify(
+            {
+                folders: [{ path: projectDir }, { path: secondDir }],
+                settings: { 'pzstudio.useSymlinks': true },
+            },
+            null,
+            4,
+        ),
+    );
+    return { outB, workspaceFile };
+}
+
 function createIntegrationFixture() {
     const projectDir = fs.mkdtempSync(
         path.join(os.tmpdir(), 'pzstudio-ext-fixture-'),
     );
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'pzstudio-ext-home-'));
+    const secondDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'pzstudio-ext-second-'),
+    );
     writeFixtureProject(projectDir);
     seedWorkshopTemplateCache(home);
+    const { outB, workspaceFile } = writeMultiRootFixture(
+        projectDir,
+        secondDir,
+        home,
+    );
     // The VS Code process is gone by the time the runner exits.
     process.once('exit', () => {
         removeDirBestEffort(projectDir);
         removeDirBestEffort(home);
+        removeDirBestEffort(secondDir);
     });
-    return { projectDir, home };
+    return { projectDir, home, secondDir, outB, workspaceFile };
 }
 
 module.exports = { createIntegrationFixture, PROJECT_TITLE, MOD_ID };

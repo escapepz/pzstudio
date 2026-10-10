@@ -33,7 +33,9 @@ vi.mock('vscode', async () => {
 });
 
 import * as vscode from 'vscode';
+import { configurationStore } from '../helpers/vscode-mock';
 import { DevSyncController } from '../../packages/vscode-extension/src/util/devsync';
+import { readPzStudioHostSettings } from '../../packages/vscode-extension/src/util/settings';
 import * as api from '@pzstudio/cli/api';
 import {
     createPzStudio,
@@ -558,5 +560,125 @@ describe('DevSyncController over the real v2 instance (commit 9 routing pins)', 
         // legacy outdir slot is untouched.
         expect(fs.existsSync(path.join(v2Out, 'Routed Sync'))).toBe(true);
         expect(fs.readdirSync(legacyOut)).toEqual([]);
+    });
+});
+
+/* ------------------------------------------------------------------ */
+/* UX-05: the DevSync session consumes its OWN project's folder        */
+/* settings through the extension settings provider                    */
+/* ------------------------------------------------------------------ */
+
+describe('DevSyncController resource-scoped settings (UX-05)', () => {
+    let temps: string[] = [];
+    function makeTemp(): string {
+        const dir = createTempDir();
+        temps.push(dir);
+        return dir;
+    }
+
+    afterEach(() => {
+        for (const dir of temps) deleteDir(dir);
+        temps = [];
+        configurationStore.reset();
+    });
+
+    function makeProject(title: string): string {
+        const dir = makeTemp();
+        fs.writeFileSync(
+            path.join(dir, 'project.json'),
+            JSON.stringify({
+                workshop: { title, visibility: 'public', tags: [] },
+                mods: {
+                    my_mod: { name: 'My Mod', description: 'A mod.' },
+                },
+                excludes: [],
+            }),
+        );
+        fs.mkdirSync(path.join(dir, 'my_mod', 'media', 'lua'), {
+            recursive: true,
+        });
+        fs.writeFileSync(
+            path.join(dir, 'my_mod', 'media', 'lua', 'hello.lua'),
+            'print("v1")',
+        );
+        return dir;
+    }
+
+    /** Seeds a valid workshop template cache so no clone is attempted. */
+    function seedWorkshopTemplateCache(): void {
+        const cacheDir = path.join(
+            getFakeHome()!,
+            '.pzstudio',
+            'templates',
+            'fixture',
+            'local',
+        );
+        fs.mkdirSync(path.join(cacheDir, '.git'), { recursive: true });
+        fs.writeFileSync(path.join(cacheDir, 'template-file.txt'), 'template');
+    }
+
+    it('builds each project into its own folder-scoped outdir with no cross-leak', async () => {
+        seedWorkshopTemplateCache();
+        const projectA = makeProject('Folder A Sync');
+        const projectB = makeProject('Folder B Sync');
+        const outA = path.join(makeTemp(), 'out-a');
+        const outB = path.join(makeTemp(), 'out-b');
+
+        // Each project IS its own workspace folder root, carrying its own
+        // folder-scoped pzstudio settings.
+        const store = vscode.workspace
+            .configurationStore as typeof configurationStore;
+        store.folders[projectA] = {
+            'pzstudio.outdir': outA,
+            'pzstudio.templates.workshop.url': 'fixture/local',
+        };
+        store.folders[projectB] = {
+            'pzstudio.outdir': outB,
+            'pzstudio.templates.workshop.url': 'fixture/local',
+        };
+        (
+            vscode.workspace as unknown as { workspaceFolders: unknown }
+        ).workspaceFolders = [
+            { uri: vscode.Uri.file(projectA), name: 'project-a' },
+            { uri: vscode.Uri.file(projectB), name: 'project-b' },
+        ];
+
+        // The exact provider wiring extension.ts installs.
+        const contexts: Array<string | undefined> = [];
+        const V2 = recordingLogger();
+        const studio = createPzStudio({
+            logger: V2.logger,
+            settings: (ctx) => {
+                contexts.push(ctx.projectDir);
+                return readPzStudioHostSettings(ctx);
+            },
+        });
+
+        const controller = new DevSyncController(studio, V2.logger);
+
+        // Session A: every plan input resolves settings FOR project A.
+        await controller.start(projectA);
+        expect(fs.existsSync(path.join(outA, 'Folder A Sync'))).toBe(true);
+        expect(fs.existsSync(path.join(outB, 'Folder A Sync'))).toBe(false);
+        await controller.dispose();
+
+        const callsForA = contexts.length;
+        for (const dir of contexts) {
+            expect(dir).toBe(projectA);
+        }
+
+        // Session B: same controller, B's folder settings — no leakage of
+        // A's outdir or templates, provider freshness preserved.
+        contexts.length = 0;
+        await controller.start(projectB);
+        expect(fs.existsSync(path.join(outB, 'Folder B Sync'))).toBe(true);
+        expect(fs.existsSync(path.join(outA, 'Folder B Sync'))).toBe(false);
+        await controller.dispose();
+
+        expect(contexts.length).toBeGreaterThan(0);
+        for (const dir of contexts) {
+            expect(dir).toBe(projectB);
+        }
+        expect(callsForA).toBeGreaterThan(0);
     });
 });
