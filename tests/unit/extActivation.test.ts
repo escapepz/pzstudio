@@ -114,7 +114,7 @@ describe('extension activation (host instance wiring)', () => {
         );
     });
 
-    it('routes the generic runner through the created instance', async () => {
+    it('runs the update command globally through the created instance (UX-03)', async () => {
         withSingleProject();
         const context = activationContext();
         await activate(context as never);
@@ -130,10 +130,36 @@ describe('extension activation (host instance wiring)', () => {
         expect(handler).toBeDefined();
         await handler();
 
-        expect(studio.run).toHaveBeenCalledWith('update', [], {
-            flags: [],
-            projectDir: path.sep + path.join('proj'),
-        });
+        // Update refreshes the global template caches: the palette entry
+        // must not resolve or anchor a project even when one exists.
+        expect(studio.run).toHaveBeenCalledTimes(1);
+        expect(studio.run).toHaveBeenCalledWith('update', [], { flags: [] });
+        expect('projectDir' in asMock(studio.run).mock.calls[0][2]).toBe(false);
+        expect(asMock(vscode.window.showQuickPick)).not.toHaveBeenCalled();
+        expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
+    });
+
+    it('activates and updates in a project-less workspace (UX-03 case A/B)', async () => {
+        (
+            vscode.workspace as unknown as { workspaceFolders: unknown }
+        ).workspaceFolders = [];
+        asMock(vscode.workspace.fs.stat).mockRejectedValue(new Error('ENOENT'));
+        asMock(vscode.workspace.fs.readDirectory).mockResolvedValue([]);
+        const context = activationContext();
+        await activate(context as never);
+
+        const studio = asMock(createPzStudio).mock.results[0].value as {
+            run: import('vitest').Mock;
+        };
+
+        const handler = asMock(vscode.commands.registerCommand).mock.calls.find(
+            ([id]) => id === 'pzstudio.update',
+        )?.[1] as () => Promise<void>;
+        expect(handler).toBeDefined();
+        await handler();
+
+        expect(studio.run).toHaveBeenCalledWith('update', [], { flags: [] });
+        expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
     });
 
     it('routes doctor and modinfo through the created instance', async () => {

@@ -235,4 +235,214 @@ describe('createCommandRunner', () => {
         expect(setProjectDir).not.toHaveBeenCalled();
         expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
     });
+
+    // UX-03: `update` refreshes the GLOBAL template caches — the CLI never
+    // resolves a project for it, so the runner must not gate it on project
+    // resolution either (no picker, no "no project" warning, no projectDir
+    // passed to the engine). Every project-scoped command keeps the old
+    // requirement.
+    describe('project-less global update (UX-03)', () => {
+        function withFoldersButNoProject() {
+            (
+                vscode.workspace as unknown as { workspaceFolders: unknown }
+            ).workspaceFolders = [folder(['plain'])];
+            asMock(vscode.workspace.fs.stat).mockRejectedValue(
+                new Error('ENOENT'),
+            );
+            asMock(vscode.workspace.fs.readDirectory).mockResolvedValue([]);
+        }
+
+        function withTwoProjects() {
+            (
+                vscode.workspace as unknown as { workspaceFolders: unknown }
+            ).workspaceFolders = [folder(['one']), folder(['two'])];
+            asMock(vscode.workspace.fs.stat).mockImplementation(
+                async (uri: { path: string }) => {
+                    if (uri.path.endsWith('project.json')) {
+                        return { type: vscode.FileType.File };
+                    }
+                    throw new Error('ENOENT');
+                },
+            );
+            asMock(vscode.workspace.fs.readDirectory).mockResolvedValue([]);
+        }
+
+        async function updateRunner(studio = studioStub()) {
+            const output = vscode.window.createOutputChannel('test');
+            const runner = createCommandRunner(
+                studio as never,
+                output as never,
+            );
+            return { runner, studio };
+        }
+
+        it('runs in a workspace without a project instead of warning and skipping', async () => {
+            withFoldersButNoProject();
+            const { runner, studio } = await updateRunner();
+
+            await runner('update', [], [], { requiresProject: false });
+
+            expect(studio.run).toHaveBeenCalledTimes(1);
+            expect(studio.run).toHaveBeenCalledWith('update', [], {
+                flags: [],
+            });
+            expect(
+                asMock(vscode.window.showWarningMessage),
+            ).not.toHaveBeenCalled();
+        });
+
+        it('runs in an empty VS Code workspace (no folders at all)', async () => {
+            (
+                vscode.workspace as unknown as { workspaceFolders: unknown }
+            ).workspaceFolders = [];
+            const { runner, studio } = await updateRunner();
+
+            await runner('update', [], [], { requiresProject: false });
+
+            expect(studio.run).toHaveBeenCalledTimes(1);
+            expect(studio.run).toHaveBeenCalledWith('update', [], {
+                flags: [],
+            });
+            expect(
+                asMock(vscode.window.showWarningMessage),
+            ).not.toHaveBeenCalled();
+        });
+
+        it('never picks a project, even when one exists (global operation)', async () => {
+            withSingleProject();
+            const { runner, studio } = await updateRunner();
+
+            await runner('update', [], [], { requiresProject: false });
+
+            expect(studio.run).toHaveBeenCalledWith('update', [], {
+                flags: [],
+            });
+            expect(asMock(vscode.window.showQuickPick)).not.toHaveBeenCalled();
+            expect('projectDir' in asMock(studio.run).mock.calls[0][2]).toBe(
+                false,
+            );
+        });
+
+        it('runs exactly once among multiple projects, without a picker', async () => {
+            withTwoProjects();
+            const { runner, studio } = await updateRunner();
+
+            await runner('update', [], [], { requiresProject: false });
+
+            expect(studio.run).toHaveBeenCalledTimes(1);
+            expect(studio.run).toHaveBeenCalledWith('update', [], {
+                flags: [],
+            });
+            expect(asMock(vscode.window.showQuickPick)).not.toHaveBeenCalled();
+        });
+
+        it('is not anchored to the project of a previous command run', async () => {
+            withSingleProject();
+            const output = vscode.window.createOutputChannel('test');
+            const studio = studioStub();
+            const runner = createCommandRunner(
+                studio as never,
+                output as never,
+            );
+
+            await runner('build');
+            await runner('update', [], [], { requiresProject: false });
+
+            const buildOptions = asMock(studio.run).mock.calls[0][2];
+            const updateOptions = asMock(studio.run).mock.calls[1][2];
+            expect(buildOptions).toEqual({
+                flags: [],
+                projectDir: path.sep + path.join('proj'),
+            });
+            expect(updateOptions).toEqual({ flags: [] });
+            expect('projectDir' in updateOptions).toBe(false);
+        });
+
+        it('still honors --verbose and the output-channel show', async () => {
+            withFoldersButNoProject();
+            asMock(vscode.workspace.getConfiguration).mockReturnValue({
+                get: vi.fn((key: string) =>
+                    key === 'verbose' ? true : undefined,
+                ),
+                inspect: vi.fn(() => undefined),
+                update: vi.fn(),
+            } as never);
+            const output = vscode.window.createOutputChannel('test');
+            const studio = studioStub();
+            const runner = createCommandRunner(
+                studio as never,
+                output as never,
+            );
+
+            await runner('update', [], [], { requiresProject: false });
+
+            expect(studio.run).toHaveBeenCalledWith('update', [], {
+                flags: ['--verbose'],
+            });
+            expect(asMock(output.show)).toHaveBeenCalledWith(true);
+        });
+
+        it('keeps the error semantics when the update run throws', async () => {
+            withFoldersButNoProject();
+            const onFinished = vi.fn();
+            const output = vscode.window.createOutputChannel('test');
+            const studio = studioStub(async () => {
+                throw new Error('cache boom');
+            });
+            const runner = createCommandRunner(
+                studio as never,
+                output as never,
+                onFinished,
+            );
+
+            await expect(
+                runner('update', [], [], { requiresProject: false }),
+            ).resolves.toBeUndefined();
+
+            expect(onFinished).toHaveBeenCalledTimes(1);
+            expect(asMock(output.show)).not.toHaveBeenCalled();
+        });
+
+        it('keeps the same-command busy guard for overlapping updates', async () => {
+            withFoldersButNoProject();
+            let release!: () => void;
+            const gate = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            asMock(vscode.window.withProgress).mockImplementation(() => gate);
+            const { runner } = await updateRunner();
+
+            const first = runner('update', [], [], { requiresProject: false });
+            await vi.waitFor(() => {
+                expect(gate).toBeInstanceOf(Promise);
+            });
+            await runner('update', [], [], { requiresProject: false });
+
+            expect(
+                asMock(vscode.window.showWarningMessage),
+            ).toHaveBeenCalledWith(
+                expect.stringContaining("command 'update' is already running"),
+            );
+            release();
+            await first;
+        });
+    });
+
+    it('still requires a project for clean when none exists (UX-03 does not loosen project-scoped commands)', async () => {
+        (
+            vscode.workspace as unknown as { workspaceFolders: unknown }
+        ).workspaceFolders = [folder(['plain'])];
+        asMock(vscode.workspace.fs.stat).mockRejectedValue(new Error('ENOENT'));
+        asMock(vscode.workspace.fs.readDirectory).mockResolvedValue([]);
+        const output = vscode.window.createOutputChannel('test');
+        const studio = studioStub();
+        const runner = createCommandRunner(studio as never, output as never);
+
+        await runner('clean');
+
+        expect(asMock(vscode.window.showWarningMessage)).toHaveBeenCalledWith(
+            expect.stringContaining('no PZ project (project.json)'),
+        );
+        expect(studio.run).not.toHaveBeenCalled();
+    });
 });

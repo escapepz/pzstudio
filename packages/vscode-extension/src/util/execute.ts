@@ -10,6 +10,14 @@ export interface ExecuteOptions {
      * view context menu — the folder picker is skipped entirely.
      */
     projectDir?: string;
+    /**
+     * Whether the command needs a project context (default true). Global
+     * operations like `update` refresh host-wide template caches and must
+     * run project-less: no picker, no "no project" warning, and no
+     * projectDir handed to the engine (its discovery then falls back to
+     * cwd, which the v2 lifecycle defines for exactly this case).
+     */
+    requiresProject?: boolean;
 }
 
 export type ExecutePZCommand = (
@@ -42,9 +50,10 @@ export function createCommandRunner(
             // Explicit project context for THIS invocation (tree menu entry);
             // F1 / keybinding entry points have no tree context: detect from
             // the active editor, else quick-pick. No project at all → warn
-            // instead of surfacing the raw CLI error.
+            // instead of surfacing the raw CLI error — unless the command is
+            // global (requiresProject: false), which runs as-is.
             let projectDir = options.projectDir;
-            if (!projectDir) {
+            if (!projectDir && options.requiresProject !== false) {
                 const dir = await resolveProjectDir(command);
                 if (!dir) {
                     warnNoProject(command);
@@ -66,7 +75,17 @@ export function createCommandRunner(
                 },
                 async () => {
                     try {
-                        await studio.run(command, args, { flags, projectDir });
+                        // No resolved project → no projectDir key at all, so
+                        // a global run can never inherit a previous command's
+                        // context or an arbitrary first-project anchor.
+                        const runOptions: {
+                            flags: string[];
+                            projectDir?: string;
+                        } = { flags };
+                        if (projectDir) {
+                            runOptions.projectDir = projectDir;
+                        }
+                        await studio.run(command, args, runOptions);
                     } catch (e) {
                         // Already surfaced by logger.error
                     }
