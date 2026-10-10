@@ -58,10 +58,12 @@ class PZTaskTerminal implements vscode.Pseudoterminal {
             // target is given, so the invocation carries exactly one target
             // flag — the CLI rejects conflicting ones. `clean` is not a
             // build target: it maps to the clean command, which never
-            // receives one.
+            // receives one. All flag settings read for the resolved
+            // project's folder resource (UX-05).
             const flags = resolveFlags(
                 command,
                 this.target === 'clean' ? undefined : this.target,
+                dir.fsPath,
             );
 
             await this.studio.run(command, [], {

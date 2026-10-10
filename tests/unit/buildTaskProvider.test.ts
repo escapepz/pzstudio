@@ -16,6 +16,10 @@ vi.mock('@pzstudio/cli/api', () => ({
 }));
 
 import * as vscode from 'vscode';
+import {
+    configurationStore,
+    defaultGetConfiguration,
+} from '../helpers/vscode-mock';
 // The REAL engine lock primitive (side-effect-free module): the queued-task
 // test below models the host instance's studio.run faithfully —
 // createPzStudio.run wraps its whole lifecycle in withEngineLock (doc 11 §9).
@@ -320,6 +324,58 @@ describe('BuildTaskProvider', () => {
         });
         const writes = await runTask('production', studio);
         expect(writes.join('')).toContain('pzstudio build failed: boom');
+    });
+
+    // UX-05: the task resolves its flags for the resolved project's folder
+    // resource. Folder-scoped non-target flags (verbose) must reach the
+    // invocation, and the task target keeps beating the folder-level
+    // configured target (UX-01).
+    describe('UX-05 resource-scoped flags', () => {
+        const UriCtor = vscode.Uri as unknown as new (
+            parts: string[],
+        ) => vscode.Uri;
+
+        beforeEach(() => {
+            configurationStore.reset();
+            asMock(vscode.workspace.getConfiguration).mockImplementation(
+                defaultGetConfiguration as never,
+            );
+        });
+
+        function withSingleFolderProject(values: Record<string, unknown>) {
+            const folder = new UriCtor(['proj']);
+            (
+                vscode.workspace as unknown as { workspaceFolders: unknown }
+            ).workspaceFolders = [{ uri: folder, name: 'proj' }];
+            configurationStore.folders[folder.fsPath] = { ...values };
+        }
+
+        it('carries folder-scoped --verbose alongside the task target', async () => {
+            withSingleFolderProject({
+                'pzstudio.verbose': true,
+                'pzstudio.build.target': 'production',
+            });
+            const studio = studioStub();
+            await runTask('development', studio);
+
+            expect(studio.run).toHaveBeenCalledWith('build', [], {
+                flags: ['--verbose', '--development'],
+                projectDir: path.sep + path.join('proj'),
+            });
+        });
+
+        it('keeps the task target above the folder-level target with one flag', async () => {
+            withSingleFolderProject({
+                'pzstudio.build.target': 'production',
+            });
+            const studio = studioStub();
+            await runTask('development', studio);
+
+            expect(studio.run).toHaveBeenCalledWith('build', [], {
+                flags: ['--development'],
+                projectDir: path.sep + path.join('proj'),
+            });
+        });
     });
 
     it('has no task-specific busy guard: concurrent tasks both dispatch', async () => {

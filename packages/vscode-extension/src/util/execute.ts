@@ -63,8 +63,12 @@ export function createCommandRunner(
             }
 
             // Flags are passed through the run options — no process.argv
-            // mutation.
-            const flags = [...resolveFlags(command), ...extraFlags];
+            // mutation. They resolve for the project resolved above (UX-05):
+            // a global run (no projectDir) stays resource-less.
+            const flags = [
+                ...resolveFlags(command, undefined, projectDir),
+                ...extraFlags,
+            ];
             const verboseMode = flags.includes('--verbose');
 
             await vscode.window.withProgress(

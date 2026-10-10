@@ -6,12 +6,21 @@ import * as vscode from 'vscode';
  * conflicting target flags (UX-01), so a task asking for development while
  * the setting says production must resolve to exactly `--development`.
  * Only the `build` command reads it; `clean` never emits a target flag.
+ *
+ * `projectDir` (UX-05) scopes every flag read to the operated project's
+ * folder resource, so folder-scoped values apply per project. Without a
+ * project context (global update) no resource is passed and no opened
+ * folder's values can be borrowed.
  */
 export function resolveFlags(
     command: string,
     explicitBuildTarget?: string,
+    projectDir?: string,
 ): string[] {
-    const config = vscode.workspace.getConfiguration('pzstudio');
+    const config = vscode.workspace.getConfiguration(
+        'pzstudio',
+        projectDir ? vscode.Uri.file(projectDir) : undefined,
+    );
     const flags: string[] = [];
 
     if (config.get<boolean>('verbose')) {

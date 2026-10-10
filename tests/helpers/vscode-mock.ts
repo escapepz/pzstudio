@@ -14,7 +14,148 @@ import path from 'path';
  * (joinPath on '/'-separated segments); fsPath mirrors the segments with
  * the platform separator so path.dirname/startsWith logic works on every
  * CI OS.
+ *
+ * Configuration is modeled close enough to the real API that incorrect
+ * resource scoping cannot pass silently (UX-05): `getConfiguration(section,
+ * resource)` resolves resource-scoped settings through a three-layer store
+ * (folder > workspace > global, defined-value semantics — `false`, `''`, `0`
+ * are values, not absence). Folder values apply only when the resource lies
+ * inside an opened `workspaceFolders` entry; a resource outside every folder
+ * (or no resource at all) sees only the workspace and global layers, so no
+ * unrelated folder's settings can leak. Tests seed/reset the store through
+ * the exported `configurationStore` (also reachable as
+ * `vscode.workspace.configurationStore`) and may replace the whole
+ * `getConfiguration` implementation with narrower stubs — restoring the
+ * faithful model is `mockImplementation(defaultGetConfiguration)`.
  */
+
+/**
+ * Three-layer configuration store with section-qualified keys
+ * (e.g. 'pzstudio.outdir', 'pzstudio.build.target'). Folder keys are
+ * normalized fsPaths; resolution checks every layer with `!== undefined`
+ * so defined falsy values win over higher layers.
+ */
+export const configurationStore = {
+    global: {} as Record<string, unknown>,
+    workspace: {} as Record<string, unknown>,
+    folders: {} as Record<string, Record<string, unknown>>,
+    reset(): void {
+        this.global = {};
+        this.workspace = {};
+        this.folders = {};
+    },
+};
+
+const normalizeFsPath = (p: string): string =>
+    p.split(/[\\/]/).filter(Boolean).join(path.sep);
+
+/**
+ * The opened workspace folder owning `resource` (longest fsPath prefix,
+ * separator-bounded), or undefined when no resource is given or the
+ * resource lies outside every opened folder. Real VS Code resolves
+ * folder-scoped values exactly this way, so a resource outside the
+ * workspace must never see a folder value.
+ */
+const owningFolderKey = (resource?: unknown): string | undefined => {
+    if (!resource) return undefined;
+    const target = normalizeFsPath((resource as { fsPath: string }).fsPath);
+    let best: string | undefined;
+    let bestLength = -1;
+    for (const key of Object.keys(configurationStore.folders)) {
+        const norm = normalizeFsPath(key);
+        if (
+            (target === norm || target.startsWith(norm + path.sep)) &&
+            norm.length > bestLength
+        ) {
+            best = key;
+            bestLength = norm.length;
+        }
+    }
+    return best;
+};
+
+const folderValue = (
+    folderKey: string | undefined,
+    qualifiedKey: string,
+): unknown =>
+    folderKey === undefined
+        ? undefined
+        : configurationStore.folders[folderKey]?.[qualifiedKey];
+
+/**
+ * The faithful default `getConfiguration` model bound to
+ * `configurationStore`. Exposed so tests that stubbed the whole
+ * implementation can restore the resource-aware semantics.
+ */
+export function defaultGetConfiguration(section?: string, resource?: unknown) {
+    const qualified = (key: string) => (section ? `${section}.${key}` : key);
+    const folderKey = owningFolderKey(resource);
+
+    return {
+        get(key: string, defaultValue?: unknown): unknown {
+            const q = qualified(key);
+            for (const value of [
+                folderValue(folderKey, q),
+                configurationStore.workspace[q],
+                configurationStore.global[q],
+            ]) {
+                if (value !== undefined) return value;
+            }
+            return defaultValue;
+        },
+        inspect(key: string) {
+            const q = qualified(key);
+            return {
+                key,
+                section,
+                defaultValue: undefined,
+                globalValue: configurationStore.global[q],
+                workspaceValue: configurationStore.workspace[q],
+                workspaceFolderValue: folderValue(folderKey, q),
+            };
+        },
+        has(key: string): boolean {
+            const q = qualified(key);
+            return [
+                folderValue(folderKey, q),
+                configurationStore.workspace[q],
+                configurationStore.global[q],
+            ].some((value) => value !== undefined);
+        },
+        async update(
+            key: string,
+            value: unknown,
+            target?: number,
+        ): Promise<void> {
+            const q = qualified(key);
+            if (target === 3 /* ConfigurationTarget.WorkspaceFolder */) {
+                const folder = owningFolderKey(resource);
+                if (!folder) {
+                    throw new Error(
+                        `Cannot update a workspace-folder setting outside every opened folder: ${q}`,
+                    );
+                }
+                configurationStore.folders[folder] ??= {};
+                if (value === undefined) {
+                    delete configurationStore.folders[folder][q];
+                } else {
+                    configurationStore.folders[folder][q] = value;
+                }
+                return;
+            }
+            const layer =
+                target === 1 /* ConfigurationTarget.Global */
+                    ? configurationStore.global
+                    : configurationStore.workspace;
+            if (value === undefined) {
+                delete layer[q];
+            } else {
+                layer[q] = value;
+            }
+        },
+    };
+}
+
 export function createVscodeMock() {
     class MockUri {
         constructor(readonly parts: string[]) {}
@@ -132,13 +273,10 @@ export function createVscodeMock() {
                 stat: vi.fn(),
                 readDirectory: vi.fn(),
             },
-            getConfiguration: vi.fn(() => ({
-                get: vi.fn(
-                    (_key: string, defaultValue?: unknown) => defaultValue,
-                ),
-                inspect: vi.fn(() => undefined),
-                update: vi.fn(),
-            })),
+            getConfiguration: vi.fn(defaultGetConfiguration),
+            // Test-only handle: seed/reset the configuration layers the
+            // section/resource-aware getConfiguration resolves through.
+            configurationStore,
             workspaceFolders: [] as Array<{ uri: MockUri; name: string }>,
             onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
             createFileSystemWatcher: vi.fn(() => ({
