@@ -73,6 +73,9 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         outputChannel,
         devSync,
+        // The provider owns the per-project diagnostics cache (UX-07);
+        // dropping it with the subscriptions is the cache's lifecycle end.
+        projectExplorer,
         ...registerAllCommands(context, executePZCommand, studio),
         registerWatchCommand(devSync),
         registerDoctorCommand(runProjectDiagnostics),
