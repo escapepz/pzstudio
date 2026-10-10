@@ -57,6 +57,76 @@ function modStateDescription(state: ModBuildState): string {
 }
 
 /**
+ * Cached doctor summary for one project, valid for exactly one observed
+ * project.json state. The fingerprint is captured BEFORE the run starts,
+ * so a file changed mid-run never validates the stale result.
+ */
+interface DiagnosticsCacheEntry {
+    summary: ProjectDiagnosticsSummary | undefined;
+    fingerprint: string;
+}
+
+/**
+ * Stable identity for a project across tree renders. Discovery rebuilds
+ * its URIs on every scan, so object identity is useless; the canonical
+ * path string is the key. Real URIs carry fsPath (Windows-normalized);
+ * the unit-test mock builds path-only URIs. Two workspace folders differing
+ * only by drive-letter case would produce two entries (a duplicate scan at
+ * worst — never a cross-project result leak).
+ */
+function projectCacheKey(dir: vscode.Uri): string {
+    return dir.fsPath || dir.path;
+}
+
+/**
+ * Cheap project.json fingerprint for the diagnostics cache: one stat per
+ * project per render (mtime + size), never a directory traversal. An
+ * absent/unreadable file is its own stable state ('missing') so a broken
+ * project renders the doctor's validation findings without rescanning
+ * until the file reappears.
+ */
+async function projectJsonFingerprint(dir: vscode.Uri): Promise<string> {
+    try {
+        const stat = await vscode.workspace.fs.stat(
+            vscode.Uri.joinPath(dir, 'project.json'),
+        );
+        return `${stat.mtime}:${stat.size}`;
+    } catch {
+        return 'missing';
+    }
+}
+
+/**
+ * Pure summary → badge/tooltip mapping. The UX contract (glyphs, severity
+ * counts, tooltip listing) is unchanged by the caching layer — the same
+ * doctor input renders the same output, it is just computed less often.
+ */
+function renderDiagnosticsBadge(
+    summary: ProjectDiagnosticsSummary | undefined,
+): { badge: string; tooltip: string } | undefined {
+    if (!summary || summary.report.diagnostics.length === 0) {
+        return undefined;
+    }
+
+    const glyphs: Record<string, string> = {
+        error: '✗',
+        warning: '⚠',
+        info: '·',
+    };
+    const badgeParts: string[] = [];
+    if (summary.errors > 0) {
+        badgeParts.push(`✗ ${summary.errors}`);
+    }
+    if (summary.warnings > 0) {
+        badgeParts.push(`⚠ ${summary.warnings}`);
+    }
+    const tooltip = summary.report.diagnostics
+        .map((d) => `${glyphs[d.severity] ?? '·'} [${d.module}] ${d.message}`)
+        .join('\n');
+    return { badge: badgeParts.join(' '), tooltip };
+}
+
+/**
  * Resolves the mod's build state: excluded wins over dev-only, which wins
  * over included (same precedence as planBuild).
  */
@@ -234,6 +304,22 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
     };
     /** Shared diagnostics provider; unset until extension.ts wires it. */
     private readonly diagnostics?: DiagnosticsSource;
+    /**
+     * Doctor summaries per project, bounded by discovery: entries exist
+     * only for projects a render actually queried, are evicted when the
+     * project disappears, and die with the provider (dispose). No disk
+     * persistence, no module-global state.
+     */
+    private readonly diagnosticsCache = new Map<
+        string,
+        DiagnosticsCacheEntry
+    >();
+    /** One in-flight doctor run per project — concurrent renders coalesce. */
+    private readonly inFlightDiagnostics = new Map<
+        string,
+        Promise<ProjectDiagnosticsSummary | undefined>
+    >();
+    private disposed = false;
 
     constructor(extensionUri: vscode.Uri, diagnostics?: DiagnosticsSource) {
         this.projectIcon = {
@@ -262,8 +348,25 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         );
     }
 
-    refresh(): void {
+    /**
+     * Rebuilds the tree. Presentation refreshes (expansion, watcher
+     * debounce, command runs) reuse cached diagnostics — a doctor run
+     * happens only when a project.json fingerprint changed (UX-07). The
+     * explicit user refresh (title-bar command) passes
+     * invalidateDiagnostics to drop the cache and recompute every badge.
+     */
+    refresh(options?: { invalidateDiagnostics?: boolean }): void {
+        if (options?.invalidateDiagnostics) {
+            this.diagnosticsCache.clear();
+        }
         this._onDidChangeTreeData.fire();
+    }
+
+    /** Drops the diagnostics cache with the provider (extension teardown). */
+    dispose(): void {
+        this.disposed = true;
+        this.diagnosticsCache.clear();
+        this.inFlightDiagnostics.clear();
     }
 
     /**
@@ -281,10 +384,11 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
     }
 
     /**
-     * Runs the shared diagnostics (when wired) and renders the summary as
-     * a description badge (errors/warnings counts) plus a tooltip with the
-     * full findings list. A failing source never breaks the tree — the
-     * badge is decoration.
+     * Renders the project's diagnostics badge from the cache while the
+     * project.json fingerprint still matches, recomputing through the
+     * shared source only on a mismatch (first discovery, meaningful
+     * change, explicit invalidation). A failing source never breaks the
+     * tree — and is never cached, so a later render retries it.
      */
     private async projectDiagnostics(
         dir: vscode.Uri,
@@ -292,35 +396,73 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         if (!this.diagnostics) {
             return undefined;
         }
-        let summary: ProjectDiagnosticsSummary | undefined;
+        const key = projectCacheKey(dir);
+        const fingerprint = await projectJsonFingerprint(dir);
+        const cached = this.diagnosticsCache.get(key);
+        if (cached && cached.fingerprint === fingerprint) {
+            return renderDiagnosticsBadge(cached.summary);
+        }
         try {
-            summary = await this.diagnostics(dir);
+            const summary = await this.computeDiagnostics(
+                key,
+                dir,
+                fingerprint,
+            );
+            return renderDiagnosticsBadge(summary);
         } catch {
             return undefined;
         }
-        if (!summary || summary.report.diagnostics.length === 0) {
-            return undefined;
-        }
+    }
 
-        const glyphs: Record<string, string> = {
-            error: '✗',
-            warning: '⚠',
-            info: '·',
-        };
-        const badgeParts: string[] = [];
-        if (summary.errors > 0) {
-            badgeParts.push(`✗ ${summary.errors}`);
+    /**
+     * Runs the diagnostics source once per project state: concurrent
+     * renders for the same project join the in-flight promise (one actual
+     * execution), the result is cached under the fingerprint observed
+     * BEFORE the run started, and a stale in-flight result (the project
+     * changed mid-run, or the joining render observed a newer state) is
+     * dropped instead of kept.
+     */
+    private computeDiagnostics(
+        key: string,
+        dir: vscode.Uri,
+        fingerprint: string,
+    ): Promise<ProjectDiagnosticsSummary | undefined> {
+        const inFlight = this.inFlightDiagnostics.get(key);
+        if (inFlight) {
+            return inFlight.then((summary) => {
+                const entry = this.diagnosticsCache.get(key);
+                if (entry && entry.fingerprint !== fingerprint) {
+                    // The run we joined started from an older project
+                    // state than this render observed: drop its result so
+                    // the next render recomputes instead of keeping it.
+                    this.diagnosticsCache.delete(key);
+                }
+                return summary;
+            });
         }
-        if (summary.warnings > 0) {
-            badgeParts.push(`⚠ ${summary.warnings}`);
-        }
-        const tooltip = summary.report.diagnostics
-            .map(
-                (d) =>
-                    `${glyphs[d.severity] ?? '·'} [${d.module}] ${d.message}`,
-            )
-            .join('\n');
-        return { badge: badgeParts.join(' '), tooltip };
+        const promise = this.diagnostics!(dir);
+        // Keep a handled tail on the stored promise so a rejection can
+        // never surface as an unhandled rejection between renders.
+        promise.catch(() => undefined);
+        this.inFlightDiagnostics.set(key, promise);
+        return promise.then(
+            (summary) => {
+                if (this.inFlightDiagnostics.get(key) === promise) {
+                    this.inFlightDiagnostics.delete(key);
+                }
+                if (!this.disposed) {
+                    this.diagnosticsCache.set(key, { summary, fingerprint });
+                }
+                return summary;
+            },
+            (error) => {
+                if (this.inFlightDiagnostics.get(key) === promise) {
+                    this.inFlightDiagnostics.delete(key);
+                }
+                // Failures are never cached: a later render retries.
+                throw error;
+            },
+        );
     }
 
     getTreeItem(element: TreeElement): vscode.TreeItem {
@@ -413,7 +555,18 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
     private async getProjectNodes(): Promise<TreeElement[]> {
         const { dirs, truncated } = await findProjectDirs();
         if (dirs.length === 0) {
+            this.diagnosticsCache.clear();
             return [infoNode(t('No project found in the workspace.'))];
+        }
+
+        // Evict cached diagnostics for projects that are no longer
+        // discovered — removed projects must not linger, and a rediscovered
+        // one recomputes fresh instead of resurrecting an old result.
+        const discovered = new Set(dirs.map(projectCacheKey));
+        for (const key of [...this.diagnosticsCache.keys()]) {
+            if (!discovered.has(key)) {
+                this.diagnosticsCache.delete(key);
+            }
         }
 
         const nodes: TreeElement[] = [];

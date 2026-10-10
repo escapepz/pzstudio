@@ -22,6 +22,8 @@ const vscodeMock = vi.hoisted(() => {
                 const baseParts = base.path.split('/').filter(Boolean);
                 return makeUri([...baseParts, ...rest]);
             },
+            file: (path: string): MockUri =>
+                makeUri(path.split('/').filter(Boolean)),
         },
         FileType: { File: 1, Directory: 2, SymbolicLink: 64 },
         TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
@@ -49,6 +51,7 @@ import {
     naturalCompare,
     resolveModFolderIcon,
     ProjectExplorerProvider,
+    REFRESH_DEBOUNCE_MS,
     SHOW_ALL_FILES_CONTEXT_KEY,
     PROJECT_FOLDER_ICON_LIGHT,
     PROJECT_FOLDER_ICON_DARK,
@@ -607,5 +610,477 @@ describe('project diagnostics badge', () => {
 
         expect(nodes[0].description).toBe('id 12345 · Test Title');
         expect(nodes[0].tooltip).toBeUndefined();
+    });
+});
+
+// ── UX-07: bounded diagnostics cache ────────────────────────────────────────
+//
+// The explorer badge must not re-run the full doctor engine on every tree
+// render. These tests count actual diagnostics-source executions (never
+// getChildren calls) and use deterministic controllable promises — no
+// wall-clock sleeps prove coalescing or invalidation ordering.
+
+describe('project diagnostics cache (UX-07)', () => {
+    interface Summary {
+        errors: number;
+        warnings: number;
+        infos: number;
+        report: {
+            projectDir: string;
+            diagnostics: Array<{
+                severity: string;
+                module: string;
+                code: string;
+                message: string;
+            }>;
+        };
+    }
+
+    const clean = (): Summary => ({
+        errors: 0,
+        warnings: 0,
+        infos: 0,
+        report: { projectDir: '', diagnostics: [] },
+    });
+    const withIssues = (
+        errors: number,
+        warnings: number,
+        message: string,
+    ): Summary => ({
+        errors,
+        warnings,
+        infos: 0,
+        report: {
+            projectDir: '',
+            diagnostics: [
+                {
+                    severity: 'error',
+                    module: 'mods',
+                    code: 'mods.missing',
+                    message,
+                },
+            ],
+        },
+    });
+
+    function deferred<T>() {
+        let resolve!: (value: T) => void;
+        let reject!: (reason?: unknown) => void;
+        const promise = new Promise<T>((res, rej) => {
+            resolve = res;
+            reject = rej;
+        });
+        return { promise, resolve, reject };
+    }
+
+    /**
+     * Deterministic microtask pump: runs pending continuations until the
+     * source has been invoked at least `minCalls` times. Proves ordering
+     * without timers or sleeps.
+     */
+    async function untilCalled(
+        fn: { mock: { calls: unknown[] } },
+        minCalls = 1,
+        max = 500,
+    ): Promise<void> {
+        for (let i = 0; i < max && fn.mock.calls.length < minCalls; i++) {
+            await Promise.resolve();
+        }
+        if (fn.mock.calls.length < minCalls) {
+            throw new Error(
+                `the diagnostics source was never called ${minCalls} time(s)`,
+            );
+        }
+    }
+
+    /**
+     * Multi-project workspace fixture: depth-1 projects under one root,
+     * with controllable project.json content, mtime stamps and discovery.
+     */
+    function seedWorkspace() {
+        const listed = new Set<string>();
+        const contents = new Map<string, string>();
+        const stamps = new Map<string, { mtime: number; size: number }>();
+        const pjOf = (dir: string) => `/ws/${dir}/project.json`;
+
+        vscodeMock.workspace.workspaceFolders = [
+            { uri: asUri('ws'), name: 'ws' },
+        ] as never;
+        vscodeMock.workspace.fs.stat = vi.fn(async (uri: { path: string }) => {
+            const stamp = stamps.get(uri.path);
+            if (stamp) {
+                return { type: FileType.File, ctime: 0, ...stamp };
+            }
+            throw new Error('ENOENT');
+        });
+        vscodeMock.workspace.fs.readDirectory = vi.fn(
+            async (uri: { path: string }) => {
+                if (uri.path === '/ws') {
+                    return [...listed].map(
+                        (name): Entry => [name, FileType.Directory],
+                    );
+                }
+                return [] as Entry[];
+            },
+        );
+        vscodeMock.workspace.fs.readFile = vi.fn(
+            async (uri: { path: string }) => {
+                const content = contents.get(uri.path);
+                if (content !== undefined) {
+                    return new TextEncoder().encode(content);
+                }
+                throw new Error('ENOENT');
+            },
+        );
+
+        return {
+            /** Adds a project to discovery with project.json content + mtime. */
+            addProject(dir: string, content: string, mtime = 1): void {
+                listed.add(dir);
+                contents.set(pjOf(dir), content);
+                stamps.set(pjOf(dir), { mtime, size: content.length });
+            },
+            /** Removes the project from discovery and the filesystem. */
+            removeProject(dir: string): void {
+                listed.delete(dir);
+                contents.delete(pjOf(dir));
+                stamps.delete(pjOf(dir));
+            },
+            /** A meaningful change: new content under a newer mtime. */
+            rewriteProject(dir: string, content: string, mtime: number): void {
+                contents.set(pjOf(dir), content);
+                stamps.set(pjOf(dir), { mtime, size: content.length });
+            },
+        };
+    }
+
+    const PROJECT_A_V1 = JSON.stringify({
+        workshop: { id: 1, title: 'Project A' },
+        mods: {},
+    });
+    const PROJECT_A_V2 = JSON.stringify({
+        workshop: { id: 1, title: 'Project A' },
+        mods: {},
+        excludes: ['old_mod'],
+    });
+    const PROJECT_B = JSON.stringify({
+        workshop: { id: 2, title: 'Project B' },
+        mods: {},
+    });
+
+    it('reuses the cached diagnostics across unchanged renders', async () => {
+        const seed = seedWorkspace();
+        seed.addProject('A', PROJECT_A_V1);
+        const source = vi.fn(async () => withIssues(1, 2, 'first finding'));
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const first = await provider.getChildren();
+        expect(source).toHaveBeenCalledTimes(1);
+        expect(first[0].description).toBe('id 1 · Project A · ✗ 1 ⚠ 2');
+
+        // Presentation refresh: rebuild the rows, reuse the diagnostics.
+        provider.refresh();
+        const second = await provider.getChildren();
+
+        expect(source).toHaveBeenCalledTimes(1);
+        expect(second).toEqual(first);
+        expect(second[0].tooltip).toContain('[mods] first finding');
+    });
+
+    it('re-renders several projects without any doctor run when nothing changed', async () => {
+        const seed = seedWorkspace();
+        seed.addProject('A', PROJECT_A_V1);
+        seed.addProject('B', PROJECT_B);
+        seed.addProject('C', PROJECT_B);
+        const source = vi.fn(async () => clean());
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const first = await provider.getChildren();
+        expect(source).toHaveBeenCalledTimes(3);
+        expect(first).toHaveLength(3);
+
+        provider.refresh();
+        const second = await provider.getChildren();
+
+        // 3 projects × 2 unchanged renders → still exactly 3 doctor runs.
+        expect(source).toHaveBeenCalledTimes(3);
+        expect(second).toEqual(first);
+
+        // Expanding project children mirrors the filesystem only — the
+        // diagnostics source must stay cold there too.
+        await provider.getChildren(second[0]);
+        expect(source).toHaveBeenCalledTimes(3);
+    });
+
+    it('recomputes only the project whose project.json changed', async () => {
+        const seed = seedWorkspace();
+        seed.addProject('A', PROJECT_A_V1);
+        seed.addProject('B', PROJECT_B);
+        const summaries = new Map<string, Summary>([
+            ['/ws/A', clean()],
+            ['/ws/B', withIssues(0, 1, 'b warning')],
+        ]);
+        const source = vi.fn(
+            async (dir: { path: string }) => summaries.get(dir.path) ?? clean(),
+        );
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const first = await provider.getChildren();
+        expect(source).toHaveBeenCalledTimes(2);
+        expect(first[0].description).toBe('id 1 · Project A');
+        expect(first[1].description).toBe('id 2 · Project B · ⚠ 1');
+
+        // Only project A changes on disk (project.json rewritten).
+        summaries.set('/ws/A', withIssues(2, 0, 'a missing mods'));
+        seed.rewriteProject('A', PROJECT_A_V2, 2);
+
+        provider.refresh();
+        const second = await provider.getChildren();
+
+        // Exactly one recompute: A again — never B.
+        expect(
+            source.mock.calls.map((c) => (c[0] as { path: string }).path),
+        ).toEqual(['/ws/A', '/ws/B', '/ws/A']);
+        expect(second[0].description).toBe('id 1 · Project A · ✗ 2');
+        expect(second[1].description).toBe('id 2 · Project B · ⚠ 1');
+    });
+
+    it('reuses the cache across debounced watcher/command refreshes', async () => {
+        vi.useFakeTimers();
+        try {
+            const seed = seedWorkspace();
+            seed.addProject('A', PROJECT_A_V1);
+            const source = vi.fn(async () => clean());
+            const provider = new ProjectExplorerProvider(
+                asUri('ext'),
+                source as never,
+            );
+
+            await provider.getChildren();
+            expect(source).toHaveBeenCalledTimes(1);
+
+            // The watcher/runner path: debounced presentation refresh.
+            provider.requestRefresh();
+            vi.advanceTimersByTime(REFRESH_DEBOUNCE_MS);
+
+            await provider.getChildren();
+            expect(source).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('coalesces concurrent renders into one doctor run per project', async () => {
+        const seed = seedWorkspace();
+        seed.addProject('A', PROJECT_A_V1);
+        const gate = deferred<Summary>();
+        const source = vi.fn(() => gate.promise);
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const first = provider.getChildren();
+        const second = provider.getChildren();
+        await untilCalled(source);
+
+        // Both renders are pending on the same project: one execution.
+        expect(source).toHaveBeenCalledTimes(1);
+
+        gate.resolve(withIssues(1, 0, 'shared finding'));
+        const [nodes1, nodes2] = await Promise.all([first, second]);
+
+        expect(source).toHaveBeenCalledTimes(1);
+        expect(nodes1[0].description).toBe('id 1 · Project A · ✗ 1');
+        expect(nodes2[0].description).toBe(nodes1[0].description);
+    });
+
+    it('drops an in-flight result that became stale instead of caching it', async () => {
+        const seed = seedWorkspace();
+        seed.addProject('A', PROJECT_A_V1);
+        const oldResult = deferred<Summary>();
+        const newResult = deferred<Summary>();
+        const queue = [oldResult.promise, newResult.promise];
+        const source = vi.fn(() => queue.shift()!);
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const first = provider.getChildren();
+        await untilCalled(source);
+
+        // The project changes while the doctor run is in flight.
+        seed.rewriteProject('A', PROJECT_A_V2, 2);
+        oldResult.resolve(withIssues(9, 9, 'stale pre-change finding'));
+        const nodes1 = await first;
+        expect(nodes1[0].description).toBe('id 1 · Project A · ✗ 9 ⚠ 9');
+
+        // The next render must recompute, not resurrect the stale result…
+        const second = provider.getChildren();
+        await untilCalled(source, 2);
+        expect(source).toHaveBeenCalledTimes(2);
+        newResult.resolve(withIssues(1, 0, 'fresh finding'));
+        const nodes2 = await second;
+        expect(nodes2[0].description).toBe('id 1 · Project A · ✗ 1');
+
+        // …and the fresh result then holds the cache (no more recomputes).
+        provider.refresh();
+        await provider.getChildren();
+        expect(source).toHaveBeenCalledTimes(2);
+    });
+
+    it('a render joining a stale in-flight run still yields a fresh recompute', async () => {
+        const seed = seedWorkspace();
+        seed.addProject('A', PROJECT_A_V1);
+        const gate = deferred<Summary>();
+        const lateResult = deferred<Summary>();
+        const queue = [gate.promise, lateResult.promise];
+        const source = vi.fn(() => queue.shift()!);
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const first = provider.getChildren();
+        await untilCalled(source);
+
+        // The project changes while the first run is still in flight; the
+        // second render observes the newer fingerprint and joins the only
+        // in-flight execution (coalescing) instead of starting a second one.
+        seed.rewriteProject('A', PROJECT_A_V2, 2);
+        const second = provider.getChildren();
+        for (let i = 0; i < 20; i++) await Promise.resolve();
+        gate.resolve(withIssues(9, 9, 'stale pre-change finding'));
+
+        const [nodes1, nodes2] = await Promise.all([first, second]);
+        expect(source).toHaveBeenCalledTimes(1);
+        expect(nodes2[0].description).toBe(nodes1[0].description);
+
+        // The joined (stale) result must not hold the cache for the newer
+        // project state: the next render recomputes fresh.
+        const third = provider.getChildren();
+        await untilCalled(source, 2);
+        expect(source).toHaveBeenCalledTimes(2);
+        lateResult.resolve(withIssues(1, 0, 'fresh finding'));
+        const nodes3 = await third;
+        expect(nodes3[0].description).toBe('id 1 · Project A · ✗ 1');
+    });
+
+    it('never caches a failed doctor run and lets the next render retry', async () => {
+        const seed = seedWorkspace();
+        seed.addProject('A', PROJECT_A_V1);
+        const source = vi
+            .fn<() => Promise<Summary>>()
+            .mockRejectedValueOnce(new Error('engine boom'))
+            .mockResolvedValueOnce(withIssues(1, 0, 'recovered finding'));
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        // First render: the failure is decoration — the tree still renders.
+        const failed = await provider.getChildren();
+        expect(failed).toHaveLength(1);
+        expect(failed[0].description).toBe('id 1 · Project A');
+        expect(failed[0].tooltip).toBeUndefined();
+        expect(source).toHaveBeenCalledTimes(1);
+
+        // A later render retries the run and recovers the badge.
+        const recovered = await provider.getChildren();
+        expect(source).toHaveBeenCalledTimes(2);
+        expect(recovered[0].description).toBe('id 1 · Project A · ✗ 1');
+
+        // The recovered result is then cached as usual.
+        provider.refresh();
+        await provider.getChildren();
+        expect(source).toHaveBeenCalledTimes(2);
+    });
+
+    it('recomputes diagnostics on the explicit refresh path', async () => {
+        const seed = seedWorkspace();
+        seed.addProject('A', PROJECT_A_V1);
+        const results = [clean(), withIssues(1, 0, 'fresh state finding')];
+        const source = vi.fn(async () => results.shift() ?? clean());
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const first = await provider.getChildren();
+        expect(first[0].description).toBe('id 1 · Project A');
+
+        // The title-bar Refresh command: explicit diagnostic rescan.
+        provider.refresh({ invalidateDiagnostics: true });
+        const second = await provider.getChildren();
+
+        expect(source).toHaveBeenCalledTimes(2);
+        expect(second[0].description).toBe('id 1 · Project A · ✗ 1');
+    });
+
+    it('evicts the cache entry of a removed project; rediscovery recomputes', async () => {
+        const seed = seedWorkspace();
+        seed.addProject('A', PROJECT_A_V1);
+        const results = [
+            withIssues(1, 0, 'first discovery finding'),
+            withIssues(2, 0, 'rediscovered finding'),
+        ];
+        const source = vi.fn(async () => results.shift() ?? clean());
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const first = await provider.getChildren();
+        expect(source).toHaveBeenCalledTimes(1);
+        expect(first[0].description).toBe('id 1 · Project A · ✗ 1');
+
+        // The project disappears (folder deleted / project.json removed).
+        seed.removeProject('A');
+        const gone = await provider.getChildren();
+        expect(gone).toHaveLength(1);
+        expect(gone[0].kind).toBe('placeholder');
+        expect(source).toHaveBeenCalledTimes(1);
+
+        // Rediscovered with the SAME project.json state as before: the
+        // eviction — not the fingerprint — must force the fresh run.
+        seed.addProject('A', PROJECT_A_V1, 1);
+        const again = await provider.getChildren();
+
+        expect(source).toHaveBeenCalledTimes(2);
+        expect(again[0].description).toBe('id 1 · Project A · ✗ 2');
+    });
+
+    it('disposing the provider drops the diagnostics cache', async () => {
+        const seed = seedWorkspace();
+        seed.addProject('A', PROJECT_A_V1);
+        const results = [
+            withIssues(1, 0, 'before dispose'),
+            withIssues(2, 0, 'after dispose'),
+        ];
+        const source = vi.fn(async () => results.shift() ?? clean());
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const before = await provider.getChildren();
+        expect(source).toHaveBeenCalledTimes(1);
+        expect(before[0].description).toBe('id 1 · Project A · ✗ 1');
+
+        provider.dispose();
+        const after = await provider.getChildren();
+
+        expect(source).toHaveBeenCalledTimes(2);
+        expect(after[0].description).toBe('id 1 · Project A · ✗ 2');
     });
 });
