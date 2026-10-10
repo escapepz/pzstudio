@@ -36,6 +36,11 @@ export function createPZLogger(outputChannel: vscode.OutputChannel): ILogger {
                 ),
             );
         },
+        // Debug diagnostics (UX-04): the engine gates verbose emission on the
+        // invocation's --verbose/--quiet flags before calling this sink, so
+        // the host only renders — no second filter here.
+        verbose: (msg: string) =>
+            outputChannel.appendLine(`[${getTimestamp()}] [DEBUG] ${msg}`),
         clear: () => outputChannel.clear(),
     };
 }
