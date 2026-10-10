@@ -50,6 +50,8 @@
     "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: เปิดโฟลเดอร์ workspace ก่อนสร้างโปรเจกต์ที่นี่",
     "PZStudio: development sync stopped.": "PZStudio: หยุดการซิงค์การพัฒนาแล้ว",
     "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: เริ่มการซิงค์การพัฒนาสำหรับ '{0}' แล้ว — เรียกใช้คำสั่งอีกครั้งเพื่อหยุด",
+    "PZStudio: starting development sync for '{0}'…": "PZStudio: กำลังเริ่มการซิงค์การพัฒนาสำหรับ '{0}'…",
+    "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio: ไม่สามารถเริ่มการซิงค์การพัฒนาสำหรับ '{0}' ได้: {1} — ดูรายละเอียดในเอาต์พุตของ PZ Studio",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: ไม่พบปัญหาใน '{0}' ทุกอย่างดูดี",
     "Diagnostics for '{0}'": "การวินิจฉัยสำหรับ '{0}'",
     "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "ข้อผิดพลาด {0}, คำเตือน {1}, ข้อมูล {2} — ไม่มีการเปลี่ยนแปลง"

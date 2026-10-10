@@ -50,6 +50,8 @@
     "PZStudio: Open a workspace folder before creating a project here.": "PZStudio: Aprire una cartella dell'area di lavoro prima di creare un progetto qui.",
     "PZStudio: development sync stopped.": "PZStudio: sincronizzazione dello sviluppo interrotta.",
     "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: sincronizzazione dello sviluppo avviata per '{0}' — esegui di nuovo il comando per interromperla.",
+    "PZStudio: starting development sync for '{0}'…": "PZStudio: avvio della sincronizzazione dello sviluppo per '{0}'…",
+    "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio: impossibile avviare la sincronizzazione dello sviluppo per '{0}': {1} — consulta l'output di PZ Studio per i dettagli.",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: nessun problema trovato in '{0}'. Tutto sembra a posto.",
     "Diagnostics for '{0}'": "Diagnostica per '{0}'",
     "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} errore/i, {1} avviso/i, {2} info — nessuna modifica"
