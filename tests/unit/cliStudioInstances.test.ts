@@ -42,6 +42,7 @@ import { setInvocationOptions } from '../../packages/cli/src/lib/args';
 import { setInteractionMode } from '../../packages/cli/src/lib/interaction';
 import { getCommand } from '../../packages/cli/src/lib/registry';
 import { getActiveInvocationContext } from '../../packages/cli/src/lib/invocation';
+import type { PzStudioHostSettings } from '../../packages/cli/src/lib/invocation';
 
 /* ------------------------------------------------------------------ */
 /* Fixtures and capture helpers                                        */
@@ -454,5 +455,83 @@ describe('two instances: a changed provider return affects only its own next run
         } finally {
             restore();
         }
+    });
+});
+
+/* ------------------------------------------------------------------ */
+/* 4. resolveOutDir instance isolation (doc 13 §10-A row 5): Studio A  */
+/*    → settings A → outdir A, Studio B → settings B → outdir B,      */
+/*    resolved interleaved — each only ever through its own provider  */
+/*    and logger.                                                     */
+/* ------------------------------------------------------------------ */
+
+describe('two instances: resolveOutDir isolation (doc 13 §10-A row 5)', () => {
+    it('interleaved resolves: each instance resolves only through its own provider, logs only through its own logger, and stays fresh', () => {
+        const projA = makeProjectDir('IsolateA');
+        const projB = makeProjectDir('IsolateB');
+        const outA = makeTempDir();
+        const outB = makeTempDir();
+        const loggerA = recordingLogger();
+        const loggerB = recordingLogger();
+
+        let layersB: PzStudioHostSettings | undefined = {
+            workspace: { outdir: outB },
+        };
+        const providerA = vi.fn(() => ({ workspace: { outdir: outA } }));
+        const providerB = vi.fn(() => layersB);
+
+        const studioA = createPzStudio({
+            logger: loggerA.logger,
+            settings: providerA,
+        });
+        const studioB = createPzStudio({
+            logger: loggerB.logger,
+            settings: providerB,
+        });
+
+        // Interleaved resolves across both instances and both projects.
+        expect(studioA.resolveOutDir(projA)).toBe(path.resolve(outA));
+        expect(studioB.resolveOutDir(projB)).toBe(path.resolve(outB));
+        // Resolving the OTHER instance's project still goes through the
+        // calling instance's own provider: A never receives B's settings
+        // and B never receives A's.
+        expect(studioA.resolveOutDir(projB)).toBe(path.resolve(outA));
+        expect(studioB.resolveOutDir(projA)).toBe(path.resolve(outB));
+        expect(studioA.resolveOutDir(projA)).toBe(path.resolve(outA));
+
+        // Each provider received exactly the requested explicit projectDir,
+        // once per resolve, never the other instance's context.
+        expect(providerA).toHaveBeenCalledTimes(3);
+        expect(providerA).toHaveBeenNthCalledWith(1, { projectDir: projA });
+        expect(providerA).toHaveBeenNthCalledWith(2, { projectDir: projB });
+        expect(providerA).toHaveBeenNthCalledWith(3, { projectDir: projA });
+        expect(providerB).toHaveBeenCalledTimes(2);
+        expect(providerB).toHaveBeenNthCalledWith(1, { projectDir: projB });
+        expect(providerB).toHaveBeenNthCalledWith(2, { projectDir: projA });
+
+        // Logger isolation with asymmetric counts: every resolve emits the
+        // global-config verbose through the calling instance's logger — a
+        // cross-wired or shared sink cannot produce 3 vs 2.
+        const configReads = (rec: { calls: LogCall[] }) =>
+            rec.calls.filter(
+                (c) =>
+                    c.method === 'verbose' &&
+                    String(c.message).includes('Reading global config from:'),
+            );
+        expect(configReads(loggerA)).toHaveLength(3);
+        expect(configReads(loggerB)).toHaveLength(2);
+
+        // Freshness under interleave: B's provider return changes → B's
+        // next resolve observes it (same project, new root) while A's
+        // result is untouched.
+        layersB = undefined;
+        expect(studioB.resolveOutDir(projB)).toBe(
+            path.join(
+                (globalThis as any).__PZSTUDIO_FAKE_HOME,
+                'Zomboid',
+                'Workshop',
+            ),
+        );
+        expect(studioA.resolveOutDir(projA)).toBe(path.resolve(outA));
     });
 });
