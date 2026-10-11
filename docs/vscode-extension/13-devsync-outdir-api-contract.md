@@ -867,7 +867,9 @@ one outdir in the contract.
 ```ts
 // packages/vscode-extension/src/util/devsync.ts (sketch)
 import { isWatchPathIgnored } from '@pzstudio/cli/api';   // already exported
-import { basename } from 'path';                          // for the §6.3 trigger check
+// No basename import: the §6.3 trigger is exact root-level path matching
+// (isRootProjectJson below), not a basename test — see §6.3's
+// implementation correction.
 
 export class DevSyncController implements vscode.Disposable {
     private session: BuildSession | undefined;
@@ -934,7 +936,7 @@ export class DevSyncController implements vscode.Disposable {
         // NOT switch here — their re-baseline is conditional (a stray or
         // non-configured mod's event classifies 'ignore' and rebuilds
         // nothing) — they are covered by the post-apply half below.
-        if (this.projectDir && basename(path) === 'project.json') {
+        if (this.projectDir && isRootProjectJson(this.projectDir, path)) {
             try {
                 const fresh = this.studio.resolveOutDir(this.projectDir);
                 if (fresh) this.filterRoot = fresh;
@@ -1123,6 +1125,26 @@ reader, so some root reader must exist for the policy to be implementable
    which keeps its baseline when the same resolution fails
    (`buildsession.ts:543-551`; for the scoped path the assignment at
    `buildsession.ts:519-520` never completes either).
+
+**Implementation correction (UX-09 — trigger expression).** The §6.2
+sketch's `basename(path) === 'project.json'` trigger is corrected to
+**exact root-level path matching** (`isRootProjectJson`):
+`normalizePath(eventPath) === normalizePath(projectDir) + '/project.json'`,
+with `normalizePath` replicating the classifier's own convention
+(backslashes fold to '/', trailing separators drop, case-sensitive).
+Evidence: `classifyDelta` returns `full-rebuild` only when the delta's
+FULL normalized relative path equals the literal `'project.json'`
+(`buildsession.ts:137-150`); a nested `project.json`
+(`<project>/my_mod/data/project.json`) classifies as an ordinary
+`mod-file` — or `'…' is not a configured mod` — and never triggers a
+re-baseline. A basename trigger would switch the filter root on an event
+no re-baseline follows, leaving the filter ahead of an engine still
+writing the old root — the exact filter-leads-engine hazard §6.3.4
+rejects for `mod.info`/`.pzstudioignore` events (self-feed window under
+the old root until the next switch point). The policy itself is
+unchanged: same switch point, same compare-and-adopt, same
+retain-on-throw — only the trigger's path test is exact instead of
+name-based.
 
 **Why this closes the §3.2 loss (normative claim, with its exact scope):**
 every engine re-baseline is caused by an apply whose triggering event

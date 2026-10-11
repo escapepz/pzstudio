@@ -112,6 +112,108 @@ describe('isWatchPathIgnored (pure)', () => {
     });
 });
 
+/**
+ * Containment invariants of the shared filter (doc 13 §3.1/§10-C): the
+ * outdir rule fails OPEN for every configuration where the output root
+ * contains or adjoins the project — the fail-open property is emergent
+ * (the '..' guard and the empty-outRel no-op), so these gates pin it
+ * against silent regressions of watch-shared.ts.
+ */
+describe('isWatchPathIgnored — containment invariants (doc 13 §10-C)', () => {
+    const parent = path.join(os.tmpdir(), 'pzstudio-watch-containment');
+    const projectPath = path.join(parent, 'proj');
+
+    it('outDir equals the project root: source paths are not ignored (case 1, rule is a no-op)', () => {
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                projectPath,
+                path.join(projectPath, 'my_mod', 'media', 'lua', 'a.lua'),
+            ),
+        ).toBe(false);
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                projectPath,
+                path.join(projectPath, 'project.json'),
+            ),
+        ).toBe(false);
+    });
+
+    it('outDir is a project ancestor: source paths are not ignored (case 2, the ".." guard)', () => {
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                parent,
+                path.join(projectPath, 'my_mod', 'media', 'a.lua'),
+            ),
+        ).toBe(false);
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                parent,
+                path.join(projectPath, 'project.json'),
+            ),
+        ).toBe(false);
+    });
+
+    it('similar path prefixes never falsely contain (case 5)', () => {
+        // A sibling of the project root whose name extends it.
+        const siblingOut = path.join(parent, 'proj-out');
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                siblingOut,
+                path.join(projectPath, 'my_mod', 'a.lua'),
+            ),
+        ).toBe(false);
+        // A sibling segment inside the project.
+        const innerSiblingOut = path.join(projectPath, 'my_mod2');
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                innerSiblingOut,
+                path.join(projectPath, 'my_mod', 'a.lua'),
+            ),
+        ).toBe(false);
+        // The sibling subtree itself stays filtered (case 3 for that root).
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                innerSiblingOut,
+                path.join(innerSiblingOut, 'x.lua'),
+            ),
+        ).toBe(true);
+    });
+
+    it('outDir nested in a configured mod folder: the output subtree is ignored, sibling mod sources are not (case 6)', () => {
+        const outDir = path.join(projectPath, 'my_mod', 'generated-A');
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                outDir,
+                path.join(
+                    outDir,
+                    'My Title',
+                    'Contents',
+                    'mods',
+                    'my_mod',
+                    'media',
+                    'lua',
+                    'x.lua',
+                ),
+            ),
+        ).toBe(true);
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                outDir,
+                path.join(projectPath, 'my_mod', 'media', 'lua', 'x.lua'),
+            ),
+        ).toBe(false);
+    });
+});
+
 describe('createDevSync (Node host integration)', () => {
     const dirs: string[] = [];
 

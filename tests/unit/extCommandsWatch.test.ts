@@ -54,10 +54,15 @@ function fakeSession() {
     };
 }
 
-/** Minimal PzStudio stub: the controller only ever calls createDevSync. */
+/**
+ * Minimal PzStudio stub: the controller calls createDevSync and — since
+ * UX-09 — resolveOutDir. The root sits outside every project used here, so
+ * these startup-presentation pins are unaffected by filtering decisions.
+ */
 function studioStub(session: BuildSession): PzStudio {
     return {
         createDevSync: vi.fn(() => session),
+        resolveOutDir: vi.fn(() => '/proj-out'),
     } as unknown as PzStudio;
 }
 
