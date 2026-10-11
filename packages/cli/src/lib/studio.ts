@@ -27,7 +27,11 @@ import {
 import { runInvocationLifecycle, type LifecycleFacade } from './cli';
 import { createDevSyncCore, DevSyncOptions, BuildSession } from './devsync';
 import { runProjectDoctorCore, ProjectDoctorOptions } from './doctor';
-import { resolveModInfoTargets as resolveModInfoTargetsIn } from './helper';
+import {
+    resolveProjectConfigFor,
+    resolveModInfoTargets as resolveModInfoTargetsIn,
+} from './helper';
+import { CliError } from './errors';
 
 /**
  * Public v2 type surface (§7). The pure types are owned by invocation.ts
@@ -110,6 +114,38 @@ export interface PzStudio {
      * mod.info (the existing helper with the implicit baseDir removed).
      */
     resolveModInfoTargets(modId: string, projectDir: string): string[];
+
+    /**
+     * Resolves the effective build output directory for ONE project —
+     * the same five-tier resolution the DevSync plan input and `build`
+     * use: project.json outdir (against the project root) > workspace
+     * host layer > user host layer > global CLI config > default.
+     *
+     * A current resolved-configuration reader: it reads the instance's
+     * settings provider exactly once with the given projectDir and
+     * threads the instance logger for the resolver's emissions
+     * ([MIGRATION] warns, defaulting verboses). The result is a fresh
+     * read at call time — NOT a handle on a running BuildSession's
+     * baseline, and not synchronized with one.
+     *
+     * Synchronous, lock-free, touches no legacy state (R0/R1). It
+     * performs the config-resolution step of a plan input ONLY — no
+     * template resolution, no source snapshots, no DevSync session.
+     *
+     * Failure contract (fail closed): throws exactly what the
+     * config-resolution step of the session's first plan input would
+     * throw for the same directory — the structured no-project CliError
+     * when no project.json exists at or above `projectDir`, the parse
+     * error for corrupt JSON, and the validation error when project.json
+     * is invalid. A missing or invalid resolved outdir additionally
+     * throws rather than returning an unchecked optional. Returns an
+     * absolute, platform-native path (path.resolve semantics).
+     *
+     * Pass the same projectDir string the session was created with. The
+     * result is the OUTPUT ROOT (the outdir tier), not a per-variant
+     * folder.
+     */
+    resolveOutDir(projectDir: string): string;
 }
 
 /**
@@ -241,6 +277,46 @@ export function createPzStudio(options?: PzStudioOptions): PzStudio {
 
         resolveModInfoTargets(modId, projectDir) {
             return resolveModInfoTargetsIn(modId, projectDir);
+        },
+
+        resolveOutDir(projectDir) {
+            // The SAME resolver call the DevSync plan input makes
+            // (devsync.ts getPlanInput), with the instance provider and
+            // instance logger threaded exactly as createDevSync does —
+            // one fresh read per call, never an ambient, never the
+            // legacy slots, never the engine lock.
+            const config = resolveProjectConfigFor(
+                projectDir,
+                settingsProvider ? settingsProvider({ projectDir }) : undefined,
+                { logger: instanceLogger() },
+            );
+            if (!config) {
+                // Unreachable in practice (resolveProjectConfigFor fails
+                // closed first); kept for type soundness — fail closed,
+                // never guess.
+                throw new CliError('No pzstudio project found.', {
+                    cause: `Searched from '${projectDir}' up to the filesystem root for a project.json.`,
+                    tryHint: `Run 'pzstudio new <title>' to create a project, or point at one with 'pzstudio -C <dir> <command>'.`,
+                });
+            }
+            const outdir = config.outdir;
+            // IProjectConfig.outdir is OPTIONAL in its declared type, so
+            // the `string` return is earned here, not asserted with `!`.
+            // The scope-form getOutDir always yields a non-empty string at
+            // runtime (every falsy tier falls through to the default),
+            // making this guard unreachable today — but the contract fails
+            // closed rather than resting on an unchecked optional.
+            if (typeof outdir !== 'string' || outdir.length === 0) {
+                throw new CliError(
+                    `Failed to resolve the output directory for '${projectDir}'.`,
+                    {
+                        cause: 'The resolved project configuration has no usable outdir.',
+                        tryHint:
+                            'Check the outdir tiers: project.json, host settings, ~/.pzstudio/config.json.',
+                    },
+                );
+            }
+            return outdir;
         },
     };
 }
