@@ -90,6 +90,25 @@ deleted).
 > state). One item is an explicit product confirmation, not a proof: the
 > committed-outdir territory granularity (§14.8.6). The Q3 sections
 > remain untouched; no public API beyond the already-proposed getter.
+>
+> **Q4 final correctness gate (§14 revised in place, fourth revision).**
+> A final correctness gate — again commissioned not to accept the prior
+> GO — disproved three more claims at HEAD `ff80f13`, each verified
+> against the real engine: a *successful* scoped rebuild whose fresh
+> plan input resolves a different outdir committed an incomplete new
+> root (missing every non-scoped mod and `workshop.txt`) with zero
+> errors and no C10 signal (§14.13 outcome 6 — repaired by **C11**, the
+> root-change promotion to a full rebuild); the failed-batch FIFO could
+> re-deliver stale deltas whose `delete` type destroys output the
+> source still has (§14.11.10 — repaired by **C12**, execution-time
+> delete reconciliation), and its 16-entry cap bounded entries, not
+> memory (a dual entry/delta bound added); and the successful-build
+> late-mutation residual was mis-described as bounded by "the next
+> successful full rebuild" when no such rebuild is guaranteed — it can
+> persist indefinitely (§14.17 — the bound claim withdrawn, the two
+> policy contracts separated, and the exact S1 relaxation stated for
+> the owner decision). The Q3 sections remain untouched; still no
+> public API beyond the already-proposed getter.
 
 This document resolves **Q3** from
 [`12-project-cockpit-migration-matrix.md`](12-project-cockpit-migration-matrix.md)
@@ -1744,9 +1763,11 @@ safety revision at HEAD `caf4c424e799d57c02a5428630d500ad2a2f1a1d`** (same
 branch, tree clean; the only commits between the two heads are
 documentation commits, so every file:line reference below is valid at
 both); **revised again in the Q4 adversarial closure (third revision) at
-HEAD `20b48beba26622c4ff69bf94a6240950f85fbbb6`** (same branch, tree
-clean; the intervening commits are documentation-only, so every
-file:line reference remains valid at all three heads). The UX-09 red-first regression tests produced by the closure task
+HEAD `20b48beba26622c4ff69bf94a6240950f85fbbb6`**; **and revised once
+more in the Q4 final correctness gate (fourth revision) at HEAD
+`ff80f135295076daccc4692db072d0a4a35c3546`** (same branch, tree clean;
+the commits between `20b48be` and `ff80f13` are documentation-only, so
+every file:line reference remains valid at all four heads). The UX-09 red-first regression tests produced by the closure task
 are retained in a stash identified by its message ("UX-09 red-first
 regression tests (A/B/C silent source-event loss, proven at 8967ada) -
 blocked on session-root contract"; `stash@{N}` positions are not
@@ -1768,12 +1789,21 @@ source-event losses, not cosmetic misalignments. The first revision of
 this addendum answered with a predicted-root transition state machine;
 the second revision re-audited the engine, found a stronger mechanism the
 first revision missed (§14.3), and replaces that machinery with it. The
-third revision (this text) is the adversarial closure of the second: its
-GO verdict was explicitly not accepted, three counterexamples were
-re-audited against source (§14.0's second table), and the corrections
-they force — the T′ theorem restatement, the C7 retry queue, the C10
-degraded state, the §14.8.6 territory confirmation — are folded in
-below. Every claim below is labeled **FACT** (verified against source
+third revision is the adversarial closure of the second: its GO verdict
+was explicitly not accepted, three counterexamples were re-audited
+against source (§14.0's second table), and the corrections they force —
+the T′ theorem restatement, the C7 retry queue, the C10 degraded state,
+the §14.8.6 territory confirmation — are folded in below. The fourth
+revision (this text) is the final correctness gate of the third: its GO
+verdict was again not accepted as a given, and the three remaining proof
+gaps were re-audited against the real engine at `ff80f13` — a
+*successful* scoped rebuild that commits a different, incomplete output
+root with no errors and no signal (C10's false negative), FIFO retry
+re-delivery that can execute stale deltas with unbounded retained
+memory, and a late-mutation residual mis-described as time-bounded — and
+the corrections they force (the C11 root-change promotion, the C12
+execution-time delete reconciliation, the dual retry-queue bound, and
+the corrected residual and decision record) are folded in below. Every claim below is labeled **FACT** (verified against source
 at the audited HEAD), **DECISION** (a design choice this addendum makes
 and justifies), or **RESIDUAL** (a named, bounded behavior that is not a
 silent loss).
@@ -1816,8 +1846,22 @@ accepted as a given. Its findings, dispositioned from source at
 | **P0-C** | A failed full-rebuild batch can abandon its truncated source remainder: F7 truncation + F13 abort-on-first-failing-operation leaves the edit on disk, unincorporated and undelivered, while result-level errors are treated as completely handled delivery. | **Confirmed** — healing holds only on successful rebuilds; the second revision's §14.13 disposition (log-only) and its rule-7 healing assumption fail exactly for under-root files whose next-save events the territory filter drops. Repaired by C10: re-baseline-class failures set the degraded state instead of counting as handled (§14.13); no auto-retry is attached (loop prevention stands). |
 | **Territory** | The committed-outdir territory policy is a product ownership decision, not a proof that every discarded event was irrelevant. | **Accepted as a decision item** — the whole-outdir granularity is continuity with the shipped CLI watch and the Q3-accepted policy, pinned by F18; the genuinely new semantic (decision-time ownership with retroactive capture of pre-commit mutations) is stated for explicit owner confirmation (§14.8.6). |
 
+**The fourth revision's commission (P0-D/P0-E/P0-F).** A final
+correctness gate challenged the third revision's remaining proof
+obligations; its findings, dispositioned against the real engine at
+`ff80f13` (the behavioral counterexamples were executed as disposable
+scratch tests against unmodified `BuildSession` + memory fs, then
+deleted — the source-line facts were additionally re-read directly):
+
+| Finding | Gate's claim | Disposition (section) |
+| :--- | :--- | :--- |
+| **P0-D** | A *successful* scoped rebuild whose fresh plan input resolves a **different outdir** commits the new baseline (520) while re-syncing only the scoped mods (F21): the new root is missing every other mod's output and `workshop.txt`, the result carries zero errors, and C10 — keyed on a non-empty `errors` array — reports nothing. The new root is committed territory, yet not a complete, usable project build. | **Confirmed as a design blocker** (real-engine counterexample: two mods, A→B via a single `mod.info` delta — `mod_beta` and `workshop.txt` absent from B, `errors: []`, baseline behaviorally proven to be B). Repaired at the engine boundary by **C11**: a root-moving scoped batch is promoted to a full rebuild (§14.7, §14.13 outcome 6). |
+| **P0-E** | The failed-batch FIFO re-delivers by rejection time, not source order: a stale `delete` retried after a newer `create` deletes output the source still has — a divergence no later event heals (proven against the real engine); and the 16-entry cap bounds entries, not memory — each entry may hold an arbitrary number of paths. | **Confirmed** (real-engine counterexamples for delete-after-create, create-after-delete and repeated-change): repaired by **C12** — execution-time delete reconciliation makes delivery order unable to change the final tree — plus a **dual bound** (16 entries AND 256 total retained deltas; overflow takes the terminal path, never a silent drop) (§14.11). |
+| **P0-F** | §14.17 described the successful-build late-mutation residual's bound as "the next successful full rebuild" — but no such rebuild is guaranteed to occur, and in case-6 layouts even re-saving the missed file does not deliver (its event is territory). The residual can persist **indefinitely**. | **Confirmed**: the bound claim is withdrawn; the residual is restated as unbounded-until-user-action; the two possible contracts are separated with their exact costs; and the S1 relaxation the territory policy implies is stated verbatim for the owner decision (§14.8.6, §14.8.7, §14.17). |
+
 ### 14.1 Confirmed source facts (all file:line at `caf4c42`; re-verified
-### at `20b48be` for the third revision, whose additions are F19–F21)
+### at `20b48be` for the third revision, whose additions are F19–F21, and
+### at `ff80f13` for the fourth revision, whose addition is F22)
 
 Facts the Q3 document established, facts the first Q4 revision added, and
 new facts this revision adds, each re-verified by direct reads at the
@@ -1996,7 +2040,23 @@ Controller, hosts and tests:
   `mod.info`/`.pzstudioignore` changed (521–537). A root move committed
   on the scoped path therefore leaves every *other* mod's output absent
   from the new root (pre-existing engine semantics, host-independent);
-  the next successful full rebuild is what completes it.
+  the next successful full rebuild is what completes it. *(Fourth
+  revision: the engine-level fact stands, but the contract no longer
+  lets a root move reach the engine through this path — C11 promotes a
+  root-moving scoped batch to a full rebuild before it can commit an
+  incomplete root, §14.7; for a stable root this fact is exactly what
+  makes a scoped re-baseline unable to clear C10's flag, §14.13.)*
+- **F22 — the scoped block is the only re-baseline site that can move
+  the output root without a full rebuild (new in the fourth revision).**
+  Site-by-site over F2's four assignment points: `start` (365) runs
+  `buildVariants` immediately after its assignment (366); `rebuild`
+  (379) likewise (380); `doFullRebuild` assigns and builds in one
+  envelope (545–546); the scoped block assigns (520) and then re-syncs
+  only the scoped mods (521–537). A root move that leaves the new root
+  incomplete can therefore originate **only at 520** — the exhaustiveness
+  fact that makes C11's single-site promotion close the entire class
+  (there is no second site to guard). **FACT** (site-by-site read;
+  the workshop-text and preview writers re-baseline nothing).
 
 ### 14.2 The four states, and which one the filter needs
 
@@ -2233,17 +2293,28 @@ for the source clauses; **DECISION** for the disposition.
    old root (getter still old — drops apply); 519–520 commit the fresh
    input mid-apply; the scoped `copyTree` writes the new root (529) under
    the getter's new value (dropped). **Getter: flips exactly at 520,
-   between the two write phases.**
+   between the two write phases.** *(Fourth revision: this scenario is
+   the **stable-root** shape only. When the fresh input's outdir differs
+   from the committed baseline, C11 promotes the batch to a full rebuild
+   — the getter still flips exactly at 520 before any write, and the
+   promoted build completes the new root instead of committing it
+   incomplete; the pre-assignment incremental writes, if any, land in
+   the abandoned root as bounded garbage (§14.8.4). See §14.13 outcome
+   6.)*
 6. **Scoped rebuild failure before assignment.** 519 throws outside any
    try/catch: the rejection escapes `apply()` (F5) → cross-host batch
    loss (F10). Baseline retained. After the C7 fix: result
    `{errors: [msg]}`, baseline retained, no rejection. **The delivery
-   pipeline, not the baseline, is what broke; C8 owns the pipeline
+   pipeline, not the baseline, is what broke; C7 owns the pipeline
    (§14.11).**
 7. **Scoped rebuild failure after assignment.** 520 committed;
    per-variant execution failures collected (526–534); `scoped` still
    reported (536). The getter has moved; the filter follows; partial
    output is territory (F13 bounds what was written). **Getter: moved.**
+   *(Fourth revision: with C11, a root-moving scoped batch that fails
+   after assignment is the promoted full rebuild's build-phase failure —
+   the F4 shape, C10-flagged; a stable-root scoped failure keeps this
+   shape with the root unchanged.)*
 8. **Overlapping controller flushes × the serialized apply queue.**
    Flushes overlap freely (no in-flight guard; the debounce only orders
    scheduling); the session's queue (F6) serializes their applies; each
@@ -2458,7 +2529,7 @@ convention-bearing and surface-heavier); Option C is rejected.
   `pending` — the pre-existing debounce queue, unchanged in shape and
   bound (Q3 shipped it; its burst bound is the debounce window plus
   watcher throughput, and its flood source — unfiltered engine output —
-  is removed by C2). A failed batch never re-enters `pending` (C8 owns
+  is removed by C2). A failed batch never re-enters `pending` (C7 owns
   it separately).
 - **C5 — correction reads disappear entirely.** The post-start
   correction and the post-apply correction (Q3 §6.3.3), and the
@@ -2506,12 +2577,118 @@ convention-bearing and surface-heavier); Option C is rejected.
   build failures must not loop); subsequent deliveries continue
   flowing. The flag clears only per §14.13's clearing rule — a
   successful `start()`, or an apply reporting `fullRebuild === true`
-  with no errors (a successful scoped re-baseline never clears it).
+  with no errors (a successful scoped re-baseline that did **not** move
+  the root never clears it — under C11 a root-moving scoped batch *is*
+  a full rebuild, so a success that clears the flag is always a rebuild
+  that provably re-read the whole tree).
   Rationale: theorem T′ + F13 + F20/F21 prove a failed re-baseline can
   leave source work unincorporated and its future events
   territory-dropped, so "errors logged" is not "delivery complete";
   the degraded state makes the gap observable and recoverable without
   introducing a retry loop. Full specification in §14.13.
+- **C11 — a root-moving scoped batch is promoted to a full rebuild
+  (new in the fourth revision; the P0-D repair).** In `applyCoalesced`'s
+  scoped block, after the fresh plan input is fetched (519) and
+  **before** the assignment (520), the fresh input's resolved
+  `config.outdir` is compared with the committed baseline's
+  (`this.planInput.config.outdir`), both normalized with the engine's
+  own `normalizePath` convention (backslashes fold to `/`, trailing
+  separators drop; case-sensitive, like every engine comparison — a
+  case-only spelling change of the same directory is harmless in both
+  directions: a false-positive promotion costs one correct rebuild, a
+  false-negative leaves the same physical directory complete). When the
+  normalized roots differ, the scoped block **delegates the batch to the
+  full-rebuild path**: assign the fresh input (520 — the getter flips
+  before any write, preserving theorem T′ and F22's ordering), run
+  `buildVariants(this.variants)` inside the `doFullRebuild` failure
+  envelope, and report `fullRebuild: true` on success with `scoped`
+  empty (nothing was scoped-rebuilt). The stable-root scoped path is
+  byte-identical to today's (F21 stands; RG-7's outcome is unchanged).
+  Failure semantics are the existing F4 shapes, verified against the
+  real engine: a build-phase failure leaves the new baseline committed
+  with `fullRebuild: false` and non-empty `errors` — exactly the
+  condition C10 flags — and the plan-input phase cannot fail here (the
+  input is already fetched; C6 owns the fetch's rejection). Result
+  compatibility: `fullRebuild === true` keeps its truthful meaning ("a
+  full rebuild ran"); no consumer distinguishes the cause
+  (`summarizeApplyResult` prints "full rebuild"; the C10 clearing rule
+  consumes the shape correctly, because a promoted success *provably*
+  re-read the whole live tree). Exhaustiveness: F22 proves the scoped
+  block is the only re-baseline site that can move the root without a
+  full rebuild, so this single site closes the class. Loop safety: the
+  promoted rebuild writes only into the newly committed root —
+  territory-dropped from the first write (C2) — and generates no source
+  deltas, so exactly one full rebuild runs per root-moving batch and no
+  follow-up chain exists (S4; the "do not automatically trigger
+  unbounded follow-up rebuilds" constraint holds by construction).
+  Cost honesty: a root change arriving on a scoped trigger now pays a
+  full rebuild instead of committing a broken root — the work the next
+  structural change would have paid anyway, paid at the moment the
+  incompleteness would otherwise arise. The abandoned root's partial
+  output (and any pre-assignment incremental writes into it) is bounded
+  garbage on disk the engine never deletes — pre-existing semantics for
+  every root move (F7 deletes variant folders, never the outdir).
+  **Alternatives evaluated and rejected (the gate's B2/B3):** an
+  **explicit root-change result/degraded contract** (the engine reports
+  "committed a different outdir without a full rebuild"; the host marks
+  `resyncRequired`) — rejected because it leaves the incomplete root
+  committed and *in use* until the user reacts (a degraded window of
+  unbounded duration whose incremental deliveries only partially
+  populate the new root), adds a result field every host must honor
+  (a consumer that ignores it silently keeps the gap — the exact
+  false-negative class being closed), and spends surface to report a
+  state C11 simply prevents; and a **host-side baseline comparison**
+  around applies (read the getter before and after each flush's apply)
+  — rejected on a deterministic counterexample: with overlapping
+  flushes (no in-flight guard; the queue serializes applies, F6), both
+  flushes pre-read A before either apply commits; apply 1 (settings →
+  B) commits B, apply 2 (settings → A) commits A; both post-reads
+  return A — the A→B→A round trip is invisible to every bracketing
+  read, and its damage is real: files saved during the B excursion were
+  written into B (the then-committed root), so the restored A root is
+  stale for them with no event left to deliver. Even a *detected*
+  transition cannot be attributed to the right flush. B3 also
+  reintroduces the correction-read class C5 deleted (the S1-vs-S3
+  divergence shape Q4 exists to close). C11 avoids the entire class by
+  making every root-moving re-baseline complete at commit time, at the
+  engine boundary — where F22 proves the one site to fix is.
+- **C12 — execution-time delete reconciliation (new in the fourth
+  revision; the P0-E repair).** The engine's incremental writer is
+  driven by the *original* delta type: a `delete` removes the output
+  copy without consulting the source (`buildsession.ts:642–645`), while
+  a non-delete copies the **live** source at apply time (647). A delta
+  whose type is stale relative to the current source state — a retried
+  batch's (§14.11), or any event delivered out of source-order across
+  batches (F19's unbounded delay makes the fresh pipeline vulnerable
+  too) — therefore cannot be applied safely by type alone: a stale
+  `delete` executed after a newer `create` deletes output the source
+  still has, a divergence no later event heals (proven against the real
+  engine). The repair is **at the operation, not the queue**: when an
+  incremental `delete` delta names a source path that currently exists,
+  the engine treats it as a change of that path (the same live-source
+  copy a fresh change event performs, including the existing
+  `isSourcePathIncluded` check); when the source is absent, the delete
+  executes as today. The decision is made in the same continuation as
+  the write (the queue serializes applies, F6), so no host-side timing
+  can reopen it. With C12 every incremental delta converges the output
+  toward the **current** source state for its path regardless of when
+  the delta was generated: stale non-delete deltas already converge
+  (live content re-read; a vanished source is skipped as ignored,
+  592–608), and stale deletes now converge too. Deterministic
+  determination of the three sequences the gate demanded: create→delete
+  (stale create, source absent) → skipped, output stays without the
+  file — converged silently; delete→create (stale delete, source
+  present) → reconciled to a copy — converged; repeated change →
+  live-content copy — converged. Delivery order between batches stops
+  affecting the final tree. Loop safety: the reconciled copy writes
+  into the committed root, whose events are dropped (C2) — no chain
+  (S2). Mechanics note: the shipped pin "apply() creates and deletes
+  files in the output" deletes a delta whose source still exists — a
+  synthetic sequence no watcher produces; under C12 it must model the
+  source deletion (remove the source first) and its outcome is
+  unchanged for every realistic sequence (watcher deletes trail disk
+  writes, so a fresh delete's source is always already gone — F19's
+  premise).
 
 ### 14.8 What the filter drops, and why that is not a loss (the territory contract)
 
@@ -2566,7 +2743,9 @@ loss, and bounds every residual behavior around it.
    one-generation garbage, below).
 4. **Bounded garbage, no self-sustaining cycle.** An event under a root
    the engine has left (stale title folder, a root abandoned mid-apply,
-   an outdir-subtree path in a case-6 layout) is forwarded, classified
+   the incremental phase of a C11-promoted batch — written against the
+   pre-assignment baseline before the root move was detected — or an
+   outdir-subtree path in a case-6 layout) is forwarded, classified
    against the current baseline, and written into the *current* root's
    variant folders (F3) — where subsequent events for it are dropped
    (C2). Each root move can thus cause at most one spurious sync per
@@ -2609,17 +2788,25 @@ loss, and bounds every residual behavior around it.
      F14/F13) make the drop lossless: the mutation is in the output,
      and the drop only prevents a redundant re-delivery. The residual
      when a commit incorporates *most* but not *all* pending mutations
-     is named in §14.17 (the bounded repair re-read is per-subtree,
-     not per-file).
+     is named in §14.17 (the incorporate/miss boundary is per-subtree —
+     F13 — not per-file).
    - **Non-incorporating commits** (a failed re-baseline — F4/F13/F20 —
-     or a scoped commit that excludes the file's mod, F21) would
-     strand the mutation silently; C10 makes them observable
+     would strand the mutation silently; C10 makes them observable
      (`resyncRequired`) and recoverable (restart/`pzstudio build`
      re-reads the live tree — every stranded mutation predates the
-     commit, so a post-commit resync provably heals them all). The
-     repair is therefore guaranteed *up to the next successful full
-     rebuild*, not per-event — strictly weaker than per-event
-     delivery, and stated as such.
+     commit, so a post-commit resync provably heals them all). *(Fourth
+     revision: the third revision's other stranded-commit class — "a
+     scoped commit that excludes the file's mod, F21" — is now
+     impossible as stated: a root-moving scoped batch is promoted to a
+     full rebuild by C11 before it can commit an incomplete root, and a
+     **stable-root** scoped commit excludes only mods whose output
+     already exists in that same committed root, so nothing goes
+     missing. What survives of the class is the failed-re-baseline
+     family and the outcome-5 residual below.)* The repair is
+     *available* up to the next successful full rebuild, not per-event —
+     but that rebuild is **user-action-dependent and not guaranteed to
+     occur** (§14.17); strictly weaker than per-event delivery, and
+     stated as such.
    This item is what replaces the second revision's unconditional "the
    event is never mis-dropped" claim: decisions are exact, mutation
    outcomes are contract + healing.
@@ -2645,12 +2832,18 @@ loss, and bounds every residual behavior around it.
    by the same getter (former output reverts to source the moment the
    committed root moves — no stale cache exists; new territory is
    captured the moment the commit lands); and the S1 invariant must be
-   read with §14.8.6's repair bound, not as per-event delivery. If the
-   owner instead requires per-event mutation provenance, that is a
-   **missing contract capability** (engine-side write provenance or a
-   delivery-ordering guarantee — neither exists in the public API), and
-   the correct disposition is BLOCKED-for-that-requirement, not a
-   silent narrowing.
+   read with §14.17's exact relaxation — the decision-time repair
+   bound is user-action-dependent, not a guarantee (fourth revision:
+   the residual persists indefinitely absent user action). If the
+   owner instead requires per-event mutation provenance — the strict
+   "every mutation is delivered or incorporated" contract — that is a
+   **missing contract capability**: neither engine-side write
+   provenance nor a delivery-ordering guarantee exists in the public
+   API, and the fourth revision's assessment (§14.17) records what the
+   provenance alternative would cost before it could be selected. The
+   correct disposition for that requirement is
+   BLOCKED-for-that-requirement pending an architectural decision, not
+   a silent narrowing.
 
 ### 14.9 P1 — COMMITTED-discard reassessed (CN-1)
 
@@ -2831,7 +3024,11 @@ slot with a bounded FIFO failed-batch queue (P0-B, rules 2/8). **DECISION
    is equal for both, not *batch* ownership). The contract is therefore
    a **failed-batch queue** (`failedBatches: Array<{ deltas, attempt }>`,
    append-only on rejection), with these bounds and semantics:
-   - **Capacity bound (S4): 16 entries.** Overflow cannot drop: the
+   - **Capacity bound (S4, dual — fourth revision): 16 entries AND 256
+     total retained deltas.** The third revision's 16-entry cap bounds
+     entries, not memory — each entry is an arbitrary `FileDelta[]`, so
+     16 unbounded batches is no hard limit (P0-E). Both bounds are
+     enforced at enqueue: if admitting a batch would exceed either, the
      oldest *terminal* (exhausted) entry is retired to the
      `resyncRequired` bookkeeping (its paths are already logged and
      covered by the recovery re-read — §14.11.6) to make room; if no
@@ -2841,25 +3038,31 @@ slot with a bounded FIFO failed-batch queue (P0-B, rules 2/8). **DECISION
      flush overlap is bounded by the debounce cadence (300 ms) against
      serialized applies, so more than a handful of *concurrently
      rejected* batches already implies a persistently failing engine —
-     which is the terminal state's job, not the queue's.
+     which is the terminal state's job, not the queue's; 256 deltas is
+     the hard memory ceiling (a batch too large to retain safely is
+     exactly the case where the recovery re-read is the right answer,
+     and its paths are logged before the flag is set).
    - **At-least-once delivery:** every queued entry is delivered by a
      `session.apply` call until it either resolves (success — entry
      removed) or exhausts its budget (terminal — logged, flagged,
      removed). No path removes an entry without one of the two
      outcomes. Failure of a delivery *attempt* leaves the entry in
      place with its attempt counter incremented.
-   - **Ordering:** FIFO by rejection time. The engine's apply queue
-     (F6) serializes the deliveries; batch content order within one
-     original batch is already coalesced by the engine (F17). Cross-batch
-     source-order is not preserved against interleaved fresh `pending`
-     flushes — the same property the pre-existing unguarded pipeline
-     has; the engine's per-path final-state semantics (F17) make
-     last-writer-wins per path safe.
+   - **Ordering:** FIFO by rejection time — which does **not**
+     preserve source-mutation order against interleaved fresh `pending`
+     flushes, and the third revision's claim that the engine's
+     final-state semantics (F17) make that safe was **disproven** (the
+     fourth revision's P0-E counterexample: a stale `delete` retried
+     after a newer `create` deletes output the source still has; F17
+     coalesces final states *within one batch* and has no cross-batch
+     view). Safety comes from C12's execution-time reconciliation
+     (rule 10), not from ordering or from F17.
    - **Memory:** each entry is the spliced `FileDelta[]` it failed
      with — the same data the pre-C7 design dropped; the queue holds at
-     most 16 of them (bounded by the overflow rule above). No growth
-     loop exists: rejections are host-event-driven (a burst ends) and
-     the terminal path retires entries permanently.
+     most 16 entries and at most 256 deltas in total (the dual
+     overflow rule above), so retention is bounded regardless of batch
+     size. No growth loop exists: rejections are host-event-driven (a
+     burst ends) and the terminal path retires entries permanently.
 3. **Retry scheduling is independent of watcher events, and driven by
    exactly one timer.** A single retry driver timer re-delivers the
    queue's head entry on its own backoff — never a timer per entry
@@ -2888,7 +3091,9 @@ slot with a bounded FIFO failed-batch queue (P0-B, rules 2/8). **DECISION
    procedure (below). `resyncRequired` is sticky: it clears on the
    next `start()` (or the host's equivalent of a session rebuild) — or
    on the next apply reporting `fullRebuild === true` with no errors,
-   per §14.13 (a successful scoped re-baseline does not clear it). If
+   per §14.13 (a successful scoped re-baseline that did not move the
+   root does not clear it — under C11 a root-moving one *is* a full
+   rebuild, so the clearing shape always names a proven resync). If
    the underlying failure persists, each subsequent rejected batch
    terminates the same way — one error log per exhausted batch, bounded
    by flush frequency.
@@ -2957,6 +3162,58 @@ slot with a bounded FIFO failed-batch queue (P0-B, rules 2/8). **DECISION
    error naming the paths and the recovery (`rerun pzstudio watch`, or
    `pzstudio build`). No other CLI behavior changes (Q3 §12.4's frozen
    root stands).
+10. **Retry ordering is safe by execution-time reconciliation, not by
+    ordering (fourth revision — the P0-E proof).** The gate demanded a
+    determination of whether re-delivering older deltas after newer
+    batches can change the final filesystem output, distinguished along
+    four axes; each is settled against source and the real engine:
+    - *`coalesceDeltas` within a batch* (F17): final-state-wins per
+      normalized path, first-occurrence order preserved. It governs one
+      batch only and has **no cross-batch view** — it cannot make
+      cross-batch re-delivery safe, and the third revision's reliance
+      on it was the error.
+    - *Ordering between batches*: FIFO by rejection time ≠ source
+      order. A batch rejected first and retried after a newer
+      successful batch executes out of source-order — reachable by the
+      design's own terms (flush overlap × the serialized apply queue,
+      F6). **Order matters, proven**: the counterexample is a stale
+      `delete` retried after a newer `create` — the output file is
+      deleted while the source still has it, and no later event heals
+      the divergence (the user has not touched the file since; no
+      rebuild is scheduled).
+    - *Engine reads of current filesystem state*: the incremental
+      writer re-reads the **live source** for every non-delete delta at
+      apply time (592–608, 647) — content staleness is impossible for
+      create/change; a vanished source is skipped as ignored, not
+      errored. A retried create/change therefore always converges
+      (repeated-change and create-after-delete sequences: converged,
+      verified against the real engine — the second silently, without
+      error noise).
+    - *Engine operations driven by the original delta type*: the
+      **only** unsafe operation is the `delete` — it removes the output
+      copy without consulting the source (642–645), so a stale delete
+      destroys output the source still has. This is exactly the gap
+      **C12** closes at the operation: the delete is reconciled against
+      the current source in the same continuation that writes (the
+      queue serializes applies, F6), making every retried delta a
+      convergence statement about the *current* source state rather
+      than a replay of a past event.
+    With C12, the final filesystem tree is independent of delivery
+    order across batches: any interleaving of retried and fresh batches
+    leaves each path at its current source state (modulo the
+    outcome-5-class mutation-after-last-read race, §14.17, which no
+    build tool can exclude and whose own fresh event heals it outside
+    committed territory). Alternatives evaluated and rejected:
+    **serializing fresh flushes behind retry deliveries** — withholds
+    fresh user edits behind a poison batch, the exact shape the P0-B
+    disposition already rejected; **host-side re-validation of delta
+    types at retry time** (re-stat each path, re-derive the type) —
+    shrinks but cannot close the staleness window (the stat and the
+    apply are separated by awaits any macrotask can interleave with),
+    duplicating machinery the engine already owns; **merging retry
+    entries into fresh flushes** — merges batch identities (the P0-B
+    ownership failure). C12 is the smallest mechanism that makes the
+    property hold by construction.
 
 **Assessment of the proposed three-attempt limit:** appropriate —
 post-C6 rejections are unexpected failures, so the budget's job is to
@@ -3096,8 +3353,8 @@ truncated edits") therefore holds **only for a successful rebuild** —
 F13 bounds it operation-wise, and the second revision's §14.11 rule 7
 generic claim ("per-action failures … the engine's own semantics own
 them") and §14.13 shape-3 disposition ("hosts log; no retry") both
-overlooked the truncated-remainder case. Distinguishing the five
-outcomes the brief demands:
+overlooked the truncated-remainder case. Distinguishing the six
+outcomes the brief demands (the sixth added by the fourth revision):
 
 1. *Successful full rebuild* — everything incorporated (F14's live-tree
    read); truncation harmless; delivery complete.
@@ -3117,6 +3374,25 @@ outcomes the brief demands:
    the pipeline as a later batch (it was truncated from *this* apply
    only if coalesced into it — F17 — in which case outcome 3/4 governs
    by timing); C10 flags the commit whose incorporation is uncertain.
+   The **successful-commit** sub-case of this outcome — the mutation
+   landing after the traversal of a build that then reports zero
+   errors — is the one shape C10 cannot observe; it is the
+   §14.17 residual, classified by the fourth revision as persisting
+   indefinitely absent user action (P0-F).
+6. *Successful root-moving scoped batch* (fourth revision — P0-D).**
+   Pre-C11 this outcome committed the new root while re-syncing only
+   the scoped mods (F21): every other mod's output and `workshop.txt`
+   absent from the new root, `errors: []`, `fullRebuild: false` —
+   the C10 condition (non-empty errors) never fires, and the new root
+   is committed territory despite being incomplete. Confirmed against
+   the real engine (two mods, A→B via a single `mod.info` delta: the
+   second mod and `workshop.txt` absent from B, baseline proven to be
+   B by the next incremental write). Under **C11** the scoped block
+   detects the root change at 519/520 and delegates to the
+   full-rebuild envelope: success takes outcome 1's properties
+   (complete root, `fullRebuild: true`, flag clears — a proven resync);
+   failure takes outcomes 3/4's (F4 shape, C10 flags). The incomplete
+   shape is the RED condition of RG-22.
 
 **Decision (the two concerns are separated; shapes distinguished):**
 
@@ -3160,9 +3436,13 @@ outcomes the brief demands:
   `start()` (fresh session) or on the next apply reporting
   `fullRebuild === true` with **no errors** — only a *full* rebuild
   re-reads the live tree for every mod (F14/F15) and provably
-  incorporates everything stranded before it; a successful *scoped*
-  re-baseline does **not** clear the flag (F21: it re-syncs only the
+  incorporates everything stranded before it; a *stable-root* scoped
+  success does **not** clear the flag (F21: it re-syncs only the
   scoped mods, so it cannot prove the stranded work is incorporated).
+  *(Fourth revision: under C11 a root-moving scoped batch reports
+  `fullRebuild === true` on success — it *is* a full rebuild — so the
+  only success shapes that clear the flag are exactly the shapes that
+  prove a whole-tree re-read.)*
   That is the recovery proof, verifiable by tree assertions. Retried
   applies (C7) and fresh applies (C10/C2)
   can never overwrite each other's state: retries remove their own
@@ -3188,12 +3468,12 @@ outcomes the brief demands:
 
 | Invariant | Mechanism | Source grounding | Residual named? |
 | :--- | :--- | :--- | :--- |
-| **S1 — no persistent silent source-event loss** | Every event is either delivered or dropped by one rule: under the committed root at decision time (C2 + theorem T′); no cached root exists, so no event is discarded by a stale or ambiguous root. Every *non-incorporating* re-baseline commit sets the C10 degraded state, so a dropped event's missing work is observable and healable rather than silent; the incorporate-commit remainder is the §14.17 micro-residual. Territory contract governs the committed subtree (§14.8.2); a root move re-opens the subtree by the same getter. | F2/F3, theorem T′ (§14.3), F18, F19, C10 | §14.8.2/§14.8.5/§14.8.6 (territory, pre-assignment placement, retroactive ownership — repair bounded by the next successful full rebuild, not per-event) + §14.8.7 (owner-confirmed policy) |
-| **S2 — no output self-feeding** | Every engine write is under the committed root current at write time (T1); its events decided while that root holds are dropped (C2). Engine events from an abandoned root are *forwarded* — bounded one-generation garbage per event (§14.8.4); the cycle proof is no-self-sustaining-loop, not universal event filtering. | F3, F7, theorem T′, §14.8.4, F19 | The pre-existing case-6 one-generation self-embedding in full builds (F14) — bounded, not a loop, doctor-flagged |
+| **S1 — no persistent silent source-event loss** | Every event is either delivered or dropped by one rule: under the committed root at decision time (C2 + theorem T′); no cached root exists, so no event is discarded by a stale or ambiguous root. Every *non-incorporating* re-baseline commit sets the C10 degraded state, so a dropped event's missing work is observable and healable rather than silent; a root move can no longer commit an incomplete root silently (C11 promotes it to a full rebuild — the P0-D blocker is closed at the engine boundary). The incorporate-commit remainder is the §14.17 micro-residual — **unobservable by any available signal and unbounded in time absent user action** (fourth revision; the S1 reading this implies is the exact relaxation stated in §14.17, pending owner confirmation). Territory contract governs the committed subtree (§14.8.2); a root move re-opens the subtree by the same getter. | F2/F3, theorem T′ (§14.3), F18, F19, C10, C11 | §14.8.2/§14.8.5/§14.8.6 (territory, pre-assignment placement, retroactive ownership — repair *available* up to the next successful full rebuild, which is not guaranteed to occur) + §14.8.7 (owner-confirmed policy) |
+| **S2 — no output self-feeding** | Every engine write is under the committed root current at write time (T1); its events decided while that root holds are dropped (C2). Engine events from an abandoned root are *forwarded* — bounded one-generation garbage per event (§14.8.4); the cycle proof is no-self-sustaining-loop, not universal event filtering. The C11 promotion adds one full rebuild per root-moving batch whose output is territory-dropped from the first write (no chain); the C12 reconciled copy writes into the committed root likewise (no chain). | F3, F7, theorem T′, §14.8.4, F19, C11, C12 | The pre-existing case-6 one-generation self-embedding in full builds (F14) — bounded, not a loop, doctor-flagged |
 | **S3 — authoritative baseline** | The filtering authority **is** `this.planInput` (C1) — no independent snapshot exists anywhere in the delivery path; the former S1-vs-S3 divergence class is deleted with the cached field. | F1/F2/F9, §14.2 | — |
-| **S4 — bounded resources and recovery** | Buffering: `pending` (pre-existing, debounce-bounded) + the C7 failed-batch queue (16 entries, overflow retires to the terminal path — never drops a fresh batch). Retries: per-entry budget of 3, single driver, backoff 300/600/1200 ms. Recovery: restart/build, one-shot; no automatic re-arming; no background reconciliation loop. | §14.11.2–5, §14.10.5 | — |
+| **S4 — bounded resources and recovery** | Buffering: `pending` (pre-existing, debounce-bounded) + the C7 failed-batch queue (dual bound — 16 entries AND 256 total retained deltas; overflow retires to the terminal path, never drops a batch silently; P0-E's unbounded-per-entry memory is closed). Retries: per-entry budget of 3, single driver, backoff 300/600/1200 ms; out-of-order re-delivery cannot corrupt the final tree (C12). Rebuild promotion (C11): exactly one full rebuild per root-moving batch — no follow-up chain. Recovery: restart/build, one-shot; no automatic re-arming; no background reconciliation loop. | §14.11.2–5/10, §14.10.5, C11, C12 | — |
 | **S5 — session isolation** | Identity guard on every async continuation that mutates controller state or requeues (flush + failed-batch queue + driver); failed batches of a dead session are retired by the guard — no cross-session overwrite (the P0-B guard fix); the dead session's getter is never read; restart starts clean. | F6, §14.4.10, §14.11.1/8, §14.12.9 | The bounded drained batch of a stopped session (pre-existing, documented) |
-| **S6 — observable failure and deterministic recovery** | Delivery failure (rejection): sticky `resyncRequired` + error log naming paths + the provable resynchronization (restart/build re-reads disk — superset healing). Re-baseline failure (resolved with errors): the same sticky state via C10 — a failed rebuild is degradation, not handled delivery. A failed restart leaves the requirement observable (§14.11.6); a manual `pzstudio build` corrects the disk but does not clear the live session's flag. Recovery verified by tree assertions, never by attempt counts; the flag clears only on a proven recovery (§14.13's clearing rule). | §14.11.5–6, §14.13, §14.10.4 | — |
+| **S6 — observable failure and deterministic recovery** | Delivery failure (rejection): sticky `resyncRequired` + error log naming paths + the provable resynchronization (restart/build re-reads disk — superset healing). Re-baseline failure (resolved with errors): the same sticky state via C10 — a failed rebuild is degradation, not handled delivery; an *incompletely built* root can no longer occur silently (C11). A failed restart leaves the requirement observable (§14.11.6); a manual `pzstudio build` corrects the disk but does not clear the live session's flag. Recovery verified by tree assertions, never by attempt counts; the flag clears only on a proven recovery (§14.13's clearing rule). The one unobservable shape is the §14.17 outcome-5 residual (a mutation landing after a fully successful commit's traversal) — named, not signaled. | §14.11.5–6/10, §14.13, §14.10.4, C11, C12 | The §14.17 outcome-5 residual (indefinite absent user action — the owner decision item) |
 
 **S1/S2 jointly for supported configurations: satisfied, with named
 residuals and one owner decision.** The first review's conditional ("if
@@ -3203,13 +3483,21 @@ answered for the *decision-layer* guarantee: the live getter + forwarding
 + territory contract needs no capability beyond the one additive getter.
 The second review's challenge sharpens the answer's boundary: T3 (per-
 mutation provenance) is a missing capability no `(type, path)` API can
-provide (F19), so S1's meaning is "no *silent* loss — every
-non-incorporating commit is observable and recoverable", not "every
-mutation is delivered or incorporated per event". If the project owner
+provide (F19). The fourth revision corrects the S1 reading once more:
+its honest meaning is now "no *silent* loss **except the one
+unobservable shape** — every non-incorporating *failure* is observable
+and recoverable (C10), an incompletely built root can no longer be
+committed silently (C11), and out-of-order re-delivery cannot corrupt
+the tree (C12); the single remaining silent shape is the outcome-5
+residual, a mutation landing after a fully *successful* commit's
+traversal, which is unobservable and unbounded in time absent user
+action (§14.17)". "Every mutation is delivered or incorporated per
+event" is not claimed and cannot be (F19). If the project owner
 requires per-event provenance instead of the §14.8.6/§14.8.7 territory
 semantics, that requirement is BLOCKED pending an architectural decision
-(engine-side write provenance or a delivery-ordering guarantee); under
-the territory contract as specified, **verdict: not BLOCKED**.
+(the fourth revision records the provenance alternative's exact cost in
+§14.17); under the territory contract as specified, **verdict: not
+BLOCKED**.
 
 ### 14.15 Regression matrix (implementation stage — NOT implemented here)
 
@@ -3338,6 +3626,14 @@ Compatibility gates:
   switch/correction-specific tests (e.g. "retains the last good root at
   the switch", "post-apply correction") are superseded by RG-4…RG-8's
   stronger forms and are removed with the machinery they pin.
+  Fourth-revision mechanics notes: C11 leaves every **stable-root**
+  scoped pin (B.13, RG-7) byte-identical — it fires only when the
+  resolved outdir changed; and the shipped engine pin "apply() creates
+  and deletes files in the output" deletes a delta whose source still
+  exists — a synthetic sequence no watcher produces (watcher deletes
+  trail disk writes) — so under C12 its mechanics must model the
+  source deletion (remove the source file first); its outcome is
+  unchanged for every realistic sequence.
 - **RG-15 — stubs and CLI parity.** `fakeSession` gains the getter (one
   line; F12's double-cast compiles unchanged otherwise). `watch.test.ts`
   filter pins unchanged (the CLI's frozen-root behavior is Q3-documented
@@ -3408,11 +3704,101 @@ real sleeps anywhere):
   (F21). RED: a flag cleared by a failed restart, by a scoped success,
   or by a manual `pzstudio build` while the session is live.
 
+Fourth-revision rows (P0-D/P0-E/P0-F — every one uses the same
+deterministic tools: real unmodified `BuildSession` behind gated
+operations, fake timers, manual delivery-order control; the P0-D and
+P0-E counterexamples were verified as disposable scratch tests against
+the real engine at `ff80f13` and deleted — the gates below pin them
+permanently):
+
+- **RG-22 — successful scoped A→B root migration, two mods, no errors
+  (the P0-D counterexample, pinned as fixed by C11).** Real engine,
+  both variants: start on outdir A (both mods' trees verified on
+  disk), the config layer's outdir moves to B, deliver exactly
+  `[change mod_alpha/mod.info]`. Expected: result
+  `{fullRebuild: true, errors: [], scoped: []}`, and the written tree
+  contains **both** mods' generated trees and `workshop.txt` under B
+  for both variants; `mod_alpha`'s subsequent incremental write lands
+  in B (baseline proven, not asserted). RED: the pre-C11 engine —
+  `mod_beta`'s output and `workshop.txt` absent from B with zero
+  errors (the exact counterexample executed at `ff80f13`).
+- **RG-23 — root migration with a build-phase failure.** Same harness
+  with a gated failing operation inside `buildVariants` after the
+  promotion: result `{fullRebuild: false, errors: non-empty}` (F4),
+  the baseline is committed to B (a later incremental write lands in
+  B), `resyncRequired` is set, no automatic retry; a subsequent
+  successful full rebuild (or restart) completes B and clears the
+  flag. RED: the batch treated as handled delivery without the flag,
+  or a flag cleared by anything but a proven whole-tree rebuild.
+- **RG-24 — consecutive A→B→A scoped transitions.** Two config moves
+  delivered via `mod.info` deltas (A→B, then B→A): each promotes to
+  exactly one full rebuild (assert the promoted-rebuild count equals
+  the root-move count — no cascade, no loop), and the final tree under
+  the final root A is complete (every mod, both variants,
+  `workshop.txt`). RED: an unbounded rebuild chain, a missed
+  promotion on either transition, or a stale-root filter decision in
+  either direction.
+- **RG-25 — overlapping flushes spanning a root migration.** Flush 1
+  (a `mod.info` delta, root A→B) and flush 2 (a `mod_beta` source
+  delta) overlap; the engine queue serializes them. Expected: flush
+  2's deltas are classified against the post-promotion baseline and
+  written into B; no batch is lost; the final tree is consistent; any
+  pre-assignment incremental write into A is bounded garbage (never
+  asserted as correct output). RED: a batch applied against a stale
+  root decision or abandoned.
+- **RG-26 — failed older create, successful newer delete.** Real
+  engine: `[create x]` rejected (gated), the source file then deleted
+  and `[delete x]` delivered successfully; the retry of the stale
+  create must be **skipped** (source absent — ignored, no error), the
+  output stays without the file, and the result carries no errors.
+  RED: an engine that resurrects the file from a stale snapshot or
+  surfaces a spurious per-action error.
+- **RG-27 — failed older delete, successful newer create (the P0-E
+  divergence case, pinned as fixed by C12).** Real engine: `[delete
+  x]` rejected (gated), the user re-creates `x` and `[create x]` is
+  delivered successfully (output = current content); the retry of the
+  stale delete must **reconcile to a copy** (C12) — the output still
+  contains `x` with the current source content, no errors. RED: the
+  confirmed divergence — output file deleted while the source still
+  has it (the counterexample executed at `ff80f13`).
+- **RG-28 — retry-queue capacity and total retained-delta bounds.**
+  Stubbed rejecting apply: fill the queue past 16 entries and past
+  256 total deltas (a large batch); assert both bounds are enforced
+  at enqueue, the overflow batch takes the terminal path
+  (`resyncRequired` + one error log naming its paths and the
+  recovery), no queued entry is silently dropped, and a terminal
+  retirement frees room for a subsequent rejection. RED: unbounded
+  per-entry path growth retained in memory, or an overflow that
+  discards without the flag and log.
+- **RG-29 — successful-build late-mutation residual (outcome 5 —
+  pins the documented residual, not a fix).** Real engine, case-6
+  layout (outdir inside a mod folder), gated fs: a full rebuild
+  succeeds; a source mutation lands **after** the traversal passed
+  the file (gate released mid-plan); its event is delivered only
+  after the commit. Expected: the event is dropped (committed
+  territory), the output **lacks** the mutation, `errors` is empty,
+  `resyncRequired` is **not** set (the build succeeded), and no
+  recovery event exists — nothing schedules a rebuild. This row
+  asserts §14.17's residual verbatim (indefinite persistence absent
+  user action) and the exact S1 relaxation the owner is asked to
+  confirm; it also guards against regressions that would set the flag
+  on every successful rebuild (false-positive noise). RED: any design
+  claiming per-event losslessness here, or a design that flags
+  successful commits.
+
 ### 14.16 Proposed implementation boundaries (minimal)
 
 1. `packages/core/src/buildsession.ts` — the getter (C1, a few lines
-   with doc) and the scoped-fetch normalization (C6: move 519–520
-   inside the failure envelope). No other engine change.
+   with doc), the scoped-fetch normalization (C6: move 519–520
+   inside the failure envelope), the scoped root-change promotion
+   (C11: compare the fetched input's normalized outdir against the
+   committed baseline before assigning; on a difference delegate to
+   the full-rebuild envelope — F22 proves this is the only site), and
+   the execution-time delete reconciliation (C12: an incremental
+   delete whose source path currently exists is applied as a change
+   of that path). No other engine change; no new export, type or
+   result field (`SessionApplyResult` is untouched — C11 reports
+   through the existing `fullRebuild` shape).
 2. `packages/cli/src/api.ts` — **nothing** (the getter arrives through
    the existing `BuildSession` re-export). `packages/cli/src/lib/**` —
    nothing for the contract itself, except `commands/watch.ts`'s C7
@@ -3443,8 +3829,9 @@ a future Cockpit/CLI affordance, not a watcher-policy one).
   rebuild of the owning mod; other layouts never treat them as source;
   non-incorporating commits are covered by the C10 degraded state, not
   by healing.
-- **RESIDUAL (the third revision's micro-gap — named, bounded):** C10
-  guarantees recovery *up to the next successful full rebuild* (the
+- **RESIDUAL (the successful-commit late-mutation residual — named,
+  reclassified by the fourth revision as UNBOUNDED in time; P0-F).**
+  C10 makes every *failed* re-baseline observable and recoverable (the
   resync re-reads the whole live tree), not per event. Within one
   incorporating commit, F13's abort-on-first-failure makes the
   incorporate/miss boundary a per-subtree property (every mod whose
@@ -3452,16 +3839,32 @@ a future Cockpit/CLI affordance, not a watcher-policy one).
   user mutation can be incorporated by the same commit that fails
   elsewhere while a different, later mutation is missed by the very
   next commit — the degraded state covers both conservatively (it
-  flags on the failure and clears only on a proven full rebuild), but
-  a mutation missed by an incorporating commit whose result *carries
-  errors* is flagged; a mutation missed by a commit that fully
+  flags on the failure and clears only on a proven full rebuild); a
+  mutation missed by an incorporating commit whose result *carries
+  errors* is flagged. But a mutation missed by a commit that fully
   *succeeded* (landed after its subtree's traversal — outcome 5 of
-  §14.13) leaves no error to flag. That last shape is the irreducible
-  remainder of T3 on the available information; its bound is the
-  next successful full rebuild (any later structural change, user
-  save in a non-case-6 layout, or the C10-flagged failure path), and
-  it closes the P0-A brief item 5 ("unprocessed indefinitely") to
-  within that bound.
+  §14.13) leaves no error to flag. The third revision described that
+  shape's bound as "the next successful full rebuild (any later
+  structural change, user save in a non-case-6 layout, or the
+  C10-flagged failure path)". **The fourth revision withdraws that
+  bound claim (P0-F): none of those triggers is guaranteed to occur.**
+  A structural change happens only if the user makes one; a re-save
+  heals only in non-case-6 layouts (where the missed file's path is
+  outside the committed root and its fresh event is forwarded) — in a
+  case-6 layout the missed file lies *under* the committed root, so
+  even re-saving the missed file itself is territory-dropped and
+  delivers nothing; and the C10-flagged failure path is itself
+  user-action-dependent. **Determination: the mutation can remain
+  unincorporated indefinitely.** The only healing events are
+  user-triggered — restarting DevSync, running `pzstudio build`,
+  editing `project.json` (full rebuild), or changing the owning mod's
+  `mod.info`/`.pzstudioignore` (scoped rebuild of that mod, which
+  re-copies its tree) — and DevSync cannot force any of them without
+  violating the no-auto-rebuild decisions (S4, the P2 flood
+  counterexample). This is the irreducible remainder of T3 on the
+  available information; it is not "closed to within a bound", it is
+  an open-ended policy residual, and adopting it is exactly the
+  territory decision recorded below.
 - **RISK (the theorem is a discipline, not a type):** S2's and S1's
   decision-layer mechanisms rest on F2's four-site
   assignment-before-write discipline. A future engine change that
@@ -3490,20 +3893,64 @@ a future Cockpit/CLI affordance, not a watcher-policy one).
   `getBaselineOutDir` (proposed) vs `getOutputRoot` vs
   `getEffectiveOutDir`. The contract is the semantics (C1); the name
   follows the API review.
-- **QUESTION (for approval — the third revision's decision item):**
-  confirm the territory policy as specified in §14.8.6/§14.8.7 —
-  whole-committed-outdir granularity, decision-time ownership
-  (including retroactive capture of pre-commit mutations), repair
-  bounded by the next successful full rebuild via C10. Confirming it
-  revises the *user-facing* reading of S1 from "every legitimate
-  source mutation is delivered" to "every legitimate source mutation
-  is delivered, or dropped under the documented territory contract
-  with an observable, healable degraded state"; the UX-09 gates to
-  re-read under that lens are B.11/B.12 (Q3 §10) and the stash's A1
-  control (F18), whose assertions are unchanged in outcome — only
-  their *rationale* moves from "proven loss-prevention" to "owner-
-  confirmed policy". Rejecting it (requiring per-event provenance)
-  blocks the design per §14.14's carve-out.
+- **QUESTION (for approval — decision item, restated by the fourth
+  revision with the corrected residual):** confirm the territory
+  policy as specified in §14.8.6/§14.8.7 — whole-committed-outdir
+  granularity, decision-time ownership (including retroactive capture
+  of pre-commit mutations). The fourth revision separates the two
+  possible contracts explicitly, because they are different products,
+  not different proofs:
+  1. **Strict source mutation delivery or incorporation** — every
+     legitimate source mutation is eventually delivered or
+     incorporated, with no retroactive exclusion. On the available
+     public API this is **not achievable**: delivery is unordered
+     relative to engine continuations (F19) and T3 is unprovable, so
+     a decision-time filter cannot know a delayed event's provenance.
+     The only technically constructible route is **engine-side write
+     provenance** — each apply reports the paths it wrote; the host
+     keeps the latest apply's written-path set and, at decision time,
+     delivers (instead of dropping) any event under the committed
+     root whose path that apply did **not** write (the engine then
+     incorporates it incrementally; its own output event lands in the
+     next apply's written set and is dropped — terminating). That
+     converts the outcome-5 residual into an observable, incorporated
+     delivery, at the cost §14.9's table already priced for Q4: a new
+     result-contract surface on the frozen engine plus bounded
+     host-side per-apply state (and it still leaves the microscopic
+     read→write race inside one file's copy, which only a
+     content-comparison reconciliation could close).
+  2. **Decision-time committed-output territory** — the contract as
+     specified, accepting that a mutation whose event is decided under
+     a committed root that did not incorporate it may be retroactively
+     excluded; failures are observable (C10), incompleteness cannot
+     commit silently (C11), re-delivery cannot corrupt (C12), and the
+     one silent shape is the outcome-5 residual above — **unbounded
+     in time absent user action**.
+  The second is a product decision, not a technical proof of the
+  first. The existing A1 control test (F18) and CLI parity do **not**
+  constitute owner approval: they pin the *filter decision's*
+  granularity and continuity, not the user-facing mutation-loss
+  policy. Confirming contract 2 revises the *user-facing* reading of
+  S1 — **the exact relaxation**: from "every legitimate source
+  mutation is delivered or incorporated" (the original, stricter
+  requirement — kept visible here and in §14.14 as the unmet-in-full
+  strict contract) to "every legitimate source mutation is delivered,
+  or dropped under the documented territory contract; every
+  non-incorporating *failure* is observable and healable via C10, an
+  incomplete root can no longer commit silently via C11, and
+  out-of-order re-delivery cannot corrupt the output via C12 — except
+  the outcome-5 residual, whose observable consequence is: in a
+  case-6 layout, an edit saved during a build window after the
+  traversal passed its file may never appear in the output, no
+  diagnostic reports it, and it heals only when the user next
+  restarts DevSync, runs `pzstudio build`, or changes the project or
+  owning mod's structure". The UX-09 gates to re-read under that lens
+  are B.11/B.12 (Q3 §10) and the stash's A1 control (F18), whose
+  assertions are unchanged in outcome — only their *rationale* moves
+  from "proven loss-prevention" to "owner-confirmed policy".
+  Rejecting contract 2 (requiring contract 1) blocks the design per
+  §14.14's carve-out until the provenance surface is specified and
+  approved as its own API decision.
 - **QUESTION:** whether the CLI watch should adopt the getter for its
   own filter root (it could re-read the committed root per event for
   free). Q4 does **not** propose it — the CLI's native parcel `ignore`
@@ -3593,3 +4040,56 @@ a future Cockpit/CLI affordance, not a watcher-policy one).
   (§14.15 preamble).
 - [x] Docs-only change re-verified: no production source, test,
   manifest or dependency touched; Q3 sections untouched.
+
+### 14.20 Q4 final correctness gate (fourth-revision) validation checklist
+
+- [x] Preflight re-verified at `ff80f13`: branch `42.20.0-dev`, HEAD
+  matches, clean tree; the UX-09 stash located by its message and
+  inspected read-only (never applied, never popped — A1's control-phase
+  assertion re-checked verbatim, F18 intact).
+- [x] Every load-bearing §14 fact re-read against source at `ff80f13`;
+  the commits between `20b48be` and `ff80f13` are documentation-only,
+  so all file:line references remain valid (F1–F21 unchanged; F22
+  added).
+- [x] P0-D confirmed with a real-engine counterexample (two mods,
+  successful scoped A→B migration: `mod_beta`'s output and
+  `workshop.txt` absent from B, `errors: []`, baseline proven to be B
+  behaviorally, no C10 signal) and repaired at the engine boundary by
+  C11 — selected over the explicit-result (B2) and host-comparison
+  (B3) alternatives: B3 is disproven by the A→B→A overlapping-flush
+  concealment (§14.7's C11 record), B2 leaves the incomplete root in
+  use until user action and adds surface; C11 preserves
+  `SessionApplyResult` semantics, reuses the F4 failure envelope +
+  C10, and cannot loop (one full rebuild per root-moving batch).
+- [x] P0-E confirmed with real-engine counterexamples (stale delete
+  after newer create diverges; stale create after newer delete
+  converges silently; repeated change converges) and repaired by C12
+  (execution-time delete reconciliation — order can no longer change
+  the final tree) plus the dual queue bound (16 entries AND 256 total
+  retained deltas; overflow takes the terminal path, never a silent
+  drop); the four-axis determination (within-batch coalescing /
+  between-batch ordering / engine reads / delta-type-driven
+  operations) recorded in §14.11.10; host-side serialization,
+  re-validation and merge alternatives rejected with reasons.
+- [x] P0-F confirmed: the third revision's "bound" on the
+  successful-commit residual is withdrawn — the residual persists
+  indefinitely absent user action; re-saving the missed file does not
+  deliver in case-6 layouts; the two contracts separated with exact
+  costs (§14.17), the S1 relaxation stated verbatim, the original
+  stricter requirement kept visible in the decision record, and A1/CLI
+  parity explicitly not treated as owner approval.
+- [x] S1–S6 re-derived against C11/C12 and the corrected residual
+  (§14.14); the S1 meaning restated ("no silent loss except the one
+  unobservable shape"); verdict unchanged: not BLOCKED under the
+  territory contract, BLOCKED-for-requirement if per-event provenance
+  is demanded.
+- [x] Regression plan extended with the deterministic fourth-revision
+  rows (RG-22…RG-29), each naming its RED condition, harness, expected
+  `FileDelta[]` deliveries and written-tree assertions; the stashed
+  A1/B1/C1 outcomes and the stable-root scoped pins (B.13, RG-7)
+  unchanged; the C12 mechanics note recorded for the shipped delete
+  pin (§14.15 compatibility gates).
+- [x] Docs-only change re-verified: no production source, test,
+  manifest or dependency touched; Q3 sections untouched; the scratch
+  counterexample tests used for verification were deleted before
+  commit.
