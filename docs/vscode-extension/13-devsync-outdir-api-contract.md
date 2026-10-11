@@ -51,6 +51,18 @@ deleted).
 > the policy's implementation does depend on the reader being available
 > in some form.
 
+> **Q4 addendum (appended below — §14).** A fourth task (the DevSync
+> session-owned baseline contract) appended §14 to this document,
+> audited at the same source baseline (`8967ada`). It does not modify
+> the accepted Q3 contract above: the §6.1 reader and the §6.3 policy
+> remain the shipped, accepted Q3 decision. §14 establishes — from
+> source, against the UX-09 red-first findings — that the three
+> residual windows §6.3 named are proven silent source-event losses,
+> and specifies the narrowest contract that closes them (a Core-owned
+> committed-baseline accessor plus a transition-safe watcher policy).
+> §14 resolves the deferral recorded in §12.2; read §12 with §14 in
+> hand.
+
 This document resolves **Q3** from
 [`12-project-cockpit-migration-matrix.md`](12-project-cockpit-migration-matrix.md)
 (§3 UX-09, §4 open questions): *how the extension obtains the session's
@@ -1693,3 +1705,674 @@ No release/publish step, no manifest change, no dependency change.
   §6.3).
 - [x] Docs-only change re-verified: no production source, test, manifest
   or dependency touched (`git status` verified before commit).
+
+---
+
+## 14. Q4 addendum — the session-owned committed-baseline contract
+
+Written at HEAD `8967ada1e51bbaa3beb2b0e0845ed8be53ed6424` (branch
+`42.20.0-dev`, tree clean, no staged changes). The UX-09 red-first
+regression tests produced by the closure task are retained in a stash
+identified by its message ("UX-09 red-first regression tests (A/B/C silent
+source-event loss, proven at 8967ada) - blocked on session-root contract";
+`stash@{N}` positions are not load-bearing — the message is) and were
+inspected **read-only**: never applied, never popped. Design-only: no
+production source, test, manifest or dependency change belongs to this
+addendum; the only artifact is this section (plus the pointer blockquote in
+the header).
+
+**What this addendum is and is not.** It does not rewrite the accepted Q3
+contract above. The §6.1 reader and the §6.3 policy stay as shipped. What
+changes is the assessment of §6.3's residual windows: the UX-09 closure
+work proved — with three red tests retained in the stash — that all three
+are silent source-event losses, not cosmetic misalignments. §14 specifies
+the narrowest contract that closes them, resolves §12.2's deferral (the
+session-owned root becomes the recommended Q4 decision), and specifies the
+scoped-apply rejection fix the Q3 document never had reason to examine.
+
+### 14.1 Confirmed source facts (all file:line at `8967ada`)
+
+Facts the Q3 document established, and new facts this addendum adds, each
+re-verified by direct reads at the audited HEAD:
+
+Engine (`packages/core/src/buildsession.ts` unless noted):
+
+- **F1 — the baseline is one private field.** `planInput:
+  Omit<PlanBuildInput, 'variant'> | undefined` (`buildsession.ts:339`). No
+  accessor, no event, no status enum. `BuildSession`'s public surface is
+  `start`/`rebuild`/`apply`/`stop` (337-396) — the matrix §1 freeze Q3
+  relied on.
+- **F2 — exactly four assignment sites**, each in the same synchronous
+  continuation as its own `await this.host.getPlanInput()`: `start()`
+  (365 — before the initial build runs, and *not* serialized through the
+  apply queue), `rebuild()` (379, inside the queue), the scoped path of
+  `applyCoalesced` (519-520 — the assignment at 520 is **not** inside any
+  try/catch), and `doFullRebuild` (545, inside the try/catch at 543-551).
+  A whole-tree grep confirms there is no fifth site.
+- **F3 — the output root is never stored.** Every engine write derives
+  `resolveBuildOutputPath(config, variant)` = `joinPosix(config.outdir!,
+  sanitize(title) [+' - dev_branch'])` (`buildplan.ts:119-128`) from the
+  *current* `this.planInput.config` at operation time — full build
+  (`buildsession.ts:425`), scoped rebuild (529), incremental mod-file sync
+  (630), workshop text (676), preview (705). "The root the engine uses" is
+  a function of (planInput, time), not a field.
+- **F4 — full-rebuild failure shapes are asymmetric** (543-551): a
+  plan-input-phase failure (`getPlanInput` throws at 545) skips the
+  assignment — the baseline is **retained**; a build-phase failure
+  (`buildVariants` throws after 545 completed) leaves the **new input
+  committed**. Both produce the identical observable result
+  `{ fullRebuild: false, errors: [...] }` — `result.fullRebuild = true`
+  (547) is reachable only on success. Consequence: Q3 §6.3.3's rule
+  ("`fullRebuild` or `scoped.length > 0` are the only result shapes a
+  re-baseline produces") is correct only in the forward direction;
+  `fullRebuild === false` does **not** imply the baseline did not move.
+- **F5 — the scoped path escapes the failure envelope.** The plan input is
+  fetched at 519 outside any try/catch, so a scoped plan-input rejection
+  **rejects `apply()`** — contradicting apply()'s own contract comment
+  ("Never throws: per-action failures are collected in the result",
+  384-387). Per-variant execution failures *are* normalized (526-534), and
+  `result.scoped` is pushed regardless of execution outcome (536) because
+  the baseline was already committed at 520.
+- **F6 — queue and lifecycle.** `enqueue` (398-406) serializes
+  apply/rebuild work and survives rejections; `stop()` sets `stopped` and
+  drains the queue (393-396); `applyCoalesced` no-ops when stopped or
+  before the first assignment (449-451). `start()` is deliberately **not**
+  enqueued: a delta delivered during the initial build would run
+  concurrently with it. Both in-repo hosts order start before any event
+  delivery (extension: `util/devsync.ts:112-117` subscribes after
+  `await session.start()`; CLI: `commands/watch.ts:73` then subscribe at
+  116) — a host convention, not an engine guarantee.
+- **F7 — a full-rebuild delta truncates its own batch's remainder**
+  (`return result` at 472). Disk-safe: `planBuild` resets the whole output
+  root before copying (`buildplan.ts:340-341`) and re-reads the live source
+  tree, so any same-burst source edit already on disk is incorporated by
+  the rebuild itself — the fact Q3 §6.3 already relied on.
+
+CLI wrapper (`packages/cli/src/lib/devsync.ts`):
+
+- **F8 — three failure phases inside one plan input.** `getPlanInput`
+  (71-88) resolves config (`resolveProjectConfigFor`, 74 — the point where
+  `config.outdir` becomes known), then the workshop template (80-86), then
+  per-mod source snapshots (`gatherPlanInput`, 87). A failure in the later
+  phases leaves the resolved outdir known to the wrapper but **unassigned**
+  in the engine — the baseline stays on the old input. Only the engine's
+  failure envelope (F4/F5) decides whether a resolved input was committed.
+
+Controller and hosts:
+
+- **F9 — every filter-root read is a fresh read.** The controller
+  re-resolves at four points (`util/devsync.ts`: pre-start 100, post-start
+  correction 106-110, schedule-time switch on a root-level `project.json`
+  171-177, post-apply correction 213-224 guarded on the F4-shaped result
+  heuristic and session identity) — each a fresh `resolveOutDir` read,
+  documented as "NOT a handle on a running BuildSession's baseline, and not
+  synchronized with one" (`studio.ts:124-129`).
+- **F10 — a rejected apply loses its batch on both hosts.** The extension
+  splices the batch before the await (`util/devsync.ts:202`) and fires the
+  flush as `void this.flush()` (195): a rejected `apply` becomes an
+  unhandled promise rejection and the spliced batch is silently abandoned —
+  no log, no requeue. The CLI watch has the identical shape
+  (`commands/watch.ts:82-96`, `void flush()` at 101). The defect is
+  cross-host.
+- **F11 — the v2 session type is the core class.** `PzStudio.createDevSync`
+  returns `BuildSession` directly (`studio.ts:100`; the type re-exported
+  through `api.ts:59-66` ← `lib/devsync.ts:158-163`). There is no v2
+  session wrapper interface. `IProjectConfig.outdir` is optional
+  (`core/src/project.ts:104/119/126`) but `resolveProjectConfigFor` always
+  yields a non-empty resolved outdir in the DevSync path (every falsy tier
+  falls through to the default — `helper.ts:689-712`).
+- **F12 — test stubs double-cast.** Extension-test session stubs are
+  `as unknown as BuildSession & {…}`
+  (`tests/unit/extUtilDevSync.test.ts:76-97`): additive class members do
+  not break their compilation, but stubs must gain any newly read member
+  for runtime behavior. Real-engine tests drive actual `BuildSession`
+  instances (`extUtilDevSync.test.ts:1373+`).
+
+### 14.2 The four states, and which one the filter needs
+
+| State | Definition | Where it lives |
+| :--- | :--- | :--- |
+| **S1** — last configuration resolved successfully | the outdir of the most recent successful `resolveProjectConfigFor` run, by *any* reader — including reads that are not plan inputs at all (`studio.resolveOutDir`) | transient inside resolver calls and fresh reads |
+| **S2** — last plan input returned successfully | the most recent `getPlanInput()` completion | the wrapper closure under Option A |
+| **S3** — plan input assigned to the session | `this.planInput` (F2) | BuildSession private state |
+| **S4** — output root used by the engine for build operations | `resolveBuildOutputPath(this.planInput.config, variant)` evaluated at each operation (F3) | derived: f(S3, time) |
+
+The Q3 distinction ("fresh read ≠ baseline") is S1 ≠ S3. The Q4 question
+is whether S2 ≡ S3 closely enough to build the filter on S2:
+
+- **S2 and S3 differ only inside a microtask.** Between a `getPlanInput`
+  completion and the assignment continuation nothing else is scheduled
+  (F2: all four sites assign first). The controller's observers —
+  `schedule` runs in watcher-event macrotasks, `flush` in timer macrotasks
+  and in the post-await continuation of an apply that has fully settled —
+  cannot observe the gap. But nothing in the type system enforces "every
+  resolved input is assigned"; it holds by the four-site convention (F2).
+- **S1 and S3 diverge for whole macrotask windows.** S1 advances on every
+  successful config read (pre-start reads, schedule-time switch reads,
+  post-apply corrections) and on plan inputs whose later phases fail (F8)
+  — where S3 provably did not move. That is exactly the A1/C1 class, and
+  why a filter built on S1 can only ever be heuristic.
+
+**Answer to the brief's question:** a CLI wrapper that records
+`config.outdir` inside `getPlanInput()` *can* temporarily expose a new root
+before `BuildSession.planInput` is assigned — in an unobservable-to-hosts
+microtask window if (and only if) it records at plan-input **completion**,
+and in a fully observable macro window if it records earlier (e.g. right
+after config resolution succeeds — F8: a template or snapshot failure then
+leaves the wrapper on a root the engine never commits, reintroducing the
+A1 shape from the recording side). A completion-recorded closure is
+therefore "the latest resolved plan input" by mechanism and "the committed
+baseline" only under two unenforced conventions (record-at-completion;
+every-resolution-is-assigned). §14.5 selects the contract that makes the
+equivalence hold by construction.
+
+### 14.3 Failure timelines (nine scenarios)
+
+For each scenario: the authoritative engine baseline (S3), what a
+completion-recorded closure would expose (S2), and what a fresh
+`resolveOutDir` reader exposes (S1).
+
+1. **Initial `session.start()`.** Assignment at 365 precedes the build; a
+   `buildVariants` failure rejects `start()` with the baseline already
+   committed (the controller's catch stops the session —
+   `util/devsync.ts:125-133` — so the extension never observes this state;
+   the CLI watch exits, `watch.ts:74-78`). Getter/closure: defined from
+   365 onward, `undefined` while in flight. S1: defined as soon as the
+   pre-start read succeeds — it can *lead* the engine here (C1's
+   mechanism). **Authoritative: S3.**
+2. **Successful full rebuild.** Classification 469-472 →
+   `doFullRebuild`: assignment 545, build succeeds, `fullRebuild: true`.
+   S1/S2/S3 all converge after the apply — modulo the S1 race class (a
+   config change after the plan input but before the post-apply correction
+   strands S1; the Q3 §6.2 race). **Authoritative: S3 (the fresh input).**
+3. **Full rebuild with plan-input failure.** 545 throws inside the
+   try/catch; baseline **retained** (A1's mechanism); result
+   `{fullRebuild: false, errors}` (F4). S2: unchanged (no completion). S1:
+   whatever the schedule-time switch read — it advanced to the new config
+   *before* the failure (A1's exact divergence). **Authoritative: S3
+   (retained).**
+4. **Full rebuild with build-phase failure after assignment.** 545
+   completed, `buildVariants` threw (A′); baseline = the **new input**
+   (committed despite the failure — its outputs may be absent or partial).
+   Result shape **identical** to scenario 3 (F4): the result cannot
+   distinguish the two; only engine state can. S1: depends on read timing;
+   the Q3 schedule-time switch happens to align here by luck.
+   **Authoritative: S3 (moved).**
+5. **Successful scoped rebuild.** The incremental phase writes under the
+   old root; 519-520 commit the fresh input mid-apply; `copyTree` writes
+   the new root (529). S3 flips mid-apply, *before* the scoped writes.
+   **Authoritative: S3, time-indexed within the apply.**
+6. **Scoped rebuild failure before assignment.** 519 throws outside any
+   try/catch: the rejection escapes `apply()` (F5) → cross-host batch loss
+   (F10). Baseline retained. After the §14.8 fix: result `{errors: [msg]}`,
+   baseline retained, no rejection. **Authoritative: S3 (retained); the
+   delivery pipeline, not the baseline, is what broke.**
+7. **Scoped rebuild failure after assignment.** 520 committed;
+   per-variant execution failures collected (526-534); `scoped` still
+   reported (536) — here the result's re-baseline shape is *right* (the
+   baseline did move). **Authoritative: S3 (moved).**
+8. **Overlapping controller flushes × the serialized apply queue.**
+   Flushes overlap freely (no in-flight guard; the debounce only orders
+   scheduling); the session's queue (F6) serializes their applies; each
+   batch is classified against the baseline current at *its* execution,
+   which an earlier batch may have moved. Safe at the engine; the filter
+   must never assume a batch it scheduled observed the roots it saw at
+   schedule time (the transition machinery of §14.7 owns this).
+   **Authoritative: S3 at each batch's execution time.**
+9. **Stop/restart and stale asynchronous completion.** `stop()` clears
+   controller state, disposes the watcher, drains the session queue
+   (`util/devsync.ts:137-151` + F6). An in-flight flush's continuation is
+   identity-guarded (213-215) so it cannot adopt into the next session;
+   its spliced batch may still be written by the *old* session after the
+   new one started (bounded: one drained batch; the watcher is gone).
+   Transitions and buffers pending at stop are discarded with the state
+   (§14.7). **Authoritative: the new session's S3; the old session's S3 is
+   dead state that must not be read.**
+
+### 14.4 Assessment: closure snapshot vs committed baseline
+
+The closure *can* be made equivalent to the committed baseline at every
+macrotask boundary, but the equivalence rests on two unenforced
+conventions — record-at-completion, and every-resolution-is-assigned
+(F2) — and breaks silently if either drifts. F8 is the recorded-early
+trap; any future non-assigning `getPlanInput` consumer in core (a
+speculative read, a CP-12 status probe) would break the second. The
+closure also needs a wrapper type: `createDevSyncCore` returns
+`new BuildSession(host)` (`lib/devsync.ts:97`) today, so exposing a
+closure means `DevSyncSession extends BuildSession` plus widening
+`PzStudio.createDevSync`'s declared return type — a new exported type on
+the v2 surface. Verdict: **do not accept the closure proposal as
+proposed**; it is correct today but convention-bearing. §14.5 selects the
+by-construction alternative.
+
+### 14.5 Options comparison and selection
+
+**Option A — CLI closure snapshot** (`createDevSyncCore` records the
+completion outdir; a `DevSyncSession extends BuildSession` wrapper exposes
+`getEffectiveOutDir()`):
+
+- *Authority/consistency:* indirect — S2 tracks S3 by convention
+  (§14.4); equivalent at every macrotask boundary today; not
+  type-enforced.
+- *Assignment/observation ordering:* microtask gap, unobservable to
+  hosts; the recording-point discipline is load-bearing (F8).
+- *Failed rebuilds:* plan-input failure → closure unchanged (aligned);
+  build-phase failure → closure moved *with* the engine (it records the
+  input that was committed). No divergence in either direction today.
+- *Instance/session isolation:* per-session closure; R0/R1 unchanged;
+  no ambient reads.
+- *Lifecycle:* `undefined` until the first completion (partial
+  function); retains the last value after `stop()` (harmless; hosts
+  discard the session).
+- *Compatibility:* core untouched (the matrix §1 freeze and CP-12 stay
+  intact), but the v2 surface gains an exported wrapper type and a
+  widened `createDevSync` return type; `PzStudio.resolveOutDir`
+  unaffected.
+- *Testability:* convergence pinnable per assignment site with a fake
+  host; wrapper forwarding pinnable; the convention itself is **not**
+  pinnable against future core changes (a test can only pin today's
+  four sites).
+
+**Option B — Core-owned committed-baseline accessor** (`BuildSession`
+gains a read-only getter over F2's field — proposed shape
+`getBaselineOutDir(): string | undefined` returning
+`this.planInput?.config.outdir` — surfaced through the *existing*
+`PzStudio.createDevSync` return type; no wrapper, no new type):
+
+- *Authority/consistency:* direct — the getter **is** S3; divergence is
+  impossible by construction; the microtask question disappears (there
+  is no second recording).
+- *Assignment/observation ordering:* reads observe assignments exactly
+  (same field, same synchronous domain).
+- *Failed rebuilds:* scenarios 3 vs 4 become **distinguishable** at the
+  consumer (getter unchanged vs moved) — F4's asymmetry becomes usable
+  information instead of a trap for the result-shape heuristic.
+- *Instance/session isolation:* a pure private-field read; no ambient,
+  no legacy slots; browser-safe (a string field on a host-agnostic
+  class); R0/R1 intact (C9/C10 below).
+- *Lifecycle:* `undefined` before the first assignment (documented);
+  retains the last value after `stop()` (harmless — sessions are not
+  restarted; the controller clears its own state).
+- *Compatibility:* one additive member on an already-exported class —
+  no interface change (`PzStudio` is untouched), no new export, no
+  signature change. Existing consumers compile unchanged; structural
+  literal implementers would break at compile exactly like any additive
+  member (none exist in-repo — F12's stubs double-cast).
+- *Testability:* getter convergence needs no per-site pinning (it is
+  the same field); the scenario-3-vs-4 distinction is directly
+  testable; stubs gain one member (F12).
+
+**Option C — epoch/generation snapshot** (a baseline-change counter, or a
+`{root, generation}` snapshot):
+
+- Would add value only if a consumer needed to correlate an event with
+  the baseline version it was classified against. The §14.7 policy
+  correlates via transition slots resolved against the current getter —
+  string comparison of roots suffices; no consumer needs the
+  generation. **Rejected** as unproven additional surface (the brief's
+  bar: no new public surface without demonstrated necessity). Revisit
+  only if a future buffering design cannot name its release conditions
+  without one.
+
+**Selection: Option B.** Correctness: by construction beats by
+convention (§14.4). Surface: one member on an existing class beats a new
+exported type plus a widened signature. The Q3 §5/§12.2 objections are
+resolved, not ignored: (a) CP-12 is structured session *status* (phases
+and events for the Cockpit state owner, doc 12's CP-12 row); a single
+derived read-only scalar is not status events and does not preempt that
+surface — the getter can seed CP-12 later, not the reverse; (b) the
+partial function is real but harmless: the only consumer (the
+controller) reads it strictly after `start()` resolves (F6 ordering),
+and `undefined` before start is *honest engine truth* — the total
+function Q3 preferred is precisely the fresh read whose false confidence
+produced C1. This addendum resolves §12.2's deferral: the residual
+windows it reserved engine truth for are now proven losses (the stashed
+A1/B1/C1), which is the justification §12.2 asked for. Option A is
+recorded as the runner-up (correct today, cheaper for core, but
+convention-bearing and surface-heavier); Option C is rejected.
+
+### 14.6 The selected contract (normative invariants)
+
+- **C1 — committed-baseline authority.** `BuildSession` exposes the
+  committed baseline's output root and nothing else:
+  `getBaselineOutDir(): string | undefined` — `this.planInput?.config.outdir`.
+  The full private `PlanBuildInput` stays private. `undefined` means "no
+  plan input has ever been assigned" (pre-first-assignment only). The
+  name is a suggestion; the contract is the semantics.
+- **C2 — filter root ≡ committed root (steady state).** The controller's
+  schedule-time drop decision is
+  `isWatchPathIgnored(projectDir, session.getBaselineOutDir(), path)`,
+  evaluated per event. No correction-read races exist because no second
+  authority exists. (The stored `filterRoot` field becomes a cache of
+  this value, cleared in `stop()` as today.)
+- **C3 — prediction is guarded, never authoritative.** The schedule-time
+  switch on a root-level `project.json` event (Q3 §6.3.2) is **retained**
+  as a bounded loop-protection prediction: when the freshly read root
+  differs from the committed root, a **transition** is opened (predicted
+  root, committed root at open time). While the transition is open,
+  events under the *predicted* root are **buffered** (not dropped, not
+  forwarded). When predicted == committed, no transition opens —
+  compare-and-adopt, Q3 §6.3.2 semantics preserved exactly (the B.12
+  loop-protection pins stay green unchanged).
+- **C4 — transition resolution is engine truth, not result shape.** When
+  the apply that follows the triggering `project.json` event settles
+  (success or failure), the transition resolves against the committed
+  root: committed == predicted → **COMMITTED** (discard the buffer — the
+  buffered events are the rebuild's own output writes, and any same-burst
+  source edit was incorporated by the rebuild's disk re-read, F7);
+  committed != predicted → **FAILED** (revert the filter root to the
+  committed root and **replay** the buffer into `pending` — those events
+  are under a root the engine never adopted). Resolution does **not**
+  consult `result.fullRebuild`/`result.scoped` (F4: they cannot
+  distinguish scenarios 3 from 4). A new schedule-time switch while a
+  transition is open resolves the open transition first (same rule),
+  then opens the next.
+- **C5 — buffer contract.** Ownership: the controller instance (one open
+  transition at a time). Contents: only events dropped-by-prediction
+  during the open window. Bounds: a count cap (256 proposed) — on
+  overflow, drop the newest and log a warn (the window is one apply's
+  duration; overflow signals a pathological burst worth surfacing).
+  Release: only by C4's resolution or `stop()` (discarded). Recovery: a
+  replayed event is re-evaluated by the C2 rule at replay time
+  (reclassification is the engine's, at apply execution).
+- **C6 — correction reads disappear.** The post-start correction and the
+  post-apply correction's fresh reads (Q3 §6.3.3) are replaced by
+  assignments from the committed root (post-start:
+  `filterRoot = session.getBaselineOutDir()`; post-apply: transition
+  resolution only). `studio.resolveOutDir` remains in the surface
+  unchanged (Q3 contract) with exactly one remaining in-policy caller:
+  the C3 prediction read. The startup read count drops by one; the C1
+  race class disappears (no third read exists).
+- **C7 — apply never rejects (engine normalization).** The scoped
+  plan-input fetch moves inside the failure envelope (§14.8): `apply()`
+  resolves `{…, errors: [message]}` with the baseline retained. This is
+  a Core behavior fix aligned with the documented contract (F5); it
+  repairs both hosts at once (F10).
+- **C8 — delivery recovery is host-side and bounded.** Both flushes
+  (extension `util/devsync.ts:199-234`; CLI `watch.ts:82-96`) gain a
+  rejection guard: on any rejection from `apply`, log a warn and re-queue
+  the spliced batch at the head of `pending` (the existing debounce
+  re-delivers it). After C7 this path is defense-in-depth; it exists so
+  a future engine throw can never silently abandon a spliced batch.
+- **C9 — R0/R1 untouched.** The getter reads session state only; no
+  ambient, no legacy slots, no engine lock. Concurrent `studio.run`
+  invocations are unaffected (the getter is not a lifecycle call).
+- **C10 — instance/session isolation.** Each session's getter observes
+  only its own field; two sessions on two projects never cross.
+
+### 14.7 Watcher transition safety (A/A′/B/C and the surrounding windows)
+
+Using the UX-09 letters (the stash's definitions), against the C1-C8
+machinery:
+
+- **A — transition fails before baseline assignment** (the A1 shape: the
+  schedule-time switch predicted B; the rebuild's plan input threw; the
+  engine keeps A). During the window: events under A are dropped by C2
+  (the engine's own pre-rebuild writes — loop protection); events under
+  B are buffered by C3. At resolution: committed (A) ≠ predicted (B) →
+  FAILED → the filter reverts to A and the buffer **replays** → the
+  under-B event reaches `session.apply` and the engine syncs it into A
+  (its actual root). **Closed with zero loss.** (The stashed A1 turns
+  green; its delivery assertions are preserved verbatim; its
+  provider-call-count instrumentation evolves per C6.)
+- **A′ — transition fails after baseline assignment** (scenario 4: the
+  plan input committed B, the build failed). At resolution: committed
+  (B) == predicted (B) → COMMITTED → buffer discarded. The filter
+  follows the engine to B: under-B events dropped (loop protection for
+  the root the engine will keep writing); under-A events forwarded and
+  synced into B by the engine (terminating; A's stale output may merge
+  once — an engine-semantics consequence of F4, named, not a filter
+  defect). Events under B arriving during the pre-assignment window
+  (between schedule and 545) were buffered and are now discarded —
+  correct: post-commit they are output-root events, and any source edits
+  among them were on disk before the failed build's `copyTree` read the
+  tree (F7).
+- **B — scoped re-baseline while an apply is pending** (the B1 shape): no
+  `project.json` event → no transition → the C2 rule tracks the
+  committed root directly. Events under the old root arriving **after**
+  the mid-apply assignment (520) are forwarded (the committed root is
+  already the new one) → delivered → the engine classifies them against
+  the new baseline. **Closed.** Events under the old root in the
+  **pre-assignment** window are dropped by C2 (the engine is still
+  incrementally writing the old root — loop protection) and are healed
+  iff the write reached disk before that mod's `copyTree` executed;
+  otherwise the Q3 §6.3 residual persists, now precisely bounded and
+  named: it is the **only remaining drop-without-replay window**, it
+  cannot be closed by any root getter (the future root is unknowable
+  before the plan input resolves), and closing it would require either
+  forwarding root-matching events during in-flight applies (re-opens the
+  self-feed loop for §3.1-case-6 layouts — rejected) or engine-side
+  reporting of written paths (a larger surface than Q4 warrants). The
+  brief's bar is met by identifying this precisely rather than declaring
+  the race solved.
+- **C — startup provider reads diverge** (the C1 shape): the third read
+  no longer exists (C6). Post-start, the filter root **is** the
+  committed root. A config that moves between the engine's first plan
+  input and "the correction" changes nothing — there is no correction
+  read to diverge. **Closed by construction.**
+- **Events before adoption:** none can exist — the watcher is subscribed
+  after `start()` resolves (F6), and the engine no-ops unassigned
+  applies (449-451).
+- **Events during adoption:** covered by A/A′/B above; the engine's own
+  writes are dropped under whichever root it is currently writing (C2
+  tracks the flip at 545/520); the prediction buffer covers the one
+  window C2 cannot see (pre-assignment full-rebuild writes to the
+  predicted root); same-burst source edits are healed by the rebuild's
+  disk re-read (F7).
+- **Events after adoption:** C2 tracks; old-root events forwarded
+  (terminating spurious syncs — the engine writes the new root only);
+  new-root output dropped.
+- **Multiple queued or overlapping flushes:** applies serialize (F6);
+  one transition slot with C4's resolve-then-open supersede rule; a
+  second flush's `project.json` event resolves the first transition
+  against the *current* committed root before opening its own. A batch
+  scheduled under transition W1 but applied after W2 opened is safe: the
+  engine classifies it against the then-current baseline, and W2's
+  resolution re-evaluates only W2's buffer.
+- **Rapid A→B→A configuration changes:** each switch re-predicts; a
+  prediction equal to the current committed root opens no transition
+  (C3) and the previous one resolves by C4 first. Worst case is a FAILED
+  resolution + replay per flip — bounded, lossless.
+- **Stop/dispose while a transition is pending:** the buffer and
+  transition are discarded with the controller state; the pending apply
+  drains on the stopped session (identity guard retained,
+  `util/devsync.ts:213-215`); the dead session's getter is never read
+  again. Restart starts clean (existing stop/start pins hold).
+- **Persistent self-feeding when an old output root becomes valid
+  source:** the C2 rule forwards old-root events (they are no longer
+  output), so the engine syncs them into the new root **once**
+  (terminating); the new root's output events are dropped (C2), so no
+  cycle closes. The nested-write hazard (an old output's
+  `Title/Contents/mods/…` shape re-entering as source) produces at most
+  one spurious merge per file per transition, never a loop, because
+  every subsequent write lands under the (filtered) new root. This is
+  the mechanism §3.2/§12.5's loop family is held by: the filter keeps
+  dropping exactly the subtree the engine currently writes — the
+  invariant Q3 §6.3 preserved and Q4 keeps.
+
+### 14.8 Scoped apply failure contract (reporting vs recovery)
+
+**Finding (confirmed against source):**
+
+- The mismatch is real: `apply()`'s contract comment promises "Never
+  throws: per-action failures are collected in the result"
+  (`buildsession.ts:384-387`); the scoped plan-input fetch (519) sits
+  outside every try/catch, so its rejection rejects `apply()`.
+- The loss is real on both hosts: the batch is spliced before the await
+  (extension `util/devsync.ts:202`; CLI `watch.ts:82`), the rejection
+  escapes the `void`-ed flush (`devsync.ts:195`; `watch.ts:101`), so the
+  deltas are abandoned with no log and no requeue, and the rejection
+  surfaces as an unhandled promise rejection.
+- The engine's queue survives (F6) — subsequent applies still run; the
+  damage is exactly one batch plus one unhandled rejection.
+
+**Decision (the two concerns are separated):**
+
+- **Error reporting — Core.** Normalize the scoped fetch into the result
+  envelope, mirroring `doFullRebuild` (C7): catch at the `applyCoalesced`
+  scoped block, push `describeError(e)` into `result.errors`, retain the
+  baseline, return the result. The `scoped` list stays empty (nothing was
+  rebuilt). The two re-baseline paths then share one failure vocabulary.
+  This is the correctness fix; without it no host policy is reliable
+  (the rejection bypasses every result-driven rule).
+- **Delivery recovery — hosts.** C8's guard: catch, warn-log, requeue
+  the spliced batch at the head of `pending` (the next flush
+  re-delivers it). After C7 this path should be unreachable; it is
+  specified so the invariant "a spliced batch is never silently
+  abandoned" holds against any future engine throw, independent of C7.
+- **Not chosen:** batch retry *inside* core (a rebuild attempt is not
+  idempotent-cheap and the host owns retry policy), and silent
+  drop-with-log (loses user edits — the direction UX-09 exists to
+  forbid).
+
+### 14.9 Regression matrix (implementation stage — NOT implemented here)
+
+All tests must exercise delivered `FileDelta[]` and/or written trees,
+never only root comparisons or isolated helper returns (Q3 §10's
+assertion method, carried over). The existing UX-09 suites
+(`extUtilDevSync.test.ts:396-1164` and `1373+`) and `watch.test.ts` stay
+green; the named instrumentation evolutions are listed, not silently
+accepted.
+
+Core (`tests/unit/buildsession.test.ts` — fake host with a plan-input
+holder):
+
+- **R1 — baseline agreement at stable boundaries.** After `start`, after
+  a successful full rebuild, after a scoped rebuild:
+  `getBaselineOutDir()` equals the root the engine provably wrote to on
+  disk (`resolveBuildOutputPath` shape, title folder included).
+- **R2 — failure distinguishability (F4 pinned).** Plan-input failure →
+  getter unchanged + `errors` + `fullRebuild === false`; build-phase
+  failure → getter **moved** + `errors` + `fullRebuild === false`. Same
+  result shape, different engine state — the pin that makes A vs A′
+  consumer-visible.
+- **R3 — scoped normalization (C7).** A rejecting `getPlanInput` on the
+  scoped path resolves `{errors: [msg], scoped: [], incremental: N}`,
+  retains the baseline (getter unchanged), does **not** reject, and the
+  queue still processes a subsequent batch.
+- **R4 — real-engine scoped rejection.** `createDevSyncCore` with a
+  template resolution that throws on the scoped path — `apply` resolves
+  with the error; no unhandled rejection (assert via a process-level
+  `unhandledRejection` listener).
+
+Extension (`tests/unit/extUtilDevSync.test.ts` — real v2 instance +
+stubbed watcher, the stash's harness):
+
+- **R5 — A1 closure.** The stashed scenario verbatim (failed full
+  rebuild after a schedule-time switch): the under-B event reaches
+  `session.apply` (buffer replay) and the engine writes it into A.
+  Provider-call-count assertions updated per C6 (one fewer startup
+  read; the switch read remains).
+- **R6 — A′.** Build-phase failure after assignment: the filter follows
+  the committed root to B — under-B events filtered, under-A events
+  delivered and written into B; the transition resolves COMMITTED.
+- **R7 — B1 closure.** The stashed scenario verbatim (gated scoped
+  apply, old-root event post-assignment): delivered. The pre-assignment
+  residual is pinned as a *named residual*: same harness, event fired
+  before the plan input resolves → dropped, healed iff on disk before
+  `copyTree` (assert via a controlled pre-write).
+- **R8 — C1 closure.** The stashed scenario verbatim (startup
+  divergence): the filter reads the committed root post-start; the
+  under-B event is delivered while the engine keeps A.
+  Provider-call-count assertions updated per C6.
+- **R9 — stable output remains filtered.** The existing B.12-style pins
+  (engine output `mod.info` events; outdir-irrelevant `project.json`
+  edits — no transition opens; the output subtree never reaches
+  `apply`) stay green **unchanged**.
+- **R10 — transition bounds.** Buffer overflow (cap + warn) and rapid
+  A→B→A (resolve-then-open supersede; lossless replay) exercised with
+  delivered-delta assertions.
+- **R11 — concurrency and stop/restart.** Overlapping flushes
+  serialize; a `stop()` with a pending transition discards the buffer
+  without replay; restart is clean; the old session's drained batch is
+  bounded (existing stop/start pins extended).
+- **R12 — delivery recovery (C8).** A stubbed rejecting `apply`: the
+  batch is re-queued, a warn is logged, a subsequent successful flush
+  delivers it; no unhandled rejection.
+- **R13 — isolation.** Legacy slots cold while the getter is read (the
+  existing conflict-slot pattern, `extUtilDevSync.test.ts:1394+`);
+  concurrent `studio.run` unaffected; two sessions never cross (the
+  existing cross-leak pins extended to the getter).
+
+Compatibility:
+
+- **R14 — stubs.** `fakeSession` gains the getter (one line); the
+  double-cast compile compatibility is pinned by the suite compiling
+  unchanged otherwise.
+- **R15 — CLI parity.** `watch.test.ts`'s filter pins unchanged (the
+  CLI's frozen-root behavior is Q3-documented and **not** changed by
+  Q4; C8's watch-side guard is the only `watch.ts` behavior delta).
+
+### 14.10 Proposed implementation boundaries (minimal)
+
+1. `packages/core/src/buildsession.ts` — the getter (C1, a few lines
+   with doc) and the scoped-fetch normalization (C7: move 519-520
+   inside the failure envelope). No other engine change.
+2. `packages/cli/src/api.ts` — **nothing** (the getter arrives through
+   the existing `BuildSession` re-export). `packages/cli/src/lib/**` —
+   nothing for the contract itself.
+3. `packages/vscode-extension/src/util/devsync.ts` — C2's drop rule,
+   C3/C4's transition slot and buffer, C6's correction replacement,
+   C8's guard. `packages/cli/src/lib/commands/watch.ts` — C8's guard
+   only.
+4. Tests per §14.9. No manifest, dependency, or schema change.
+
+Deliberately out of scope: the CP-12 status surface; CLI watch filter
+re-resolution (Q3 documents the frozen root; unchanged); the
+pre-assignment scoped-window closure (§14.7 B — requires engine-side
+write reporting; filed as the residual); UX-10 and Project Cockpit work.
+
+### 14.11 Remaining risks and unresolved questions
+
+- **RISK (named residual):** the pre-assignment scoped window (§14.7 B)
+  remains a bounded drop-healed-or-lost window. Not closable by any
+  root contract; requires engine-side written-path reporting — a
+  future, larger decision.
+- **RISK:** F4's semantics (a failed build still commits the new
+  baseline) surprise consumers who assume "failed rebuild = nothing
+  changed". Q4 does not change engine semantics; it makes them
+  observable. Whether a failed build should roll the baseline back is
+  a separate Core decision (rollback would change scenario 4 and R2).
+- **RISK:** the C3 prediction still consumes a fresh `resolveOutDir`
+  read; if the config churns between the prediction and the plan input,
+  the buffer resolves FAILED and replays — correct, but the prediction
+  read stays on the hot path of every `project.json` edit. Accepted: it
+  is one synchronous read per `project.json` event (Q3 §6.3.2's
+  existing cost).
+- **QUESTION (for approval, not for this task):** getter naming —
+  `getBaselineOutDir` (proposed) vs `getOutputRoot` vs
+  `getEffectiveOutDir`. The contract is the semantics (C1); the name
+  follows the API review.
+- **QUESTION:** whether the CLI watch should adopt the getter for its
+  own filter root (it could re-read the committed root per event for
+  free). Q4 does **not** propose it — the CLI's native parcel `ignore`
+  is start-frozen regardless (Q3 §12.4), so the getter buys the CLI
+  little; deferred with §12.
+- **Unchanged Q3 deferrals:** §12.1's per-flush re-resolution stays
+  rejected (superseded by the committed-root rule, which is strictly
+  stronger); §12.5's pathological layouts remain doctor guidance.
+
+### 14.12 Q4 validation checklist
+
+- [x] Preflight verified: branch `42.20.0-dev`, HEAD `8967ada`, clean
+  tree, no staged changes; the UX-09 stash identified by message and
+  inspected read-only (never applied, never popped).
+- [x] Every claim anchored to source at the audited HEAD; the Q3
+  sections above untouched except for the appended pointer blockquote
+  and this section.
+- [x] The closure proposal assessed, not accepted (§14.4); the four
+  states distinguished (§14.2); nine timelines grounded (§14.3).
+- [x] Options compared on the brief's criteria; one selected with
+  reasons; the alternatives rejected with reasons (§14.5).
+- [x] Transition safety specified per event class with
+  drop/forward/buffer/replay/reclassify rules, ownership, bounds,
+  release and recovery (§14.7); the single-getter insufficiency named
+  precisely (the pre-assignment scoped window) instead of a claimed
+  solution.
+- [x] Apply-failure mismatch confirmed from source; reporting vs
+  recovery separated (§14.8).
+- [x] Regression matrix specified with owners and delivery-level
+  assertion methods; existing UX-09 expectations preserved with named
+  instrumentation evolutions (§14.9).
+- [x] Docs-only change: no production source, test, manifest or
+  dependency touched (§14.10 is a proposal, not an edit).
