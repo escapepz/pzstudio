@@ -74,6 +74,22 @@ deleted).
 > delivery-retry contract (former C8) into a bounded, terminal-state design,
 > and re-derives every safety timeline from source. The Q3 sections
 > above remain untouched; `studio.resolveOutDir` stays unchanged.
+>
+> **Q4 adversarial closure (§14 revised in place, third revision).** A
+> second independent adversarial review — commissioned explicitly not to
+> accept the second revision's GO verdict — confirmed the second
+> revision's architecture (live committed-baseline getter, forwarding,
+> territory contract) but disproved three of its claims at HEAD
+> `20b48be`: the theorem's headline overclaimed (mutation provenance is
+> unprovable from `(type, path)` events — §14.3 restated as decision-time
+> ownership, T′), the single retry slot collides under overlapping
+> rejected flushes from one live session (§14.11, replaced by a bounded
+> FIFO failed-batch queue), and result-level errors of re-baseline-class
+> applies were treated as completely handled delivery while they can
+> abandon truncated source deltas (§14.13, repaired by the C10 degraded
+> state). One item is an explicit product confirmation, not a proof: the
+> committed-outdir territory granularity (§14.8.6). The Q3 sections
+> remain untouched; no public API beyond the already-proposed getter.
 
 This document resolves **Q3** from
 [`12-project-cockpit-migration-matrix.md`](12-project-cockpit-migration-matrix.md)
@@ -1727,7 +1743,10 @@ Written at HEAD `8967ada1e51bbaa3beb2b0e0845ed8be53ed6424` (branch
 safety revision at HEAD `caf4c424e799d57c02a5428630d500ad2a2f1a1d`** (same
 branch, tree clean; the only commits between the two heads are
 documentation commits, so every file:line reference below is valid at
-both). The UX-09 red-first regression tests produced by the closure task
+both); **revised again in the Q4 adversarial closure (third revision) at
+HEAD `20b48beba26622c4ff69bf94a6240950f85fbbb6`** (same branch, tree
+clean; the intervening commits are documentation-only, so every
+file:line reference remains valid at all three heads). The UX-09 red-first regression tests produced by the closure task
 are retained in a stash identified by its message ("UX-09 red-first
 regression tests (A/B/C silent source-event loss, proven at 8967ada) -
 blocked on session-root contract"; `stash@{N}` positions are not
@@ -1747,9 +1766,14 @@ root (§12.4, unchanged). The UX-09 closure work proved — with three red
 tests retained in the stash — that §6.3's residual windows are silent
 source-event losses, not cosmetic misalignments. The first revision of
 this addendum answered with a predicted-root transition state machine;
-the second revision (this text) re-audited the engine, found a stronger
-mechanism the first revision missed (§14.3), and replaces that machinery
-with it. Every claim below is labeled **FACT** (verified against source
+the second revision re-audited the engine, found a stronger mechanism the
+first revision missed (§14.3), and replaces that machinery with it. The
+third revision (this text) is the adversarial closure of the second: its
+GO verdict was explicitly not accepted, three counterexamples were
+re-audited against source (§14.0's second table), and the corrections
+they force — the T′ theorem restatement, the C7 retry queue, the C10
+degraded state, the §14.8.6 territory confirmation — are folded in
+below. Every claim below is labeled **FACT** (verified against source
 at the audited HEAD), **DECISION** (a design choice this addendum makes
 and justifies), or **RESIDUAL** (a named, bounded behavior that is not a
 silent loss).
@@ -1779,7 +1803,21 @@ reworked form (§14.11); **MC-4** (armed-resolution rule) — moot with the
 state machine (§14.12); **MC-5** (cached root for diagnostics) — moot: the
 revised controller holds no cached root at all (§14.7 C2).
 
-### 14.1 Confirmed source facts (all file:line at `caf4c42`)
+**The third revision's commission (P0-A/P0-B/P0-C).** A second
+independent adversarial review challenged the second revision's theorem
+and its recovery design specifically; its GO verdict was explicitly not
+accepted as a given. Its findings, dispositioned from source at
+`20b48be`:
+
+| Finding | Review's claim | Disposition (section) |
+| :--- | :--- | :--- |
+| **P0-A** | Asynchronous watcher delivery can observe a different baseline than the one active when the underlying mutation occurred — a legitimate source edit under a *future* root, delayed past that root's commit, is dropped as territory with no guaranteed incorporation. | **Confirmed as a real window, conditional on watcher ordering** — the source provides no delivery-ordering guarantee relative to `BuildSession` assignments, so T3 (mutation provenance) is unprovable from `(type, path)` events. The theorem is restated as decision-time ownership (§14.3, T′); the window is named (§14.4.10, §14.8.6); every *non-incorporating* commit becomes observable via the C10 degraded state, leaving one named micro-residual (§14.17). |
+| **P0-B** | Overlapping rejected flushes from the same live session collide in the proposed single retry slot — the second rejection overwrites the first batch; identity guards check session identity, not batch ownership. | **Confirmed** — the second revision's §14.11 rule 8 claim ("overlapping flushes cannot … drop it") was false. Replaced by a bounded FIFO failed-batch queue with one retry driver, per-entry terminal semantics and an explicit overflow policy (§14.11). |
+| **P0-C** | A failed full-rebuild batch can abandon its truncated source remainder: F7 truncation + F13 abort-on-first-failing-operation leaves the edit on disk, unincorporated and undelivered, while result-level errors are treated as completely handled delivery. | **Confirmed** — healing holds only on successful rebuilds; the second revision's §14.13 disposition (log-only) and its rule-7 healing assumption fail exactly for under-root files whose next-save events the territory filter drops. Repaired by C10: re-baseline-class failures set the degraded state instead of counting as handled (§14.13); no auto-retry is attached (loop prevention stands). |
+| **Territory** | The committed-outdir territory policy is a product ownership decision, not a proof that every discarded event was irrelevant. | **Accepted as a decision item** — the whole-outdir granularity is continuity with the shipped CLI watch and the Q3-accepted policy, pinned by F18; the genuinely new semantic (decision-time ownership with retroactive capture of pre-commit mutations) is stated for explicit owner confirmation (§14.8.6). |
+
+### 14.1 Confirmed source facts (all file:line at `caf4c42`; re-verified
+### at `20b48be` for the third revision, whose additions are F19–F21)
 
 Facts the Q3 document established, facts the first Q4 revision added, and
 new facts this revision adds, each re-verified by direct reads at the
@@ -1933,6 +1971,32 @@ Controller, hosts and tests:
   The outdir subtree, once committed, is engine territory by the test
   record — this gates the getter's granularity (§14.6) and the territory
   contract (§14.8.3).
+- **F19 — watcher delivery is asynchronous, batched and unordered
+  relative to engine continuations.** The CLI's parcel callback delivers
+  whole event *arrays* per tick (`watch.ts:117–138`); the extension's
+  `FileSystemWatcher` handlers fire across the extension-host boundary
+  (`util/devsync.ts:115–117`). No host's source contains any ordering
+  contract between a filesystem mutation and the callback that reports
+  it, nor any bound on the mutation→callback interval (a full rebuild's
+  own output flood is a routine queue-delay source). The interval can
+  span any number of `BuildSession` assignments. Consequence: **no
+  mechanism built on `(type, path)` events can recover the baseline
+  (or ownership status) that was current when the mutation occurred** —
+  only decision-time state is available.
+- **F20 — full-rebuild truncation is position-independent within the
+  batch.** `applyCoalesced` classifies the whole batch in one loop and
+  only *executes* incremental writes after it (`buildsession.ts:459–514`);
+  the `full-rebuild` case returns at 472 before that phase. A source
+  delta positioned *before* the `project.json` delta in the same batch
+  is exactly as truncated as one after it — nothing in the batch except
+  the rebuild itself is ever applied.
+- **F21 — a scoped rebuild re-syncs only the scoped mods.** The scoped
+  block commits the fresh input for the whole config (`buildsession.ts:
+  519–520`) but executes `planScopedModRebuild` only for the mods whose
+  `mod.info`/`.pzstudioignore` changed (521–537). A root move committed
+  on the scoped path therefore leaves every *other* mod's output absent
+  from the new root (pre-existing engine semantics, host-independent);
+  the next successful full rebuild is what completes it.
 
 ### 14.2 The four states, and which one the filter needs
 
@@ -1972,27 +2036,73 @@ by mechanism and "the committed baseline" only under two unenforced
 conventions (record-at-completion; every-resolution-is-assigned). §14.6
 selects the contract that makes the equivalence hold by construction.
 
-### 14.3 The assignment-before-write visibility theorem (new — the linchpin)
+**The three guarantee levels the third revision separates (normative
+vocabulary).** The second revision proved one property and inferred two
+more from it; the inference was the error. Stated separately:
+
+- **T1 — assignment-before-engine-write.** The engine assigns its
+  baseline before writing under it. **Proven from source** — F2/F3, the
+  proof obligations below.
+- **T2 — callback-time observation.** A `schedule()`-time getter read
+  observes the committed baseline as of that instant. **Proven from
+  source** — the getter is the field itself (C1); nothing separates the
+  read from the state.
+- **T3 — mutation provenance.** The baseline observed at callback time
+  identifies the baseline (and ownership status) that was current when
+  the underlying filesystem mutation occurred. **NOT provable from
+  source** — F19: delivery is asynchronous and unordered relative to
+  engine continuations; the mutation→callback interval can span
+  assignments. T3 does not follow from T1 + T2 without a
+  delivery-ordering guarantee no host provides. Everything below is
+  therefore derived from T1 + T2 alone; wherever a claim would need T3,
+  it is named as a residual instead of asserted.
+
+### 14.3 The assignment-before-write visibility theorem (restated as T′ in the third revision — still the linchpin)
 
 The first revision built a prediction/buffer/resolution machine because
 it assumed the filter cannot see the moment the engine's write root
-moves. The source says otherwise. **FACT (each clause cited):**
+moves. The source says otherwise. The second revision stated the
+resulting theorem with a stronger second sentence than the source
+supports; the third revision narrows it to exactly what is proven. **FACT
+(each clause cited):**
 
-> **Theorem T (assignment-before-write visibility).** Every filesystem
-> write or delete the engine performs derives its output root from
-> `this.planInput` read at operation time (F3), and every assignment to
-> `this.planInput` (F2's four sites) happens in the same async
-> continuation chain strictly before the writes that follow it:
+> **Theorem T′ (assignment-before-write visibility, decision-time form).**
+> Every filesystem write or delete the engine performs derives its output
+> root from `this.planInput` read at operation time (F3), and every
+> assignment to `this.planInput` (F2's four sites) happens in the same
+> async continuation chain strictly before the writes that follow it:
 > `start` 365 → 366; `rebuild` 379 → 380; scoped 520 → 526+; full
 > 545 → 546; the incremental, workshop-text and preview writers read
 > `this.planInput` per operation (558, 665, 701) and run only in the
-> pre-assignment phase of their batch. JavaScript executes the
-> controller's `schedule()` (the watcher callback) to completion between
-> engine continuations. Therefore a `schedule()`-time read of a getter
-> over `this.planInput` observes exactly the root the engine is writing
-> at that instant: **no engine-generated event can ever be classified
-> against a getter value that does not name the root the event came
-> from.**
+> pre-assignment phase of their batch. Therefore, at any instant, the
+> engine's committed baseline names the root — and the whole outdir
+> subtree — under which all engine activity at that instant occurs, and
+> a `schedule()`-time getter read observes that same state (T1 + T2,
+> §14.2). The getter read therefore supports exactly one drop rule:
+> **at decision time, the committed root's subtree is engine territory,
+> and every other path is not.** The theorem makes **no claim about when
+> a watcher event's underlying mutation occurred** (T3 is unprovable —
+> F19), and no claim that an event under the committed root at decision
+> time was engine-generated or was incorporated by the commit that
+> named that root.
+
+**What the second revision's stronger form claimed, and why it fails
+(noted for the record).** Theorem T's original headline — "no
+engine-generated event can ever be classified against a getter value
+that does not name the root the event came from" — asserted T3. The
+"Watcher latency" proof obligation reasoned "the engine wrote it under
+that same root at write time" from "between write and read the root can
+only have moved by a *later* re-baseline"; the premise is true
+(assignment order, T1) but the conclusion does not follow, because the
+delivery interval is unbounded (F19) and a later re-baseline can
+*adopt the event's own root* (a case-6 A→B move makes formerly-forwarded
+under-A paths drop, and under-B paths that were legitimate source at
+mutation time drop). No `(type, path)` event stream can distinguish
+engine output from a user mutation under the same path — §14.8.3 already
+stated this as the indistinguishability fact; the original theorem's
+headline contradicted it. The revised drop rule (decision-time
+ownership) is the one both revisions actually specified; T′ aligns the
+theorem with the specification.
 
 Proof obligations, discharged against source:
 
@@ -2011,42 +2121,75 @@ Proof obligations, discharged against source:
   Y, the event is not under Y's root and is forwarded — the engine
   applies it against its current baseline and writes into the current
   root (terminating, bounded one-generation garbage — §14.8.4); if not,
-  the event is under X, the engine's territory at write time, and is
-  dropped. Sound in both orders.
-- *Watcher latency.* A write's event is delivered after the write; the
-  schedule-time getter read happens after the delivery; between write
-  and read the root can only have moved by a *later* re-baseline — the
-  overlapping-applies case above. The event is never mis-dropped: drops
-  require the event to be under the root the getter names **now**, and
-  the engine wrote it under that same root at write time (or a root
-  since abandoned — in which case the event is forwarded, never
-  dropped).
-- *Batch truncation.* A full-rebuild delta truncates its batch's
-  remainder (F7) — same-batch events are never classified. Their disk
-  mutations preceded the flush (watcher events trail disk writes), and
-  the rebuild's `copyTree` reads the live tree at execution time (F14),
-  so truncated edits are incorporated by the rebuild itself. A
-  late-delivered event (arriving after the rebuild) is a *later batch*,
-  classified normally. No loss path.
+  the event is under X — the committed root at **decision time** — and
+  is dropped. Sound in both orders *as a decision-time rule*; what the
+  drop means for a delayed mutation is §14.8.5's business, not this
+  obligation's.
+- *Delivery latency (corrected — was "Watcher latency").* A mutation's
+  event arrives after the mutation by an **unbounded, unordered**
+  interval (F19). At decision time exactly one of two dispositions
+  occurs, both safe as decisions: the event is under the root the
+  getter currently names (dropped — territory; what that means for a
+  delayed mutation is governed by §14.8.5, not by this theorem), or it
+  is under a root the engine has left or never committed (forwarded —
+  the engine classifies it against the committed baseline, a
+  terminating write, §14.8.4). **Engine-output events under an
+  abandoned root are therefore forwarded, not filtered** — bounded
+  garbage by the §14.8.4 analysis, never loop protection in the strong
+  "every engine event is filtered" sense. No mis-dropped *decision*
+  exists under T′; whether a drop loses a *mutation* is the residual
+  the territory contract owns.
+- *Batch truncation (corrected).* A full-rebuild delta truncates its
+  batch's remainder (F7) — same-batch events are never classified
+  (position-independently, F20). Their disk mutations preceded the
+  flush (watcher events trail disk writes), and the rebuild's
+  `copyTree` reads the live tree at execution time (F14), so truncated
+  edits are incorporated by the rebuild itself **iff the rebuild
+  succeeds** — F13's abort-on-first-failing-operation bounds that
+  guarantee. A late-delivered event (arriving after the rebuild) is a
+  *later batch*, classified normally. The failed-rebuild remainder is
+  owned by C10 (§14.13), not by this theorem.
+- *Rapid alternation and containment (new obligation).* A→B→A changes
+  produce, at each decision, the same two-way split — under the
+  current committed root or not; no decision requires knowing the
+  order of past re-baselines, so rapid alternation adds bounded churn
+  (forwarded stale-root events per move, §14.8.4) but no new drop
+  shape. Roots that contain one another (an outdir at
+  `<project>/a/b` while a previous root was `<project>/a`): the
+  helper's segment-exact relative test (`watch-shared.ts:44–48`) makes
+  the deeper root's subtree a strict subset — the two configurations
+  filter nested territories, each decision taken against the getter's
+  single current value; no combined or shadowed state is ever
+  consulted. Both cases are decision-safe under T′ without additional
+  mechanism.
 
 **Consequences (normative for everything below):**
 
-1. An outdir-level committed-baseline getter, read live at schedule time,
-   is a **sound loop-protection authority**: every engine-generated event
-   is under the root the getter names at decision time and is dropped.
-2. Events under a root the engine has **not** committed are not engine
-   output. Forwarding them to the engine is safe: the engine classifies
-   them against its committed baseline and writes into the committed
-   root (terminating). In particular the A1 window — a predicted root
-   the engine never adopts (failed plan input) — needs no buffer and no
-   replay: the events are simply delivered, which is what the stashed
-   A1 test requires.
-3. No prediction, no transition state, no buffer, no correction read can
-   improve on the live getter, because none of them can be *less stale*
-   than a value that is never stale. Every root-holding structure the
-   first revision introduced is strictly redundant.
+1. An outdir-level committed-baseline getter, read live at schedule
+   time, is a **sound decision-time loop-protection authority**: under a
+   stable root, every engine write lands under the root the getter
+   names when the write's event is decided, and is dropped. Under root
+   moves the protection degrades *safely*: engine events from an
+   abandoned root are forwarded and re-absorbed (bounded one-generation
+   garbage, §14.8.4) — bounded forwarding, not universal event
+   filtering, is the honest statement of the loop property (§14.8.4's
+   no-self-sustaining-cycle proof).
+2. A path **outside the committed root at decision time** is not
+   identifiable as engine output and is forwarded. Forwarding is safe:
+   the engine classifies it against its committed baseline and writes
+   into the committed root (terminating). In particular the A1 window —
+   a predicted root the engine never adopts (failed plan input) — needs
+   no buffer and no replay: the events are simply delivered, which is
+   what the stashed A1 test requires.
+3. No prediction, no transition state, no buffer, no correction read
+   can improve on the live getter for the *decision* it makes, because
+   none of them can be *less stale* than a value that is never stale —
+   and none of them can recover a delayed mutation's provenance either
+   (T3, F19): provenance-based narrowing is not a better design, it is
+   an impossible one on the available information. Every root-holding
+   structure the first revision introduced is strictly redundant.
 
-### 14.4 Failure timelines (nine scenarios, re-derived)
+### 14.4 Failure timelines (ten scenarios, re-derived)
 
 For each scenario: the authoritative engine baseline (S3), what the live
 getter exposes, and the disposition under the revised contract. **FACT**
@@ -2068,9 +2211,14 @@ for the source clauses; **DECISION** for the disposition.
 3. **Full rebuild with plan-input failure.** 545 throws inside the
    try/catch; baseline **retained** (A1's mechanism); result
    `{fullRebuild: false, errors}` (F4). Getter: unchanged (no
-   completion). Events under the predicted-but-uncommitted root were
-   never dropped — they were forwarded and applied against the retained
-   baseline (consequence 2). **A1's loss is structurally absent.**
+   completion). Events under the predicted-but-uncommitted root that
+   arrive while the attempt has failed are forwarded and applied
+   against the retained baseline (consequence 2). **A1's loss is
+   structurally absent for this state** — conditional, as every
+   territory drop now is: an under-B event *delayed past a later
+   successful commit of B* is territory (scenario 10), and the failed
+   attempt's errors now set the C10 degraded state (§14.13), which is
+   what makes the A1 outcome (delivery) resumable rather than assumed.
 4. **Full rebuild with build-phase failure after assignment.** 545
    completed, `buildVariants` threw (A′); baseline = the **new input**
    (committed despite the failure — its outputs are partial per F13: the
@@ -2102,17 +2250,66 @@ for the source clauses; **DECISION** for the disposition.
    batch is classified against the baseline current at *its* execution.
    Event-level filtering happened at schedule time against the
    then-current getter — the forward direction (consequence 2) absorbs
-   every mismatch, the drop direction is exact (consequence 1).
-   **Safe at both layers; no cross-flush state exists to desynchronize.**
-9. **Stop/restart and stale asynchronous completion.** `stop()` clears
-   controller state, disposes the watcher, drains the session queue
-   (`util/devsync.ts:137–151` + F6). An in-flight flush's continuation is
-   identity-guarded (213–215 shape retained) so it cannot adopt into the
-   next session; its spliced batch may still be written by the *old*
-   session after the new one started (bounded: one drained batch; the
-   watcher is gone). C8's retry state is identity-guarded the same way
-   (§14.11). **The new session's getter is the only authority read after
-   restart; the old session's getter is dead state that is never read.**
+   every mismatch, the drop direction is a decision-time territory
+   drop (§14.8.5 governs what it means for delayed mutations).
+   **Safe at both layers as a decision rule; no cross-flush state
+   exists to desynchronize.**
+9. **Delayed delivery across a root move (P0-A — new in the third
+   revision).** The mutation→decision interval is unbounded (F19), so a
+   *user* mutation can be decided after the mutation's root has been
+   committed by a re-baseline that did not incorporate it. Full
+   timeline (the case-6 shape, all steps source-grounded):
+
+   ```text
+   Baseline A (case-6 root inside a configured mod).
+   User edits <A>/media/lua/revived.lua — legitimate source at
+     mutation time (classifyDelta against the current plan input
+     has no outdir rule; the engine would sync it into A).
+   A project.json event (or a scoped trigger) flushes; the engine
+     commits root B (545 or 520) and — failure shapes F13/F20 —
+     does not copy revived.lua into B.
+   The edit's watcher callback is finally delivered.
+   getBaselineOutDir() → B; isWatchPathIgnored(projectDir, B,
+     <A>/media/lua/revived.lua) → true (B's subtree covers A when
+     A ⊂ B; conversely an under-B edit after an A-commit is
+     covered by the same rule when B ⊂ A).
+   The event is dropped as territory — with no delivery, no
+     retry, and (pre-C10) no observable signal.
+   ```
+
+   Determination, point by point: (1) the mutation **was legitimate
+   source when it occurred** — classification happens against the
+   plan input at apply time, and ownership is not retroactive in
+   intent; (2) the commit to B **does not necessarily incorporate** the
+   mutation — F7's healing requires a successful rebuild, F13 bounds
+   it to operations before the first failure, and a scoped commit
+   re-syncs only the scoped mods (F21); (3) the callback-time getter
+   **cannot distinguish** this case from an engine-output event — T3
+   is unprovable (F19, §14.8.3); (4) the territory contract **is
+   decision-time and therefore does reclassify ownership
+   retroactively from the event's viewpoint** — that semantic is
+   explicit product policy, stated in §14.8.6; (5) without C10 the
+   event **could remain unprocessed indefinitely** (no later event
+   exists — the file was not re-saved; nothing else names it); with
+   C10 every non-incorporating commit leaves an observable degraded
+   state whose resync heals it, and the §14.17 micro-residual covers
+   the incorporating-commit remainder. Reverse ordering (engine writes
+   under A; baseline moves to B; A's delayed output event arrives;
+   getter returns B): the event is **forwarded** (not under B) and
+   re-absorbed per §14.8.4 — bounded forwarding is the actual loop
+   behavior; no universal "every engine-generated event is filtered"
+   claim survives F19. **Getter: the decision is always well-defined;
+   the mutation's meaning is the named residual.**
+10. **Stop/restart and stale asynchronous completion.** `stop()` clears
+    controller state, disposes the watcher, drains the session queue
+    (`util/devsync.ts:137–151` + F6). An in-flight flush's continuation
+    is identity-guarded (213–215 shape retained) so it cannot adopt
+    into the next session; its spliced batch may still be written by
+    the *old* session after the new one started (bounded: one drained
+    batch; the watcher is gone). C7's failed-batch queue is
+    identity-guarded the same way (§14.11). **The new session's getter
+    is the only authority read after restart; the old session's getter
+    is dead state that is never read.**
 
 ### 14.5 Assessment: closure snapshot vs committed baseline
 
@@ -2166,7 +2363,7 @@ gains a read-only getter over F2's field — shape
 
 - *Authority/consistency:* direct — the getter **is** S3; divergence is
   impossible by construction; the microtask question disappears (there
-  is no second recording). With theorem T it is also a *complete*
+  is no second recording). With theorem T′ it is a *decision-complete*
   filtering authority (consequences 1–3), which is what the first
   revision did not realize.
 - *Assignment/observation ordering:* reads observe assignments exactly
@@ -2253,7 +2450,7 @@ convention-bearing and surface-heavier); Option C is rejected.
   open/resolve lifecycle and the buffer (first revision C3–C5) are
   **deleted**. A root-level `project.json` event is delivered like any
   other event; the engine's full rebuild re-baselines; the getter
-  follows at the assignment (theorem T) — *adopt-on-commit replaces
+  follows at the assignment (theorem T′) — *adopt-on-commit replaces
   adopt-on-prediction*, which is strictly safer: a prediction the
   engine never commits (A1) adopts nothing.
 - **C4 — no buffer, no cap, no overflow.** The transition buffer is
@@ -2282,9 +2479,11 @@ convention-bearing and surface-heavier); Option C is rejected.
   contract (F5); it repairs both hosts at once (F10).
 - **C7 — (renumbered) delivery recovery is host-side and bounded.** Both
   flushes (extension `util/devsync.ts`; CLI `commands/watch.ts`) gain a
-  rejection guard with session-identity checks, a dedicated retry slot
-  and timer, a finite retry budget with backoff, and a terminal state
-  with an explicit recovery procedure. Full specification in §14.11 —
+  rejection guard with session-identity checks, a bounded failed-batch
+  queue with a single retry driver and per-entry budgets (third
+  revision — the second revision's single retry slot collided under
+  overlapping rejected flushes, P0-B), and a terminal state with an
+  explicit recovery procedure. Full specification in §14.11 —
   the first revision's "requeue at the head of `pending`" is
   **replaced** (it re-delivered only on the next watcher event and had
   no terminal semantics).
@@ -2296,6 +2495,23 @@ convention-bearing and surface-heavier); Option C is rejected.
   controller reads the getter through its captured session reference;
   identity guards (§14.11) keep a stopped session's getter out of the
   next session's decisions.
+- **C10 — result-level re-baseline failures are observable degradation,
+  not handled delivery (new in the third revision).** When an apply
+  whose batch contains a `full-rebuild` or `mod-scoped` delta resolves
+  with a non-empty `errors` array (the F4 shapes: a failed full rebuild
+  or scoped rebuild — including truncation of the batch's remainder,
+  F7/F20), the controller sets a sticky **`resyncRequired`** state —
+  the same terminal-state flag C7 uses — and logs one error naming the
+  failure and the recovery. The batch is **not** retried (deterministic
+  build failures must not loop); subsequent deliveries continue
+  flowing. The flag clears only per §14.13's clearing rule — a
+  successful `start()`, or an apply reporting `fullRebuild === true`
+  with no errors (a successful scoped re-baseline never clears it).
+  Rationale: theorem T′ + F13 + F20/F21 prove a failed re-baseline can
+  leave source work unincorporated and its future events
+  territory-dropped, so "errors logged" is not "delivery complete";
+  the degraded state makes the gap observable and recoverable without
+  introducing a retry loop. Full specification in §14.13.
 
 ### 14.8 What the filter drops, and why that is not a loss (the territory contract)
 
@@ -2304,13 +2520,15 @@ discards are events under the **committed** output root at schedule
 time. This section states why that discard is a contract, not a silent
 loss, and bounds every residual behavior around it.
 
-1. **The engine's writes are exactly covered.** Every write/delete the
-   engine performs is under `resolveBuildOutputPath(this.planInput.config,
+1. **The engine's writes are exactly covered at decision time.** Every
+   write/delete the engine performs is under `resolveBuildOutputPath(this.planInput.config,
    variant)` for the plan input current at operation time (F3), and
-   theorem T guarantees the getter names that root at every event
-   decision. Engine output can never feed the session: **S2 holds by
-   construction**, including the §3.1-case-6 layouts the filter exists
-   for.
+   theorem T′ guarantees the getter names that root at every decision
+   made while the engine is actively writing it. Engine output can
+   never *sustain* a self-feeding loop (§14.8.4's cycle proof): **S2
+   holds by construction**, including the §3.1-case-6 layouts the
+   filter exists for. (Engine events from a root abandoned before
+   their delivery are forwarded — bounded, §14.8.4.)
 2. **The committed outdir is engine territory by existing semantics.**
    The engine deletes and rewrites the variant folders on every
    structural change (F7, `buildplan.ts:341–342`); its own output
@@ -2319,38 +2537,52 @@ loss, and bounds every residual behavior around it.
    outdir-granular post-commit filtering as correct behavior (F18). A
    file placed under the committed output root is in the engine's
    output directory — the same standing any build tool's output
-   directory has. **RESIDUAL (named, not a silent loss):** a user file
-   created under the committed outdir is not source-delivered while
-   that root is committed. In a §3.1-case-6 layout the file lies inside
-   a mod folder, so the *next* full build or scoped rebuild of that mod
-   re-reads it from disk and incorporates it (F14) — the same
-   healing-by-rebuild the Q3 contract relies on for same-burst edits.
-   When the root moves away, the getter moves with it and the subtree
-   reverts to ordinary source semantics (the §3.2 temporal loss is
-   structurally closed — no cached root exists to be stale).
+   directory has. **RESIDUAL (named, not a silent loss, in intent):** a
+   user file created under the committed outdir is not source-delivered
+   while that root is committed — and neither is a *mutation event*
+   decided there, whatever the mutation's history (§14.8.6). In a
+   §3.1-case-6 layout the file lies inside a mod folder, so the *next*
+   full build or scoped rebuild of that mod re-reads it from disk and
+   incorporates it (F14) — the same healing-by-rebuild the Q3 contract
+   relies on for same-burst edits. When the root moves away, the getter
+   moves with it and the subtree reverts to ordinary source semantics
+   (the §3.2 temporal loss is structurally closed — no cached root
+   exists to be stale).
 3. **What cannot be distinguished, and why it does not matter.** From a
    `(type, path)` watcher event and the committed-root getter alone, a
    user edit under the committed root is indistinguishable from an
    engine write — no timing, provenance or content signal exists in the
    event stream (this is the precise answer to the brief's P1
-   ambiguity question). The territory contract resolves the
-   ambiguity by ownership rather than by provenance: under the
-   committed root, both origins are out-of-scope for delivery; outside
-   it, both are delivered and the engine — the component that owns
-   classification — decides what they mean. Forwarding outside-root
-   events is safe because the engine writes only into the committed
-   root (terminating; bounded one-generation garbage, below).
-4. **Bounded garbage, never a loop.** An event under a root the engine
-   has left (stale title folder, a root abandoned mid-apply, an
-   outdir-subtree path in a case-6 layout) is forwarded, classified
+   ambiguity question). The third revision makes this fact load-bearing
+   in the temporal dimension as well: because delivery is unordered
+   relative to assignments (F19), the same indistinguishability holds
+   for *when* the mutation happened — T3 is unprovable (§14.2). The
+   territory contract resolves the ambiguity by ownership rather than
+   by provenance: under the committed root, both origins are
+   out-of-scope for delivery; outside it, both are delivered and the
+   engine — the component that owns classification — decides what they
+   mean. Forwarding outside-root events is safe because the engine
+   writes only into the committed root (terminating; bounded
+   one-generation garbage, below).
+4. **Bounded garbage, no self-sustaining cycle.** An event under a root
+   the engine has left (stale title folder, a root abandoned mid-apply,
+   an outdir-subtree path in a case-6 layout) is forwarded, classified
    against the current baseline, and written into the *current* root's
    variant folders (F3) — where subsequent events for it are dropped
    (C2). Each root move can thus cause at most one spurious sync per
-   in-flight event; no chain of forwards can close a cycle. **S2's
-   "unbounded feedback loop" is impossible**: a loop would require an
-   engine write to generate an event that is itself forwarded, but
-   engine writes are always under the committed root (theorem T) and
-   are always dropped.
+   in-flight or delayed event; no chain of forwards closes a cycle
+   *through engine writes*, because a forwarded event's write lands
+   under the committed root, whose own events are dropped. Stated
+   precisely (the third revision's narrowing): the cycle proof is
+   about **self-sustaining loops** — a loop would require an
+   engine write to generate an event that is itself forwarded into
+   another engine write without bound, and each forwarded write's
+   output events terminate in committed territory. Delayed or
+   re-delivered events of *one* generation may each cause one
+   forwarding (bounded by the event's own re-delivery, not by engine
+   output); **S2's "unbounded feedback loop" is impossible** in that
+   sense, and "every engine-generated event is filtered" is
+   deliberately *not* claimed (§14.4.9, reverse ordering).
 5. **The pre-assignment scoped window, restated.** An event under the
    *future* root arriving between the schedule-time decision and the
    scoped assignment (520) is forwarded and applied against the old
@@ -2364,6 +2596,61 @@ loss, and bounds every residual behavior around it.
    surviving in a strictly weaker form: the event is *delivered*
    (nothing is silently dropped); what remains is placement plus the
    heal-iff-timing property, governed by the same territory contract.
+6. **Delayed delivery and retroactive ownership (third revision — the
+   P0-A contract statement).** Because delivery is unordered relative
+   to assignments (F19), ownership is evaluated **at decision time**:
+   a mutation performed while a root was uncommitted source territory
+   can be dropped if its event is decided after that root — or a root
+   containing it — is committed (§14.4.9). The contract states this
+   openly instead of claiming provenance sensitivity it cannot have.
+   The observable consequences are bounded by two mechanisms:
+   - **Incorporating commits** (a successful full rebuild whose
+     `copyTree` traversed the file's subtree before any failure —
+     F14/F13) make the drop lossless: the mutation is in the output,
+     and the drop only prevents a redundant re-delivery. The residual
+     when a commit incorporates *most* but not *all* pending mutations
+     is named in §14.17 (the bounded repair re-read is per-subtree,
+     not per-file).
+   - **Non-incorporating commits** (a failed re-baseline — F4/F13/F20 —
+     or a scoped commit that excludes the file's mod, F21) would
+     strand the mutation silently; C10 makes them observable
+     (`resyncRequired`) and recoverable (restart/`pzstudio build`
+     re-reads the live tree — every stranded mutation predates the
+     commit, so a post-commit resync provably heals them all). The
+     repair is therefore guaranteed *up to the next successful full
+     rebuild*, not per-event — strictly weaker than per-event
+     delivery, and stated as such.
+   This item is what replaces the second revision's unconditional "the
+   event is never mis-dropped" claim: decisions are exact, mutation
+   outcomes are contract + healing.
+7. **Territory granularity is a product decision, not a proof
+   (third revision — decision item).** That the **whole committed
+   outdir** (not just the engine's per-variant write folders) is
+   territory — including user edits under outdir paths that are not
+   engine-written files, pre-commit mutations captured by a
+   post-commit decision, and case-6 layouts where the outdir doubles
+   as mod source — is a **policy choice**, adopted for three reasons
+   and requiring explicit owner confirmation with the Q4 approval:
+   (a) continuity — the shipped CLI watch filters the same whole
+   subtree for a stable root (`watch.ts:142–148`), and the Q3-accepted
+   policy did the same, so Q4 does not change the drop *set* for
+   stable roots; (b) the stashed A1 control pins outdir-granular
+   filtering as the regression expectation (F18); (c) per-variant
+   narrowing cannot recover provenance anyway (T3) — it would only
+   shrink the drop set while keeping the retroactive-capture semantic
+   at variant-folder granularity. Consequences an owner accepts with
+   it: a *narrower* drop set (per-variant write roots) would reclassify
+   non-variant outdir paths as source and is rejected on (b) + surface
+   grounds (§14.6); a *root-migration source↔output flip* is handled
+   by the same getter (former output reverts to source the moment the
+   committed root moves — no stale cache exists; new territory is
+   captured the moment the commit lands); and the S1 invariant must be
+   read with §14.8.6's repair bound, not as per-event delivery. If the
+   owner instead requires per-event mutation provenance, that is a
+   **missing contract capability** (engine-side write provenance or a
+   delivery-ordering guarantee — neither exists in the public API), and
+   the correct disposition is BLOCKED-for-that-requirement, not a
+   silent narrowing.
 
 ### 14.9 P1 — COMMITTED-discard reassessed (CN-1)
 
@@ -2420,8 +2707,11 @@ and the engine writes it into A" — holds *by construction*, without a
 transition, a replay, or a resolution step. S1 and S2 both hold for
 every supported configuration with the outdir-level getter alone:
 **no missing capability, not BLOCKED** — the missing capability the
-review anticipated (output-write provenance) is rendered unnecessary by
-theorem T, and the alternative narrowing (a write-roots getter) is
+review anticipated (output-write provenance) is rendered unnecessary
+for the decision-layer guarantee by theorem T′ (provenance recovery is
+in fact impossible on `(type, path)` events — F19; the territory
+contract §14.8.6/§14.8.7 owns what provenance would have decided), and
+the alternative narrowing (a write-roots getter) is
 rejected on the F18 gate (§14.6).
 
 **Alternatives compared (all against source):**
@@ -2431,9 +2721,9 @@ rejected on the F18 gate (§14.6).
 | Replay the whole buffer at COMMITTED | Rejected | Re-feeds engine output writes into the engine in case-6 layouts — the exact self-feed direction §14.7-B (first revision) rejected; bounded garbage per event, but it re-opens by policy what C2 exists to prevent. |
 | Widen the getter to the per-variant write roots; drop only those subtrees | Rejected | Breaks the stashed A1 control's outdir-granular post-commit pin (F18); reclassifies part of the committed territory as source; wider surface for no theorem benefit (§14.6). |
 | Trigger `session.rebuild()` at COMMITTED when the buffer is non-empty | Rejected | Heavy (a second full rebuild per structural change), F4-asymmetric on failure, and unnecessary once events are forwarded instead of buffered; the same primitive is retained for explicit recovery (§14.10.4). |
-| Engine-side write provenance (report written paths per apply) | Rejected for Q4 | A new result-contract surface on the frozen engine; theorem T makes per-write attribution unnecessary — the *boundary* of engine writes is already implied by the committed root. |
+| Engine-side write provenance (report written paths per apply) | Rejected for Q4 | A new result-contract surface on the frozen engine; theorem T′ makes per-write attribution unnecessary for the decision rule — the *boundary* of engine writes at decision time is already implied by the committed root (provenance recovery across delivery delay is impossible anyway, F19). |
 | Configuration constraint (reject case-6 layouts for DevSync) | Rejected | §3.1 case 6 declares the layout valid and intended; the doctor flags it, and §12.5 assigns layout remediation to configuration guidance, not watcher mechanics. The brief forbids rejecting existing layouts without justification. |
-| **Forward under-uncommitted-root events; drop only under the committed root (C2, live)** | **Selected** | The engine is the classifier; delivery is safe by theorem T; the discard set is exactly the engine's territory (§14.8); the stashed A1/B1/C1 outcomes hold by construction. |
+| **Forward under-uncommitted-root events; drop only under the committed root (C2, live)** | **Selected** | The engine is the classifier; the decision is safe by theorem T′; the discard set is exactly the engine's decision-time territory (§14.8); the stashed A1/B1/C1 outcomes hold by construction. |
 
 ### 14.10 P2 — the degraded buffer and overflow recovery
 
@@ -2513,79 +2803,160 @@ properties govern the recovery paths that *do* remain (§14.11).
    command surface, not a watcher-policy one): at most one attempt per
    invocation, no automatic re-arming — S4-bounded.
 
-### 14.11 P3 — bounded delivery retry and terminal behavior (C7, full specification)
+### 14.11 P3 — bounded delivery retry and terminal behavior (C7, full specification; reworked in the third revision)
 
 Post-C6 (normalization), `apply()` rejects only on unexpected engine or
 host failure — every expected per-action failure is reported in
 `result.errors`. The rejection guard exists so a spliced batch can never
-be silently abandoned (F10) *whatever* throws. **DECISION (normative,
-both hosts):**
+be silently abandoned (F10) *whatever* throws. The second revision
+specified this as a single retry slot; the third revision replaces the
+slot with a bounded FIFO failed-batch queue (P0-B, rules 2/8). **DECISION
+(normative, both hosts):**
 
 1. **Session identity guard before every requeue or asynchronous state
    mutation.** `flush()` captures `session` and `projectDir` at entry
    (the existing shape, `util/devsync.ts:200–201`). The rejection
-   handler — and every continuation that touches retry state — proceeds
-   only if `this.session === session && this.projectDir === projectDir`;
+   handler — and every continuation that touches failed-batch state —
+   proceeds only if `this.session === session && this.projectDir === projectDir`;
    otherwise the batch belongs to a stopped session and is dropped with
    a warn (its changes are on disk; the documented stop semantics
-   discard it — §14.4.9). The same guard wraps the retry timer's fire.
-2. **Retry scheduling is independent of watcher events.** A rejected
-   batch moves to a dedicated **retry slot** (`retryBatch: { deltas,
-   attempt }`), *not* back into `pending` — the first revision's
-   "requeue at the head of `pending`" relied on the debounce, which only
-   arms on a *new* `schedule()` call: with no further events the batch
-   would sit forever. The retry slot arms its own timer.
-3. **Finite budget with deterministic backoff.** At most **3 retries**
-   after the initial delivery (4 attempts total); the retry delay is
-   `WATCH_DEBOUNCE_MS × 2^attempt` (300/600/1200 ms) — deterministic for
-   tests, long enough to clear transient host/fs contention (emfile-class
-   errors), short enough that a deterministic failure exhausts in ~2 s
-   and surfaces instead of spinning. The attempt counter lives on the
-   batch.
-4. **Failed batches are separated from subsequent source events.** The
-   retry slot is delivered as its own `session.apply` call; `pending`
-   continues to drain independently (the queue serializes the two —
-   F6). A slow-failing batch never withholds fresh user edits, and a
-   fresh burst never inflates the failed batch.
-5. **Terminal handling of deterministic repeated failures.** After the
-   third failed retry the batch is parked terminally: the retry slot is
-   cleared (no further automatic attempts — **S4**), the controller
+   discard it — §14.4.10). The same guard wraps the retry driver's
+   fire.
+2. **Failed batches enter a bounded FIFO queue, never `pending`, and
+   never overwrite one another (third revision — replaces the single
+   retry slot).** The second revision specified one `retryBatch` slot;
+   P0-B showed two overlapping rejected flushes from the same live
+   session overwrite it (the second rejection wins, the first batch is
+   silently lost — the identity guard checks *session* identity, which
+   is equal for both, not *batch* ownership). The contract is therefore
+   a **failed-batch queue** (`failedBatches: Array<{ deltas, attempt }>`,
+   append-only on rejection), with these bounds and semantics:
+   - **Capacity bound (S4): 16 entries.** Overflow cannot drop: the
+     oldest *terminal* (exhausted) entry is retired to the
+     `resyncRequired` bookkeeping (its paths are already logged and
+     covered by the recovery re-read — §14.11.6) to make room; if no
+     entry is terminal, the *newly rejected* batch takes the terminal
+     path immediately (logged + `resyncRequired`, not queued) instead
+     of displacing a pending retry. 16 exceeds any realistic overlap:
+     flush overlap is bounded by the debounce cadence (300 ms) against
+     serialized applies, so more than a handful of *concurrently
+     rejected* batches already implies a persistently failing engine —
+     which is the terminal state's job, not the queue's.
+   - **At-least-once delivery:** every queued entry is delivered by a
+     `session.apply` call until it either resolves (success — entry
+     removed) or exhausts its budget (terminal — logged, flagged,
+     removed). No path removes an entry without one of the two
+     outcomes. Failure of a delivery *attempt* leaves the entry in
+     place with its attempt counter incremented.
+   - **Ordering:** FIFO by rejection time. The engine's apply queue
+     (F6) serializes the deliveries; batch content order within one
+     original batch is already coalesced by the engine (F17). Cross-batch
+     source-order is not preserved against interleaved fresh `pending`
+     flushes — the same property the pre-existing unguarded pipeline
+     has; the engine's per-path final-state semantics (F17) make
+     last-writer-wins per path safe.
+   - **Memory:** each entry is the spliced `FileDelta[]` it failed
+     with — the same data the pre-C7 design dropped; the queue holds at
+     most 16 of them (bounded by the overflow rule above). No growth
+     loop exists: rejections are host-event-driven (a burst ends) and
+     the terminal path retires entries permanently.
+3. **Retry scheduling is independent of watcher events, and driven by
+   exactly one timer.** A single retry driver timer re-delivers the
+   queue's head entry on its own backoff — never a timer per entry
+   (which would re-introduce racing drivers) and never a reliance on
+   `pending`'s debounce (which only arms on a *new* `schedule()` call:
+   with no further events a failed batch would sit forever). When the
+   head entry resolves successfully the driver advances to the next
+   entry; when it rejects, the entry's attempt count increments and the
+   driver re-arms.
+4. **Finite budget with deterministic backoff, per entry.** Each queued
+   batch gets at most **3 retries** after its initial delivery (4
+   attempts total); the retry delay is `WATCH_DEBOUNCE_MS × 2^attempt`
+   (300/600/1200 ms) — deterministic for tests, long enough to clear
+   transient host/fs contention (emfile-class errors), short enough
+   that a deterministic failure exhausts in ~2 s and surfaces instead
+   of spinning. The attempt counter lives on the queued entry.
+5. **Separation and terminal handling of deterministic repeated
+   failures.** Queued entries are delivered as their own `session.apply`
+   calls; `pending` continues to drain independently (the engine's queue
+   serializes the two — F6). A slow-failing batch never withholds fresh
+   user edits, and a fresh burst never inflates a failed one. After an
+   entry's third failed retry it is retired terminally: removed from
+   the queue (no further automatic attempts — **S4**), the controller
    enters a `resyncRequired` state, and one **error-level** log names
    the delta count and each undelivered path plus the recovery
-   procedure (below). `resyncRequired` is sticky: it clears only on the
-   next `start()` (or the host's equivalent of a session rebuild).
-   Subsequent batches still flow (separation, rule 4); if the
-   underlying failure persists, each batch terminates the same way —
-   one error log per exhausted batch, bounded by flush frequency.
+   procedure (below). `resyncRequired` is sticky: it clears on the
+   next `start()` (or the host's equivalent of a session rebuild) — or
+   on the next apply reporting `fullRebuild === true` with no errors,
+   per §14.13 (a successful scoped re-baseline does not clear it). If
+   the underlying failure persists, each subsequent rejected batch
+   terminates the same way — one error log per exhausted batch, bounded
+   by flush frequency.
 6. **Recovery after the underlying failure is corrected.** The
    deterministic procedure is **toggle DevSync off and on (or run
    `pzstudio build`)**: the new session's `start()` full-builds from the
-   live tree (365–366, F14/F15) — a superset of the parked batch's
-   changes, since every delta in a rejected batch was a filesystem
-   mutation that already reached disk (watcher events trail disk
-   writes). This is why terminal parking is not irreversible loss: the
-   information preserved is the batch's presence (flag + logged paths),
-   and the recovery provably resynchronizes from disk. **A terminal log
-   alone would not satisfy S1/S6; the log *plus* the sticky state plus
-   the provable resynchronization does.**
+   live tree (365–366, F14/F15) — a superset of every exhausted entry's
+   changes and of any re-baseline-truncated remainder (C10), since
+   every delta in a rejected batch and every mutation predating the
+   failed commit was a filesystem mutation already on disk (watcher
+   events trail disk writes). This is why terminal parking is not
+   irreversible loss: the information preserved is the batch's presence
+   (flag + logged paths), and the recovery provably resynchronizes from
+   disk. **A terminal log alone would not satisfy S1/S6; the log
+   *plus* the sticky state plus the provable resynchronization does.**
+   **Exact clearing condition (third revision):** a *failed restart*
+   (the new session's `start()` rejects — its baseline is already
+   committed at 365 even when `buildVariants` fails, §14.4.1) leaves
+   the recovery requirement observable: the controller's catch path
+   keeps the degraded/`resyncRequired` state surfaced (the toggle UX's
+   error notice), and the recovery must be attempted again. A manual
+   `pzstudio build` **corrects the output on disk but does not clear
+   the extension session's flag** — the flag belongs to the controller
+   process; it clears only when the live session next proves recovery
+   (a successful `start()`, or an apply reporting `fullRebuild === true`
+   with no errors, per §14.13). Recovery *attempted* is not recovery
+   *proven*.
 7. **No duplicated retries across layers.** Hosts retry only
    *rejections*. Per-action failures inside a resolved
-   `SessionApplyResult` are logged once and never requeued — the
-   engine's own semantics own them (the lock-error message documents
+   `SessionApplyResult` are logged once and never requeued — with the
+   single third-revision exception of C10 (a re-baseline-class batch's
+   errors set the degraded state instead of being treated as handled;
+   the state is *not* a retry — see §14.13). The engine's own semantics
+   own per-file errors (the lock-error message documents
    next-save/full-rebuild healing, `buildsession.ts:329–335`). C6's
    normalization is what makes this separation real: without it, the
    scoped-path rejection would bypass every result-driven rule (F5).
-8. **Overlapping flush promises.** Flushes may overlap (no in-flight
-   guard — the queue serializes applies, §14.4.8). The retry slot is
-   touched only under the identity guard, delivered as its own apply,
-   and never spliced from `pending`, so overlapping flushes cannot
-   double-deliver or drop it. A retry timer firing mid-flush simply
-   enqueues a second apply behind the first.
+8. **Overlapping flush promises (third revision — the P0-B fix).**
+   Flushes may overlap (no in-flight guard — the queue serializes
+   applies, §14.4.8). The second revision's claim that a single retry
+   slot makes this safe was **false**: two overlapping rejected
+   flushes both pass the (session-level) identity guard and the second
+   `retryBatch = …` assignment silently overwrites the first batch —
+   one of two user batches lost with no signal. Under the queue design
+   each rejection **appends** its own entry (`failedBatches.push(…)`),
+   so concurrent rejections accumulate instead of colliding; the single
+   retry driver serializes their re-delivery; entries are removed only
+   by their own success or terminal retirement. A retry driver fire
+   during another flush simply enqueues one more apply behind it (F6).
+   The interleavings the review demanded, resolved: retry fire during
+   another flush → two queued applies, ordered; two rejections settling
+   consecutively → two entries; retry succeeds while another failure is
+   being parked → success removes its own entry only, the parked entry
+   is untouched; stop with a retry armed and a flush pending → the
+   identity guard retires all failed-batch state with the session
+   (§14.4.10); new watcher events during repeated failure → they flow
+   through `pending` independently (separation, rule 5); one poison
+   batch → exhausts its own budget and terminates alone; several
+   independent failures → each terminates on its own budget, one log
+   each. No owner ambiguity remains: the *queue* owns every failed
+   batch; the *driver* owns delivery order; the *entry* owns its own
+   attempt count.
 9. **CLI parity.** `commands/watch.ts`'s flush gains the same guard:
-   identity check (trivially true — one session per command), retry
-   slot + timer + budget, terminal error naming the paths and the
-   recovery (`rerun pzstudio watch`, or `pzstudio build`). No other CLI
-   behavior changes (Q3 §12.4's frozen root stands).
+   identity check (trivially true — one session per command), the same
+   failed-batch queue + single driver + per-entry budget, terminal
+   error naming the paths and the recovery (`rerun pzstudio watch`, or
+   `pzstudio build`). No other CLI behavior changes (Q3 §12.4's frozen
+   root stands).
 
 **Assessment of the proposed three-attempt limit:** appropriate —
 post-C6 rejections are unexpected failures, so the budget's job is to
@@ -2594,13 +2965,27 @@ failure state instead of an unbounded loop. A larger budget would only
 delay the terminal state; a smaller one would park recoverable batches.
 The backoff, the separation, and the terminal semantics are what make
 the number safe; any of 2–5 attempts would also be defensible — 3 is
-selected and pinned by test (§14.15, RG-11/RG-12).
+selected and pinned by test (§14.15, RG-11/RG-12). **P0-B disposition
+record:** the review was right that identity guards alone cannot solve
+same-session collisions — the guards distinguish *sessions*, and the
+colliding flushes share one. Of the candidate shapes, serialized
+host-side delivery was rejected (it would withhold fresh edits behind a
+poison batch and changes the shipped overlap behavior); a deliberately
+coalesced recovery state was rejected (it merges distinct batches'
+identities — the exact ownership failure P0-B names — and cannot
+at-least-once deliver per batch); a one-shot explicit resync trigger was
+rejected as the *primary* mechanism (it makes every transient rejection
+user-visible) but is retained as the terminal state's recovery. The
+bounded FIFO queue is the narrowest shape that gives per-batch
+at-least-once delivery, no overwrite, bounded memory and a terminal
+exit — with the missing contract made explicit: **failure-handling
+state ownership is per batch, and the host owns the retry policy.**
 
 ### 14.12 P4 — transition lifecycle: the state machine dissolved
 
 The brief models nine phases of a transition lifecycle and asks for
 ownership, token identity, buffering, completion ordering, replay, and a
-verdict on supersession and slot count. Under theorem T the machinery
+verdict on supersession and slot count. Under theorem T′ the machinery
 those phases describe does not exist, and each phase's hazard is
 discharged by a mechanism that cannot be stale. **The mapping (each row:
 the first revision's hazard → the revised discharge):**
@@ -2613,7 +2998,7 @@ the first revision's hazard → the revised discharge):**
    pre-apply getter — correct, because the engine is still writing the
    old root (or nothing).
 3. **T1 apply running before baseline assignment.** The engine writes
-   nothing under the future root in this phase (theorem T — the
+   nothing under the future root in this phase (theorem T′ — the
    window the transition buffer claimed to cover is empty). Events
    under the future root are forwarded and applied against the
    committed baseline — delivered, terminating (§14.8.4). **This is
@@ -2633,10 +3018,11 @@ the first revision's hazard → the revised discharge):**
    Q4 invention). Every event in every phase is classified live.
 7. **T1 and T2 triggers coalesce into the same flush batch.** The
    engine's `coalesceDeltas` merges them (F17); one full rebuild runs;
-   the batch remainder truncates (F7) and is healed by the rebuild's
-   live-tree re-read (theorem T, truncation clause). **DECISION:** the
-   F7 healing is normative and pinned by test (RG-12), not an
-   assumption.
+   the batch remainder truncates (F7, position-independently — F20)
+   and is healed by the rebuild's live-tree re-read **iff the rebuild
+   succeeds** (F13); the failure shapes are C10's (§14.13).
+   **DECISION:** the healing is normative and pinned by test (RG-13,
+   success-scoped; RG-19 for the failure shapes), not an assumption.
 8. **A stale apply completion arrives after "T2 opens".** No T2 state to
    poison. The flush continuation is identity-guarded (the captured
    session reference — **the token identity is the session itself**);
@@ -2646,24 +3032,27 @@ the first revision's hazard → the revised discharge):**
 9. **Stop/restart during any phase.** `stop()` clears state, disposes
    the watcher, drains the queue (F6); the identity guard prevents any
    in-flight continuation from mutating the next session's state; C7's
-   retry state is guarded identically (§14.11.1); the old session's
-   getter is dead state, never read (§14.4.9).
+   failed-batch queue is guarded identically (§14.11.1); the old
+   session's getter is dead state, never read (§14.4.10).
 
 **Transition ownership:** the controller instance, reduced to
-`session` + `projectDir` + `pending` + `timer` + C7's retry state —
-there is no transition owner because there is no transition. **Token
-identity:** the session reference (S5). **One transition slot?** Zero
-slots; the bounded representation is the getter read (a scalar), the
-pre-existing `pending` queue, and C7's single retry slot. **Generation
-ID?** No concrete counterexample survives theorem T: a generation would
-correlate events with baseline versions, but no state crosses a
-re-baseline to be correlated. **The FAILED-declaration prohibition
-(a transition may not fail merely because its predicted root is not yet
-committed while its trigger is pending) is satisfied vacuously** — no
-FAILED state exists, and the situation it feared (a predicted root the
-engine has not adopted) is the *normal, safe* forwarding case (§14.8.2).
+`session` + `projectDir` + `pending` + `timer` + C7's failed-batch queue
+and retry driver + the C10/`resyncRequired` flag — there is no
+transition owner because there is no transition. **Token identity:** the
+session reference (S5). **One transition slot?** Zero slots; the bounded
+representation is the getter read (a scalar), the pre-existing `pending`
+queue, and C7's bounded failed-batch queue. **Generation ID?** No
+concrete counterexample survives theorem T′: a generation would
+correlate events with baseline versions, but no *decision* crosses a
+re-baseline to be correlated (the delayed-mutation meaning is owned by
+the territory contract, §14.8.6, not by decision state). **The
+FAILED-declaration prohibition (a transition may not fail merely because
+its predicted root is not yet committed while its trigger is pending) is
+satisfied vacuously** — no FAILED state exists, and the situation it
+feared (a predicted root the engine has not adopted) is the *normal,
+safe* forwarding case (§14.8.2).
 
-### 14.13 Scoped apply failure contract (reporting vs recovery)
+### 14.13 Scoped apply failure contract (reporting vs recovery; reworked in the third revision)
 
 **Finding (confirmed against source):**
 
@@ -2679,14 +3068,63 @@ engine has not adopted) is the *normal, safe* forwarding case (§14.8.2).
 - The engine's queue survives (F6) — subsequent applies still run; the
   damage is exactly one batch plus one unhandled rejection.
 
-**Decision (the two concerns are separated; the four failure shapes the
-brief requires are distinguished):**
+**Third-revision finding (P0-C — result-level errors are not completely
+handled delivery).** Even after normalization, a resolved result with
+errors can represent a real delivery gap. The sequence, each step
+source-grounded:
+
+```text
+Batch: [project.json delta, my_mod/media/lua/feature.lua delta]
+  (F20: position-independent — any order truncates the same way)
+classifyDelta hits 'full-rebuild' → doFullRebuild (472)
+Fresh plan input succeeds (545) — the baseline moves to B
+buildVariants runs; the failure lands before the my_mod
+  copyTree for the relevant variant (F13: first failing
+  operation aborts that variant's remaining operations)
+The edit is on disk in the project, absent from B's output
+apply() resolves { fullRebuild: false, errors: [...] } (F4)
+The host logs the error — and treats the batch as delivered
+The truncated delta is never processed: no retry, no queue
+  entry, no state
+Every later event for feature.lua is decided against the
+  committed root B — dropped as territory (§14.8.6) if the
+  file lies under B (a case-6 layout), silently forever.
+```
+
+F7's healing guarantee ("the rebuild's live-tree re-read incorporates
+truncated edits") therefore holds **only for a successful rebuild** —
+F13 bounds it operation-wise, and the second revision's §14.11 rule 7
+generic claim ("per-action failures … the engine's own semantics own
+them") and §14.13 shape-3 disposition ("hosts log; no retry") both
+overlooked the truncated-remainder case. Distinguishing the five
+outcomes the brief demands:
+
+1. *Successful full rebuild* — everything incorporated (F14's live-tree
+   read); truncation harmless; delivery complete.
+2. *Failed plan-input resolution* — the baseline is retained (F4); the
+   batch's remainder was never executed (the whole batch's work is
+   unstarted); C10 flags.
+3. *Failed build before the relevant copy* — the baseline moved; the
+   on-disk edit is unincorporated; its future events are territory if
+   under the new root; C10 flags. **This is the persistent-missed-update
+   case, now observable.**
+4. *Failure after the relevant copy* — the edit was incorporated before
+   the failure; the miss is bounded to the ops after the failing one;
+   C10 still flags (the flag is conservative — it may clear on the next
+   successful re-baseline with nothing to repair).
+5. *Mutation landing after the copy traversal had passed the file* —
+   the rebuild could not have seen it; the delta's event is still in
+   the pipeline as a later batch (it was truncated from *this* apply
+   only if coalesced into it — F17 — in which case outcome 3/4 governs
+   by timing); C10 flags the commit whose incorporation is uncertain.
+
+**Decision (the two concerns are separated; shapes distinguished):**
 
 - **Error reporting — Core (C6).** Normalize the scoped fetch into the
   result envelope, mirroring `doFullRebuild` (543–551): catch at the
   `applyCoalesced` scoped block, push `describeError(e)` into
   `result.errors`, retain the baseline, return the result. The `scoped`
-  list stays empty (nothing was rebuilt). The four shapes:
+  list stays empty (nothing was rebuilt). The four rejection shapes:
   1. *Failure before baseline assignment* (519 rejects): normalized —
      `{errors: [msg], scoped: [], …}`, baseline retained (the
      assignment never ran).
@@ -2697,40 +3135,81 @@ brief requires are distinguished):**
   3. *Partial incremental success followed by scoped failure:* the
      incremental writes (499–514) are durable — the engine performs no
      rollback — and the result reports both the `incremental` count and
-     the errors. Hosts log; no retry (rule 7 below).
+     the errors.
   4. *Unexpected rejection escaping the result contract:* after C6 the
      only rejections are engine/host bugs — C7's guard catches them
      with bounded retry and a terminal state (§14.11). No expected
-     failure path rejects.
+     failure path rejects. Post-C6, `apply()` honoring its "never
+     throws" comment is what makes the host-side C10 rule implementable
+     uniformly (a rejecting flush is C7's problem; a resolved-with-
+     errors result is C10's).
+- **Degraded-state rule — hosts (C10, new).** When an apply whose batch
+  contained a re-baseline-class delta (`full-rebuild` classification,
+  or any `mod-scoped` classification) resolves with a non-empty
+  `errors` array, the controller sets `resyncRequired` (the same sticky
+  flag as §14.11.5) and logs one error naming the failure and the
+  recovery. The batch is **not** requeued: (a) a deterministic build
+  failure would fail identically on retry — an unbounded loop is the
+  one outcome worse than a flagged gap; (b) the queue + budget exists
+  for *transient* rejections, and a resolved-with-errors result is by
+  definition not transient-identifiable from the host side. Plain
+  batches (no re-baseline-class delta) with per-action errors keep the
+  second revision's log-only semantics — their failures are per-file,
+  the engine's lock-error healing message applies, and no truncation
+  occurred. **Clearing:** `resyncRequired` clears on a successful
+  `start()` (fresh session) or on the next apply reporting
+  `fullRebuild === true` with **no errors** — only a *full* rebuild
+  re-reads the live tree for every mod (F14/F15) and provably
+  incorporates everything stranded before it; a successful *scoped*
+  re-baseline does **not** clear the flag (F21: it re-syncs only the
+  scoped mods, so it cannot prove the stranded work is incorporated).
+  That is the recovery proof, verifiable by tree assertions. Retried
+  applies (C7) and fresh applies (C10/C2)
+  can never overwrite each other's state: retries remove their own
+  queue entries; the flag is a single sticky scalar set by any
+  failure-class event and cleared only by the success conditions above.
 - **Delivery recovery — hosts (C7).** The bounded guard of §14.11. This
   is the correctness pairing: C6 makes expected failures non-rejecting
-  (so hosts must not retry `errors[]` — no duplicated retries, no lost
-  batches), and C7 makes unexpected rejections non-losing (so no future
-  engine throw can silently abandon a spliced batch). Both hosts
-  (§14.11.9).
+  (so the host can decide per result — log, or flag per C10 — instead
+  of losing the batch to a rejection), and C7 makes unexpected
+  rejections non-losing (so no future engine throw can silently abandon
+  a spliced batch). Both hosts (§14.11.9).
 - **Not chosen:** batch retry *inside* core (a rebuild attempt is not
-  idempotent-cheap and the host owns retry policy), and silent
+  idempotent-cheap and the host owns retry policy); silent
   drop-with-log (loses user edits — the direction UX-09 exists to
-  forbid).
+  forbid); **automatic retry of every result error** (deterministic
+  build failures would loop — the exact hazard §14.10.3's counterexample
+  establishes for recovery-triggered rebuilds; loop prevention is why
+  C10 flags instead of requeues); and *deleting* the truncated delta
+  from the delivery pipeline without state (the second revision's
+  treatment — superseded here).
 
 ### 14.14 Safety invariant matrix (S1–S6)
 
 | Invariant | Mechanism | Source grounding | Residual named? |
 | :--- | :--- | :--- | :--- |
-| **S1 — no persistent silent source-event loss** | Every event is either delivered or under the committed root at decision time (C2 + theorem T); no cached root exists, so no event is discarded by a stale or ambiguous root — structurally impossible. Territory contract governs the committed subtree (§14.8.2); a root move re-opens the subtree by the same getter. | F2/F3, theorem T (§14.3), F18 | §14.8.2/§14.8.5 (territory + pre-assignment placement; both delivered-or-contractual, neither silently dropped) |
-| **S2 — no persistent output self-feeding** | Every engine write is under the committed root at write time (theorem T); its events are dropped (C2). Forwarded cross-root garbage is bounded one-generation (§14.8.4). | F3, F7, theorem T, §14.8.4 | The pre-existing case-6 one-generation self-embedding in full builds (F14) — bounded, not a loop, doctor-flagged |
+| **S1 — no persistent silent source-event loss** | Every event is either delivered or dropped by one rule: under the committed root at decision time (C2 + theorem T′); no cached root exists, so no event is discarded by a stale or ambiguous root. Every *non-incorporating* re-baseline commit sets the C10 degraded state, so a dropped event's missing work is observable and healable rather than silent; the incorporate-commit remainder is the §14.17 micro-residual. Territory contract governs the committed subtree (§14.8.2); a root move re-opens the subtree by the same getter. | F2/F3, theorem T′ (§14.3), F18, F19, C10 | §14.8.2/§14.8.5/§14.8.6 (territory, pre-assignment placement, retroactive ownership — repair bounded by the next successful full rebuild, not per-event) + §14.8.7 (owner-confirmed policy) |
+| **S2 — no output self-feeding** | Every engine write is under the committed root current at write time (T1); its events decided while that root holds are dropped (C2). Engine events from an abandoned root are *forwarded* — bounded one-generation garbage per event (§14.8.4); the cycle proof is no-self-sustaining-loop, not universal event filtering. | F3, F7, theorem T′, §14.8.4, F19 | The pre-existing case-6 one-generation self-embedding in full builds (F14) — bounded, not a loop, doctor-flagged |
 | **S3 — authoritative baseline** | The filtering authority **is** `this.planInput` (C1) — no independent snapshot exists anywhere in the delivery path; the former S1-vs-S3 divergence class is deleted with the cached field. | F1/F2/F9, §14.2 | — |
-| **S4 — bounded resources and recovery** | Buffering: `pending` (pre-existing, debounce-bounded) + one retry slot. Retries: 3, backoff 300/600/1200 ms. Recovery: restart/build, one-shot; no automatic re-arming; no background reconciliation loop. | §14.11, §14.10.5 | — |
-| **S5 — session isolation** | Identity guard on every async continuation that mutates controller state or requeues (flush + retry); the dead session's getter is never read; restart starts clean. | F6, §14.4.9, §14.11.1, §14.12.9 | The bounded drained batch of a stopped session (pre-existing, documented) |
-| **S6 — observable failure and deterministic recovery** | Delivery failure: sticky `resyncRequired` + error log naming paths + the provable resynchronization (restart/build re-reads disk — superset healing). Re-baseline failure: the getter's unchanged value *is* the observable state (scenarios 3/4 distinguishable). Recovery verified by tree assertions, never by attempt counts. | §14.11.5–6, §14.10.4 | — |
+| **S4 — bounded resources and recovery** | Buffering: `pending` (pre-existing, debounce-bounded) + the C7 failed-batch queue (16 entries, overflow retires to the terminal path — never drops a fresh batch). Retries: per-entry budget of 3, single driver, backoff 300/600/1200 ms. Recovery: restart/build, one-shot; no automatic re-arming; no background reconciliation loop. | §14.11.2–5, §14.10.5 | — |
+| **S5 — session isolation** | Identity guard on every async continuation that mutates controller state or requeues (flush + failed-batch queue + driver); failed batches of a dead session are retired by the guard — no cross-session overwrite (the P0-B guard fix); the dead session's getter is never read; restart starts clean. | F6, §14.4.10, §14.11.1/8, §14.12.9 | The bounded drained batch of a stopped session (pre-existing, documented) |
+| **S6 — observable failure and deterministic recovery** | Delivery failure (rejection): sticky `resyncRequired` + error log naming paths + the provable resynchronization (restart/build re-reads disk — superset healing). Re-baseline failure (resolved with errors): the same sticky state via C10 — a failed rebuild is degradation, not handled delivery. A failed restart leaves the requirement observable (§14.11.6); a manual `pzstudio build` corrects the disk but does not clear the live session's flag. Recovery verified by tree assertions, never by attempt counts; the flag clears only on a proven recovery (§14.13's clearing rule). | §14.11.5–6, §14.13, §14.10.4 | — |
 
-**S1/S2 jointly for supported configurations: satisfied.** The review's
-conditional ("if S1 and S2 cannot both be guaranteed using the proposed
-API, identify the precise missing capability and mark the design
-BLOCKED") is answered: the first revision's API (buffer + discard)
-could not; the revised API (live getter + forwarding + territory
-contract) does, with no new capability beyond the one additive getter
-Option B already proposed. **Verdict: not BLOCKED.**
+**S1/S2 jointly for supported configurations: satisfied, with named
+residuals and one owner decision.** The first review's conditional ("if
+S1 and S2 cannot both be guaranteed using the proposed API, identify the
+precise missing capability and mark the design BLOCKED") remains
+answered for the *decision-layer* guarantee: the live getter + forwarding
++ territory contract needs no capability beyond the one additive getter.
+The second review's challenge sharpens the answer's boundary: T3 (per-
+mutation provenance) is a missing capability no `(type, path)` API can
+provide (F19), so S1's meaning is "no *silent* loss — every
+non-incorporating commit is observable and recoverable", not "every
+mutation is delivered or incorporated per event". If the project owner
+requires per-event provenance instead of the §14.8.6/§14.8.7 territory
+semantics, that requirement is BLOCKED pending an architectural decision
+(engine-side write provenance or a delivery-ordering guarantee); under
+the territory contract as specified, **verdict: not BLOCKED**.
 
 ### 14.15 Regression matrix (implementation stage — NOT implemented here)
 
@@ -2778,7 +3257,7 @@ Extension (`tests/unit/extUtilDevSync.test.ts`):
   events delivered and written into B. RED: a filter stuck on the old
   root (dropping B's output requires it; forwarding A's source requires
   the getter).
-- **RG-6 — mid-apply flip timing (theorem T pinned).** A gated full
+- **RG-6 — mid-apply flip timing (theorem T′ pinned).** A gated full
   rebuild A→B: events under the *future* root B fired before the
   assignment are delivered (forwarded — B is not yet committed; in a
   case-6 layout they sync into A's variant folders, §14.8.4); events
@@ -2807,23 +3286,29 @@ Extension (`tests/unit/extUtilDevSync.test.ts`):
   `apply`), exactly **one** rebuild runs, and no re-trigger follows.
   RED: MC-2's rebuild-on-overflow (an unbounded rebuild loop), or any
   buffering of output floods.
-- **RG-11 — bounded delivery retry (C7).** A stubbed rejecting `apply`:
-  the batch moves to the retry slot, retries fire on their own timers
-  (assert with fake timers — no new watcher events needed), backoff
-  escalates, subsequent fresh events deliver independently between
-  retries, a later retry succeeds and delivers the batch. RED: the
-  first revision's head-of-`pending` requeue (never redelivered without
-  new events), or F10's silent abandonment.
-- **RG-12 — terminal semantics.** Three failed retries: the batch is
-  parked, `resyncRequired` is set, one error log names the paths and
-  the recovery, no further automatic retries, fresh events still flow.
-  Then the recovery: restart → the new `start()` full build delivers
-  the parked changes (assert the written tree). RED: a terminal state
-  without a working recovery, or retries that never stop.
-- **RG-13 — truncation healing (F7 normative).** A same-burst source
-  edit + `project.json` in one batch: the edit's delta is truncated,
-  and the rebuild's written tree contains it. RED: any design that
-  drops truncated deltas without the rebuild's re-read.
+- **RG-11 — bounded delivery retry (C7, queue form).** A stubbed
+  rejecting `apply`: each rejected batch appends a queue entry, the
+  single driver re-delivers the head on its own timers (assert with
+  fake timers — no new watcher events needed), backoff escalates,
+  subsequent fresh events deliver independently between retries, a
+  later retry succeeds and delivers that entry. RED: the first
+  revision's head-of-`pending` requeue (never redelivered without new
+  events), F10's silent abandonment, or any per-entry timer racing.
+- **RG-12 — terminal semantics.** Three failed retries of one entry:
+  the entry is retired, `resyncRequired` is set, one error log names
+  the paths and the recovery, no further automatic retries, fresh
+  events still flow. Then the recovery: restart → the new `start()`
+  full build delivers the retired changes (assert the written tree); a
+  *failed* restart keeps the requirement observable (the flag/state is
+  not silently cleared). RED: a terminal state without a working
+  recovery, retries that never stop, or a failed restart that looks
+  recovered.
+- **RG-13 — truncation healing on a successful rebuild (F7 normative,
+  success-scoped per the third revision).** A same-burst source edit +
+  `project.json` in one batch (edit *before* the trigger, per F20): the
+  edit's delta is truncated, the rebuild **succeeds**, and the written
+  tree contains it. RED: any design that drops truncated deltas without
+  the rebuild's re-read. (The failed-rebuild counterpart is RG-19.)
 - **RG-14 — concurrency, stop/restart, isolation.** Overlapping
   flushes serialize in order; `stop()` with an in-flight flush and/or
   an armed retry: no cross-session adoption (identity guards), the
@@ -2857,7 +3342,71 @@ Compatibility gates:
   line; F12's double-cast compiles unchanged otherwise). `watch.test.ts`
   filter pins unchanged (the CLI's frozen-root behavior is Q3-documented
   and not changed by Q4; C7's watch-side guard is the only `watch.ts`
-  behavior delta, pinned by a rejecting-apply test mirroring RG-11).
+  behavior delta, pinned by a rejecting-apply test mirroring RG-11 —
+  the watch-side C10 counterpart is log-only: a CLI command holds no
+  sticky state, so its degraded output names the resync procedure in
+  the error text).
+
+Third-revision rows (P0-A/P0-B/P0-C — every one uses the deterministic
+tools already mandated: fake-watcher handler queues with manual
+delivery-order control, gated real-engine applies, fake timers; no
+real sleeps anywhere):
+
+- **RG-16 — delayed delivery across a commit (P0-A, case-6).** Real
+  engine, gated: deliver a `project.json` event (root A→B case-6 move),
+  gate the flush, write a source file under A **on disk**, deliver its
+  event only *after* the (successful) rebuild's assignment — i.e. after
+  releasing the gate and awaiting the getter flip to B. The event is
+  dropped (territory — the written tree contains the file via
+  `copyTree`'s live re-read, proving the drop is lossless *here*).
+  RED: a filter that forwards it (double-delivery) or any design whose
+  drop leaves no recovery path. Pins the T′ drop rule and F19's
+  ordering indifference.
+- **RG-17 — future-root edit, non-incorporating commit (P0-A + C10).**
+  Same harness; the rebuild is made to fail before the mod's copyTree
+  (gated failing operation). The under-B source event delivered after
+  the commit is dropped (B is committed territory), `result.errors` is
+  non-empty, and **`resyncRequired` is set** — the loss is observable,
+  not silent. Then restart: the new `start()` full build delivers the
+  edit (assert the written tree). RED: the second revision's behavior
+  (errors logged, delivery treated as complete, no state).
+- **RG-18 — delayed engine-output notification after root migration.**
+  Real engine: successful A→B move; an engine output event generated
+  under A (written pre-move) is delivered after the commit — it is
+  **forwarded** (not under B), classified by the engine against B, and
+  the resulting write lands under B (bounded one-generation garbage,
+  §14.8.4); assert no loop (exactly one extra apply, its output
+  dropped). RED: any "every engine event is filtered" assumption (the
+  reverse-ordering forwarding is real), or an unbounded forward chain.
+- **RG-19 — failed full rebuild with a truncated source delta
+  (P0-C).** Real engine, batch `[source edit, project.json]` (F20
+  position-independence pinned by running both orders), gated to fail
+  mid-`buildVariants` before the edit's mod copy: result resolves
+  `{fullRebuild: false, errors: non-empty}`, the edit is on disk,
+  absent from the output, `resyncRequired` set, no automatic retry.
+  Recovery: a subsequent successful full rebuild (or restart)
+  incorporates the edit and clears the flag. RED: log-only handling
+  (the second revision's), any automatic retry of the failed batch, or
+  a flag that clears on a scoped success.
+- **RG-20 — overlapping rejected flushes (P0-B).** Stubbed rejecting
+  `apply`, two overlapping flushes (fire the debounce twice without
+  awaiting), both reject: **two** queue entries exist, neither
+  overwritten (assert both batches' paths survive in queue
+  introspection or via later successful delivery), the driver
+  re-delivers both, budget is per entry. Includes the interleavings:
+  retry fire during another flush; retry succeeding while another
+  entry is failing; stop with a driver armed and an entry queued (no
+  cross-session leak). RED: the single-slot design (one batch
+  vanished — assertable as a missing delivery of the first batch's
+  paths).
+- **RG-21 — recovery state machine.** Terminal state via RG-12; then
+  (a) restart with a *failing* `start()` → the degraded state remains
+  surfaced (a failed recovery is not recovery); (b) restart with a
+  healthy `start()` → flag cleared, written tree complete; (c) without
+  restart, a later apply reporting `fullRebuild === true` with no
+  errors → flag cleared; a scoped-only success → flag **retained**
+  (F21). RED: a flag cleared by a failed restart, by a scoped success,
+  or by a manual `pzstudio build` while the session is live.
 
 ### 14.16 Proposed implementation boundaries (minimal)
 
@@ -2871,8 +3420,10 @@ Compatibility gates:
 3. `packages/vscode-extension/src/util/devsync.ts` — delete
    `filterRoot`, the schedule-time switch, both correction reads and
    `isRootProjectJson`; implement C2's live per-event getter read; add
-   C7's retry slot, timers, identity guards and terminal state.
-   `packages/cli/src/lib/commands/watch.ts` — C7's guard only.
+   C7's failed-batch queue, single retry driver, identity guards and
+   terminal state, plus C10's degraded-state rule (§14.13).
+   `packages/cli/src/lib/commands/watch.ts` — C7's guard plus the
+   log-only C10 counterpart (§14.11.9).
 4. Tests per §14.15. No manifest, dependency, or schema change.
 
 Deliberately out of scope: the CP-12 status surface; CLI watch filter
@@ -2884,18 +3435,41 @@ a future Cockpit/CLI affordance, not a watcher-policy one).
 
 - **RISK (territory contract is user-facing semantics):** files placed
   under the committed output root are not source-delivered while that
-  root is committed (§14.8.2). This is the contract the stashed A1
-  control pins and every build tool's output directory implies, but it
-  must be documented for users (doctor guidance / doc 06) — the
-  case-6 family heals such files on the next rebuild of the owning
-  mod; other layouts never treat them as source.
-- **RISK (the theorem is a discipline, not a type):** S2's mechanism
-  rests on F2's four-site assignment-before-write discipline. A future
-  engine change that writes before assigning would silently break it.
-  The guard is RG-6 (the mid-apply flip pin): it fails loudly on any
-  such change. A type-enforcement (a builder that cannot write before
-  assigning) is a Core redesign — out of Q4 scope, noted for CP-12-era
-  work.
+  root is committed (§14.8.2) — and neither are *events* decided
+  there, whatever the mutation's history (§14.8.6). This is the
+  contract the stashed A1 control pins and every build tool's output
+  directory implies, but it must be documented for users (doctor
+  guidance / doc 06) — the case-6 family heals such files on the next
+  rebuild of the owning mod; other layouts never treat them as source;
+  non-incorporating commits are covered by the C10 degraded state, not
+  by healing.
+- **RESIDUAL (the third revision's micro-gap — named, bounded):** C10
+  guarantees recovery *up to the next successful full rebuild* (the
+  resync re-reads the whole live tree), not per event. Within one
+  incorporating commit, F13's abort-on-first-failure makes the
+  incorporate/miss boundary a per-subtree property (every mod whose
+  copy ran is incorporated; every mod after the failure is not), so a
+  user mutation can be incorporated by the same commit that fails
+  elsewhere while a different, later mutation is missed by the very
+  next commit — the degraded state covers both conservatively (it
+  flags on the failure and clears only on a proven full rebuild), but
+  a mutation missed by an incorporating commit whose result *carries
+  errors* is flagged; a mutation missed by a commit that fully
+  *succeeded* (landed after its subtree's traversal — outcome 5 of
+  §14.13) leaves no error to flag. That last shape is the irreducible
+  remainder of T3 on the available information; its bound is the
+  next successful full rebuild (any later structural change, user
+  save in a non-case-6 layout, or the C10-flagged failure path), and
+  it closes the P0-A brief item 5 ("unprocessed indefinitely") to
+  within that bound.
+- **RISK (the theorem is a discipline, not a type):** S2's and S1's
+  decision-layer mechanisms rest on F2's four-site
+  assignment-before-write discipline. A future engine change that
+  writes before assigning would silently break them. The guards are
+  RG-6 (the mid-apply flip pin) and RG-16/RG-17 (delivery-order
+  injection): they fail loudly on any such change. A type-enforcement
+  (a builder that cannot write before assigning) is a Core redesign —
+  out of Q4 scope, noted for CP-12-era work.
 - **RISK:** F4's semantics (a failed build still commits the new
   baseline) surprise consumers who assume "failed rebuild = nothing
   changed". Q4 does not change engine semantics; it makes them
@@ -2912,10 +3486,24 @@ a future Cockpit/CLI affordance, not a watcher-policy one).
   rejected (superseded by the committed-root rule, which is strictly
   stronger); §12.5's pathological layouts remain doctor guidance;
   §12.4's native-exclusion parity gap is untouched.
-- **QUESTION (for approval, not for this task):** getter naming —
+- **QUESTION (for approval, not for this task): getter naming** —
   `getBaselineOutDir` (proposed) vs `getOutputRoot` vs
   `getEffectiveOutDir`. The contract is the semantics (C1); the name
   follows the API review.
+- **QUESTION (for approval — the third revision's decision item):**
+  confirm the territory policy as specified in §14.8.6/§14.8.7 —
+  whole-committed-outdir granularity, decision-time ownership
+  (including retroactive capture of pre-commit mutations), repair
+  bounded by the next successful full rebuild via C10. Confirming it
+  revises the *user-facing* reading of S1 from "every legitimate
+  source mutation is delivered" to "every legitimate source mutation
+  is delivered, or dropped under the documented territory contract
+  with an observable, healable degraded state"; the UX-09 gates to
+  re-read under that lens are B.11/B.12 (Q3 §10) and the stash's A1
+  control (F18), whose assertions are unchanged in outcome — only
+  their *rationale* moves from "proven loss-prevention" to "owner-
+  confirmed policy". Rejecting it (requiring per-event provenance)
+  blocks the design per §14.14's carve-out.
 - **QUESTION:** whether the CLI watch should adopt the getter for its
   own filter root (it could re-read the committed root per event for
   free). Q4 does **not** propose it — the CLI's native parcel `ignore`
@@ -2960,3 +3548,48 @@ a future Cockpit/CLI affordance, not a watcher-policy one).
   evolution (§14.15).
 - [x] Docs-only change: no production source, test, manifest or
   dependency touched (§14.16 is a proposal, not an edit).
+
+### 14.19 Q4 adversarial-closure (third-revision) validation checklist
+
+- [x] Preflight re-verified at `20b48be`: branch `42.20.0-dev`, HEAD
+  matches, clean tree, the UX-09 stash located by its message and
+  inspected read-only (never applied, never popped) — its A1 control
+  re-verified verbatim (F18), including the B1 gated-real-apply
+  harness pattern reused by RG-16…RG-21.
+- [x] The theorem assessment separated into T1/T2/T3 (§14.2): T1 and
+  T2 proven from source; T3 stated unprovable (F19) — the second
+  revision's stronger headline withdrawn and the theorem restated as
+  T′ (§14.3) without weakening any specification that depends on it.
+- [x] P0-A dispositioned (§14.0, §14.4.9, §14.8.6): legitimate-source
+  determination, non-incorporating-commit determination, the
+  indistinguishability determination, the retroactive-ownership
+  statement, the reverse-ordering forwarding, rapid A→B→A and
+  containment analysis (§14.3's last obligation) — the
+  "unprocessed indefinitely" shape closed to within the C10 recovery
+  bound (§14.17).
+- [x] Territory contract converted from implicit proof to explicit
+  policy (§14.8.6/§14.8.7) with the owner decision item recorded
+  (§14.17's QUESTION) and the S1 reading revision it implies; F18's
+  outdir-granular pin honored (no narrowing to variant folders).
+- [x] P0-B dispositioned: the single-slot collision confirmed against
+  the second revision's own rule-8 text, replaced by the bounded FIFO
+  failed-batch queue with per-entry budget, single driver, explicit
+  overflow policy and the nine interleavings resolved (§14.11.2/8);
+  the candidate alternatives compared and rejected with reasons.
+- [x] P0-C dispositioned: the truncation sequence confirmed (F7/F13/F20),
+  the five outcomes distinguished, C10 added to the contract (§14.7,
+  §14.13) with the no-auto-retry loop-prevention rationale, the
+  scoped-success non-clearing rule, and the exact recovery/clearing
+  conditions specified (§14.11.6, §14.13).
+- [x] Recovery correctness re-derived: fresh-rebuild `start()`,
+  pre/post-assignment failure shapes, failed-restart observability,
+  `pzstudio build` non-clearing semantics, retry/fresh state
+  separation (§14.11.6, §14.13, RG-21).
+- [x] S1–S6 re-derived against the new mechanisms and residuals
+  (§14.14); the BLOCKED carve-out stated precisely (T3 provenance).
+- [x] Regression plan extended with the deterministic third-revision
+  rows (RG-16…RG-21), each naming its RED condition and harness; no
+  real sleeps; getter-dependent tests marked as implementation-stage
+  (§14.15 preamble).
+- [x] Docs-only change re-verified: no production source, test,
+  manifest or dependency touched; Q3 sections untouched.
