@@ -2,12 +2,17 @@
 
 **Design-only pass.** Originally written at HEAD
 `c34878c814bfedce22920c0164da094b37862a9f`; **hardened in a Q3 review
-revision at HEAD `25af2b5cc39a9b9e89f2fb295e7ddacfee2d31c2`** (branch
-`42.20.0-dev`, tree clean; the only commit between the two is the docs
-commit that introduced this file, so every file:line reference is valid at
-both). No production source, test, manifest or dependency was touched for
-this document; the only artifact is this file. Every claim below was
-verified against the implementation — file:line references are to HEAD.
+revision at HEAD `25af2b5cc39a9b9e89f2fb295e7ddacfee2d31c2`**; **re-hardened
+in a second Q3 safety revision at HEAD `0701ccacb920a8c44eeb812cb2e4def2cac30ecb`**
+(branch `42.20.0-dev`, tree clean; the only commits between the three heads
+are the docs commits that introduced and hardened this file, so every
+file:line reference is valid at all of them). No production source, test,
+manifest or dependency was touched for this document; the only artifact is
+this file. Every claim below was verified against the implementation —
+file:line references are to HEAD; the second revision additionally grounded
+its behavioral claims in a disposable source-level probe (untracked, run
+once against the real `isWatchPathIgnored` and `classifyDelta`, then
+deleted).
 
 > **Q3 hardening revision (what changed).** The review corrected four
 > classes of claim, all tightened *against* the recommendation, not away
@@ -23,6 +28,28 @@ verified against the implementation — file:line references are to HEAD.
 > versioning scheme and the optionality of `IProjectConfig.outdir` (§6.1,
 > §8). The recommendation itself (Option B, startup-snapshot policy) is
 > unchanged; it remains a recommendation, not an approval.
+
+> **Second Q3 safety revision (what changed).** The first revision still
+> asserted that a stale startup filter root is "harmless for source
+> delivery". That assertion is **disproven** (§3.2, §4 Scenario 3): when
+> the engine's write root moves mid-session away from a descendant output
+> root that lies inside a configured mod folder, the formerly filtered
+> subtree reverts to ordinary mod source semantics — `classifyDelta` has
+> no outdir rule — and the stale filter then silently discards legitimate
+> source events. This revision (i) removes every absolute stale-root-
+> is-harmless claim, (ii) extends the safety invariant to the temporal
+> dimension (§3.2), (iii) replaces the bare startup-snapshot filtering
+> policy with a **refresh-triggered re-resolution policy** (§6.3) that
+> closes the loss without new API beyond the already-proposed reader, and
+> (iv) adds the corresponding acceptance gates (§10-B.11/B.12/B.13,
+> §10-A.8). Two decisions in this document remain independent approvals: Option B
+> (`studio.resolveOutDir`) is an **API reader** recommendation; the
+> §6.3 filtering policy is an **extension policy** recommendation layered
+> on that reader. Accepting one does not imply accepting the other —
+> though without some root reader the extension has no filter at all
+> (today's fail-open-by-absence behavior, self-feed loops included), so
+> the policy's implementation does depend on the reader being available
+> in some form.
 
 This document resolves **Q3** from
 [`12-project-cockpit-migration-matrix.md`](12-project-cockpit-migration-matrix.md)
@@ -200,8 +227,11 @@ exactly the CLI's own semantics.
 ### 3.1 Unsafe-root containment of the shared filter (verified)
 
 **Acceptance invariant (normative):** *Watcher filtering must never silently
-discard legitimate source events because the configured output root
-contains the project root.*
+discard legitimate source events — neither because the configured output
+root contains the project root (the static dimension, this section), nor
+because the filter holds a stale root that has ceased to be the engine's
+write root while still excluding a subtree that now contains legitimate
+source (the temporal dimension, §3.2).*
 
 `isWatchPathIgnored(projectPath, outDir, target)` (`watch-shared.ts:36-57`)
 applies its outdir rule only under `!outRel.startsWith('..')` where
@@ -222,7 +252,10 @@ implementation (and probed against the transpiled helper):
 **fails open** — no source events are discarded. The conditional
 extension-side guard sketched by the review ("unsafe filtering root → fail
 open → preserve source event delivery") is therefore **not required as new
-code**: the invariant already holds by construction. Two honest caveats:
+code**: the invariant already holds by construction **for every fixed
+configuration** — this section's analysis is static, and its verdict does
+not extend to configurations that *change* under a live filter (§3.2).
+Three honest caveats:
 
 - **The fail-open property is emergent, not designed.** It rests on two
   subtleties — the `..` guard and the empty-`outRel` no-op — not on an
@@ -236,6 +269,13 @@ code**: the invariant already holds by construction. Two honest caveats:
   writes inside the project are forwarded and absorbed by classification —
   except the pathological mod-id collision (§4/§12.5), which this filter
   cannot address in any root configuration.
+- **The descendant cases (3, 6) are safe only while the configuration is
+  stable.** Their exclusion is by design and correct for a genuine output
+  subtree — but "genuine" is a temporal property this static analysis
+  cannot grant: once the engine's write root moves elsewhere mid-session,
+  the formerly filtered subtree reverts to ordinary source semantics and
+  the same exclusion starts discarding legitimate source events. That
+  temporal dimension is analyzed in §3.2 and closed by the §6.3 policy.
 
 Parity framing: shared-helper parity holds for **valid** configurations
 (3, 6) and unsafe configurations fail open **identically in both hosts**
@@ -249,6 +289,73 @@ noted for completeness, out of scope: the outside-project test
 segment literally begins with `..` (legal on POSIX) classifies as outside;
 this predates UX-09, is shared by both hosts, and is not a containment
 issue.
+
+### 3.2 Temporal stale-root containment (second revision — the gap, proven)
+
+The §3.1 analysis fixes the configuration. This section asks what happens
+when the configuration changes *under a live filter* — and the answer for
+the descendant cases (3, 6) is the first proven violation of the invariant
+in this document.
+
+**The loss scenario** (the brief's sequence, each step grounded):
+
+```text
+1. DevSync starts with outdir <project>/my_mod/generated-A
+     (a §3.1 case-6 root: descendant of the project, inside a configured
+      mod folder — doctor-flagged, but a valid, intended configuration)
+2. The watcher filter holds root A = <project>/my_mod/generated-A
+3. project.json is edited: outdir becomes /external/output-B
+4. The project.json delta is NOT under A, so the filter forwards it;
+   apply() classifies it 'full-rebuild' (buildsession.ts:145-150),
+   doFullRebuild fetches a fresh plan input (buildsession.ts:543-551)
+   → the engine's baseline write root is now B
+5. A source file is created/edited under <project>/my_mod/generated-A/
+6. The startup-snapshot filter still calls
+   isWatchPathIgnored(projectDir, A, eventPath)
+```
+
+Verified against the implementation (and against a disposable probe that
+executed the real helper and classifier, then was deleted):
+
+- **Step 6 drops the event.** `outRel = relative(projectPath, A)` is a
+  non-`..` descendant (`watch-shared.ts:44`); the event path satisfies
+  `rel.startsWith(outRel + sep)` (`watch-shared.ts:47`) → the helper
+  returns `true`, and the §6.2 sketch's `schedule()` discards the event
+  before it can enter `pending`. The CLI behaves identically — its filter
+  root and native parcel `ignore` are equally frozen at start
+  (`watch.ts:57,124,142-148`) — so **CLI parity is not safety evidence
+  here: both hosts lose the event.**
+- **The engine would have accepted it.** `classifyDelta` has **no outdir
+  rule** (`buildsession.ts:129-223` — `outdir` appears nowhere in the
+  function): first segment `my_mod` is a configured, non-excluded mod, no
+  dot segments, not `mod.info`/`.pzstudioignore` → the event classifies as
+  `{ kind: 'mod-file', modId: 'my_mod', relativePath: 'generated-A/…' }`
+  and the incremental applier would have copied it into the new root B.
+- **No contract forbids reusing A as source.** Nothing in the resolver
+  (`getOutDir`, `helper.ts:677-713`), the classifier, or the doctor
+  (`filesystem.outDirInsideProject` is advisory guidance) reserves a
+  formerly-output subtree; §3.1 case 6 itself calls the layout "a valid,
+  intended configuration". After the move, `generated-A` is an ordinary
+  directory inside `my_mod`, and files created in it are ordinary mod
+  source.
+
+**Loss condition, stated precisely (normative):** a stale startup filter
+root silently discards legitimate source events **iff the stale root is a
+descendant of the project that lies inside a configured, non-excluded mod
+folder** (or equals one) **and the engine's write root has moved away from
+it**. All other stale shapes remain harmless *temporally as well*: equal/
+ancestor/outside roots fail open by a time-independent mechanism (§3.1
+cases 1/2/4 — the `..` guard and the empty-`outRel` no-op do not depend on
+when the root was read), and a stale descendant **outside** every
+configured mod folder discards only events `classifyDelta` would ignore
+anyway (`'…' is not a configured mod`, `buildsession.ts:167-170`). The
+losing shape is exactly the doctor-flagged inside-a-mod-folder layout —
+flagged, not forbidden.
+
+**Consequence for this contract:** the first revision's claim that a stale
+filter root is "harmless for source delivery" is withdrawn. A bare
+startup-snapshot policy (former Option C's filtering half) is therefore
+**not acceptable** on its own; the §6.3 policy exists to close this gap.
 
 ---
 
@@ -269,7 +376,8 @@ mod-file batches reuse without re-reading (`buildsession.ts:453-514`).
 These two roots coincide only under stable configuration between the two
 reads (§6.2); nothing in the source makes them coincide by mechanism.
 
-Two scenarios bound the exposure (both traced against source):
+Two scenarios bound the forwarding exposure (both traced against source);
+a third bounds the loss exposure (§4 Scenario 3):
 
 **Scenario 1 — settings changed, no plan-input refresh.** The filter can
 *lead* the engine:
@@ -348,6 +456,33 @@ Folder…"). For outdirs **outside** the project — the default
 (`~/Zomboid/Workshop`) and the recommended shape — the watcher never sees
 output events at all and the exposure is zero.
 
+**Scenario 3 — stale filter root holds a former output subtree (source
+loss; proven, see §3.2 for the full trace).** The direction the first
+revision missed: the engine can *lead* the filter into discarding
+legitimate source.
+
+```text
+Session starts using A, A inside a configured mod folder
+    (baseline = A; startup filter root = A — a §3.1 case-6 descendant)
+project.json outdir edited to B (B outside the project)
+    ↓ project.json is not under A → forwarded → 'full-rebuild'
+    → fresh plan input → baseline = B               buildsession.ts:543-551
+Source file created/edited under the OLD subtree A
+    ↓ filter still excludes A's subtree (startup snapshot)
+    → isWatchPathIgnored(projectDir, A, path) === true   watch-shared.ts:44-48
+    → schedule() discards the event BEFORE pending.push
+classifyDelta against the NEW baseline would call it a mod-file
+    (no outdir rule — buildsession.ts:129-223); the engine would have
+    synced it into B. The event never reaches session.apply().
+```
+
+This is **silent loss**, not wasted work: no error, no log, no apply pass —
+the §6.2 sketch drops the event inside `schedule()`. It is bounded to the
+§3.2 loss condition (stale root inside a configured, non-excluded mod
+folder) and lasts until session restart — the filter never re-examines its
+root under the bare snapshot policy. The §6.3 policy closes the
+project.json-move path; §4 determination 3 and §12 record what remains.
+
 The five determinations the brief requires:
 
 1. **Does the engine support changing output roots during a session?**
@@ -362,15 +497,24 @@ The five determinations the brief requires:
    (`studio.ts:215-218`), and `resolveProjectConfigFor` re-reads
    `project.json` *and* the global config each time (`helper.ts:309-321`).
    Outdir is as fresh as any other config field on every refresh.
-3. **Must the session refresh its filtering root?** With a startup-snapshot
-   root, the filter does not follow the engine across a mid-session move —
-   the mismatch window of §4 opens. The root *can* be re-read
-   extension-side by re-invoking the same reader (per flush, or on
-   configuration-change events) — that needs no new API, but per §4
-   Scenario 1 a re-read is another unsynchronized fresh read: it may trail,
-   lead or coincide with the session's baseline arbitrarily. It narrows the
-   window; it does not close it. That policy is deliberately **not** part
-   of this release (see 5 and §12).
+3. **Must the session refresh its filtering root?** With a bare
+   startup-snapshot root, the filter does not follow the engine across a
+   mid-session move — and §4 Scenario 3 shows that mismatch is not merely
+   cosmetic: it silently discards legitimate source. The second revision
+   therefore **changes this answer**: the recommendation now includes a
+   refresh-triggered re-resolution policy (§6.3) — the filter root is
+   re-read via the same reader on a `project.json` watcher event (the one
+   event whose full re-baseline is guaranteed) and after every re-baseline
+   the session reports (post-start, and post-apply when the result reports
+   `fullRebuild` or a scoped rebuild). That still needs no new API beyond
+   the reader itself, and it deliberately does **not** re-read per flush
+   or on every refresh-capable event: per §4 Scenario 1 a re-read tracks
+   the configuration, not the session, and a re-read that runs while the
+   engine still writes the old root can lead the engine and re-open the
+   self-feed loop in §3.1-case-6 layouts. Triggering the re-read where a
+   re-baseline is guaranteed or just observed aligns it with the engine's
+   own lifecycle, which is the tightest alignment a fresh read can achieve
+   without engine truth (§12.2).
 4. **Should relevant settings changes require a session restart?**
    Rejected for this release. It is new UX behavior (restart loops,
    lifecycle churn) neither host has today; it does **not** cover the
@@ -379,17 +523,32 @@ The five determinations the brief requires:
    that event); and the CLI watch — the parity target of UX-09 — never
    restarts either. Revisit only with the R2 state owner if user demand
    appears.
-5. **Is startup-snapshot semantics accepted, identical to CLI watch?**
-   **Yes — deliberately, not silently.** Limitations, stated:
-   - After a mid-session outdir move (settings change + triggering event,
-     or a `project.json` outdir edit), output events under the new root are
-     forwarded to the engine until restart. In every non-pathological
-     layout they are absorbed by classification (bounded waste: one
-     ignored-classification apply per output write batch, verbose-only
-     logging).
+5. **Is startup-time resolution accepted, with CLI-shaped decisions?**
+   **Yes — deliberately, not silently, and no longer as a bare snapshot:**
+   the filter root is resolved once at startup (CLI-identical shape) and
+   then re-resolved on guaranteed-re-baseline events (`project.json`) and
+   after every re-baseline the session reports (§6.3 — an extension
+   policy the CLI does not have; see the parity caveat below). Limitations, stated:
+   - After a mid-session outdir move, output events under the new root
+     are forwarded to the engine until the filter's next re-resolution
+     adopts the new root (§6.3) or the session restarts. In every
+     non-pathological layout they are absorbed by classification (bounded
+     waste: one ignored-classification apply per output write batch,
+     verbose-only logging).
+   - **The stale-root source loss (§3.2/§4 Scenario 3) is real under a
+     bare snapshot** — the first revision called it harmless; that claim
+     is withdrawn. The §6.3 policy closes it for every move the engine
+     itself reacts to: every re-baseline is either the session's first
+     plan input (post-start correction), caused by a `project.json` event
+     (schedule-time switch), or reported by the apply result (post-apply
+     correction) — each has a switch point; the residuals that remain are
+     the during-apply scoped window, the same-burst scheduling window and
+     the §6.2 race class, all bounded and stated in §6.3.
    - In the pathological layout (outdir inside a configured mod folder) the
-     pre-existing loop persists — it exists in the shipped CLI watch today
-     under the identical conditions; this contract neither introduces nor
+     pre-existing loop persists wherever the root has not verifiably moved
+     — the §6.3 policy keeps filtering in that state precisely to preserve
+     the loop protection; it exists in the shipped CLI watch today under
+     the identical conditions, and this contract neither introduces nor
      worsens it. Mitigation is configuration guidance (doctor finding +
      Cockpit remediation), not the watcher filter.
    - Why safe enough for this release: (a) zero exposure for outdirs
@@ -397,16 +556,17 @@ The five determinations the brief requires:
      inside-project outdirs are already doctor-flagged for exactly this
      risk; (c) the *stable* inside-project outdir — the common case among
      flagged configs — becomes fully filtered, which is the UX-09
-     improvement; (d) the filtering *decisions* are byte-for-byte the CLI
-     watch's shipped semantics (the same `isWatchPathIgnored` helper; the
-     CLI's additional native parcel `ignore` is a deliberate pre-existing
-     asymmetry, §12.4), and CLI/extension parity is UX-09's stated goal;
-     (e) the
-     *narrower* follow-up (per-flush re-read, §12) needs no new API —
-     though per §4 Scenario 1 re-reading is not session tracking, and
-     exact plan-input-lifecycle tracking would require Option C or a
-     supplementary contract, i.e. an API change. Nothing about this choice
-     forecloses either.
+     improvement, and the §6.3 policy keeps it filtered unless the root
+     verifiably moved; (d) the *filtering decisions* reuse the CLI watch's
+     shipped helper (`isWatchPathIgnored`), and CLI/extension parity is
+     UX-09's stated goal — **but parity is a consistency goal, not safety
+     evidence**: §3.2 shows the shipped CLI watch suffers the same
+     stale-root source loss under the same conditions, so this document
+     no longer cites parity as an argument that the policy is safe;
+     (e) the policy needs no new API beyond the already-proposed reader —
+     `resolveOutDir` is re-invocable as-is — and exact plan-input-lifecycle
+     tracking would still require Option C or a supplementary contract,
+     i.e. an API change. Nothing about this choice forecloses either.
 
 **Conclusions (normative, replacing any stronger earlier phrasing):**
 
@@ -425,18 +585,25 @@ The five determinations the brief requires:
   actual write root across refreshes) requires Option C (session-owned
   recorded root) or a supplementary contract — a further API decision.
 - Accordingly, this document makes **no claim that future live tracking
-  certainly needs no API change**; it claims only that the per-flush
-  re-read *policy* is implementable with the API this document already
-  proposes.
+  certainly needs no API change**; it claims only that the
+  refresh-triggered re-resolution *policy* (§6.3) is implementable with
+  the API this document already proposes.
 
-The startup-snapshot policy remains the recommendation for this release,
-with the residual risk stated exactly: after a mid-session root move,
-output events under the new root are forwarded to the engine until
-restart (absorbed by classification except in the pathological layout —
-§4's chain above), and the filter may in the interim keep excluding the
-stale root — harmless for source delivery, because the stale root is
-either a genuine output subtree (no legitimate source) or an unsafe root
-where the outdir rule no-ops (§3.1).
+The recommendation for this release is the **refresh-triggered
+re-resolution policy** (§6.3) — startup resolution plus re-resolution on
+plan-input-refresh signals — replacing the first revision's bare
+startup-snapshot policy. The residual risk is stated exactly: between the
+engine's re-baseline and the filter's next re-resolution, output events
+under the new root are forwarded (absorbed by classification except in
+the pathological layout — §4's chain above), and a same-burst source
+event scheduled before the triggering event may still be dropped by the
+pre-switch filter — bounded by one flush and, for the moves the engine
+reacts to, healed by the rebuild's own disk re-read (§6.3). What the
+policy removes is the unconditional form of the first revision's claim:
+the stale root is **no longer asserted to be harmless for source
+delivery** — §3.2 proves the opposite for the inside-a-mod-folder
+descendant shape — and the filter therefore no longer holds its root
+unconditionally across a session.
 
 ---
 
@@ -496,8 +663,9 @@ One synchronous method returning the effective output root, delegating to
   configuration, but the window between them is real: nothing atomic
   spans the two reads (§6.2). Mid-session it is exactly the CLI's shipped
   mismatch (§4.5). The method is *also* sufficient to implement the
-  per-flush re-read policy later without any new API — but a re-read is
-  not engine truth (§4, §12) — see §12.
+  §6.3 refresh-triggered re-resolution policy with no new API — this
+  revision adopts exactly that — but a re-read is not engine truth
+  (§4, §12) — see §12.
 - **Two independently timed configuration reads:** yes — one for the
   filtering root, one for the session's first plan input. This is not new:
   the CLI watch does precisely this today (`watch.ts:40` then the plan
@@ -538,7 +706,12 @@ exposes the outdir actually used.
   temporal fidelity than any fresh read. (Micro-caveat: during one apply,
   the incremental phase writes from the old baseline while the scoped phase
   writes from the fresh input; the recorded value flips when the fresh
-  input resolves, mid-apply.)
+  input resolves, mid-apply.) The second revision sharpens C's standing:
+  since the stale-root source loss is now proven (§3.2), C's fidelity is
+  what would close the loss *completely* — including moves that ride
+  settings changes or the §6.2 race window, where a fresh read cannot
+  prove alignment — which is why C remains the deferred vehicle for
+  engine truth (§12.2) rather than a rejected design.
 - **Getter vs returned startup result:** a `start()`-returned result would
   freeze the value at startup (equivalent to B's snapshot) while changing
   core's `start(): Promise<void>` signature — the worst of both. A getter
@@ -555,8 +728,8 @@ exposes the outdir actually used.
 | Criterion | Broad config (A) | Narrow outdir (B) | Session-owned (C) |
 | :--- | :--- | :--- | :--- |
 | Single authoritative resolver | Yes (delegates) | Yes (delegates to the same `resolveProjectConfigFor`) | Yes — no second resolution at all (sourced from the plan input) |
-| Exactly matches active session | No — fresh read; matches at start only (under stable config) | No — fresh read; matches at start only (under stable config); a per-flush re-read policy is possible later without new API, but re-reading ≠ session tracking (§4) | Yes — recorded from the session's own plan input, tracks refreshes |
-| Supports changing outdir | No (snapshot per call) | No as a start snapshot; a re-read-per-flush policy can be layered on later with zero new API — it narrows, not closes, the mismatch window and never becomes engine truth | Yes (getter follows plan-input refreshes) |
+| Exactly matches active session | No — fresh read; matches at start only (under stable config) | No — fresh read; matches at start only (under stable config); the §6.3 refresh-triggered re-resolution policy is layered on this same API (adopted by the second revision), but re-reading ≠ session tracking (§4) | Yes — recorded from the session's own plan input, tracks refreshes |
+| Supports changing outdir | No (snapshot per call) | No as a start snapshot; the §6.3 trigger-based re-resolution layers on with zero new API — it closes the proven loss paths and leaves the §6.3 residual windows, but never becomes engine truth | Yes (getter follows plan-input refreshes) |
 | Minimal public API | No — wide `IProjectConfig` exposed | **Yes — one total sync method** | No — widened `createDevSync` return type or a Core accessor; `undefined`-until-started semantics |
 | R0/R1 safe | Yes (explicit context, lock-free) | Yes (explicit context, lock-free, instance deps only) | Yes (inside the existing session) |
 | Testability | Good | Good — pure instance method; same fixture style as `resolveModInfoTargets` and the `getOutDir` scope-tier tests | Moderate — value only observable through session lifecycle timing |
@@ -575,17 +748,24 @@ The narrowest contract that provides correct behavior for this release:
 - It is fail-closed *aligned* with the session: it throws exactly when the
   session's first `getPlanInput` would throw (same resolver, same inputs),
   so no "filter without a session" state can exist (§7).
-- It matches the CLI watch's startup shape byte-for-byte (config read →
-  session start → filter), which is UX-09's parity goal.
+- It matches the CLI watch's startup shape (config read → session start
+  → filter), which is UX-09's parity goal — with one deliberate addition
+  the CLI does not perform: the §6.3.3 post-start correction re-read
+  after `start`, adopted because the CLI's frozen root is demonstrably
+  not safety evidence (§3.2).
 - Its only deficiency versus C — the mid-session move window — is (i)
-  identical to the shipped CLI behavior, (ii) confined to doctor-flagged
-  configurations (§4), and (iii) *mitigable* later through this same API
-  (per-flush re-read) with zero additional surface — mitigable, not
-  eliminable: the re-read remains an unsynchronized fresh read, not engine
-  truth (§4). C's extra fidelity does not justify widening a frozen public
+  shared with the shipped CLI behavior (though §3.2 shows parity is not
+  safety evidence — the CLI loses the same events), (ii) confined to
+  doctor-flagged configurations (§3.2's loss condition), and (iii)
+  *mitigated by this revision* through the §6.3 policy, layered on this
+  same API with zero additional surface — mitigated, not eliminated: every
+  re-resolution remains an unsynchronized fresh read, not engine truth
+  (§4). C's extra fidelity does not justify widening a frozen public
   surface and adding `undefined`-until-started lifecycle semantics now;
-  if engine-truth tracking is ever required, C or a supplementary contract
-  is the honest vehicle (§12).
+  if engine-truth tracking is ever required — to close the §6.3 residuals
+  completely, or to make `mod.info`/`.pzstudioignore` events safe
+  re-resolution triggers — C or a supplementary contract is the honest
+  vehicle (§12).
 
 A is rejected (§5). C is **deferred**, not rejected on merit: if the R2
 DevSync state owner ever needs engine-truth tracking (e.g. alongside
@@ -687,6 +867,7 @@ one outdir in the contract.
 ```ts
 // packages/vscode-extension/src/util/devsync.ts (sketch)
 import { isWatchPathIgnored } from '@pzstudio/cli/api';   // already exported
+import { basename } from 'path';                          // for the §6.3 trigger check
 
 export class DevSyncController implements vscode.Disposable {
     private session: BuildSession | undefined;
@@ -706,8 +887,15 @@ export class DevSyncController implements vscode.Disposable {
             // creating the session too, watch.ts:40 → watch.ts:69). The
             // reads are NOT an atomic snapshot; see "Two reads, not a
             // snapshot" below.
-            const filterRoot = this.studio.resolveOutDir(projectDir);
+            let filterRoot = this.studio.resolveOutDir(projectDir);
             await session.start(['main', 'development']);
+            // §6.3.3 post-start correction: the session's first plan input
+            // resolved inside start(); re-read now and adopt whatever the
+            // race window changed, so the published root follows the
+            // baseline instead of trailing it.
+            try {
+                filterRoot = this.studio.resolveOutDir(projectDir);
+            } catch { /* retain the pre-start root */ }
 
             const watcher = vscode.workspace.createFileSystemWatcher(/* …unchanged… */);
             watcher.onDidCreate((uri) => this.schedule('create', uri.fsPath));
@@ -732,6 +920,26 @@ export class DevSyncController implements vscode.Disposable {
 
     private schedule(type: FileDelta['type'], path: string): void {
         if (!this.session) return;
+        // §6.3 policy, schedule-time half: a project.json event is the
+        // only in-band signal that GUARANTEES a full re-baseline attempt
+        // is imminent ('full-rebuild' is classified before any mod lookup,
+        // buildsession.ts:145-150), so the filter is never switched here
+        // without a re-baseline immediately behind it (the rebuild-fails
+        // direction is a bounded §6.3 residual).
+        // Re-resolve-and-compare (NOT unconditional invalidation — a
+        // same-root result keeps filtering, preserving loop protection);
+        // retain the last good root on throw (engine-aligned: the rebuild
+        // this event triggers keeps its baseline on the same failure,
+        // buildsession.ts:543-551). mod.info/.pzstudioignore events do
+        // NOT switch here — their re-baseline is conditional (a stray or
+        // non-configured mod's event classifies 'ignore' and rebuilds
+        // nothing) — they are covered by the post-apply half below.
+        if (this.projectDir && basename(path) === 'project.json') {
+            try {
+                const fresh = this.studio.resolveOutDir(this.projectDir);
+                if (fresh) this.filterRoot = fresh;
+            } catch { /* retain last good root — engine-aligned */ }
+        }
         // Fail OPEN: an unknown filtering root must never discard arbitrary
         // source changes. Unreachable in practice (the root is published
         // before the watcher exists and cleared after it is disposed), but
@@ -742,6 +950,26 @@ export class DevSyncController implements vscode.Disposable {
         }
         this.pending.push({ type, path });
         // … debounce unchanged …
+    }
+
+    private async flush(): Promise<void> {
+        // … existing apply/batch logic …
+        const result = await session.apply(batch);
+        // §6.3 policy, post-apply half: fullRebuild and a non-empty scoped
+        // list are the only SessionApplyResult shapes an engine
+        // re-baseline produces (buildsession.ts:519-520, 545) — after
+        // either, the baseline is the fresh input, so re-resolving NOW is
+        // the best-aligned read a fresh read can be (it follows the
+        // re-baseline instead of racing ahead of it). Covers moves that
+        // ride a scoped rebuild (settings changed, then a mod.info /
+        // .pzstudioignore edit). Existing public result type; no new API.
+        if (result.fullRebuild || result.scoped.length > 0) {
+            try {
+                const fresh = this.studio.resolveOutDir(this.projectDir!);
+                if (fresh) this.filterRoot = fresh;
+            } catch { /* retain last good root */ }
+        }
+        // … summary logging unchanged …
     }
 }
 ```
@@ -756,6 +984,9 @@ createDevSync(projectDir)
   → await session.start(...)           (the session's first plan input
                                         resolves here, with the same
                                         provider/state the read just saw)
+  → resolveOutDir(projectDir) again    (§6.3.3 post-start correction —
+                                        adopt what the race window changed;
+                                        retain on throw)
   → create watcher, publish (projectDir, filterRoot), subscribe
 ```
 
@@ -794,14 +1025,22 @@ that spans them.
   baseline write root (second read) diverge. Consequences, in both
   directions: output events under the root the engine actually writes are
   forwarded (absorbed by classification except the pathological layout,
-  §4); output events under the stale root are filtered (harmless unless
-  the stale root contains legitimate source — which §3.1's invariant
-  forbids the filter from ever discarding: equal/ancestor/sibling-prefix
-  roots fail open by construction). **Source-event delivery does not
-  depend on which of the two roots the filter holds**: in every case the
-  filter only ever excludes paths under a genuine descendant output
-  subtree (§3.1 cases 3/6) — never under equal/ancestor/sibling-prefix
-  roots, where the rule fails open (§3.1 cases 1/2/5).
+  §4); and events under the stale root are filtered — harmless **only
+  while the stale root is a genuine output subtree or a root the rule
+  no-ops on**. The second revision withdraws the first revision's
+  absolute claim here: if the engine's baseline later moves away from a
+  stale **descendant** root that lies inside a configured mod folder,
+  that subtree reverts to legitimate source and the filter silently
+  discards its events (§3.2 — the first revision's parenthetical "which
+  §3.1's invariant forbids the filter from ever discarding" was wrong:
+  §3.1's fail-open cases are equal/ancestor/sibling roots, time-
+  independent, but the *descendant* cases 3/6 discard by design and are
+  safe only while the subtree is genuinely output). **Source-event
+  delivery therefore does depend on which root the filter holds, in
+  exactly one configuration shape** — the §3.2 loss condition — and the
+  §6.3 policy exists so the filter does not hold such a root
+  unconditionally: it re-resolves on `project.json` events and after
+  every apply that reports a re-baseline, adopting the moved root.
 - **Failure directions:** resolution failures fail **closed** — no
   project.json (structured CliError, `helper.ts:303-308`), corrupt JSON
   (`helper.ts:469-476`), failed validation (`helper.ts:489-497`), or a
@@ -827,6 +1066,135 @@ without a session, in either direction. There is exactly one extra
 provider call per session start (a pure read) — the same double-read the
 CLI watch has always had (`watch.ts:40` + plan input).
 
+### 6.3 Filtering policy: refresh-triggered re-resolution (second revision)
+
+This subsection is **extension policy**, not API: it specifies how the
+controller holds and refreshes its filtering root. It is separable from
+the Option B reader decision (§0 status note) — but it consumes the
+reader, so some root reader must exist for the policy to be implementable
+(§0, second-revision note).
+
+**Policy (normative):**
+
+1. **Startup.** `filterRoot = resolveOutDir(projectDir)` — resolved
+   before `session.start`, published with the watcher (§6.2 ordering).
+2. **Schedule-time switch — `project.json` events only.** When an event
+   whose basename is `project.json` is scheduled, re-invoke
+   `resolveOutDir(projectDir)`; if it returns a *different* absolute
+   root, adopt it as `filterRoot`; if it throws, retain the last good
+   root. Rationale: `project.json` is the only watcher event whose
+   `full-rebuild` classification is unconditional (`buildsession.ts:
+   145-150` — classified before any mod lookup), so a full re-baseline
+   attempt always follows in the imminent apply — the filter is never
+   switched *without* a re-baseline immediately behind it (the
+   rebuild-fails direction is a bounded residual, listed below).
+   Re-resolution is **compare-and-adopt, never unconditional
+   invalidation**: a same-root result keeps filtering (preserving the
+   §3.1-case-6 loop protection the filter exists to provide), and an
+   unconditional "disable on any refresh-capable event" policy is
+   explicitly rejected — it would re-open the engine self-feed loop on
+   every outdir-irrelevant `project.json` edit (§12.5).
+3. **Post-baseline correction (start and apply).** The engine re-baselines
+   at its first plan input (inside `session.start`) and afterwards only
+   inside `apply` — and both re-baseline shapes are visible to the
+   controller without new API: `start` resolves by returning (its build
+   failure rejects and the controller stops the session), and an apply
+   reports `fullRebuild === true` or `scoped.length > 0` (the only two
+   result shapes a re-baseline produces; `buildsession.ts:519-520,545`).
+   After either — once after `await session.start(...)` resolves, and
+   after every such `apply` — re-invoke `resolveOutDir(projectDir)` once
+   and adopt a changed root. This is the best-aligned read available
+   without engine truth: it *follows* the re-baseline instead of racing
+   ahead of it, it covers the §6.2 startup race (a provider or
+   `project.json` change between the pre-start read and the session's
+   first plan input is adopted, not stranded), and it covers moves that
+   ride a **scoped** rebuild (settings or global-config tier changed,
+   then a `mod.info`/`.pzstudioignore` edit). It uses only the existing
+   public `SessionApplyResult` — no new API.
+4. **No other switch points.** `mod.info`/`.pzstudioignore` events do not
+   switch at schedule time (their re-baseline is conditional — a stray or
+   non-configured mod's event classifies `ignore` and rebuilds nothing,
+   so switching there could leave the filter ahead of an engine still
+   writing the old root); plain mod-file events never re-resolve (pure
+   cost); `rebuild()` is not part of the controller's surface.
+5. **Fail-open invariants unchanged.** Unknown root forwards (§6.2);
+   unsafe roots no-op (§3.1 cases 1/2/4/5); a throw during any
+   re-resolution retains the last good root — aligned with the engine,
+   which keeps its baseline when the same resolution fails
+   (`buildsession.ts:543-551`; for the scoped path the assignment at
+   `buildsession.ts:519-520` never completes either).
+
+**Why this closes the §3.2 loss (normative claim, with its exact scope):**
+every engine re-baseline is caused by an apply whose triggering event
+passed through `schedule()` (a `project.json` event — switched at
+schedule time — or a `mod.info`/`.pzstudioignore` event under a
+configured, non-excluded mod — switched at the post-apply correction
+point; the controller never calls `rebuild()`), or by the session's first
+plan input (covered by the post-start correction). After the switch, events
+under the old root are forwarded: the engine — now writing the new root —
+classifies them per the §3.2 trace (legitimate `mod-file` delivery when
+the old subtree lies in a configured mod). Same-burst source events
+scheduled *before* the `project.json` trigger are still subject to the
+pre-switch filter — but the full rebuild that the trigger performs
+re-reads every mod's source tree from disk at execution time
+(`copyTree` walks and reads the live tree — `execute.ts:196-221`;
+`gatherPlanInput`'s snapshot feeds planner decisions, not the copy), so
+any such edit already saved to disk is incorporated into the new output
+by the rebuild itself. The residual windows that remain are stated, not
+hidden:
+
+- **During-apply saves on the scoped path.** A save landing while a
+  scoped-rebuild apply is in flight is scheduled with the pre-switch
+  filter and may be dropped; the scoped rebuild's `copyTree` heals it
+  only if the save landed before that mod's copy executed. Bounded by
+  one flush plus apply duration; healed by the next re-baseline or
+  restart.
+- **The §6.2 race class, narrowed.** Configuration changing between any
+  two reads (pre-start read vs. the session's first plan input — adopted
+  by the post-start correction; schedule-time switch vs. the apply's own
+  plan input; the apply's input vs. the post-apply correction) can strand
+  the filter on the wrong side until the next switch point. Every
+  re-baseline is followed by a correction read, so a stranded state
+  self-corrects at the next re-baseline; not eliminable without engine
+  truth (Option C, §12.2).
+- **A failed rebuild after a schedule-time switch.** If `project.json`
+  changes between the schedule-time read and the apply's own read such
+  that the rebuild fails, the engine retains its old baseline while the
+  filter holds the switched root until the next switch point. Same race
+  class; same bound.
+
+**Why not the other candidate policies (decided against source evidence):**
+
+- **Bare startup snapshot (the first revision's policy): rejected** —
+  §3.2 disproves its harmlessness premise; the loss persists until
+  restart.
+- **Unconditional invalidation on any refresh-capable event (the brief's
+  Option A in its naive form): rejected** — the build output itself
+  contains `mod.info` files (`buildplan.ts:199-290`: copied and
+  id-patched, or generated, at `outModsPath/<target>/mod.info`), which
+  classify as `mod-scoped` (`buildsession.ts:183-191`); disabling the
+  filter on such events — or on any outdir-irrelevant `project.json`
+  edit in a stable case-6 layout — forwards the engine's own output
+  writes and re-opens the self-feed loop (§1.3, §12.5) that UX-09's
+  filter exists to close. Invalidation is also irreversible in the brief's
+  formulation (disabled until restart), trading a bounded loss window for
+  a permanent loop window.
+- **Per-flush re-resolution (the first revision's deferred §12.1 idea):
+  rejected in favor of the trigger-based form** — a per-flush read runs
+  while the engine may still be writing the old root (§4 Scenario 1),
+  leading the engine and re-opening the loop; the trigger-based switch
+  points are ordered *with* the engine's re-baselines instead.
+- **Session-owned root (Option C): deferred, not rejected** — its
+  fidelity would close the residual windows completely (§5, §12.2), but
+  it requires the API surface widening this release avoids.
+
+**Option B impact: none.** The policy consumes `resolveOutDir` exactly as
+§6.1 specifies it — synchronous, total, re-invocable, no state. The
+reader decision and this policy decision remain independent approvals;
+approving the policy without the reader leaves the extension filter-less
+(today's behavior: fail-open by absence, self-feed loops included), and
+approving the reader without the policy leaves the §3.2 loss open.
+
 ---
 
 ## 7. Error/failure semantics
@@ -841,7 +1209,10 @@ CLI watch has always had (`watch.ts:40` + plan input).
 | `resolveOutDir` returns a path inside the project | Filter works as designed; doctor's `filesystem.outDirInsideProject` is the user-facing guidance | Outdir-inside-project is a known, flagged configuration (§4) |
 | Resolved root **contains or adjoins** the project root (equal / ancestor / outside / string-prefix sibling — §3.1 cases 1/2/4/5) | The outdir rule fails **open by construction**: source events are forwarded; no guard needed | The invariant "unsafe root must never discard legitimate source events" already holds in the shared helper; §10 pins it as an acceptance gate so a refactor cannot silently regress it. Corollary (case 1): no output filtering occurs either — pinned, not a bug |
 | Filtering root unknown at event time (defensive; unreachable) | **Fail open — forward the event** (§6.2 sketch) | "An unknown filtering root must not result in silently discarding arbitrary source changes": forward-not-drop is the only safe direction; today's behavior is also fail-open |
-| Settings change during a session | No effect on the filter root (startup-snapshot policy, §4.5); the engine's write root moves only on plan-input refreshes | Documented limitation, CLI-identical; the per-flush re-read policy is implementable with the proposed API, while engine-truth tracking needs Option C or a supplementary contract (§12) |
+| `project.json` outdir edited mid-session (root A → B) | The `project.json` event triggers a schedule-time re-resolution (§6.3.2); the filter adopts B, the engine's full rebuild re-baselines to B; events under the old root A are forwarded afterwards | The §3.2 loss is closed for this path: the filter never holds a root the engine has verifiably left; same-burst pre-trigger edits are healed by the rebuild's disk re-read (§6.3) |
+| Settings/global-tier move riding a scoped rebuild (mod.info / .pzstudioignore) | No schedule-time switch (re-baseline is conditional, §6.3.4); the post-apply correction (§6.3.3) adopts the moved root after `apply` reports the scoped re-baseline | Switch only on observed re-baselines keeps the filter from leading the engine (the naive alternative re-opens the self-feed loop, §6.3); residual: saves landing during the apply window may be dropped until the next re-baseline (§6.3) |
+| Re-resolution throws at any switch point (transient invalid config) | Last good root retained (§6.3.5) | Engine-aligned: the rebuild the same event triggers keeps its baseline on the same failure (`buildsession.ts:543-551`); filter and engine stay on the same side |
+| Settings change during a session, no refresh event yet | No effect on the filter root; the engine's write root also does not move (baseline reused) — filter and engine remain aligned on the old root | Documented limitation, CLI-identical; the alignment (not the snapshot) is the point: both sides move together at the next refresh event, via §6.3's switch points |
 
 No new lock, no new module-global state, no error swallowing: the method is
 a stateless synchronous read; the controller's only new state is two
@@ -905,7 +1276,7 @@ instance fields cleared in `stop()`.
 | File | Change |
 | :--- | :--- |
 | `packages/cli/src/lib/studio.ts` | Add `resolveOutDir` to the `PzStudio` interface and the instance; import `resolveProjectConfigFor` from `./helper` and `CliError` from `./errors` (both already within the bundle's import graph) |
-| `packages/vscode-extension/src/util/devsync.ts` | Store `projectDir`/`filterRoot` alongside the session; resolve the root after `createDevSync` before `await start`; filter in `schedule()` via `isWatchPathIgnored`; clear both in `stop()` |
+| `packages/vscode-extension/src/util/devsync.ts` | Store `projectDir`/`filterRoot` alongside the session; resolve the root after `createDevSync` before `await start`; filter in `schedule()` via `isWatchPathIgnored`; refresh the root per the §6.3 policy (schedule-time switch on `project.json` events; post-apply correction when the result reports a re-baseline); clear both in `stop()` |
 | `tests/unit/cliStudio.test.ts` | New `describe` for `studio.resolveOutDir` (tier matrix + failures) — see §10 |
 | `tests/unit/extUtilDevSync.test.ts` | New `describe` for controller pre-filtering (UX-09 acceptance) — see §10 |
 
@@ -937,11 +1308,15 @@ right column is the required proof, not a suggestion:
 | Outdir is nested in a configured mod | Generated output is filtered under stable config (§3.1 case 6; C.4 + B.3) |
 | Outdir outside project | Source events remain forwarded (A.2/B.2) |
 | Similar path prefixes | No false containment (§3.1 case 5; C.3) |
-| Settings A→B without rebuild | Engine still writes A; test acknowledges snapshot semantics explicitly (B.5a) |
-| Settings A→B with rebuild | Engine can switch to B; known mismatch is explicitly pinned (B.5b) |
+| Settings A→B without rebuild | Engine still writes A; test acknowledges the no-switch-on-plain-delta policy explicitly (B.5a) |
+| Settings A→B with rebuild | Engine can switch to B; the §6.3 switch adopts B and output events under B stop reaching `apply` (B.5b) |
 | Provider changes between two reads | No claim of atomic equivalence — behavior is defined and source-safe in both orders (B.10) |
 | Stop/start with new root | New session resolves a new startup root (B.8) |
 | Failure during resolution | No watcher/session state leaks (A.6/B.9) |
+| Engine moves output A → B (`project.json` edit); a file under the previously filtered A becomes valid source afterwards | The source delta reaches `session.apply` (B.11) — the §3.2 temporal gate; the loss this policy forbids is demonstrably detectable |
+| Stable layout, outdir-irrelevant `project.json` edit or engine output `mod.info` event | Filter root unchanged; output subtree still never reaches `apply` (B.12) — no naive invalidation, loop protection pinned |
+| Root move riding a scoped rebuild (settings A→B, then mod.info edit) | Post-apply correction adopts the moved root; post-flush events under the old root reach `apply` (B.13) |
+| Reader re-invocation reflects config changes | Same call, changed tiers → new root; unchanged tiers → same root (A.8) — the policy's compare-and-adopt dependency |
 
 **How the tests must assert (normative, applies to every case below):**
 
@@ -989,6 +1364,13 @@ right column is the required proof, not a suggestion:
 7. **Lock-free / R0/R1** — call while a `studio.run` is mid-flight (lock
    held) → resolves without queueing and consumes no legacy slot (pattern:
    `cliStudioInstances.test.ts` overlap tests).
+8. **Re-invocable root tracking (the §6.3 dependency)** — call
+   `resolveOutDir`, change the outdir tier it resolves from (fixture
+   `project.json` edit or provider-layer swap), call again → the second
+   call returns the *new* absolute root; a second call with unchanged
+   tiers returns the same root (stateless, no caching — the §6.3
+   compare-and-adopt switch depends on re-invocation being a faithful
+   fresh read every time).
 
 ### B. Controller pre-filtering — owner: `tests/unit/extUtilDevSync.test.ts` (new describe "DevSyncController pre-filtering (UX-09)"; real v2 instance + stubbed watcher per the existing harness)
 
@@ -1022,18 +1404,22 @@ right column is the required proof, not a suggestion:
    delta: the engine still writes to **A** (baseline reused,
    `buildsession.ts:453-514`); the test asserts the batch reaches `apply`
    and the write lands in A, and **explicitly acknowledges in its
-   assertions that the filter root is the startup snapshot A** — i.e. the
-   test documents that the filter did not re-resolve, not that the roots
-   happened to agree.
-5b. **Settings A→B with rebuild (known mismatch explicitly pinned)** —
-   same swap, then a `project.json` delta: the write root moves to B
-   (fresh plan input, `buildsession.ts:543-551`); events under B are
-   **still forwarded** to `apply` in this release (startup-snapshot
-   policy — pin the policy explicitly so a future change is deliberate);
-   classification absorbs them (assert `result.ignored` counts and
-   `session.apply`'s received deltas, no write amplification into B). The
-   test names the §4 Scenario-2 mismatch as expected behavior of this
-   release.
+   assertions that the filter root is the startup root A — no §6.3 switch
+   point fires on a plain delta** — i.e. the test documents that the
+   filter did not re-resolve (by policy), not that the roots happened to
+   agree.
+5b. **Settings A→B with rebuild (the §6.3 switch, pinned)** — same swap,
+   then a `project.json` delta: the schedule-time switch re-resolves and
+   adopts B, the write root moves to B (fresh plan input,
+   `buildsession.ts:543-551`), and the post-apply correction re-confirms
+   B. Assert the filter root is now B and that **output events under B no
+   longer reach `apply`** (the new root is filtered — the UX-09 loop
+   protection follows the engine to its new root, not just the startup
+   root); any output events delivered in the pre-switch window are
+   absorbed by classification (assert `result.ignored` counts, no write
+   amplification). The test names the §4 Scenario-2 window — between the
+   engine's re-baseline and the filter's adoption — as expected behavior
+   of this release, closed at the next switch point.
 6. **Two project contexts never cross-leak (filter side)** — extend the
    UX-05 folder-scoped describe (`extUtilDevSync.test.ts:620-683`):
    session A's filter root is A's outdir, session B's is B's; an outdir-A
@@ -1060,7 +1446,45 @@ right column is the required proof, not a suggestion:
     promised or asserted** — whichever root each read observed, the
     behavior is defined by §6.2 ("Two reads, not a snapshot"): source
     events always reach `apply`, no state leak, no crash; output filtering
-    applies only to the observed filter root's genuine descendant subtree.
+    applies only to the observed filter root's genuine descendant subtree,
+    and the post-start correction (§6.3.3) has adopted the session's own
+    baseline root once `start` resolves.
+11. **Engine transitions output A → B; a file under the previously
+    filtered A becomes valid source (the §3.2 temporal gate — the
+    acceptance test this revision mandates)** — configure the outdir
+    inside a configured mod folder (§3.1 case 6, e.g.
+    `<project>/my_mod/generated-A`), start the session (filter root =
+    A), then move the outdir to an external B (provider-layer swap or
+    fixture `project.json` edit) and deliver a **`project.json` delta**
+    through the recorded watcher handler. After the flush completes (the
+    full rebuild re-baselined the engine to B), deliver a
+    **create/change under `<project>/my_mod/generated-A/`** and assert
+    **`session.apply` receives the delta** — spy on `apply`, inspect the
+    delivered `FileDelta[]` (the §6.3 schedule-time switch must have
+    adopted B, so the stale filter must NOT discard the event) — and
+    that the classification/written tree treats it as a `my_mod` source
+    file (the write lands under B). The same test pins the *negative*:
+    with the switch points bypassed (filter deliberately held at A, the
+    bare-snapshot shape), the identical event must NOT reach `apply` —
+    proving the harness detects the exact loss this policy forbids.
+12. **Stable layout: no spurious root switch; loop protection retained** —
+    case-6 layout (outdir inside a configured mod folder), no
+    configuration change: deliver (a) a `project.json` event that does
+    not change the outdir and (b) an engine-shaped output `mod.info`
+    event under the filter root (the output contains mod.info files —
+    `buildplan.ts:199-290`); assert the filter root is unchanged and
+    that subsequent events under the output subtree still never reach
+    `apply` — pinning that §6.3 adopts compare-and-adopt, never
+    unconditional invalidation, and that the engine's own output writes
+    remain filtered.
+13. **Root move riding a scoped rebuild** — swap the provider layers
+    A→B mid-session, deliver a `mod.info` delta under a configured mod;
+    assert the apply result's `scoped` list is non-empty and that, after
+    the flush, a source event under the old root A reaches `apply` (the
+    post-apply correction adopted B). Also pin the residual explicitly:
+    an event delivered *during* the apply window may legitimately be
+    filtered — assert post-flush delivery only, and name the §6.3
+    residual in the test.
 
 ### C. Containment invariants of the shared filter — owner: `tests/unit/watch.test.ts` (extended)
 
@@ -1098,10 +1522,14 @@ Two atomic commits, each compiling and testing green independently; both
    - No behavior change for any existing consumer; the method has no
      in-repo caller until commit 2.
 2. `fix(ext): pre-filter Development Sync watcher events (UX-09)`
-   - `packages/vscode-extension/src/util/devsync.ts` (§6.2),
-     `tests/unit/extUtilDevSync.test.ts` (matrix B).
-   - Closes UX-09's achievable scope; the temporal policy of §4.5 is the
-     documented behavior of this commit.
+   - `packages/vscode-extension/src/util/devsync.ts` (§6.2 sketch plus the
+     §6.3 policy: startup resolution, post-start correction, schedule-time
+     `project.json` switch, post-apply correction),
+     `tests/unit/extUtilDevSync.test.ts` (matrix B, including the §3.2
+     temporal gate B.11 and the loop-preservation pins B.12/B.13).
+   - Closes UX-09's achievable scope; the §6.3 refresh-triggered
+     re-resolution policy is the documented behavior of this commit, and
+     the §3.2 loss condition is its named residual boundary.
 
 No release/publish step, no manifest change, no dependency change.
 
@@ -1109,24 +1537,34 @@ No release/publish step, no manifest change, no dependency change.
 
 ## 12. Explicit deferred issues
 
-1. **Live filtering-root freshness (per-flush re-read)** — re-resolving
-   the root per flush (or on `onDidChangeConfiguration`). Implementable
-   with **no new API** — `studio.resolveOutDir` is re-invocable; the cost
-   is one extra config read per debounced batch (the engine itself pays
-   the same per plan input). Honest scope, per §4: a re-read tracks the
-   *configuration*, not the *session* — it narrows the mismatch window
-   (the re-read is at most one batch stale) but can still trail, lead or
-   coincide with the active baseline arbitrarily, and never constitutes
-   engine truth. Decision deferred to the R2 DevSync state owner
-   (CP-04/`devsyncState.ts`), where the root belongs as state.
+1. **Live filtering-root freshness — partially adopted, partially
+   deferred.** The second revision ADOPTS the event-triggered form:
+   re-resolution on `project.json` events and after every reported
+   re-baseline (§6.3) — implementable with **no new API** beyond the
+   already-proposed reader (`studio.resolveOutDir` is re-invocable and
+   stateless; A.8 pins that). Still deferred: (a) per-flush
+   re-resolution — rejected deliberately (§6.3): a read that runs while
+   the engine may still write the old root leads the engine and re-opens
+   the self-feed loop; (b) `onDidChangeConfiguration`-driven
+   re-resolution — currently unnecessary, because a settings change moves
+   nothing until a refresh event re-baselines the engine, and that event
+   already triggers a switch point (§6.3); revisit only if a future
+   session model re-baselines without watcher-visible events. Honest
+   scope, per §4: every adopted re-read tracks the *configuration*, not
+   the *session* — the residual windows of §6.3 are the exact price of
+   that. The root still belongs as state in the R2 DevSync state owner
+   (CP-04/`devsyncState.ts`) if/when that lands.
 2. **Session-owned live root (Option C) or a supplementary contract** —
    the wrapper/accessor shape is the right vehicle whenever the filter
    must track the engine's *actual* write root across plan-input
    refreshes (e.g. together with CP-12 structured session status, a Core
    decision); exact plan-input-lifecycle tracking cannot be achieved by
-   re-reading alone (§4). Not needed while the snapshot policy stands —
-   which is a statement about this release's policy, not a claim that
-   live tracking will never need an API change.
+   re-reading alone (§4). The second revision sharpens its standing: the
+   §6.3 policy closes the *proven* loss paths, but its residual windows
+   (during-apply saves on the scoped path; the race class) close
+   **completely** only with engine truth — C is the honest vehicle for
+   that, deferred until the residual windows justify the frozen-surface
+   widening (§5).
 3. **Restart-on-settings-change policy** — rejected for this release (§4.4);
    revisit only with user demand and Cockpit UX support.
 4. **Native watcher exclusion parity** — the CLI's parcel `ignore`
@@ -1137,9 +1575,15 @@ No release/publish step, no manifest change, no dependency change.
 5. **Pathological outdir layouts** — an outdir inside a configured mod
    folder can self-feed even with correct filtering if the root moves
    mid-session; with `outDir === projectDir` the outdir rule is a no-op
-   and no output exclusion exists at all (§3.1 case 1). The durable
-   mitigation is configuration guidance (doctor
-   `filesystem.outDirInsideProject` + Cockpit §8.4 "Change Output
+   and no output exclusion exists at all (§3.1 case 1). The second
+   revision adds the *loss* direction to the same family: a stale filter
+   root inside a configured mod folder silently discards legitimate
+   source after the engine's root moves away (§3.2 — proven); the §6.3
+   policy closes the loss for every move the engine reacts to, and
+   deliberately keeps filtering wherever the root has not verifiably
+   moved, because the same layouts are the loop cases. The durable
+   mitigation for the layouts themselves is configuration guidance
+   (doctor `filesystem.outDirInsideProject` + Cockpit §8.4 "Change Output
    Folder…"), not watcher mechanics.
 6. **CP-12 (structured session status)** — unchanged by this contract; this
    design deliberately avoids preempting its surface decisions.
@@ -1192,3 +1636,38 @@ No release/publish step, no manifest change, no dependency change.
 - [x] §10 mandates the scenario→proof gate table and assertion method
   (apply-call/batch assertions, deterministic events, controllable
   provider).
+
+**Second Q3 safety revision checklist (stale-outdir filtering):**
+
+- [x] Stale-root source-loss scenario traced step-by-step against the
+  implementation and confirmed by a disposable source-level probe (helper
+  drop + classifier acceptance + delivery-chain replica; probe untracked,
+  run once, deleted) — the first revision's "harmless for source
+  delivery" claim withdrawn (§3.2, §4 Scenario 3, §6.2).
+- [x] The loss condition stated precisely (stale descendant root inside a
+  configured, non-excluded mod folder, engine root moved away) and every
+  other stale shape shown harmless temporally as well (§3.2).
+- [x] Safety invariant extended to the temporal dimension (§3.1
+  invariant, §3.2).
+- [x] Candidate filtering policies decided against source evidence: bare
+  startup snapshot rejected (the proven loss); naive invalidation
+  rejected (re-opens the self-feed loop — the build output itself
+  contains mod.info files, `buildplan.ts:199-290`); per-flush re-read
+  rejected (can lead the engine); session-owned root deferred. Chosen:
+  refresh-triggered re-resolution (§6.3) — schedule-time switch on
+  `project.json` events, post-start/post-apply corrections on observed
+  re-baselines, retain-on-throw, compare-and-adopt never unconditional.
+- [x] CLI parity explicitly demoted from safety evidence to a consistency
+  goal — the shipped CLI watch shares the §3.2 loss (§3.2, §4.5d).
+- [x] Acceptance gates added: the mandated A→B transition test with
+  `session.apply`-level proof and a demonstrably detectable negative
+  (B.11), loop-preservation pins (B.12), scoped-move correction (B.13),
+  reader re-invocability (A.8); gates table extended (§10).
+- [x] Residual windows stated exactly and bounded (§6.3): during-apply
+  saves on the scoped path, the narrowed §6.2 race class, failed-rebuild
+  strandings.
+- [x] Option B's surface unchanged by this revision; the reader decision
+  and the filtering-policy decision remain independent approvals (§0,
+  §6.3).
+- [x] Docs-only change re-verified: no production source, test, manifest
+  or dependency touched (`git status` verified before commit).
