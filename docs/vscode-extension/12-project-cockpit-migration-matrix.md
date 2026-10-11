@@ -329,6 +329,21 @@ addressed** (root cause removed by v2; residual UX concern noted),
   for the achievable half; **open question Q3** for the rest.
 - Regression tests: events under a dot segment never reach `apply`;
   CLI/extension parity cases from `tests/unit/watch.test.ts` reused.
+- **Reconciliation addendum (governance pass, 2026-10-12).** The
+  achievable remediation **shipped** at `8967ada` after the accepted Q3
+  decision: `studio.resolveOutDir` plus the doc 13 §6.3
+  refresh-triggered re-resolution policy, with the Q3 §10 test
+  matrices (A/B/C) — this row's "HEAD: identical" snapshot predates
+  that commit and describes the matrix's audit point, not today. The
+  residual windows §6.3 named were subsequently **proven** silent
+  source-event losses (red-first evidence retained in the UX-09 stash,
+  read-only). The proposed successor — the **UX-09 DevSync Baseline
+  Safety Contract** (doc 13 §14, historically labeled "Q4 DevSync";
+  **unrelated to this matrix's Q4**) — spans Core/API items that are
+  outside UX-R0's extension-only boundary and is gated on the owner
+  decisions recorded in doc 13 §15 (Contract B and the C1–C12
+  classifications). UX-R0's boundary is unchanged; no cross-package
+  prerequisite may ride a UX-09 commit.
 
 ### UX-10 — `modinfo` command touches the global anchor and Node `fs` directly — **Partially addressed**
 
@@ -598,11 +613,20 @@ CLI API). Docs — UX-12 (**1**).
   one-line engine addition is ever preferred (e.g. expose the resolved
   plan input's outdir on `SessionApplyResult`), it is a **CLI API
   change** requiring its own decision — not smuggled into a UX fix.
+  *(Resolved and shipped — see doc 13, the accepted Q3 contract
+  (`studio.resolveOutDir` + the §6.3 policy, commit `8967ada`);
+  residual safety windows and any further engine work are governed by
+  doc 13 §15, not by this question.)*
 - **Q4 (R0/R1):** semantics of "Remove from Project…" on a missing mod —
   today's `pzstudio delete` deletes the (absent) folder and errors or
   no-ops by CLI version; removing only the `project.json` entry has no
   CLI command (`modconfig` edits build state, not membership). v1 may
   ship Open project.json + Refresh only.
+  **(Naming note — Q4 here keeps this missing-mod meaning. The DevSync
+  baseline-safety work that also used the label "Q4" in doc 13 §14 is a
+  different, unrelated item; its current name is the UX-09 DevSync
+  Baseline Safety Contract, and its "Q4" labels are historical review
+  identifiers. See doc 13 §15 for the disambiguation record.)**
 - **Q5 (R1):** UX-18 wiring — extension adopts `@pzstudio/core` directly
   (recommended) vs. `studio.loadProject` added to the CLI api.
 - **Q6 (carried from doc 11, OPEN QUESTION A1):** external consumers of
@@ -1007,3 +1031,75 @@ watch-shared.ts, helper.ts, logger.ts, transport.ts, invocation.ts,
 commands/{build.ts, update.ts, watch.ts}}}`, `packages/core/src/{buildsession.ts,
 project-contract.ts, doctor.ts}`, `tests/unit/{ext*, buildTaskProvider,
 projectExplorer, cliStudio*}.test.ts`.
+
+---
+
+## 14. UX-09 scope reconciliation addendum (governance pass, 2026-10-12)
+
+Documentation-only reconciliation at HEAD `80c80fe` (tree clean): this
+section records where the DevSync baseline-safety proposal stands
+relative to the milestones this matrix froze. The authoritative,
+complete record is doc 13 §15
+([`13-devsync-outdir-api-contract.md`](13-devsync-outdir-api-contract.md)
+"UX-09 scope reconciliation and approval record"); this section carries
+only what a matrix reader needs. No production source, test, manifest
+or dependency change belongs to it, and nothing here authorizes
+implementation.
+
+**What happened to UX-09 (status of record).** The original UX-09
+remediation was extension-only and is **shipped** (`8967ada`): the
+accepted Q3 decision — `studio.resolveOutDir` + the doc 13 §6.3
+refresh-triggered re-resolution policy — with the Q3 §10 acceptance
+matrices. UX-R0's extension-only boundary therefore held and is
+exhausted for this finding. After the ship, red-first regression tests
+(retained in the UX-09 stash, read-only) **proved** that §6.3's
+residual windows are silent source-event losses. The response is the
+**UX-09 DevSync Baseline Safety Contract** (doc 13 §14; historical
+label "Q4 DevSync" — unrelated to this matrix's Q4, which keeps the
+missing-mod meaning, see §4 above).
+
+**Dependency graph.**
+
+```text
+UX-R0 / UX-09
+  ├─ Extension pre-filtering .................. shipped (8967ada)
+  ├─ Accepted/shipped Q3 effective-outdir work   (resolveOutDir + §10 tests)
+  └─ Proposed DevSync safety prerequisites ..... doc 13 §14 — NOT approved
+       ├─ Core/API decisions ................ C1 getter; Contract B territory
+       ├─ Independent engine correctness fixes   C6, C11
+       └─ Host reliability enhancements ..... C7/C12 retry package, C10
+
+UX-R2
+  └─ Cockpit Development Sync state owner/UI .. CP-04; persistent
+                                              resyncRequired UI; CP-12
+```
+
+**What this means for the milestones.**
+
+- **UX-R0** keeps exactly its original boundary (§11 above). The
+  cross-package prerequisites (C1/C6/C11/C12 in Core, C7's CLI guard)
+  are **exceptions requiring their own approvals** — doc 13 §15 marks
+  each `APPROVAL_REQUIRED`/`PROPOSED` with its decision ID (DX-1…DX-12)
+  — and none may ride a UX-09 or UX-R0 commit. Two of them (C6, C11)
+  are verified standalone Core correctness defects
+  (`buildsession.ts:519` escaping `apply()`'s never-throws contract;
+  the scoped path committing an incomplete output root with zero
+  errors) and are recommended as independent engineering work.
+- **UX-R2** owns the persistent Development Sync state (CP-04) and any
+  user-visible presentation of a degraded/resync-required condition.
+  Until R2, the minimum current-host contract is `logger.error`
+  routing (the existing notification path) with recovery text — an
+  internal controller flag alone is not observability (doc 13 §15.7).
+- **Contract B** (decision-time committed-output territory — the
+  relaxation of the strict "every source mutation is delivered or
+  incorporated" invariant) is a **product decision, not approved**;
+  owner approval is pending. S1-original remains the acceptance
+  baseline of record; no document may silently rewrite it.
+- **The UX-09 stash** stays untouched as read-only regression evidence
+  (A1/B1/C1 silent source-event loss, proven at `8967ada`); applying
+  it as tests is gated on the contract decision, with the doc 13
+  §14.15 mechanics evolution.
+
+Decision IDs and the full approval table: doc 13 §15.8. Nothing in
+this addendum changes any other row of the matrix, the Q3 decision
+record, or the milestone ordering.
