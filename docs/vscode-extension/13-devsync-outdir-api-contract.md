@@ -109,6 +109,21 @@ deleted).
 > policy contracts separated, and the exact S1 relaxation stated for
 > the owner decision). The Q3 sections remain untouched; still no
 > public API beyond the already-proposed getter.
+>
+> **UX-09 scope reconciliation (governance pass, appended below —
+> §15).** An independent scope review reconciled this contract with the
+> Project Cockpit migration matrix and the original UX-09 acceptance
+> baseline. It classifies every §14 normative change (C1–C12) against
+> the original UX-09 boundary, separates technical correctness from
+> product approval (Contract A vs Contract B), labels S1–S6 and
+> RG-1…RG-29 by their approval dependency, resolves the "Q4" naming
+> collision with the migration matrix's missing-mod Q4, and records the
+> outstanding owner decisions. §14's text above is preserved verbatim
+> as the proposal record — **nothing in it is approved by this
+> document, and no GO verdict recorded there constitutes product-owner
+> consent**. The current descriptive name of the proposed work is the
+> **UX-09 DevSync Baseline Safety Contract**. The accepted, shipped Q3
+> contract is untouched. See §15.
 
 This document resolves **Q3** from
 [`12-project-cockpit-migration-matrix.md`](12-project-cockpit-migration-matrix.md)
@@ -4093,3 +4108,469 @@ a future Cockpit/CLI affordance, not a watcher-policy one).
   manifest or dependency touched; Q3 sections untouched; the scratch
   counterexample tests used for verification were deleted before
   commit.
+
+---
+
+## 15. UX-09 scope reconciliation and approval record (governance pass)
+
+Written at HEAD `80c80fe6331538c3cb500c5caeae2954f3fc1a1c` (branch
+`42.20.0-dev`, tree clean). Documentation-only governance review: no
+production source, test, manifest or dependency change belongs to this
+section, and **nothing in it authorizes implementation**. It reconciles
+the §14 proposal with the original UX-09 acceptance baseline
+([`10-ui-ux-audit-findings.md`](10-ui-ux-audit-findings.md) UX-09,
+[`12-project-cockpit-migration-matrix.md`](12-project-cockpit-migration-matrix.md)
+§3/§4/§11) and separates, for every normative §14 item: what is already
+shipped and accepted, what is an independently defensible defect fix,
+what is proposed hardening, and what is a product decision still
+awaiting the owner. §14 above is preserved verbatim as the proposal
+record — the four revision GO verdicts recorded there were review-process
+artifacts commissioned by the design work itself, not product-owner
+consent, and none of them approves implementation.
+
+> **Naming (normative for all documents).** The §14 addendum and its
+> revisions used the label **"Q4"** for the DevSync baseline-safety work.
+> That label collides with the migration matrix's **Q4** — the missing-mod
+> "Remove from Project…" semantics question
+> ([`12-project-cockpit-migration-matrix.md`](12-project-cockpit-migration-matrix.md)
+> §4, UX-13). Resolution, without rewriting history: the "Q4" labels in
+> this file (header blockquotes, §14 heading, §14.0–§14.20) are
+> **historical identifiers of completed review iterations** and stay as
+> written; the current descriptive name of the proposed work is the
+> **UX-09 DevSync Baseline Safety Contract** (this section, §14). Every
+> reference to matrix Q4 keeps the missing-mod meaning; no mass rename is
+> performed in either document. The accepted Q3 contract (§1–§13,
+> `studio.resolveOutDir` + the §6.3 policy, shipped at `8967ada`) is
+> untouched and remains the contract of record for the shipped UX-09
+> remediation.
+
+### 15.1 The original UX-09 boundary (source-grounded reconstruction)
+
+1. **Original problem.** The extension fed every watcher event under the
+   project into `session.apply`; the CLI watch pre-filtered through
+   `isWatchPathIgnored` (outdir + dot segments, `watch.ts:124`). Core
+   classification has no outdir rule (`buildsession.ts:129-223`),
+   so an outdir inside a mod folder would feed the engine its own
+   writes (the loop case) and every other output event cost a wasted
+   apply pass — a host-consistency gap plus cheap loop insurance
+   (audit UX-09, doc 06).
+2. **Original proposed fix.** Call
+   `isWatchPathIgnored(projectDir, outDir, path)` in
+   `DevSyncController.schedule`, with the outdir obtained without
+   duplicating tier logic — which became open question Q3.
+3. **Original safety invariants.** Deliver legitimate source events
+   (fail open under unsafe or unknown roots); never self-feed the
+   engine's output; dot-segment noise filtered.
+4. **Original acceptance tests.** Events under a dot segment never
+   reach `apply`; CLI/extension parity cases from
+   `tests/unit/watch.test.ts` reused (matrix §3 UX-09), later
+   formalized as the Q3 §10 matrices A/B/C.
+5. **Allowed package boundaries.** UX-R0 is "Correctness
+   (extension-only; CLI/Core: **no**)" (matrix §11). Q3 was the single
+   sanctioned API decision, and the matrix record is explicit: an
+   engine addition "is a **CLI API change** requiring its own decision —
+   not smuggled into a UX fix".
+6. **Explicitly deferred at the time.** Full outdir exclusion pending
+   the outdir-resolution decision (Q3); the DevSync state owner and any
+   persistent sync UI (UX-R2/CP-04); structured session status (CP-12).
+
+**Status of the original scope: shipped and accepted.** Commit
+`8967ada` implemented the approved Q3 contract — `studio.resolveOutDir`
+(`studio.ts:148,282`) plus the §6.3 refresh-triggered re-resolution
+policy in the controller (filter root, post-start correction,
+schedule-time `project.json` switch, post-apply correction; verified in
+`packages/vscode-extension/src/util/devsync.ts`) with the Q3 §10 test
+matrices. UX-09's original acceptance is met; §14 exists because the
+red-first stash tests (A1/B1/C1) then **proved** that §6.3's residual
+windows are silent source-event losses, not cosmetic misalignments —
+which is a *new* finding about the shipped behavior, not part of the
+original acceptance baseline.
+
+### 15.2 Dependency graph (decisions vs milestones)
+
+```text
+UX-R0 / UX-09
+  ├─ Extension pre-filtering .................. shipped (8967ada, §6.3 policy)
+  ├─ Accepted/shipped Q3 effective-outdir work   (studio.resolveOutDir + §10 tests)
+  └─ Proposed DevSync safety prerequisites
+       (the UX-09 DevSync Baseline Safety Contract, §14 — nothing below
+        is approved; each needs its own explicit decision)
+       ├─ Core/API decisions ............... C1 getter (DX-2); territory
+       │                                     policy Contract B (DX-9)
+       ├─ Independent engine correctness fixes   C6 (DX-4), C11 (DX-7)
+       └─ Host reliability enhancements .... C7/C12 retry package (DX-5/DX-8),
+                                             C10 degraded state (DX-6)
+
+UX-R2
+  └─ Cockpit Development Sync state owner/UI .. CP-04; persistent
+                                              resyncRequired UI; CP-12
+```
+
+The graph distinguishes **decisions** (approvals the owner owes) from
+**implementation milestones** (UX-R0 shipped; UX-R2 deferred). The
+proposed prerequisites hang off UX-09 but are *not* UX-R0 work: UX-R0's
+extension-only boundary holds exactly as the matrix froze it, and every
+cross-package item below is an exception requiring its own approval.
+
+### 15.3 C1–C12 classification
+
+Labels used (exactly the six permitted):
+`DIRECT_UX09`, `REQUIRED_PREREQUISITE`, `OPTIONAL_HARDENING`,
+`SEPARATE_DEFECT`, `PRODUCT_DECISION`, `DEFERRED`. No item is
+`REQUIRED_PREREQUISITE` merely because it appears in §14; each such
+label names the contract it is a prerequisite *of*, and states why a
+narrower implementation cannot satisfy that target.
+
+**C1 — Core-owned committed-baseline getter (`getBaselineOutDir`).**
+
+| Field | Assessment |
+| :--- | :--- |
+| Requirement | `BuildSession` exposes the committed baseline's outdir (`this.planInput?.config.outdir`) read-only; `undefined` before first assignment. |
+| Source evidence | `buildsession.ts:339` private field, public surface only `start/rebuild/apply/stop` (verified — no accessor exists); fresh reads (S1) diverge from the committed baseline (S3) across macrotask windows (F2/F8). |
+| Original UX-09 dependency | **Indirect.** The original pre-filter shipped without it; the getter is needed only to close the *proven* A1/B1/C1 residual windows of the shipped §6.3 policy. |
+| Package owner | Core. |
+| Behavioral impact | None on existing semantics — additive read-only member. |
+| Compatibility impact | Additive member on an exported class; no interface or result-shape change; in-repo stubs double-cast (F12). `PzStudio` untouched. |
+| Necessity | Not a must-have for UX-09 closure (shipped). REQUIRED_PREREQUISITE **of the §14 successor contract**: every fresh read (the shipped policy's root source) is heuristic by construction (S1 ≠ S3), and §14's decision-time drop rule is unsound without the field itself. No narrower mechanism satisfies that target — §14.5/§14.6 show the CLI-closure alternative is convention-bearing and the wrapper widens the frozen surface more. |
+| Alternative | Keep the shipped §6.3 policy with its documented residuals; or Option A closure (rejected in §14.6). |
+| Milestone | Independent prerequisite of the proposed §14 work — outside UX-R0. |
+| Approval | New approval required (v2/Core surface exception to UX-R0). Status: **PROPOSED** (DX-2). |
+| Test obligation | RG-1 (baseline agreement + F4 failure distinguishability); RG-6 guards the four-site assignment discipline the getter rests on. |
+
+**C2 — live per-event getter read; `filterRoot` deleted.**
+
+| Field | Assessment |
+| :--- | :--- |
+| Requirement | Schedule-time drop decision reads `session.getBaselineOutDir()` at every event; no cached root; `undefined` fails open. |
+| Source evidence | Controller holds `filterRoot` refreshed at four points (`devsync.ts:68,100-110,171-177,213-224`); every refresh is a fresh read that can strand on the wrong side of a re-baseline (F9; the stash's A1/B1/C1). |
+| Original UX-09 dependency | **Direct lineage** (it is the pre-filter with a better root source) — but not necessary for the original closure, which shipped. |
+| Package owner | VS Code extension. |
+| Behavioral impact | Replaces the shipped §6.3 policy's correction reads; the drop set for a stable root is unchanged (continuity with CLI watch and Q3, F18). |
+| Compatibility impact | Extension-internal policy; no public API. Supersedes accepted behavior — therefore a decision, not a bug fix. |
+| Necessity | REQUIRED_PREREQUISITE of the §14 contract (it *is* that contract's filter). Narrower alternative that satisfies the *original* UX-09 invariants: the shipped §6.3 policy — which is why C2 is gated on the owner accepting the §14 residuals story (DX-9), not on UX-09. |
+| Alternative | Ship nothing; keep §6.3 + documented residual windows. |
+| Milestone | Deferred — gated on DX-2 + DX-9. |
+| Approval | New approval required (changes accepted §6.3 behavior). Status: **PROPOSED** (DX-3). |
+| Test obligation | RG-4…RG-9; shipped B.11/B.12/B.13 outcomes preserved. |
+
+**C3 / C4 / C5 — deletion of the prediction/switch, the buffer, and the correction reads.**
+
+| Field | C3 (no prediction/switch) | C4 (no buffer) | C5 (correction reads deleted) |
+| :--- | :--- | :--- | :--- |
+| Requirement | Root-level `project.json` events deliver like any event; adopt-on-commit replaces adopt-on-prediction. | Only `pending` remains; a failed batch never re-enters it. | Controller performs zero `resolveOutDir` calls; the reader stays on the surface for hosts/diagnostics. |
+| Source evidence | T′/§14.12 (the transition machinery's coverage target is empty); F7/F20. | F6 (queue serialization), F17. | F9 (the four reads are the S1-divergence class §14 exists to delete). |
+| UX-09 dependency | Indirect — consequences of adopting C2, not independent needs. | Same. | Same. |
+| Owner | Extension. | Extension. | Extension. |
+| Behavioral impact | Removes the shipped switch points; residuals move to the getter. | No shipped buffer exists to remove — normative constraint. | Removes shipped post-start/schedule/post-apply reads. |
+| Compatibility impact | Extension-internal. | Extension-internal. | Extension-internal; `resolveOutDir` unchanged on the surface. |
+| Necessity | REQUIRED_PREREQUISITE **within the C2 adoption** (C2 without C3 leaves two root authorities). | Same (C4 prevents reintroducing the P1/P2 buffer class). | Same (C5 without C2's live read would strand the filter). |
+| Alternative | None within the §14 adoption; outside it, the shipped policy stands. | — | — |
+| Milestone | Deferred with DX-3. | Deferred with DX-3. | Deferred with DX-3. |
+| Approval | New approval required (part of the DX-3 package). | Same. | Same. |
+| Test obligation | RG-4/RG-6/RG-8 (stash outcomes verbatim; read-count mechanics evolve per §14.15). | RG-10. | RG-8. |
+
+**C6 — `apply()` never rejects (scoped plan-input normalization).**
+
+| Field | Assessment |
+| :--- | :--- |
+| Requirement | The scoped fetch (519) moves inside the failure envelope; a scoped plan-input rejection resolves `{errors:[msg], scoped:[], …}` with the baseline retained. |
+| Source evidence | Verified defect: `buildsession.ts:519` sits outside every try/catch while `apply()`'s own contract comment (385–387) promises "Never throws"; F10 — both hosts splice the batch before the await and fire the flush `void`-ed (`devsync.ts:195,202`; `watch.ts:82–101`), so the rejection silently abandons the batch and surfaces as an unhandled rejection. |
+| Original UX-09 dependency | **Unrelated** to the original pre-filter (the flush path is untouched by filtering). |
+| Package owner | Core. |
+| Behavioral impact | Existing semantics changed: a rejecting scoped plan input now resolves instead of rejecting — aligning implementation with the documented contract. |
+| Compatibility impact | No result-shape change; callers relying on the rejection would change behavior (none in-repo — both hosts treat it as a defect today). |
+| Necessity | **SEPARATE_DEFECT** (verified contract violation, host-independent) **and** REQUIRED_PREREQUISITE of the §14 host rules (C7's guard/C10's result-driven rule both presuppose a non-rejecting `apply`). Narrower implementation cannot satisfy the original invariant *as §14 restates it* because a rejecting apply bypasses every result-driven rule by construction (F5). |
+| Alternative | A minimal host-side rejection guard alone (catch, log, flag) — defensible as the narrow F10 fix, but leaves the engine violating its own contract. |
+| Milestone | Independent engineering work (Core) — a UX-R0 exception requiring approval; recommended independently of DX-9. |
+| Approval | New approval required. Status: **APPROVAL_REQUIRED** (DX-4). |
+| Test obligation | RG-2/RG-3. |
+
+**C7 — bounded failed-batch FIFO retry, backoff and resource bounds (both hosts).**
+
+| Field | Assessment |
+| :--- | :--- |
+| Requirement | Rejection guard + session-identity checks; bounded FIFO queue (16 entries AND 256 retained deltas); single retry driver; 3-retry budget with 300/600/1200 ms backoff; sticky terminal state with recovery procedure. |
+| Source evidence | F10 (verified: a rejected `apply` abandons the spliced batch on both hosts with no log, no requeue — an unhandled rejection). |
+| Original UX-09 dependency | **None for filtering.** C7 is not intrinsically required for output pre-filtering — the shipped pre-filter never touches the flush path. It is a **consequence of the newly proposed recovery design**: §14 adopts "at-least-once delivery" for rejected batches, an ambition strictly beyond S1-original (which forbids silent loss *caused by watcher filtering*, not transient rejections of any batch). |
+| Package owner | Hosts (extension `util/devsync.ts` + CLI `commands/watch.ts`). |
+| Behavioral impact | New retry/re-delivery behavior and a new terminal state; shipped overlap semantics preserved. |
+| Compatibility impact | No public API; host-internal. Cross-host behavior change (CLI watch gains a retry queue). |
+| Necessity | The **underlying F10 defect is real** and deserves a narrow fix (rejection catch → error-level log naming the loss + recovery advice — the "no silent abandonment" minimum). The **full queue/backoff/budget design is OPTIONAL_HARDENING** relative to the original scope: it is required only by §14's S4/S6 reading (at-least-once + bounded resources + terminal semantics), not by UX-09. |
+| Alternative | The narrow F10 fix above; or C7 as specified under the §14 approval. |
+| Milestone | Deferred (§14 package); the narrow fix may proceed as independent work. |
+| Approval | New approval required for the full design. Status: **PROPOSED** (DX-5). |
+| Test obligation | RG-11/RG-12/RG-20/RG-26/RG-27/RG-28 (and RG-10's no-loop guard). |
+
+**C8 / C9 — R0/R1 untouched; instance/session isolation.**
+
+Not changes: they restate standing invariants (doc 11 §8.0 R0/R1; per-session getter isolation). Classification: **DIRECT_UX09-compatible preserved invariants** — APPROVED_EXISTING (already pinned by `cliStudio*`/`extUtilDevSync` suites); RG-14/RG-15 re-pin them under the §14 shapes.
+
+**C10 — sticky `resyncRequired` / degraded state.**
+
+| Field | Assessment |
+| :--- | :--- |
+| Requirement | A re-baseline-class apply resolving with non-empty `errors` sets a sticky degraded state; clears only on a proven whole-tree resync; one error naming failure + recovery. |
+| Source evidence | F4/F13/F20: a failed rebuild can strand source work while the hosts treat the result as handled — verified today the extension logs result errors via `logger.warn` (`devsync.ts:231-233`), which is **channel-only** (doc 09 §5: warn produces no notification), and no state is kept. "Logged" is not "observable". |
+| Original UX-09 dependency | **Indirect** — failure observability, not filtering. Required by §14 to make non-incorporating commits recoverable rather than silent. |
+| Package owner | Hosts (extension flag; CLI log-only counterpart, §14.11.9). |
+| Behavioral impact | New host state; no engine change. |
+| Compatibility impact | Extension-internal; no API. |
+| Necessity | REQUIRED_PREREQUISITE **of the §14 territory contract** (without it, decision-time drops after non-incorporating commits are silent — the S1 violation). As an independent hardening, the minimal form (route re-baseline-class failures through `logger.error` — the existing notification-producing path — plus the recovery advice) is defensible alone. |
+| Alternative | Minimal error-routing hardening; or full C10 under §14. |
+| Milestone | The persistent Development-section state ownership is **UX-R2 (CP-04) — deferred**; the minimal current-host contract is independent work. |
+| Approval | New approval required for the §14 semantics; the minimal routing fix is an ordinary host hardening. Status: **PROPOSED** (minimal) / **DEFERRED** (persistent UI) — DX-6. |
+| Test obligation | RG-17/RG-19/RG-21/RG-23; plus the §15.7 observability rule (assert the notification path, not only the flag). |
+
+**C11 — scoped outdir migration promoted to full rebuild.**
+
+| Field | Assessment |
+| :--- | :--- |
+| Requirement | In the scoped block, a fresh input whose normalized outdir differs from the committed baseline delegates to the full-rebuild envelope before assignment. |
+| Source evidence | Verified defect: `buildsession.ts:519-537` commits the fresh input for the whole config (520) but re-syncs only the scoped mods (F21); F22 proves the scoped block is the only re-baseline site that can move the root without a full rebuild — so a root-moving scoped batch commits an **incomplete output root with zero errors** (the P0-D counterexample: second mod + `workshop.txt` absent, `errors: []`). Pre-existing, host-independent (`pzstudio watch` hits the same engine path). |
+| Original UX-09 dependency | **Indirect** — not a filtering item; §14's territory contract needs "committed root is complete" to hold (C10's false-negative closure). |
+| Package owner | Core. |
+| Behavioral impact | Existing semantics changed: a root change arriving on a scoped trigger now pays a full rebuild instead of committing a broken root. |
+| Compatibility impact | `SessionApplyResult` untouched; `fullRebuild === true` keeps its truthful meaning; stable-root scoped path byte-identical. |
+| Necessity | **SEPARATE_DEFECT** (a committed, in-use output tree that is not a complete usable build, with no signal — a correctness defect on its own) **and** REQUIRED_PREREQUISITE of §14. Narrower alternative: the explicit root-change result/degraded contract — rejected in §14.7 with a deterministic counterexample (B3's A→B→A concealment) and a sound objection to B2 (the incomplete root stays in use until user action). |
+| Alternative | As above; or fix nothing and document the incomplete-root window (not recommended — silent data-shape corruption). |
+| Milestone | Independent engineering work (Core) — a UX-R0 exception requiring approval; recommended independently of DX-9. |
+| Approval | New approval required. Status: **APPROVAL_REQUIRED** (DX-7). |
+| Test obligation | RG-22/RG-23/RG-24/RG-25. |
+
+**C12 — execution-time incremental-delete reconciliation.**
+
+| Field | Assessment |
+| :--- | :--- |
+| Requirement | An incremental `delete` delta whose source path currently exists is applied as a change (live-source copy); absent source deletes as today. |
+| Source evidence | Verified: `buildsession.ts:642-645` executes the delete by delta type without consulting the source; a stale delete after a newer create deletes output the source still has (P0-E counterexamples). |
+| Original UX-09 dependency | **None for filtering.** Like C7, C12 is a **consequence of the proposed retry design**: the FIFO re-delivers stale deltas by rejection time, not source order, and §14.11.10 derives the reconciliation from exactly that ordering property. §14 further notes F19 leaves the fresh pipeline without an ordering guarantee, but no fresh-path counterexample was executed — the proven case is the retry queue's. |
+| Package owner | Core. |
+| Behavioral impact | Existing semantics changed (type-driven delete → reconcile-with-source); converges output toward current source state regardless of delivery order. |
+| Compatibility impact | No result-shape change; the shipped pin "apply() creates and deletes files in the output" needs the §14.15 mechanics note (model the source deletion). |
+| Necessity | REQUIRED_PREREQUISITE **of C7** (the queue is what re-delivers stale deltas). Without C7 it is OPTIONAL_HARDENING (defense-in-depth against F19's unordered delivery). |
+| Alternative | Without C7: ship nothing; the fresh pipeline has no proven stale-delete case. |
+| Milestone | Deferred — conditional on DX-5. |
+| Approval | New approval required (Core behavior change). Status: **PROPOSED**, conditional (DX-8). |
+| Test obligation | RG-26/RG-27 + the shipped-pin mechanics note. |
+
+### 15.4 S1-original vs S1-relaxed; Contract A vs Contract B
+
+**S1-original (normative, unchanged — the acceptance baseline of
+record):** *No legitimate source mutation may be silently lost
+indefinitely because of watcher filtering.*
+
+**The fourth revision's counterexample violates S1-original.** Each link
+is source-verified: outdir inside configured mod source (§3.1 case 6 —
+valid, doctor-flagged); source mutation after the relevant build
+traversal (F13's abort-on-first-failure bounds what a rebuild
+incorporates; F14's live-tree read is traversal-ordered); watcher
+callback delayed until after the outdir commit (F19 — delivery is
+unordered relative to engine continuations); decision-time territory
+filtering drops the event (the §14.8.6 rule); no build failure, no
+diagnostic (the commit fully succeeded — outcome 5 of §14.13); no
+guaranteed future rebuild (P0-F — every healing trigger is
+user-action-dependent); potentially persistent unsynchronized output
+(RG-29's residual, unbounded in time absent user action). The fourth
+revision correctly withdrew the earlier "bounded by the next successful
+full rebuild" claim; this record adopts that withdrawal: **the residual
+is not bounded in time.**
+
+**Contract A — strict source delivery/incorporation.**
+
+- Current approved APIs **cannot** guarantee it: T3 (mutation
+  provenance) is unprovable from `(type, path)` events (F19) — a
+  decision-time filter cannot know what a delayed event meant.
+- The §14.17 write-provenance mechanism (each apply reports written
+  paths; the host delivers under-committed-root events that set did not
+  write) is **directionally sufficient but not established**: it needs a
+  new result-contract surface on the frozen engine, bounded per-apply
+  host state, and still leaves the microscopic read→write race inside
+  one file's copy (only content-comparison reconciliation closes that).
+  It is a candidate for a future architecture decision, not a validated
+  design — this record does not adopt it on §14's say-so.
+- Remaining race cases even under provenance: the single-file
+  read→write race above; provenance-set staleness across overlapping
+  applies (the B3 counterexample class); and any future engine change
+  that breaks the four-site assignment discipline (RG-6's guard).
+- Approval path: a new API decision (result-contract surface), its own
+  design pass, then implementation. Status: **BLOCKED** for this
+  requirement pending that decision (DX-10).
+
+**Contract B — decision-time committed-output territory.**
+
+- Compatibility with the original invariant: for a **stable** root the
+  drop set equals the shipped CLI watch's native exclusion and the
+  accepted Q3 policy (continuity, F18) — the *original* UX-09 gates hold
+  unchanged. The **new** semantic is retroactive capture of pre-commit
+  mutations (decision-time ownership), and its cost is exactly the
+  residual above. The exact relaxation: S1-original's "delivered or
+  incorporated" becomes "delivered, or dropped under the documented
+  territory contract, with every non-incorporating *failure* observable
+  (C10) and no incomplete root silently committed (C11) — except the
+  outcome-5 residual, which persists indefinitely absent user action."
+- Effect on UX-09 acceptance: none on the shipped, original-scope gates
+  (they pass at HEAD); the relaxation governs only whether the §14
+  closure may *replace* S1-original in future acceptance language.
+- Mitigation: doctor's `filesystem.outDirInsideProject` and user
+  documentation mitigate the *layout* risk (case-6 exposure) but do
+  **not** deliver or report the missed mutation — they cannot satisfy
+  S1-original; they lower its probability surface only.
+- **Classification: a product-policy change, not a technical
+  correction.** Test expectations, CLI parity, architectural economy and
+  the four §14 GO verdicts do not constitute owner consent.
+  **Contract B is NOT approved; owner approval is recorded as pending
+  (DX-9).** S1-original is retained as the acceptance baseline of record
+  until the owner decides; it is not rewritten here into S1-relaxed.
+
+### 15.5 S1–S6 status labels
+
+| Invariant | Label | Basis |
+| :--- | :--- | :--- |
+| **S1** | **Unmet** in the strict original form (the outcome-5 residual — verified above); the relaxed reading is **Conditional on owner approval** (Contract B, DX-9). S1-original remains the baseline of record. | §15.4; §14.14; §14.17 (P0-F) |
+| **S2** | **Proven under the original requirement** — no self-sustaining output loop; the shipped §6.3 policy provides the stable-root form, §14's getter extends it to decision-time completeness with bounded forwarding. | C2+T′; §14.8.4; shipped B.12 |
+| **S3** | **Conditional on an implementation mechanism** — the getter (C1); the shipped policy's baseline alignment is heuristic (fresh reads) by construction. | §14.2; F9 |
+| **S4** | **Conditional on an implementation mechanism** (C7's dual bounds, C11's single-promotion) — and **Outside original UX-09 scope** (the retry machinery is not a filtering concern). | §14.11; §14.10 |
+| **S5** | **Conditional on an implementation mechanism** (identity guards) — **Outside original UX-09 scope**. | §14.11.1/8; F6 |
+| **S6** | **Conditional on owner approval and on an implementation mechanism** — C10's semantics are §14 work (DX-6/DX-9); **Unmet today**: re-baseline-class failures surface as channel-only warnings with no state and no notification (verified: `devsync.ts:231-233` logs via `logger.warn`; doc 09 §5 maps `warn` to a channel line only). | §14.13; §15.7 |
+
+### 15.6 RG-1…RG-29 classification; the stash
+
+The Q3 §10 matrices (A/B/C) are the **original UX-09 acceptance gates**
+— implemented and green at HEAD (shipped `8967ada`); they are not part
+of the RG matrix. The RG rows are implementation-stage specifications
+for §14 and classify as:
+
+- **Required for original UX-09 safety closure:** none as *new* gates —
+  the original closure is complete; RG-9 and RG-13 re-pin properties the
+  shipped contract already relies on (loop protection; F7
+  success-scoped healing) and become mandatory only if §14 is approved.
+- **Required for separately approved Core prerequisites:** RG-1 (C1);
+  RG-2/RG-3 (C6); RG-22/RG-23/RG-24/RG-25 (C11); RG-6 also guards the
+  assignment discipline once C1 lands.
+- **Required for proposed recovery hardening (§14 as a package):**
+  RG-10, RG-11, RG-12, RG-14, RG-17, RG-18, RG-19, RG-20, RG-21,
+  RG-26, RG-27, RG-28.
+- **Product-policy characterization tests (require Contract B owner
+  approval before their assertions may be treated as acceptance):**
+  RG-16 (territory drop as lossless here) and RG-29 (pins the §14.17
+  residual verbatim, including the S1 relaxation).
+- **Deferred / unnecessary for the minimal scope:** RG-4, RG-5, RG-7,
+  RG-8, RG-15 (the §14 policy-adoption and compatibility rows — required
+  only under DX-3's approval; their subject matter is otherwise covered
+  by the shipped B-series pins).
+
+**The stash (A1/B1/C1).** Identified by its message ("UX-09 red-first
+regression tests (A/B/C silent source-event loss, proven at 8967ada) -
+blocked on session-root contract"; verified present at this HEAD,
+inspected read-only, never applied/popped/dropped). Status: **read-only
+regression evidence**, preserved verbatim — its assertions are not
+altered by this pass and its RED verdicts against the shipped §6.3
+policy are the empirical proof behind §15.4. Its *mechanics*
+(`resolveSpy` counts, `filterRoot` introspection) encode the §6.3
+implementation, so applying it under the §14 contract requires exactly
+the §14.15 mechanics evolution — permitted only after DX-3/DX-9 are
+decided. If a regression gate depends on Contract B (RG-16, RG-29, and
+the A1 control's territory reading), it is labeled above as requiring
+owner approval.
+
+### 15.7 UX-R2 boundary and the minimum current-host observability contract
+
+The persistent Development Sync UI — phase/owner/last-sync rows, the
+Needs-attention presentation, `resyncRequired` as a surfaced state —
+belongs to UX-R2 (CP-04, spec §6). No §14 item may pull it forward: no
+new persistent state service, tree hierarchy, status UI, command, or
+manifest contribution belongs in any UX-09 work. **An internal flag is
+not proof of observability.** The minimum current-host contract, if
+degraded-state reporting is approved in minimal form (DX-6), is:
+
+1. **Internal bookkeeping** — a controller field is permitted but counts
+   for nothing user-facing.
+2. **User-visible reporting in the existing UX-R0 surface** — route the
+   degraded condition through `logger.error` (the existing
+   notification-producing path, doc 09 §5) with one message naming the
+   failure and the recovery (restart DevSync or run `pzstudio build`).
+   Today's `logger.warn` routing (`devsync.ts:231-233`) is
+   channel-only and does not meet this bar.
+3. **Persistent state ownership** — UX-R2 only.
+
+**Host-capability distinction (no cross-host equivalence claimed).**
+The CLI watch's native parcel `ignore` and its filter root are both
+start-frozen (`watch.ts:57,124,142-148`) — a static exclusion, not a
+live committed-baseline filter. The shipped extension policy adds
+correction reads; the proposed §14 policy reads the committed root per
+event. These are three different filtering lifecycles; C7 is specified
+for both hosts, C10's sticky state is extension-only (the CLI
+counterpart is log-only, §14.11.9). No claim that CLI watch matches the
+extension's filtering lifecycle is made anywhere in this document, and
+none may be inferred from it.
+
+### 15.8 Approval decision table
+
+| Decision ID | Proposal | Original scope compatibility | Technical recommendation | Owner approval required | Current status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| DX-1 | Shipped Q3: `studio.resolveOutDir` + §6.3 policy + §10 matrices | The accepted Q3 decision, shipped `8967ada` | Keep as the contract of record for UX-09 | No — already accepted | APPROVED_EXISTING |
+| DX-2 | C1 Core committed-baseline getter | Outside UX-R0 (Core API) | Approve only as the §14 prerequisite, not as UX-09 work | Yes (v2/Core surface exception) | PROPOSED |
+| DX-3 | C2–C5 extension policy adoption (live getter filter; correction machinery deleted) | Supersedes accepted §6.3 behavior | Approve only as a package with DX-2 and the territory decision DX-9 | Yes (changes accepted behavior) | PROPOSED |
+| DX-4 | C6 `apply()` normalization | Independent of UX-09; verified contract violation | Approve as standalone Core correctness work | Yes (Core change) | APPROVAL_REQUIRED |
+| DX-5 | C7 bounded failed-batch FIFO retry (both hosts) | Beyond the original invariant; consequence of the §14 recovery design | The narrow F10 fix (guard + error log) is defensible independently; the full design only with DX-9 | Yes (cross-host behavior change) | PROPOSED |
+| DX-6 | C10 sticky `resyncRequired` | Not required by original UX-09 | Minimal form (error-level routing + recovery text) approvable alone; persistent state is UX-R2 | Yes for the §14 semantics; UI part deferred | PROPOSED (minimal) / DEFERRED (UX-R2 UI) |
+| DX-7 | C11 scoped root-move promotion to full rebuild | Independent of UX-09; verified incomplete-root defect | Approve as standalone Core correctness work | Yes (Core change) | APPROVAL_REQUIRED |
+| DX-8 | C12 execution-time delete reconciliation | Consequence of C7's retry ordering, not of filtering | Approve only with DX-5; optional hardening otherwise | Yes (Core behavior change) | PROPOSED (conditional on DX-5) |
+| DX-9 | Contract B — decision-time committed-output territory (the S1 relaxation) | Product-policy change; relaxes S1-original | Owner decision; DX-3/DX-5/DX-8 and the §14 reading of DX-6 are meaningful only under it | **Yes — explicit product-owner approval**; prior GO reports, test expectations and CLI parity do not consent | BLOCKED (pending owner decision) |
+| DX-10 | Contract A — strict per-event delivery/incorporation via write provenance | Matches S1-original intent | Not achievable on approved APIs; the §14.17 sketch is unproven to implementation depth and needs its own API decision | Yes (new API decision) | BLOCKED (missing capability) |
+| DX-11 | Apply the UX-09 stash (A1/B1/C1) as regression tests | Red-first evidence at `8967ada` | Preserve read-only; apply only after DX-3/DX-9 with the §14.15 mechanics evolution | Yes (part of DX-3's approval) | DEFERRED |
+| DX-12 | Declare UX-09 complete | Original acceptance = shipped Q3 §10 matrices + dot/parity gates (green at HEAD); strict-S1 closure is a separate question | Record UX-09 as shipped with named residuals; full closure gated on DX-9/DX-10 | No for the original scope; strict closure gated on DX-9 | APPROVED_EXISTING (original scope) |
+
+### 15.9 Answers to the six scope questions
+
+1. **What can be implemented using already-approved requirements?**
+   Nothing further on the DevSync safety path. The approved, shipped
+   contract (DX-1) is complete as implemented; this governance pass
+   authorizes no code.
+2. **Which Core/API changes require a separate explicit exception to
+   UX-R0?** C1 (DX-2), C6 (DX-4), C11 (DX-7), C12 (DX-8) — Core — and
+   C7's `commands/watch.ts` guard (DX-5) — CLI. None may ride a UX-09
+   implementation commit.
+3. **Which improvements should be independent engineering work?** C6
+   (DX-4) and C11 (DX-7) as standalone Core correctness fixes; the
+   narrow F10 rejection-guard fix (a subset of DX-5); the minimal C10
+   error-routing hardening (DX-6 minimal). Each still needs its own
+   approval because UX-R0 is extension-only — but each is decidable
+   without the territory decision.
+4. **What is blocked solely by the S1 product-policy decision (DX-9)?**
+   The successor filter policy (C2–C5/DX-3), the retry package as
+   designed (C7+C12/DX-5+DX-8 in their §14 forms), C10's sticky-state
+   semantics as specified, the RG-16/RG-29 characterization gates, and
+   the stash application (DX-11).
+5. **Which regressions must pass before declaring UX-09 complete?**
+   The original scope is already met: the Q3 §10 matrices A/B/C and the
+   dot-segment/parity gates are green at HEAD (DX-12). Strict-S1
+   closure is a separate, owner-gated question: under Contract B it
+   would require the RG matrix per §15.6's classification with the
+   stash outcomes verbatim; under Contract A it first requires the
+   provenance architecture (DX-10).
+6. **What remains deferred to UX-R2?** Persistent Development Sync
+   state ownership (CP-04), any user-visible `resyncRequired`
+   presentation, structured session status (CP-12), and the
+   multi-project sync UX (UX-15). None of it may be pulled forward by
+   a UX-09 commit.
+
+### 15.10 Reconciliation verification
+
+- [x] Preflight verified at `80c80fe`: branch `42.20.0-dev`, HEAD
+  matches, clean tree; the UX-09 stash located by message and inspected
+  read-only (never applied, never popped).
+- [x] The shipped Q3 contract re-verified in source (`studio.ts:148,282`;
+  controller §6.3 shape; Q3 §10 tests present); §14's load-bearing F-facts
+  spot-verified (F2/F4/F5/F10/F20/F21/F22; C1's absence; the C12 delete
+  site) — no drift found requiring §14 corrections.
+- [x] Docs-only change: no production source, test, manifest or
+  dependency touched; §1–§14 preserved verbatim; the only edits are this
+  section and the companion pointer notes.
+- [x] Naming: historical "Q4 DevSync" labels preserved; matrix Q4
+  (missing-mod) untouched; current name = UX-09 DevSync Baseline Safety
+  Contract.
+- [x] Cross-document status consistency: matrix Q3/Q4 notes and the
+  matrix's reconciliation addendum point here; no document marks
+  Contract B approved, S1-original satisfied, or §14 implementation
+  authorized.
