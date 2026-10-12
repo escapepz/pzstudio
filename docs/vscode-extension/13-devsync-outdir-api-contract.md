@@ -4587,4 +4587,10 @@ none may be inferred from it.
 > top of DX-2, plus the new engine fact F23 — listing-order-dependent
 > `copyTree` self-embedding — filed as a sibling defect). Nothing in that
 > record authorizes implementation; this §15 approval table remains the
-> decision authority.
+> decision authority. The adversarial proof-closure pass over that record
+> (Contract A, strict S1) is its **§16**: the E1 legitimacy verdict
+> (semantics change requiring owner approval), the reconciliation
+> liveness theorem with its per-history triggers, the corrected F23
+> finding (unbounded under plain alphabetical order in the root-adoption
+> flow), the Candidate D component reclassification, and the verdict
+> `PROOF_INCOMPLETE` with the exact outstanding obligations.
