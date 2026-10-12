@@ -499,3 +499,290 @@ implementation begins only on that explicit approval.
 
 *Pointer: doc 13 §15 links here (UX-09 strict-S1 feasibility record,
 Contract A).*
+
+---
+
+## 16. Contract A proof-closure gates (adversarial validation pass)
+
+**Status: proof-closure record. Documentation-only; nothing here authorizes
+implementation, weakens §2's strict S1 baseline, or reopens §1–§15.**
+
+Written at HEAD `28c74ca7bbf4085fbd0122465968757f32689bd9` (branch
+`42.20.0-dev`, tree clean). This section adjudicates §8's Candidate D and
+the §2 exclusion set against four adversarial gates. Every behavioral claim
+below was executed as a deterministic scratch experiment against the
+unmodified real `BuildSession` / `planBuild` / `planScopedModRebuild` /
+`executeFileOperations` / `classifyDelta` / `isSourcePathIncluded` through a
+gated memory filesystem (configurable listing order — the F23 axis — plus
+write cap, fs-operation cap, one-shot failure injection, static list mask,
+and a pre-execution full-tree listing mode; 17 gates, all green, re-run four
+times for determinism). The scratch file was deleted before this commit;
+the UX-09 regression stash was identified by message and left untouched
+(read-only, never applied/popped/dropped). No production source, test,
+manifest or dependency was modified.
+
+### 16.1 Gate 1 — E1 source-ownership legitimacy
+
+**Verdict: E1 changes supported semantics and requires explicit owner
+approval — and the approval, even if granted, does not prevent the
+underlying destructive loss. The mechanism-impossibility half of E1 is
+proven.**
+
+Separation of ownership at the three times:
+
+- **At mutation time, the file IS legitimate source under the accepted
+  contract.** `classifyDelta` (buildsession.ts:129–223, unmodified) has no
+  outdir rule: a create at a future variant-folder destination classifies
+  `{ kind: 'mod-file' }` (G1-A asserts this against the real classifier).
+  The shipped §6.3 policy forwards the event (the path is outside the
+  committed root), and Q3 §3.1 case 6 names the layout "a valid, intended
+  configuration". The retroactive drop §14.8.6 would apply at decision
+  time is the Contract B semantic — DX-9, unapproved.
+- **At plan resolution time, the engine claims the whole subtree.**
+  `planBuild` emits `removeDir(outPath)` for each variant folder
+  (buildplan.ts:341) and `planScopedModRebuild` for each mod folder.
+- **At execution time, the destruction happens with no signal** (G1-A:
+  `fullRebuild: true`, `errors: []`, file gone, no copy of the content
+  anywhere).
+
+Reproduction of EXP-3a and the survival map: G1-A reproduces the silent
+destruction exactly (old root external, as in §4's fixture). G1-B
+additionally proves the sharper boundary: **delivering the mutation's
+event before adoption does not save it** — the engine incorporates it as a
+nested copy under the OLD root (bounded garbage abandoned with that root)
+and the original is still destroyed by the adoption's `removeDir`. No
+delivery mechanism, hash set, or reconciliation pass can incorporate
+content the engine destroys at execution time. G1-D proves the destruction
+is **plain engine build semantics shared with `pzstudio build`** (a bare
+`planBuild`+`executeFileOperations` destroys the same file with no
+DevSync, watcher, or filter involved) — i.e., the loss sits **outside
+S1-original's causal scope** ("silently lost … *because of watcher
+filtering*"), and excluding it from the legitimacy set does not weaken
+S1 as written.
+
+But the exclusions's *definition* is not established by the accepted
+source-ownership model: the accepted classifier calls these paths
+legitimate source at mutation time, and E1 narrows that set. Three
+dispositions follow, and they are not alternatives: (a) the **definition
+change requires owner approval** (it is a redefinition of "legitimate
+source mutation" relative to the accepted model — the exact thing this
+verdict is forbidden from smuggling in); (b) approving E1 **scopes the
+sync contract honestly but does not prevent the loss** — eventual engine
+ownership is not retroactive permission, and the destruction remains a
+real, silent, pre-existing user-facing data loss; preventing it requires a
+separate engine decision (pre-adoption capture semantics, a doctor gate
+for case-6 layouts, or Candidate C's layout rejection); (c) if the owner
+requires per-mutation incorporation for this class, §9.3's impossibility
+applies unchanged.
+
+### 16.2 Gate 2 — reconciliation liveness and per-mutation safety
+
+**Verdict: Candidate D's cadence-driven reconciliation guarantees S1c for
+every eventless history, with the cadence as the single independent
+trigger — but "bounded recovery" (S4) is NOT yet claimable because no host
+has committed a concrete cadence constant.**
+
+Liveness theorem (conditional form). Define the **incorporation debt** at
+time t: `D(t) = { f : f legitimate, source-state(f,t) ≠ output-state(f,t)
+}`. Assume **A1 (cadence fairness)**: the host schedules reconciliation
+passes at a finite cadence C and every scheduled pass completes (the
+session queue serializes passes with applies; no starvation); **A2
+(terminating reads)**: every fs read/list terminates; **A3 (quiescence)**:
+for convergence, a time exists after which no further user mutations
+occur; **A4 (deterministic comparator)**: the comparator is a pure
+function of observed (source, destination) states, and its applied deltas
+move the output toward the source. Then after the last mutation, the
+first pass starting after it finds all accumulated divergence and heals
+it; the next pass is a fixed point; **per-mutation staleness ≤ C + one
+pass**. Executed evidence: G2-h1 (F-stranded: a failed rebuild truncates
+the main variant after baseline assignment; with zero events, pass 1
+heals, pass 2 is a fixed point), G2-h2/5 (a mutation whose event nobody
+delivers is found and healed by the next pass), G2-h4 (mutations
+interleaved with passes converge one pass after the last mutation),
+G2-h3b (a source deleted without an event is healed via a delete delta
+through `session.apply` — the engine's own delete reconciliation).
+
+The five adversarial histories reduce to one independent trigger each:
+
+| # | History | Independent trigger |
+| :--- | :--- | :--- |
+| 1 | Source change after the final reconciliation comparison | the next cadence pass |
+| 2 | Source change while idle, no watcher event | the next cadence pass |
+| 3 | Create+delete between observations | none needed — net-zero, `D` = ∅ (G2-h3); if an earlier pass copied the file, the next pass's vanished-source check (h3b shape) heals it |
+| 4 | Concurrent mutations during repeated passes | each pass; convergence one pass after quiescence |
+| 5 | Fixed point, then a missed mutation | the cadence — **a fixed point is not absorbing; a design that runs reconciliation only after re-baseline-class applies leaves history 5 permanently stranded. The unconditional cadence is load-bearing, not an optimization.** |
+
+Formal impossibility / indistinguishability boundaries (all three
+load-bearing for the design, none solvable):
+
+1. **Trace-erasure (benign).** Any two histories with identical observable
+   states at every observation point and identical delivered event streams
+   are indistinguishable — and indistinguishable histories have identical
+   `D(t)`, so the indistinguishability cannot breach an obligation: a
+   create+delete (or write-revert) inside one window leaves no content to
+   incorporate. S1 is well-defined over mutations that alter the current
+   source state; erased intermediates impose no debt (sharpens §9.5).
+2. **Event-stream indeterminacy (F-race).** The event sequence for
+   "engine reads R, user writes W, engine writes R" is identical to
+   "engine reads R, engine writes R": no event-consuming mechanism can
+   distinguish them; content comparison distinguishes them at the next
+   pass (G2's comparator finds exactly this shape). This is the proof that
+   reconciliation is *necessary*, not optional.
+3. **E1 (destruction before observation).** Per §16.1 — outside any
+   mechanism's reach.
+
+**Per-mutation vs snapshot consistency.** With the cadence unconditional,
+per-mutation strict S1 (S1a+S1b+S1c as defined in §2) is *implemented*,
+not replaced: every traceable mutation is incorporated with bounded
+staleness (≤ C + one pass). Eventual-snapshot convergence is the weaker
+corollary; nothing in the design rests on it. Two honesty notes: (a)
+zero-latency per-mutation incorporation is achievable by no polling or
+event mechanism and is not what S1c requires; (b) **"bounded recovery" in
+the S4 sense requires a committed constant** — "finite max-staleness
+cadence" without a named value and a scheduling owner is eventual
+convergence in disguise. This corrects §8's item 3 and the §7 table's
+"finite cadence" row: the extension host must name C (a timer constant)
+and the CLI watch currently has *no* reconciliation trigger at all (its
+filter and parcel ignore are start-frozen, watch.ts:57,124,142–148) —
+CLI parity for reconciliation is mechanism-level intent, not an existing
+capability.
+
+Comparator exclusion sets (now precise, from the executed prototype):
+the **forward walk must not descend into variant folders** (S2 — the
+naive walk re-embeds without bound, EXP-6) while still reading known
+destination paths for comparison — which under case-6 preserves
+incorporation of non-variant outdir source (EXP-3b/G1-C); the **vanished-
+source (delete) check must enter variant folders but exclude the
+engine-generated file set** — `workshop.txt`, `preview.png`,
+`.pzstudio-mkdir` sentinels, and `mod.info` exactly where the plan input's
+`modSourceStates` says it was generated (a copied mod.info is
+source-owned and deletable) — else the comparator oscillates against the
+engine's regeneration (the oscillation §4/EXP-6 observed). The prototype
+exercised the forward walk and the delete-delta path; the full
+engine-generated exclusion set is asserted here from planBuild's
+operation surface and requires a review-pinned regression (§11's
+fixed-point gate) rather than a single fixture.
+
+### 16.3 Gate 3 — F23: reproduction, blast radius, and the smallest safe correction
+
+**Verdict: F23 is worse than §6 recorded. Unbounded `copyTree`
+self-embedding reproduces deterministically under PLAIN ALPHABETICAL
+(NTFS-like) listing order in the root-adoption flow. F23 is a standalone
+Core defect with its own regression and fix boundary; it is not fixed
+here.**
+
+Correction of the §4/EXP-7 scope claim: "bounded under alphabetical
+readdir" holds only for the **first build from an empty output**. When the
+walked source tree contains a **stale case-6 output root** while the
+destination is a different case-6 root in the same source tree — the
+supported doctor-flagged rename/adoption flow (G3-F23c: session started on
+`<my_mod>/gen-a`, config adopts `<my_mod>/gen-b`, no other input) — the
+adoption rebuild recurses deterministically under alphabetical order:
+within a 500-write cap the walk produced nesting depth 10 (measured as
+repeated `<root>/<variant>/Contents/mods/<mod>` suffixes) and tripped the
+cap with `errors` surfacing via `doFullRebuild`'s catch. The mechanism
+(traced op-by-op): the mod copyTree's walk lists directories live; the
+stale root's completed variant tree seeds the fresh destination before
+the walk lists it, so each level re-reads what the previous level wrote,
+each write extending the path by one fixed mod-output suffix — no fixed
+point. On real filesystems the same logic applies; Windows' default
+MAX_PATH converts it into several garbage generations plus a confusing
+build failure (ENAMETOOLONG), and long-path-enabled or POSIX systems run
+deeper toward disk fill — the harness proves the logical unboundedness.
+
+Blast radius, each flow measured:
+
+| Flow | Outcome |
+| :--- | :--- |
+| Plain `pzstudio build`, from clean | bounded (G1-D class; variant folders removed first) |
+| Plain build / full rebuild **with a stale case-6 root under the mod source** (rename/adoption) | **unbounded recursion, deterministic under alphabetical order** (G3-F23c) |
+| DevSync full rebuild (adoption apply) | same shape — **affected** |
+| Scoped rebuild (same root, stale sibling present) | **bounded in the tested shape** (recorded: 32 writes, no trip — the scoped remove-then-walk ordering avoided the trigger in this fixture; not proof of immunity for all scoped shapes) |
+| Case-6 nested output generally | the recursion's precondition is exactly the case-6 overlap |
+| Non-case-6 layouts | bounded under every tested order (G3 non-case-6 gate) |
+
+Additional engine fact established by the same gates: even the bounded
+first build is not "one generation" (F14's bound) — under alphabetical
+order the dev variant's walk re-copies the main variant's completed tree
+as mod source (G3 alpha gate asserts embedding depth ≥ 2 in the
+`/Contents/`-count metric).
+
+**Smallest safe correction (design, not implemented):** a
+**destination-subtree exclusion in `copyTree`** — skip any entry whose
+source path lies inside the operation's destination root
+(execute.ts:202–228; ~five lines). Measured properties (emulated at the
+fs boundary): bounds the recursion (the walk can never re-enter what it
+is writing) and **preserves EXP-3b incorporation** (non-variant paths
+under the output root remain visible). The **over-broad alternative —
+masking every path under the output root — is refuted by experiment**: it
+drops legitimate future-root source outside variant folders (G3
+correction 1: `staging/collide.lua` survives on disk but is never
+incorporated — a *new* legitimate-source loss introduced by the fix, the
+exact hazard this gate was ordered to check). A **pre-execution
+full-tree listing snapshot** also bounds recursion and preserves
+incorporation (G3 correction 3, under the adverse reverse-alpha order),
+at the cost of a full-tree prewalk per copy operation and
+freshness/staleness semantics the destination exclusion does not have —
+recorded as the fallback, not the recommendation. Neither correction
+resurrects E1-destroyed content.
+
+Classification: standalone Core defect (`execute.ts` `copyTree`), own
+regression (the two-flow harness: first-build listing orders + the
+adoption flow, both orders pinned), fix requires its own approval exactly
+as §10's table already records. It afflicts plain `pzstudio build`
+equally — pre-existing, not introduced by any §8 mechanism — but **no
+case-6 reliability claim (including this document's) survives without
+it**: the reconciliation passes of §16.2 read the same trees, and while
+the prototype's comparator never descends variant folders (so is not
+itself F23-shaped), the engine applies it heals are incrementals — the
+*adoption rebuild* that reconciliation cannot avoid repairing after is
+F23-broken today.
+
+### 16.4 Gate 4 — Candidate D recheck under Gates 1–3
+
+Per-component classification (the four labels the brief requires):
+
+| Component | Classification | Basis |
+| :--- | :--- | :--- |
+| Committed-baseline getter (C1/DX-2) | **Proven necessary** for drop-decision correctness (S1b/S2) | EXP-1/EXP-5 + the stash's A1/B1/C1; T′ (§14.3). Conditional only on the four-site assignment discipline (RG-6, test-guarded — a discipline, not a type) |
+| Written-path provenance, path-only set | **Proven necessary** for the territory class (EXP-1, EXP-3b); demonstrated in bounded experiments | Necessity argument is airtight; the *surface* (result field vs fs-observer) is unproven to production depth (§12 residual 1) |
+| Hash extension of the provenance set | **Conditional on unproven assumptions** | Proven by scenario reduction only (the surviving window of §8.2/B — no executed experiment); production cost of hashing every written byte on large outputs unpriced (§12 residual 4) |
+| Fixed-point reconciliation | **Proven necessary** (sole mechanism for F-race and F-stranded: EXP-2/EXP-6 + G2-h1/h3b); fixed-point property **demonstrated only in bounded experiments** (one fixture, sequential schedules) | The all-schedules claim is the §16.2 theorem, conditional on A1–A4 **plus a committed cadence constant** (not yet made by any host) and the precise exclusion sets of §16.2 |
+| C10 (degraded state) | **Separately fixable; role narrowed** | Recovery role subsumed by reconciliation (§16.2); observability role survives in weaker form: persistent reconciliation failure and owner-flagged E1 destructions need a surfacing decision — the full sticky `resyncRequired` semantics are no longer required by strict S1 |
+| C11 (scoped root-move promotion) | **Separate defect, not load-bearing for D's S1 proof** | Reconciliation detects the incomplete root (missing mods) even absent C11 — §8's row confirmed; C11 remains independently correct to fix |
+| C12 (execution-time delete reconciliation) | **Unrelated to strict S1 under D** | Reconciliation covers stale-delete corruption (source≠output); C12 stays conditional on DX-5 (retry queue), optional hardening otherwise |
+
+Schedule distinction the brief demands: **an experiment shows recovery in
+ONE schedule; a proof covers ALL admitted schedules.** The G2/EXP-6
+experiments are of the first kind. The second kind exists now only as the
+§16.2 conditional theorem — its assumptions A1–A4 are stated, but A1's
+concrete cadence commitment and the exclusion-set completeness regression
+(§16.2's final note) are outstanding. Accordingly: **DX-13 is not
+authorized by the experiments.** The experiments establish mechanism
+classes; the owner decision remains gated on the §12 residual list, now
+extended with: (5) the cadence constant and its scheduling owner per host;
+(6) the comparator exclusion-set regression pin; (7) the E1 approval of
+§16.1 including the separate decision of whether the destruction itself
+is to be prevented (doctor gate / capture semantics) or only scoped out of
+the sync contract; (8) the F23 fix decision, now with strengthened
+evidence (§16.3).
+
+### 16.5 Final verdict
+
+**`PROOF_INCOMPLETE`.** The mechanism design of §8 survives adversarial
+validation in its structure — no impossibility bars the in-contract set
+(E1 remains the only impossibility, scoped to variant-folder
+destinations), the liveness argument is now explicit, and every
+component's role is classified. The obligations that keep this
+incomplete, exactly: (1) **E1's owner approval** as a semantics change,
+plus the separate owner decision on preventing vs accepting the
+underlying destruction (§16.1); (2) a **committed, unconditional cadence
+constant** per host — without it the design is eventual convergence, not
+bounded recovery, and CLI watch has no trigger at all today (§16.2);
+(3) the **comparator exclusion-set completeness regression** pin
+(§16.2); (4) **F23's fix** — now a stronger defect than §6 recorded
+(alphabetical-order adoption recursion), mandatory before any case-6
+reliability claim (§16.3); (5) the **DX-13 production surface and
+hashing cost** (§12 residuals 1/4, unchanged). Per the brief: no
+production fix, no DX-13 authorization, no stash restoration, no
+Contract B.
