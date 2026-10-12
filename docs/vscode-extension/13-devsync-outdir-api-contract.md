@@ -4574,3 +4574,17 @@ none may be inferred from it.
   matrix's reconciliation addendum point here; no document marks
   Contract B approved, S1-original satisfied, or §14 implementation
   authorized.
+
+> **Follow-up record (pointer).** The Contract A feasibility investigation
+> that DX-10 was gated on is complete and lives in
+> [`14-ux09-strict-s1-feasibility.md`](14-ux09-strict-s1-feasibility.md):
+> deterministic real-engine experiments at `3246eb8` (A1/B1/C1 re-proven
+> red; RG-29, the read→write race, collision, echo-boundedness, loop and
+> reconciliation-fixed-point gates), the §14.17 written-path proposal
+> adjudicated scenario by scenario (necessary, not sufficient), candidate
+> comparison A–D, and the verdict `FEASIBLE_WITH_PROOF_OBLIGATIONS` with
+> the exact owner decisions named (DX-13, the DX-9 drop-set reversal, on
+> top of DX-2, plus the new engine fact F23 — listing-order-dependent
+> `copyTree` self-embedding — filed as a sibling defect). Nothing in that
+> record authorizes implementation; this §15 approval table remains the
+> decision authority.
