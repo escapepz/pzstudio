@@ -37,14 +37,17 @@ export class F23Fs extends MemoryFileSystem {
     listCap = Infinity;
     writes: string[] = [];
     deletes: string[] = [];
+    /** URIs of every list() call since the last manual reset. */
+    lists: string[] = [];
     private listCount = 0;
 
     async list(uri: string): Promise<DirectoryEntry[]> {
         this.listCount += 1;
+        this.lists.push(uri);
         if (this.listCount > this.listCap) {
             throw new BudgetExceededError('list', this.listCount, this.listCap);
         }
-        const entries = await super.list(uri);
+        const entries = await this.rawList(uri);
         if (this.order === 'alphabetical') {
             return [...entries].sort((a, b) => (a.name < b.name ? -1 : 1));
         }
@@ -52,6 +55,15 @@ export class F23Fs extends MemoryFileSystem {
             return [...entries].reverse();
         }
         return entries;
+    }
+
+    /**
+     * The uninstrumented listing subclasses override to change resolution
+     * semantics (case-insensitive lookup, symlink entries) while keeping
+     * the budgets and the listing-order axis.
+     */
+    protected async rawList(uri: string): Promise<DirectoryEntry[]> {
+        return super.list(uri); // MemoryFileSystem
     }
 
     async write(uri: string, data: Uint8Array): Promise<void> {
@@ -85,12 +97,13 @@ export function configFor(
     overrides?: {
         excludes?: string[];
         devOnlySecondMod?: boolean;
+        title?: string;
     },
 ): IProjectConfig {
     const config = {
         workshop: {
             id: 12345,
-            title: TITLE,
+            title: overrides?.title ?? TITLE,
             visibility: 'public',
             tags: [],
         },

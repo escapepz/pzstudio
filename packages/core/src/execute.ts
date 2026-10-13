@@ -208,12 +208,8 @@ function pathSegments(path: string): string[] {
  * segments of candidate below root, or null when candidate is not inside
  * root (the common case: the destination lies outside the copied source).
  * Only a Windows drive prefix compares case-insensitively ('C:' vs 'c:');
- * everything else is case-sensitive, like the engine's other path
- * comparisons. This is safe for termination: directories the copy creates
- * are spelled exactly as destRoot, so the freshly written output — the
- * recursion's only fuel — always matches, while a pre-existing
- * case-variant twin of the destination chain could contribute at most one
- * bounded generation of stale content.
+ * everything else is compared case-sensitively here — case-variant
+ * resolution is the destination chain probe's job (resolveDestinationChain).
  */
 function segmentsBelow(root: string, candidate: string): string[] | null {
     const rootSegments = pathSegments(root);
@@ -235,16 +231,122 @@ function segmentsBelow(root: string, candidate: string): string[] | null {
     return candidateSegments.slice(rootSegments.length);
 }
 
-/** Whether a source-relative path steps into the destination's segments. */
+/** How a destination-chain level matches walk-relative path segments. */
+type ChainSegment = {
+    /** The spelling the walk compares against. */
+    segment: string;
+    /**
+     * 'ci' when the filesystem resolves the plan's spelling onto a
+     * differently-cased stored directory, so walk-relative names in ANY
+     * case at this level may be the destination and must compare
+     * case-insensitively; 'exact' otherwise.
+     */
+    mode: 'exact' | 'ci';
+};
+
+/**
+ * Resolves how each destination-chain level is spelled on disk (F23-E1a):
+ * the walk consumes on-disk names from fs.list, while the plan spells the
+ * destination in config spelling. On a case-insensitive, case-preserving
+ * filesystem (NTFS/macOS default) a surviving case-variant ancestor — the
+ * outdir root spelled 'GEN' on disk while the config says 'gen', kept
+ * through removeDir because only variant folders are removed — made every
+ * comparison miss and the walk re-enter its own destination.
+ *
+ * Per level: an exact on-disk match wins (both filesystem classes;
+ * writes into an existing exact spelling resolve to it). Without one, a
+ * UNIQUE case-insensitive match counts as the destination only when a
+ * stat of the plan-spelled path SUCCEEDS — the witness that this
+ * filesystem resolves case-variant spellings onto that stored directory.
+ * On a case-sensitive filesystem the same shape fails the stat (the plan
+ * path does not exist), so a case-variant twin of the destination stays
+ * ordinary source and the fresh destination is matched exactly once the
+ * walk creates it — distinct-path semantics are preserved. Levels with no
+ * on-disk directory (fresh creation) compare exactly against the plan
+ * spelling: everything the copy writes there is plan-spelled.
+ *
+ * Uses only the ProjectFileSystem contract (list + stat) — no new
+ * capability. Bounded: one list + at most one stat per chain level, once
+ * per copyTree operation. It does NOT see symlink or short-name (8.3)
+ * aliases: containment remains lexical by name (recorded open risk —
+ * closing it needs resolved-path identity, which the contract does not
+ * expose).
+ */
+async function resolveDestinationChain(
+    fs: ProjectFileSystem,
+    sourceRoot: string,
+    planSegments: string[],
+): Promise<ChainSegment[]> {
+    const chain: ChainSegment[] = [];
+    let parentUri = sourceRoot;
+    let parentReadable = true;
+    for (const planSegment of planSegments) {
+        if (!parentReadable) {
+            chain.push({ segment: planSegment, mode: 'exact' });
+            continue;
+        }
+        let entries: DirectoryEntry[];
+        try {
+            entries = await fs.list(parentUri);
+        } catch {
+            parentReadable = false;
+            chain.push({ segment: planSegment, mode: 'exact' });
+            continue;
+        }
+        const exact = entries.find((entry) => entry.name === planSegment);
+        if (exact) {
+            chain.push({ segment: exact.name, mode: 'exact' });
+            parentUri = joinPath(parentUri, exact.name);
+            continue;
+        }
+        const lowerPlan = planSegment.toLowerCase();
+        const variantMatches = entries.filter(
+            (entry) => entry.name.toLowerCase() === lowerPlan,
+        );
+        // The stat witness: only a filesystem that resolves the plan
+        // spelling onto the stored directory may widen this level's
+        // comparison to case-insensitive — otherwise a case-variant twin
+        // on a case-sensitive filesystem would be wrongly excluded.
+        let resolvesVariant = false;
+        if (variantMatches.length === 1) {
+            try {
+                await fs.stat(joinPath(parentUri, planSegment));
+                resolvesVariant = true;
+            } catch {
+                resolvesVariant = false;
+            }
+        }
+        if (resolvesVariant) {
+            chain.push({ segment: variantMatches[0].name, mode: 'ci' });
+            parentUri = joinPath(parentUri, variantMatches[0].name);
+        } else {
+            chain.push({ segment: planSegment, mode: 'exact' });
+            parentUri = joinPath(parentUri, planSegment);
+        }
+    }
+    return chain;
+}
+
+/**
+ * Whether a source-relative path steps into the destination's chain.
+ * Levels probed as case-variant-resolved compare case-insensitively (the
+ * walk's on-disk name may carry either spelling); every other level is
+ * segment-exact, so string-prefix siblings never match.
+ */
 function isInsideDestination(
     relativeSegments: string[],
-    destinationSegments: string[],
+    destinationChain: ChainSegment[],
 ): boolean {
-    if (relativeSegments.length < destinationSegments.length) {
+    if (relativeSegments.length < destinationChain.length) {
         return false;
     }
-    for (let i = 0; i < destinationSegments.length; i += 1) {
-        if (relativeSegments[i] !== destinationSegments[i]) {
+    for (let i = 0; i < destinationChain.length; i += 1) {
+        const { segment, mode } = destinationChain[i];
+        const equal =
+            mode === 'ci'
+                ? relativeSegments[i].toLowerCase() === segment.toLowerCase()
+                : relativeSegments[i] === segment;
+        if (!equal) {
             return false;
         }
     }
@@ -263,10 +365,14 @@ function isInsideDestination(
  * the destination lies inside the source — case-6 layouts, outdir inside a
  * configured mod folder — the live listing would otherwise surface output
  * written moments ago as source, each level re-reading what the previous
- * level wrote with no fixed point. Excluding exactly that subtree keeps
- * every other source path on the existing inclusion policy: stale former
- * output roots, and files under the adopted output root outside this
- * operation's destination, are still copied.
+ * level wrote with no fixed point. The exclusion compares against the
+ * probed on-disk spelling of the destination chain (resolveDestinationChain),
+ * so a case-insensitive filesystem's stored case-variant ancestor cannot
+ * hide the destination from the walk (F23-E1a). Excluding exactly that
+ * subtree keeps every other source path on the existing inclusion policy:
+ * stale former output roots, case-variant twins on case-sensitive
+ * filesystems, and files under the adopted output root outside this
+ * operation's destination are still copied.
  */
 async function copyTree(
     fs: ProjectFileSystem,
@@ -274,14 +380,17 @@ async function copyTree(
     destRoot: string,
     options: CopyTreeOptions,
 ): Promise<void> {
-    const destinationSegments = segmentsBelow(sourceRoot, destRoot);
+    const planSegments = segmentsBelow(sourceRoot, destRoot);
+    const destinationChain = planSegments
+        ? await resolveDestinationChain(fs, sourceRoot, planSegments)
+        : null;
     const walk = async (dirUri: string, relDir: string): Promise<void> => {
         const entries = await fs.list(dirUri);
         for (const entry of entries) {
             const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
             if (
-                destinationSegments &&
-                isInsideDestination(pathSegments(rel), destinationSegments)
+                destinationChain &&
+                isInsideDestination(pathSegments(rel), destinationChain)
             ) {
                 continue;
             }
