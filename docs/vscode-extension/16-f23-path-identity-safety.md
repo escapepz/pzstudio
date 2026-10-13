@@ -128,6 +128,13 @@ Executed evidence (§3) drives five requirements on the mechanism:
    executed refinement is the ancestor-or-self set of the resolved destination chain.
    Per-operation state only: root migrations A→B→A (pinned bounded by E1a-D) are
    unaffected because no identity state crosses operations.
+
+   > **Corrected by §15 (executed counterexample):** the chain-level/ancestor identity
+   > set above is **refuted** — it over-excludes legitimate source beneath destination
+   > ancestors (the `staging/collide.lua` class pinned green by F23-R3/E1a-F) and is
+   > unnecessary for S8a/S8b, which close at the resolved destination-**root** identity
+   > alone. The corrected invariant is §15.2; this item stands as the refuted candidate
+   > of record.
 5. **Explicit unresolvable-identity behavior.** Dangling links, EACCES-shaped stat
    failures, and ELOOP-shaped resolution failures currently skip **silently**
    (execute.ts:426–428; S4-alphabetical and S6 below executed the silent omission of
@@ -299,6 +306,11 @@ host. This converts today's silent exposure into an actionable one at zero seman
 cost. A fail-closed variant (refuse the copy) is the stricter alternative and is an
 owner decision, not a recommendation of this record.
 
+> **Corrected by §15.3 (executed):** warn-and-continue alone does **not** terminate the
+> executed S2a cycle — the recursion is unbounded with warnings streaming and no
+> failure ever materializes. The executed A/B/C fallback comparison, the
+> alias-dereference budget dimension, and the corrected recommendation are §15.3.
+
 **Cost analysis for obligation 8:** one `resolveIdentity` call per directory entered and
 per link target examined — O(tree size), no new recursion vector, no caching required
 (per-operation lifetime). Budgets remain a test-harness device; no production budget is
@@ -430,6 +442,285 @@ Option-A-shaped semantics changes (rejected: silent omission), adapter-local cyc
 guards (insufficient: S3/S4/S8 are not cycles), and budget trip-wires (mitigation, not
 correctness). All executed escape classes and the full evidence/limitation record are
 in §3; the red-first path to implementation is §11.
+
+> **§15 (follow-up, proof closure) corrects two elements of this verdict** — the
+> destination identity set (ancestor extension refuted by counterexample; corrected
+> invariant §15.2) and the no-capability fallback (warn-only refuted; executed verdict
+> §15.3) — and extends the capability requirements (§15.4). The capability decision
+> itself stands.
+
+## 15. Follow-up: proof closure — ancestor-set counterexample, corrected invariant, fallback verdict, identity-contract requirements
+
+**Status: documentation-only follow-up to §§2–14. Nothing here authorizes
+implementation or changes any contract.** Written at HEAD `6182eb01287730d9cbe7f24e4f745e7100507298`
+(branch `42.20.0-dev`, tree clean). The UX-09 regression stash was identified by its
+descriptive message (`stash@{0}`, as in the header) and left untouched: never applied,
+popped, dropped or renamed. Every behavioral claim below was executed as a bounded,
+deterministic experiment against the unmodified real Core engine
+(`planBuild` → `executeFileOperations`, `BuildSession`) on the emulated filesystems
+(`F23Fs`/`SymlinkFs`/`CaseInsensitiveFs` — the permanent suites' own harnesses, budgets
+and listing orders), plus the real `NodeFileSystem` adapter on real Windows NTFS
+junctions in a temporary directory for the identity-contract properties. The prototype
+walkers used for the candidate rules were disposable experiment code (they mirror
+`copyTree`'s loop, ignore rules via the exported `isSourcePathIncluded`, and
+dereference semantics exactly; they are **not** production code) and were deleted
+before this commit; results are recorded verbatim. 24 executed experiment gates
+(A1–A6, C-A1…C-C2, D1–D5) all ran green at this HEAD; both permanent F23 suites
+(`copytree-destination-exclusion.test.ts`, `copytree-case-alias.test.ts`, 28 tests)
+ran green unchanged.
+
+This section corrects two elements of the record above and sharpens a third:
+
+1. **§2.4's destination identity set (ancestor-or-self of the chain) is refuted by
+   executed counterexample** — it silently omits legitimate source content the accepted
+   implementation incorporates, and it is unnecessary for the escapes it was added for
+   (§15.1). The corrected invariant is §15.2.
+2. **§6's no-capability fallback (warn-and-continue) is refuted as safe** — executed:
+   it does not terminate the S2a cycle (§15.3). The executed A/B/C comparison and the
+   corrected fallback policy are §15.3.
+3. **§6's `resolveIdentity` proposal is retained but its assumed guarantees are
+   replaced by specified, partially executed ones** — including the property the
+   engine actually needs and the one thing an opaque identity cannot deliver (§15.4).
+
+The S1–S8 investigation, its measurements, and §10's CLI boundary stand unchanged.
+Doc 15 §7's symlink bullet ("not executed… recorded as a source-review finding") is
+superseded by §3's executed evidence and this section's candidate analysis; doc 15
+itself needs no edit. Docs 13/14 are unaffected (their "ancestor" material concerns
+the DevSync outdir rule, a different mechanism).
+
+### 15.1 Gate A — the ancestor-set counterexample (executed)
+
+Fixture: the supported case-6 layout of the permanent harnesses — source root
+`/proj/my_mod`, output root `/proj/my_mod/gen`, operation destination
+`/proj/my_mod/gen/Sync Project/Contents/mods/my_mod` (the copyTree `destRoot`),
+destination ancestors below the walk root: `gen`, `gen/Sync Project`,
+`gen/Sync Project/Contents`, `gen/Sync Project/Contents/mods`. Legitimate source:
+`/proj/my_mod/gen/staging/collide.lua` (the exact `F23-R3`/`E1a-F` class).
+
+| # | Run | Executed result |
+| :--- | :--- | :--- |
+| A1 | Real Core engine (`executeFileOperations`, alphabetical order) | `gen/staging/collide.lua` **incorporated** at `…/mods/my_mod/gen/staging/collide.lua`; the ancestor-level output file `gen/Sync Project/Contents/template-file.txt` also embedded (the pre-existing source-inclusion policy pinned by F23-R2's exact key sets). This is the accepted behavior of record |
+| A2 | Prototype walker implementing §2.4's **literal** rule (forbid identity ∈ stack ∪ {destRoot, chain levels, existing ancestors}) | `gen` refused **by identity** (refusal event recorded, reason `destination-ancestor`); `gen/staging/collide.lua` **silently omitted from the output**; the ancestor-level embedded `template-file.txt` lost as well. Rest of the output intact — the loss is exactly the forbidden-ancestor subtree. **Obligation 2 violated; F23-R3/E1a-F regressed** |
+| A3-literal | Same literal rule against a source symlink `zzz-genlink → gen` carrying legitimate non-generated files alongside the generated output | The whole link subtree refused: `zzz-genlink/staging/legit.lua` omitted. The rule "fixes re-entry by dropping the entire ancestor/symlink subtree" — the exact shape the brief forbids |
+
+Root cause: the destination chain is a **route** to the destination, not a forbidden
+region. The lexical exclusion it replaced (`isInsideDestination`) requires a match
+against the **full** chain — it prunes exactly at the destination root and below, and
+lets every proper ancestor be walked as ordinary source. Translating the chain into
+per-level identities changed "reached the full chain" into "touched any level" — the
+over-exclusion. And §2.4's justification of the ancestor extension is refuted: S8a and
+S8b close at the **resolved destination-root identity alone** (the identity computed
+*through* the alias/junction), because any route into the destination subtree passes
+through the directory whose identity equals the resolved root; the ancestor extension
+adds only suppression. Even without the ancestor clause, the chain-level set alone
+already forbids `gen` — the defect is treating chain levels as forbidden, not merely
+the extension.
+
+### 15.2 Gate B — the corrected invariant (Option B′, executed)
+
+**Cycle detection and destination protection are two different decisions and must use
+two different sets.**
+
+Per `copyTree` operation, when the adapter exposes `resolveIdentity` (§15.4):
+
+1. **Snapshot** `idDest = resolveIdentity(destRoot)`. If the destination does not exist
+   yet (fresh creation — the common first build), the resolution rejects: leave `idDest`
+   unresolved and **re-attempt at each subsequent directory-entry decision until it
+   first succeeds** ("lazy pin"), or the operation ends. A not-yet-created destination
+   cannot be entered as source through any route (aliases into it dangle → unresolvable
+   policy), and within one walk a freshly created directory cannot be re-listed
+   canonically (directories are listed before the walk creates them) — the lazy pin
+   closes the remaining shape (an alias bound to the destination path traversed after
+   the walk's own writes created it).
+2. **Active ancestor stack**: seed with `resolveIdentity(sourceRoot)`; push on enter,
+   pop on exit (strict DFS). Never a global visited set.
+3. **At every directory-entry decision** (plain entries and dereferenced
+   `symbolicLink` entries alike), before entering: `id = resolveIdentity(entryUri)`.
+   - unresolvable → the **explicit unresolvable-identity policy** (minimum: warn naming
+     the entry, then skip; fail-closed = owner option) — never today's silent skip;
+   - `id` **on the active stack** → refuse entry (true cycle), warn naming the link;
+   - `idDest` pinned and `id == idDest` → refuse entry (the operation's own destination
+     root), warn naming the route;
+   - **Tier 2** (only when identity is ancestry-comparable, §15.4): `id` canonically
+     at-or-below `idDest` by a component-boundary prefix test → refuse entry
+     (destination **subtree**), warn;
+   - otherwise enter. Every destination **ancestor** — canonical or aliased — is
+     enterable ordinary source.
+4. File entries copy per the existing inclusion policy; no identity gating on files
+   (files cannot recurse; a Tier-2 file-level check is optional purity).
+
+**Termination (stable-fs assumption — no concurrent alias retargeting during the
+operation).** The walk writes only plain file content in plan space; it never creates
+links, so the reachable physical directory graph is fixed and finite. If a descent
+path were infinite, some physical directory would repeat on it; a repeat is reachable
+only through an alias edge (the physical parent relation is a tree) or the destination
+root — and every such traversal is exactly what the stack/destination checks refuse at
+the entry decision. Hence every descent path is finite and the walk terminates. This
+is a proof sketch against the contract, not a formalization; it holds per-operation
+and needs no budget.
+
+**Executed evidence for the corrected candidate:**
+
+| # | Run | Executed result |
+| :--- | :--- | :--- |
+| A4 | Corrected walker (Tier 2) vs the real engine on the alias-free case-6 fixture, ×3 listing orders | **Byte-identical output keys and identical write counts** in all three orders — the identity rule reproduces today's lexical exclusion exactly on alias-free trees, so every green permanent-suite expectation (R2's exact key sets, embedding policy) is preserved |
+| A4b | Corrected walker on `CaseInsensitiveFs` with the stored `GEN` root | E1a-B invariants hold: output under the stored spelling, destination excluded **through the case alias**, `GEN/staging/collide.lua` incorporated, nesting ≤ 2, no `/gen/` keys — the adapter's canonical identity collapses case spellings, subsuming `2cacb4e` with no engine-side case logic |
+| A4c | Corrected walker on the case-**sensitive** fs with a `GEN` twin | E1a-C invariants hold: distinct identities — `GEN` source incorporated, `gen` destination excluded at its own identity only (no over-exclusion) |
+| A5 | Corrected walker on the S2a self-referential cycle (`media/zzz-cycle → media`), **no harness budget** | **Terminates on its own**: 4 writes, 1 refusal (identity of `media` on the active stack), non-cyclic content intact. This is the F23-ID-R2 green condition ("bounded without the test budget") demonstrated |
+| A6 | S2b link→link cycle (`la → lb → la`) | Both hops unresolvable (ELOOP shape) → recorded as **explicit** unresolvable-identity events — never today's silent skip |
+| A3-corrected | `zzz-genlink → gen` (destination **ancestor** alias) with legitimate content alongside generated output | Enters the alias; incorporates `zzz-genlink/staging/legit.lua` **and** the canonical `gen/staging/legit.lua` (dual routes, no global suppression — S5 semantics); prunes exactly at `zzz-genlink/Sync Project/Contents/mods/my_mod` (resolved destination-root identity); **no** destination-subtree content re-entered. Ancestor-level output files reached through the alias (`zzz-genlink/Sync Project/workshop.txt`) are incorporated — the same bounded, one-generation policy class the canonical route pins (F23-R2's dev-variant keys embed the main variant's `workshop.txt`); distinguishing them from user source by identity would be source-ownership redefinition, which is out of scope |
+| A3-tiers | Alias pointing **strictly below** the destination root (`zzz-medialink → destRoot/media`) | **Tier 1** (root-identity only): entered; bounded garbage written inside the destination (`zzz-medialink/other.lua`, `zzz-medialink/lua/hello.lua`) — finite, never re-walked, no recursion. **Tier 2**: refused at the link (`destination-below`). This is the one class that separates the tiers |
+
+**Escape-class closure under the corrected invariant:** S2a refused at stack identity
+(A5); S2b explicit-unresolvable (A6); S3's `zzz-outlink → gen/Sync Project` entered as
+an ancestor and pruned at the destination root — the executed below-root corruption is
+prevented exactly as in A3-corrected; S4's order dependence collapses to two
+deterministic outcomes (chain resolvable → refused at the destination-root identity;
+chain dangling at that instant → explicit unresolvable event); S8a (external
+destination — no lexical chain at all) closes because the check needs only the
+**resolved** destRoot identity, not a chain; S8b closes with `idDest` computed through
+the junctioned destination root, with `shared`'s descent pruned at the root identity.
+None of these requires forbidding any destination ancestor.
+
+**Residuals (disclosed, not hidden):** (a) Tier-1 deeper-alias garbage — bounded,
+inside the destination, non-recursive (A3-tiers); closable only by Tier 2. (b) The
+read-side/descent protection says nothing about the **write side**: a pre-existing
+alias **inside an adopted destination** whose name matches a source segment redirects
+plan-space writes through it (copyTree writes `joinPath(destRoot, rel)`). Unexecuted,
+separate hazard class, same TOCTOU family — recorded so the implementation stage does
+not claim more than the mechanism delivers. (c) TOCTOU generally — §7 stands, now with
+the identity-specific execution in D5.
+
+### 15.3 Gate C — missing-capability fallback verdict (executed)
+
+Method: the S2a ancestor cycle (real engine where possible, prototype walkers for the
+candidate policies — all without any identity capability), explicit budgets as the
+external stop, plus the observability pipes of the real `BuildSession`.
+
+| Approach | S2 termination | Legitimate-source preservation | Failure visibility | Partial output | False failures | vscode.dev | Observable? |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **A — warn and continue** | **No** (executed: recursion unbounded; the harness write budget is the only stop — C-A3) | Yes for alias-free trees; the corruption classes (S3/S8) proceed **with** warnings streaming | Warns surface only on the host log channel (`host.log` → extension output channel / CLI stderr), **never** in `SessionApplyResult.errors`; the build never completes, so no result exists to inspect | Unbounded garbage until resource exhaustion (or MAX_PATH, N1-style) | None (it never fails — it hangs/corrupts) | Works (no capability needed) — protection-free | The warning is observable; **the safety failure is not a failure at all** — no error, no result, a hang |
+| **B — fail closed on unprovable directory alias** | Yes (explicit error naming the link) | **No** — every alias-bearing build is refused: executed on a legitimate external alias (S1/N3 class), the target's content is not incorporated (C-B1) | Thrown error → `start()` rejects / `apply()` collects into `result.errors` (pipes executed: C-A1/C-A2 show the identical paths) | Fires **after** `removeDir`: executed C-B2 — destination wiped, template copied, plan aborted before `workshop.txt`: a wiped, partially rebuilt output with a clear error | **Every alias-bearing legitimate project** (documented dereference semantics since `525960b` become a hard error) | Works | Yes |
+| **C — bounded traversal: alias-dereference budget** | Yes (executed: budget 8 → explicit failure naming `zzz-cycle`, 35 writes, deterministic — C-C1) | Yes under the budget (executed: legitimate external alias incorporated, exactly 1 dereference; link-free case-6 tree consumes **zero** budget — C-C2) | Explicit error naming the link and the count; same throw/collect pipes as B | Budget trip leaves truncated output with the explicit error (the N1 silent-truncation cousin, made loud) | Only when a project's alias-dereference count exceeds the budget; **zero for alias-free trees** (measured) — the budget dimension is the hazard class itself, not general tree size | Works | Yes |
+
+**Verdict.** A is **not safe** — a warning does not bound anything, and "warn and
+continue unchanged" on an unbounded recursion is a hang with commentary; doc 16 §6's
+original fallback is refuted as a safety posture. B is safe but breaking: it converts
+today's documented, legitimate dereference semantics into build failures on every
+alias-bearing project and its failure lands mid-plan (post-`removeDir`), so the strict
+posture is itself destructive-adjacent. C is the only no-capability fallback that both
+terminates the cycle class deterministically and preserves legitimate sources under
+stated bounds — and the executed finding sharpens §4-D: the principled budget dimension
+is **alias dereferences per copyTree operation**, not global fs operations, because
+cycles require alias edges (the termination argument of §15.2), so the budget bounds
+exactly the hazardous operation class with zero cost for link-free trees. But C — and
+every capability-less option — **bounds resources, never correctness**: a single alias
+dereference suffices for the S3/S8 destination re-entry classes, and any sane budget
+admits one. **Graceful degradation (A+C: warn every dereference + hard bound with
+explicit failure) is an honesty policy, not a safety guarantee; the guarantee exists
+only when the capability is present.** Recommended fallback: A's warn + C's budget as
+the termination backstop; B remains the owner-strict alternative; warn-only alone is
+refuted.
+
+### 15.4 Gate D — what `resolveIdentity` actually guarantees (and what identity alone cannot deliver)
+
+Native properties, executed through the real `NodeFileSystem` on real NTFS junctions
+(D1–D4), with the emulated TOCTOU probe (D5):
+
+| Property | Executed result | Consequence for the contract |
+| :--- | :--- | :--- |
+| Alias equality/collapse | `fs.promises.realpath` of a junction, of a second junction to the same target, of the junction accessed under an uppercased name, and of an uppercased intermediate component all yield the **byte-identical** canonical string (`C:\…`, backslash separators, stored casing) — D1 | Case and junction aliases collapse at the adapter; the engine compares opaquely and needs no case logic (subsumes `2cacb4e`) |
+| `stat` insufficiency | `NodeFileSystem.stat` cannot distinguish any of the aliased spellings (D1) | Confirms §1.2: identity is not derivable from the existing contract |
+| Unresolvability | Dangling/missing targets **reject** (ENOENT) — D2 | The engine's explicit unresolvable-identity policy has a well-defined trigger |
+| Stability | Repeated calls within a process are stable; child writes do not change a directory's identity — D1, D3 | One resolution per entry decision suffices; no caching required |
+| Post-creation resolvability | The not-yet-created destination **rejects** at snapshot and resolves after creation (what the executor's own writes do) — D3 | The **lazy pin** of §15.2 step 1 is required; a snapshot-only design leaves fresh-destination builds unprotected |
+| Ancestry comparability | Descendant identity = ancestor identity + `\` + suffix at a component boundary; a sibling fails the test — D4 | **Tier 2 is implementable on Node realpath — but only if the contract fixes the canonical form**: the observed separator is the OS separator (backslash on Windows). Recommendation: the contract specifies identities as adapter-canonical URIs with `/` separators (the Node adapter normalizes `realpath` output), so the engine's boundary-prefix test is host-agnostic |
+| Concurrency (TOCTOU) | Check-time identity is invalidated by retargeting; re-verification after `list` catches the first swap; a **second** swap after re-verification and before descent is undetectable — the descent then serves the new target — D5 | §7 stands with an identity-specific demonstration: re-verification narrows the window (recommended hardening), never closes it |
+| Creation stability — the form trade-off | Path-form identity (realpath) is ancestry-comparable and alias-collapsing but **not creation-stable**: delete + recreate at the same path yields the same identity string (analysis of the D1/D3 forms; not separately executed) | Inode-form identities (dev/ino) would be creation-stable but are **not** ancestry-comparable — they cap the mechanism at Tier 1. The tier decision therefore fixes the required identity form (§15.6 decision 2) |
+
+**Sufficiency answer (the brief's question).** Identity information **alone is
+sufficient** for cycle detection and destination-root refusal — that is proven
+termination plus closure of every executed escape class (§15.2). It is **not
+sufficient by itself** for full destination-subtree exclusion through aliases pointing
+*below* the destination root: recognizing "below" requires either ancestry-comparable
+(path-form) identity or an explicit adapter containment primitive; with an opaque
+identifier the deeper-alias class degrades to the bounded, non-recursive residual
+executed in A3-tiers Tier 1. This does **not** reintroduce a new API for the refuted
+ancestor-set rule: it is the same single optional `resolveIdentity` method with its
+canonical form and guarantees now specified, plus the `PlatformCapabilities.resolvedIdentity`
+flag for host surfaces.
+
+**Capability negotiation.** `PlatformCapabilities` reaches core only through the
+doctor (`doctor.ts:62`); neither `BuildSession` nor `executeFileOperations` takes
+capabilities — there is **no channel today** that would deliver a
+`resolvedIdentity` flag to the traversal. The workable engine-side negotiation is
+method-presence sniffing on the injected adapter (`typeof fs.resolveIdentity ===
+'function'`); the capabilities flag remains the host-UI/doctor surface (mirroring
+`symlinks`). `vscode.workspace.fs` exposes no realpath and no inode access — the
+optional-method shape is mandatory for the web host (§1.3 stands; `WEB_CAPABILITIES`
+would carry `resolvedIdentity: false`).
+
+### 15.5 Proof-obligation scoreboard
+
+| # | Obligation | Status under Option B′ | Evidence |
+| :--- | :--- | :--- | :--- |
+| 1 | No unbounded alias-driven traversal | **Proven** under the stable-fs assumption (termination argument, §15.2); budget-free execution demonstrated | A5 (4 writes, 1 refusal, no budget) |
+| 2 | No silent loss beneath destination ancestors | **Holds** (the refuted rule is the only violation found) | A1 vs A2; A3-corrected; A4 equivalence |
+| 3 | No silent loss through valid non-cyclic symlinks | **Holds** (incorporation unchanged; unresolvable targets become explicit) | A3-corrected (dual route); C-B1 contrast; A6 |
+| 4 | No over-exclusion on case-sensitive filesystems | **Holds** (adapter owns case; engine compares opaquely) | A4c (GEN twin incorporated); A4b (collapse on case-insensitive) |
+| 5 | No global-visited-set suppression | **Holds** (active stack only, pop-on-exit) | A3-corrected (dual-route incorporation) |
+| 6 | Destination subtree excluded through supported aliases | **Holds at Tier 2** (root, ancestor and deeper aliases); **partial at Tier 1** (deeper-alias bounded residual disclosed) | A3-corrected; A3-tiers (both tiers executed) |
+| 7 | Explicit behavior on unresolved identity | **Specified** (warn minimum / fail-closed owner option); explicit-event surface executed | A6; D2 |
+| 8 | Safe, bounded behavior when capabilities are absent | **Mitigation only** — graceful degradation, not a guarantee; recommended fallback = warn + alias-dereference budget | §15.3 (A refuted, B breaking, C bounded) |
+| 9 | Existing F23 tests remain semantically valid | **Verified** — byte-identical keys and write counts vs the real engine; both permanent suites green at this HEAD | A4 (×3 orders); A4b; 28 permanent tests |
+| 10 | TOCTOU and unstable-filesystem limitations disclosed | **Stands, extended**: re-verify-after-list narrows but does not close (D5); path-identity recreate residual; write-side alias residual; stable-fs assumption stated per claim | D5; §15.2 residuals (b)/(c); §7 |
+
+**Where the current contract makes a proof impossible:** without resolved directory
+identity, no mechanism on today's `ProjectFileSystem` can simultaneously incorporate
+alias content (S1/S5 — documented and executed behavior) and prevent alias re-entry
+(S3/S8 — executed corruption): §15.3's executed fallbacks exhaust the API-free space
+(warn-continue hangs/corrupts, fail-closed refuses legitimate sources, budgets bound
+resources only). The missing capability is exactly one optional method —
+`resolveIdentity(uri) → canonical identity` with the §15.4 equality, unresolvability
+and (for Tier 2) ancestry-comparability properties. Fixtures prove the executed
+classes; the all-schedules concurrent-mutation claim remains out of reach (§7), as
+does any formalization beyond the §15.2 proof sketch — both stay disclosed.
+
+### 15.6 Owner decisions (supersedes §12 where overlapping)
+
+1. **Frozen-API exception (§12.1, unchanged surface):** optional
+   `resolveIdentity(uri): Promise<string>` + `PlatformCapabilities.resolvedIdentity`,
+   now with the §15.4 contract requirements specified (canonical form, equality,
+   unresolvability, post-creation resolvability).
+2. **Tier decision (NEW):** require **ancestry-comparable (path-form) identity** and
+   implement Tier 2 — full destination-subtree exclusion through every supported alias
+   (recommended; this is what proof obligation 6 demands) — or accept opaque identity
+   at Tier 1 with the executed deeper-alias residual (bounded, non-recursive garbage
+   inside the destination) disclosed. The choice also fixes the identity form's
+   creation-stability trade-off (§15.4).
+3. **Unresolvable-identity policy (§12.2, unchanged question, now executed):** warn
+   (recommended minimum; the A6 event surface) vs fail-closed.
+4. **Cycle-tail semantics (§12.3, unchanged):** refusing a cycle re-entry skips the
+   refused subtree with a warn — the first sanctioned non-incorporation of reachable
+   content; owner-granted only.
+5. **No-capability fallback policy (supersedes §6's warn-only spec):** recommended =
+   warn-and-continue **plus the alias-dereference budget** as the termination backstop
+   (explicit failure naming the link and the count); fail-closed (B) = owner-strict
+   alternative; warn-only alone is refuted (executed). The degradation/guarantee
+   boundary of §15.3 must ship in user-facing wording either way.
+6. **Budget adoption (extends §12.4):** §4-D's "no production budget selected" is
+   updated — if capability-less hosts must not hang, the alias-dereference budget is
+   the executed, principled dimension (zero cost on alias-free trees; bounds exactly
+   the hazard class); exact constant and error wording are implementation-stage
+   decisions.
+7. **CLI parity (§12.5, unchanged):** a separate defect decision; §10 stands.
+
+### 15.7 Scope of this follow-up
+
+Documentation-only. The prototype walkers, experiment suite and native scratch
+directories were disposable and are deleted before this commit; no Core, CLI,
+extension, harness, contract or test file was modified. F23 remains open pending the
+decisions above; nothing here implements, approves, or relaxes anything.
 
 ---
 
