@@ -192,12 +192,81 @@ export async function isSourcePathIncluded(
 }
 
 /**
+ * Splits a plan-space path into '/'-separated segments. Backslashes fold to
+ * '/' (the build plan's common denominator, matching joinPath) and empty
+ * segments drop, so leading, trailing and duplicated separators are ignored.
+ */
+function pathSegments(path: string): string[] {
+    return path
+        .replace(/\\/g, '/')
+        .split('/')
+        .filter((segment) => segment !== '');
+}
+
+/**
+ * Locates `candidate` strictly inside `root`, segment-wise. Returns the
+ * segments of candidate below root, or null when candidate is not inside
+ * root (the common case: the destination lies outside the copied source).
+ * Only a Windows drive prefix compares case-insensitively ('C:' vs 'c:');
+ * everything else is case-sensitive, like the engine's other path
+ * comparisons. This is safe for termination: directories the copy creates
+ * are spelled exactly as destRoot, so the freshly written output — the
+ * recursion's only fuel — always matches, while a pre-existing
+ * case-variant twin of the destination chain could contribute at most one
+ * bounded generation of stale content.
+ */
+function segmentsBelow(root: string, candidate: string): string[] | null {
+    const rootSegments = pathSegments(root);
+    const candidateSegments = pathSegments(candidate);
+    if (candidateSegments.length <= rootSegments.length) {
+        return null;
+    }
+    for (let i = 0; i < rootSegments.length; i += 1) {
+        const rootSegment = rootSegments[i];
+        const candidateSegment = candidateSegments[i];
+        const equal =
+            i === 0 && /^[a-zA-Z]:$/.test(rootSegment)
+                ? rootSegment.toLowerCase() === candidateSegment.toLowerCase()
+                : rootSegment === candidateSegment;
+        if (!equal) {
+            return null;
+        }
+    }
+    return candidateSegments.slice(rootSegments.length);
+}
+
+/** Whether a source-relative path steps into the destination's segments. */
+function isInsideDestination(
+    relativeSegments: string[],
+    destinationSegments: string[],
+): boolean {
+    if (relativeSegments.length < destinationSegments.length) {
+        return false;
+    }
+    for (let i = 0; i < destinationSegments.length; i += 1) {
+        if (relativeSegments[i] !== destinationSegments[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
  * Recursively copies a source tree into destRoot through the injected
  * filesystem, applying the copyTree ignore options at every depth. Source
  * URIs come from fs.list() (adapter-native); destination URIs are built in
  * the plan's path space. Symbolic links are dereferenced (their targets are
  * copied as regular files), unlike the synchronous executor which copies the
  * link itself.
+ *
+ * The walk never enters the operation's own destination subtree (F23): when
+ * the destination lies inside the source — case-6 layouts, outdir inside a
+ * configured mod folder — the live listing would otherwise surface output
+ * written moments ago as source, each level re-reading what the previous
+ * level wrote with no fixed point. Excluding exactly that subtree keeps
+ * every other source path on the existing inclusion policy: stale former
+ * output roots, and files under the adopted output root outside this
+ * operation's destination, are still copied.
  */
 async function copyTree(
     fs: ProjectFileSystem,
@@ -205,10 +274,17 @@ async function copyTree(
     destRoot: string,
     options: CopyTreeOptions,
 ): Promise<void> {
+    const destinationSegments = segmentsBelow(sourceRoot, destRoot);
     const walk = async (dirUri: string, relDir: string): Promise<void> => {
         const entries = await fs.list(dirUri);
         for (const entry of entries) {
             const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
+            if (
+                destinationSegments &&
+                isInsideDestination(pathSegments(rel), destinationSegments)
+            ) {
+                continue;
+            }
             if (!(await isSourcePathIncluded(fs, sourceRoot, rel, options))) {
                 continue;
             }
