@@ -786,3 +786,10 @@ reliability claim (§16.3); (5) the **DX-13 production surface and
 hashing cost** (§12 residuals 1/4, unchanged). Per the brief: no
 production fix, no DX-13 authorization, no stash restoration, no
 Contract B.
+
+---
+
+*Pointer: [`15-e1-output-adoption-safety.md`](15-e1-output-adoption-safety.md)
+is the mechanism-level investigation this section's disposition (b)
+requires (preventing the E1 destruction itself) — a separate owner-gated
+decision record; nothing in it approves the E1 exclusion or strict S1.*
