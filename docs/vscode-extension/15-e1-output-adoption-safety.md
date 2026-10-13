@@ -400,6 +400,22 @@ matches that chain. Verified boundary properties:
   F23 blocker (F23-E1a)**: the containment comparison must resolve case
   (or the exclusion must be spelling-independent) before any case-6
   reliability claim holds. Not fixed here, per the brief.
+
+  **Attribution refinement (recorded later, at doc 16; the experiment
+  record above stands):** the *demonstrated* escape — in the executed
+  fixture behind the measurements above (the surviving `GEN` outdir root
+  with non-variant content, `tests/unit/copytree-case-alias.test.ts`
+  E1a-B) and in the latest native NTFS reproduction — is **not** a pure
+  variant-folder case flip. A pure title-case flip is bounded even
+  pre-`2cacb4e`: `removeDir` removes the variant folder in either
+  spelling (case-insensitive resolution), and the fresh levels are then
+  plan-spelled, so the chain re-matches (E1a-D pins this green). The
+  proven escape requires a **surviving case-variant ancestor** — an
+  outdir root whose stored spelling differs from the plan's and that
+  `removeDir` does not touch because only variant folders are removed
+  (non-variant content under it keeps the stored spelling alive). The
+  `2cacb4e` fix closes exactly that shape within its coverage; symlink
+  and short-name aliases remain open (doc 16).
 - **Symlink traversal.** The walk dereferences symlinks (`resolveEntryType`,
   execute.ts:306–320) and descends by the *link's own* name; a link inside
   the source that resolves into the destination subtree (or a cycle) is
