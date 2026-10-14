@@ -35,6 +35,7 @@ import {
     isSourcePathIncluded,
     OperationLogLevel,
 } from './execute';
+import { assertNoAliasRoute } from './mutation-guard';
 
 export type BuildVariant = 'main' | 'development';
 
@@ -424,6 +425,7 @@ export class BuildSession {
                     this.host.fs,
                     planBuild({ ...planInput, variant }),
                     (level, message) => this.log(level, message),
+                    { outputRoot: planInput.config.outdir },
                 );
             } catch (e) {
                 errors.push(
@@ -528,6 +530,7 @@ export class BuildSession {
                             this.host.fs,
                             planScopedModRebuild(freshInput, variant, modId),
                             (level, message) => this.log(level, message),
+                            { outputRoot: freshInput.config.outdir },
                         );
                     } catch (e) {
                         result.errors.push(describeError(e));
@@ -639,6 +642,18 @@ export class BuildSession {
                     ...file.relativePath.split('/'),
                 );
                 try {
+                    // F23-WRITE P0: the per-delta mutation route is guarded
+                    // like every executor mutation — a planted alias on the
+                    // destination route (B4-iii/B4-iv) refuses per variant.
+                    await assertNoAliasRoute(
+                        this.host.fs,
+                        planInput.config.outdir,
+                        modDestination,
+                        file.type === 'delete' ? 'delete' : 'write',
+                        file.type === 'delete'
+                            ? `incremental delete '${modDestination}'`
+                            : `incremental write '${modDestination}'`,
+                    );
                     if (file.type === 'delete') {
                         await this.host.fs.delete(modDestination, {
                             recursive: true,
@@ -674,11 +689,21 @@ export class BuildSession {
         }
         for (const variant of this.variants) {
             try {
+                const target = joinPosix(
+                    resolveBuildOutputPath(planInput.config, variant),
+                    'workshop.txt',
+                );
+                // F23-WRITE P0: guarded route (a link at workshop.txt or any
+                // component below the outdir refuses the rewrite).
+                await assertNoAliasRoute(
+                    this.host.fs,
+                    planInput.config.outdir,
+                    target,
+                    'write',
+                    `workshop.txt rewrite '${target}'`,
+                );
                 await this.host.fs.write(
-                    joinPosix(
-                        resolveBuildOutputPath(planInput.config, variant),
-                        'workshop.txt',
-                    ),
+                    target,
                     encodeUtf8(
                         workshopTextForVariant(
                             planInput.config,
@@ -701,11 +726,20 @@ export class BuildSession {
         const planInput = this.planInput!;
         for (const variant of this.variants) {
             try {
+                const target = joinPosix(
+                    resolveBuildOutputPath(planInput.config, variant),
+                    'preview.png',
+                );
+                // F23-WRITE P0: guarded route, like every session mutation.
+                await assertNoAliasRoute(
+                    this.host.fs,
+                    planInput.config.outdir,
+                    target,
+                    'write',
+                    `preview.png copy '${target}'`,
+                );
                 await this.host.fs.write(
-                    joinPosix(
-                        resolveBuildOutputPath(planInput.config, variant),
-                        'preview.png',
-                    ),
+                    target,
                     await this.host.fs.read(delta.path),
                 );
                 result.incremental += 1;
