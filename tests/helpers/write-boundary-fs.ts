@@ -54,20 +54,31 @@ export class AliasRouteFs extends F23Fs {
      * a link — possibly a chain of links — jumps to its final target; the
      * final component follows only when `followLeaf` is set (writeFile
      * follows a link leaf; rm does not).
+     *
+     * Absolute inputs walk in the absolute key space: the walk starts at the
+     * root sentinel and every candidate prefix carries the leading slash, so
+     * each per-component lookup matches links at their stored (absolute)
+     * keys — resolving ancestors exactly like the OS does for an absolute
+     * path. An absolute input always yields an absolute landing; a
+     * relative-keyed link target is re-anchored at the root instead of
+     * demoting the landing to a relative key (and never double-slashed).
      */
     private resolveRoute(uri: string, followLeaf: boolean): string {
         const path = this.normalize(uri);
         const absolute = path.startsWith('/');
         const segments = path.split('/').filter((segment) => segment !== '');
-        let current = '';
+        let current = absolute ? '/' : '';
         for (let i = 0; i < segments.length; i += 1) {
             const isLeaf = i === segments.length - 1;
-            const candidate = current
-                ? `${current}/${segments[i]}`
-                : segments[i];
+            const candidate =
+                current === ''
+                    ? segments[i]
+                    : current.endsWith('/')
+                      ? `${current}${segments[i]}`
+                      : `${current}/${segments[i]}`;
             current = !isLeaf || followLeaf ? this.chase(candidate) : candidate;
         }
-        return absolute ? `/${current}` : current;
+        return absolute && !current.startsWith('/') ? `/${current}` : current;
     }
 
     /** Full link-chain resolution (stat/read/list semantics). */
