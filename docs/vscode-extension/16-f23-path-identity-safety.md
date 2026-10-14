@@ -949,6 +949,11 @@ warning, no report. This is a separate hazard class from the traversal question:
 decisions**, and closing the former (Tier 2) does not close the latter. A write-side
 gate (identity-checking write targets against the operation's authorized territory)
 is its own design and approval task; nothing is implemented or approved here.
+**Follow-up (executed):** the physical write/delete boundary is investigated,
+reproduced with byte-level evidence on real NTFS junctions, and adjudicated
+(`WRITE_BOUNDARY_DESTRUCTIVE_ESCAPE_CONFIRMED`) in doc 17
+(`17-f23-write-boundary-safety.md`) — including the ancestor-alias deletion
+class this section did not execute.
 
 ### 16.6 Proof-obligation adjudication (this follow-up)
 
