@@ -18,6 +18,20 @@
  * copytree-case-alias) carry the rest of the preservation matrix with the
  * guard active end-to-end (BuildSession always declares its output root).
  *
+ * The harness-conformance block pins the emulation itself, directly against
+ * AliasRouteFs: for ABSOLUTE paths every ancestor link resolves to its
+ * physical target during write/delete routing (the stored key IS the
+ * landing, doc 17 §11.9), a link leaf is followed on write and never on
+ * delete, alias-free paths keep the plain memory semantics, and dangling
+ * aliases keep the modeled link semantics the OS rows rely on.
+ *
+ * Two permanent gates from doc 17 §8 complete the executed matrix: R2 (A3)
+ * pins the refusal of a main-variant destination alias redirecting into the
+ * development variant's territory, and R7 (B-extra/A3b) pins dangling
+ * aliases — a dangling ancestor on a recursive-deletion route and a dangling
+ * destination entry during copyTree must both refuse explicitly by name,
+ * never as a silent no-op or a raw filesystem error.
+ *
  * Not covered here and deliberately so (doc 17 §11.4 "what the P0 does NOT
  * stop"): alias retargeting between the guard's observation and the OS call
  * (TOCTOU — pinned in the native suite), hard-linked file leaves (native
@@ -33,6 +47,7 @@ import {
     createHost,
     keysUnder,
     seedProject,
+    variantRoot,
 } from '../helpers/copytree-f23-harness';
 import { AliasRouteFs } from '../helpers/write-boundary-fs';
 import {
@@ -41,6 +56,7 @@ import {
 } from '../../packages/core/src/buildsession';
 import { executeFileOperations } from '../../packages/core/src/execute';
 import {
+    modIdForVariant,
     planBuild,
     planModOperations,
 } from '../../packages/core/src/buildplan';
@@ -48,6 +64,8 @@ import {
 const OUT_DIR = '/out';
 const MAIN_OUT = `${OUT_DIR}/Sync Project`;
 const MAIN_MOD = `${MAIN_OUT}/Contents/mods/my_mod`;
+const DEV_OUT = variantRoot(OUT_DIR, 'development');
+const DEV_MOD = `${DEV_OUT}/Contents/mods/${modIdForVariant('my_mod', 'development')}`;
 const OUTPUT_ROOT_OPTIONS = { outputRoot: OUT_DIR };
 
 /** Fresh alias-route fixture: seeded project + plan-input host on /out. */
@@ -75,6 +93,134 @@ function expectSameBytes(fs: F23Fs, before: Map<string, Uint8Array>): void {
         expect(Buffer.from(fs.files.get(key)!)).toEqual(Buffer.from(bytes));
     }
 }
+
+describe('F23-WB: harness conformance (emulated OS alias semantics)', () => {
+    it('writes through an ancestor link land at the physical target, and a write-leaf link is followed', async () => {
+        const fs = new AliasRouteFs();
+        fs.links.set('/root/alias', '/victim');
+        await fs.write(
+            '/root/alias/child/file.txt',
+            new TextEncoder().encode('PAYLOAD'),
+        );
+
+        // The stored key IS the physical landing (doc 17 §11.9): the
+        // absolute ancestor link resolved, the literal spelling did not
+        // materialize.
+        expect(fs.files.has('/victim/child/file.txt')).toBe(true);
+        expect(Buffer.from(fs.files.get('/victim/child/file.txt')!)).toEqual(
+            Buffer.from(new TextEncoder().encode('PAYLOAD')),
+        );
+        expect(fs.files.has('/root/alias/child/file.txt')).toBe(false);
+        expect(fs.writes).toEqual(['/victim/child/file.txt']);
+
+        // A deeper ancestor on the realistic output route (B4's junction at
+        // <out>/Contents/mods) resolves too.
+        fs.links.set(`${MAIN_OUT}/Contents/mods`, '/victim');
+        await fs.writeText(
+            `${MAIN_OUT}/Contents/mods/my_mod/media/lua/hello.lua`,
+            'print("v1")',
+        );
+        expect(fs.files.has('/victim/my_mod/media/lua/hello.lua')).toBe(true);
+        expect(
+            fs.files.has(
+                `${MAIN_OUT}/Contents/mods/my_mod/media/lua/hello.lua`,
+            ),
+        ).toBe(false);
+
+        // fs.writeFile follows a link at the leaf (class 5).
+        fs.links.set('/root/leaf.txt', '/victim/real.txt');
+        await fs.writeText('/root/leaf.txt', 'LEAF');
+        expect(fs.files.has('/victim/real.txt')).toBe(true);
+        expect(await fs.readText('/victim/real.txt')).toBe('LEAF');
+        expect(fs.files.has('/root/leaf.txt')).toBe(false);
+    });
+
+    it('recursive deletion through an ancestor link removes the resolved subtree at the physical target', async () => {
+        const fs = new AliasRouteFs();
+        await fs.writeText('/victim/my_mod/media/lua/hello.lua', 'VICTIM-LUA');
+        await fs.writeText('/victim/TOP-SENTINEL.txt', 'TOP');
+        fs.links.set('/root/alias', '/victim');
+
+        await fs.delete('/root/alias/my_mod/media', { recursive: true });
+
+        // The resolved subtree is gone; everything outside it survives
+        // byte-exact (the class-3 escape the emulated OS must perform).
+        expect(fs.files.has('/victim/my_mod/media/lua/hello.lua')).toBe(false);
+        expect(fs.files.has('/victim/TOP-SENTINEL.txt')).toBe(true);
+        expect(await fs.readText('/victim/TOP-SENTINEL.txt')).toBe('TOP');
+        // The ancestor link itself survives a descendant's removal.
+        expect(fs.links.has('/root/alias')).toBe(true);
+    });
+
+    it('deleting an alias as the final component removes only the link, never the target (B1)', async () => {
+        const fs = new AliasRouteFs();
+        await fs.writeText('/victim/data.txt', 'TARGET-KEEP');
+        fs.links.set('/root/alias', '/victim');
+
+        await fs.delete('/root/alias', { recursive: true });
+
+        expect(fs.links.has('/root/alias')).toBe(false);
+        expect(await fs.readText('/victim/data.txt')).toBe('TARGET-KEEP');
+        // The read route through the removed link is gone with it.
+        await expect(fs.read('/root/alias/data.txt')).rejects.toThrow(/ENOENT/);
+    });
+
+    it('alias-free paths keep the plain memory semantics unchanged', async () => {
+        const fs = new AliasRouteFs();
+        await fs.writeText('/plain/dir/file.txt', 'PLAIN');
+
+        expect(fs.files.has('/plain/dir/file.txt')).toBe(true);
+        expect(await fs.readText('/plain/dir/file.txt')).toBe('PLAIN');
+        expect((await fs.stat('/plain/dir')).type).toBe('directory');
+        expect(await fs.list('/plain/dir')).toEqual([
+            { name: 'file.txt', uri: '/plain/dir/file.txt', type: 'file' },
+        ]);
+        await fs.delete('/plain/dir/file.txt');
+        expect(fs.files.has('/plain/dir/file.txt')).toBe(false);
+
+        // Relative spellings store relative keys exactly as before.
+        await fs.writeText('rel/file.txt', 'REL');
+        expect(fs.files.has('rel/file.txt')).toBe(true);
+        expect(await fs.readText('rel/file.txt')).toBe('REL');
+    });
+
+    it('dangling aliases keep the modeled link semantics (read/stat ENOENT, B1 removal, modeled landings)', async () => {
+        const fs = new AliasRouteFs();
+        fs.links.set('/root/dangle', '/nowhere');
+
+        // stat/read resolve to the missing target key and fail like
+        // fs.stat/fs.read through a broken link.
+        await expect(fs.stat('/root/dangle')).rejects.toThrow(/ENOENT/);
+        await expect(fs.read('/root/dangle/f.txt')).rejects.toThrow(/ENOENT/);
+
+        // A write through the dangling ancestor is modeled as landing at
+        // the target key (the production guard refuses it before any
+        // mutation — A3b/B-extra; the emulation never fabricates an OS
+        // error the real adapter would have thrown).
+        await fs.writeText('/root/dangle/f.txt', 'MATERIALIZED');
+        expect(fs.files.has('/nowhere/f.txt')).toBe(true);
+        expect(await fs.readText('/nowhere/f.txt')).toBe('MATERIALIZED');
+        expect(fs.files.has('/root/dangle/f.txt')).toBe(false);
+
+        // Deleting through the dangling ancestor removes the materialized
+        // target key; the ancestor link itself survives.
+        await fs.delete('/root/dangle/f.txt', { recursive: true });
+        expect(fs.files.has('/nowhere/f.txt')).toBe(false);
+        expect(fs.links.has('/root/dangle')).toBe(true);
+
+        // With nothing stored at the target, deletion through the dangling
+        // alias is the executed B-extra silent no-op — the shape the guard
+        // converts into an explicit refusal.
+        fs.links.set('/root/dangle2', '/also-nowhere');
+        await fs.delete('/root/dangle2/not-there.lua', { recursive: true });
+        expect(fs.links.has('/root/dangle2')).toBe(true);
+
+        // Deleting a dangling link as the final component is leaf-local.
+        await fs.delete('/root/dangle');
+        expect(fs.links.has('/root/dangle')).toBe(false);
+        expect(fs.links.has('/root/dangle2')).toBe(true);
+    });
+});
 
 describe('F23-WB: recursive deletion through a junction ancestor (B4-ii, A7/B5)', () => {
     it('refuses the scoped rebuild reset before the removeDir and leaves the mod source byte-identical', async () => {
@@ -460,5 +606,125 @@ describe('F23-WB: preservation (must stay green)', () => {
                 OUTPUT_ROOT_OPTIONS,
             ),
         ).resolves.toBeUndefined();
+    });
+});
+
+describe('F23-WB R2: cross-variant redirection through a destination alias (A3)', () => {
+    it('refuses a main-variant destination alias redirecting into the development variant and leaves the dev territory byte-identical', async () => {
+        const { fs, host } = await fixture();
+        const input = await host.getPlanInput();
+        // The development variant's territory pre-exists with real bytes
+        // (the A3 fixture's "target pre-created").
+        await executeFileOperations(
+            fs,
+            planBuild({ ...input, variant: 'development' }),
+            undefined,
+            OUTPUT_ROOT_OPTIONS,
+        );
+        const devBefore = snapshot(fs, DEV_OUT);
+        expect(devBefore.size).toBeGreaterThan(0);
+
+        // Adoption shape: the main destination pre-exists and its media
+        // entry is a junction consuming 'media' into the development
+        // variant's own media — a main-variant write redirected
+        // cross-territory INSIDE the same resolved output root.
+        await fs.writeText(`${MAIN_MOD}/pre-existing.txt`, 'HERE');
+        fs.links.set(`${MAIN_MOD}/media`, `${DEV_MOD}/media`);
+
+        const error = await executeFileOperations(
+            fs,
+            planModOperations({ ...input, variant: 'main' }, 'main', 'my_mod'),
+            undefined,
+            OUTPUT_ROOT_OPTIONS,
+        ).catch((e: unknown) => e);
+
+        // Explicit refusal with correct alias-route identification: the
+        // error names the operation, the lexical destination, and the alias
+        // component 'media' (the destination-entry guard, doc 17 §11.4
+        // rule 2 — the junction is a destination entry, not an ancestor).
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(
+            /Refusing copyTree destination .*'media'.*symbolic link/s,
+        );
+
+        // The development variant's existing bytes are unchanged: the
+        // redirect was refused, not silently executed (pre-fix: main's
+        // media writes materialized inside my_mod_dev/media, errors: []).
+        expectSameBytes(fs, devBefore);
+        expect(keysUnder(fs, DEV_OUT)).toEqual([...devBefore.keys()].sort());
+        // No unauthorized physical write anywhere: the stored key space
+        // gained nothing under the dev territory, and the planted alias
+        // was not consumed by the refused operation.
+        expect(fs.links.has(`${MAIN_MOD}/media`)).toBe(true);
+    });
+});
+
+describe('F23-WB R7: dangling aliases (B-extra / A3b)', () => {
+    it('a dangling alias ancestor on a recursive-deletion route is an explicit refusal naming the alias, never a silent no-op', async () => {
+        const { fs, host } = await fixture();
+        const input = await host.getPlanInput();
+        // B-extra shape: the junction's target does not exist — the alias
+        // on the scoped rebuild's reset route dangles. Pre-fix, the
+        // recursive delete resolved through it to nothing and silently
+        // no-op'd (and A3b's live-target counterpart failed cryptically).
+        await fs.writeText(`${MAIN_OUT}/Contents/.anchor`, 'a');
+        fs.links.set(`${MAIN_OUT}/Contents/mods`, '/bx-nowhere');
+        const everythingBefore = snapshot(fs, '/');
+
+        const error = await executeFileOperations(
+            fs,
+            planScopedModRebuild(input, 'main', 'my_mod'),
+            undefined,
+            OUTPUT_ROOT_OPTIONS,
+        ).catch((e: unknown) => e);
+
+        // Explicit, actionable, alias named — the authorization error, not
+        // a raw ENOENT/ENOTDIR from the missing target standing in for it.
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(
+            /Refusing removeDir .*'mods'.*symbolic link/s,
+        );
+        expect((error as Error).message).not.toMatch(/ENOENT|ENOTDIR|EEXIST/);
+
+        // No unauthorized mutation: the stored key space is unchanged (the
+        // makeDir sentinel churn nets out), the dangling link was not
+        // consumed, and nothing re-materialized at the dangling target.
+        expectSameBytes(fs, everythingBefore);
+        expect(fs.links.has(`${MAIN_OUT}/Contents/mods`)).toBe(true);
+        expect(keysUnder(fs, '/bx-nowhere')).toEqual([]);
+    });
+
+    it('a dangling destination entry encountered during copyTree is refused by name, never as a raw filesystem error', async () => {
+        const { fs, host } = await fixture();
+        const input = await host.getPlanInput();
+        // A3b shape: adoption destination whose media entry is a junction
+        // with a missing target — encountered as a destination entry during
+        // the copyTree walk (doc 17 §11.4 rule 2).
+        await fs.writeText(`${MAIN_MOD}/pre-existing.txt`, 'HERE');
+        fs.links.set(`${MAIN_MOD}/media`, '/nowhere-at-all');
+        const everythingBefore = snapshot(fs, '/');
+
+        const error = await executeFileOperations(
+            fs,
+            planModOperations({ ...input, variant: 'main' }, 'main', 'my_mod'),
+            undefined,
+            OUTPUT_ROOT_OPTIONS,
+        ).catch((e: unknown) => e);
+
+        // The alias-naming authorization error replaced A3b's cryptic
+        // ENOTDIR abort.
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(
+            /Refusing copyTree destination .*'media'.*symbolic link/s,
+        );
+        expect((error as Error).message).not.toMatch(/ENOENT|ENOTDIR|EEXIST/);
+
+        // No silent success and no unauthorized mutation: nothing was
+        // written anywhere (the refusal fires at the walk's first included
+        // entry), the link remains, and the dangling target stays
+        // nonexistent.
+        expectSameBytes(fs, everythingBefore);
+        expect(fs.links.has(`${MAIN_MOD}/media`)).toBe(true);
+        expect(keysUnder(fs, '/nowhere-at-all')).toEqual([]);
     });
 });
