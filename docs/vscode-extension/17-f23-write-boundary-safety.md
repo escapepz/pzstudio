@@ -540,6 +540,491 @@ in full only by handle-relative operations that no current contract can express
 (W6). The write-boundary protection itself is an owner decision (§9) — nothing
 in this record implements it.
 
+## 11. Follow-up: the physical mutation authorization contract — decision package
+
+**Status: documentation-only architecture-decision record appended to the
+write-boundary investigation. Nothing here implements, pre-approves
+implementation, changes any API surface, or touches the CLI executor.** Written
+at HEAD `7ed2998a5a67ff304928b3eb1613d95e9f2367ef` (branch `42.20.0-dev`, tree
+clean apart from this appendix). The UX-09 regression stash was identified by
+its descriptive message (`stash@{0}`, as in the header) and left untouched:
+never applied, popped, dropped or renamed. The 21 executed F23-WRITE
+experiments of §2 are preserved verbatim and were **not** repeated — every
+behavioral claim below cites §2's record or the sources as they stand at this
+HEAD, where all eight mutation sites were re-verified in place (M1
+execute.ts:457–469, M2 470–479, M3 404–407, M4 487–489, M5 490–492; M6
+buildsession.ts:630–653, M7 662–695, M8 697–716; `NodeFileSystem.write`
+node-file-system.ts:57–61, `delete` 63–73; web `write`
+workspace-file-system.ts:35–41, `delete` 43–48). Exactly one new bounded probe
+was executed, for a fact no prior record pins and one decision below depends
+on: Node v22.22.2's `fs.readdir(dir, { withFileTypes: true })` reports a real
+NTFS directory junction as `isSymbolicLink: true` / `isDirectory: false`
+(while `stat` follows it, `isDirectory: true`) — so the Node adapter's `list`
+surfaces junctions as `symbolicLink` entries (the adapter maps
+`entry.isSymbolicLink()` → `type: 'symbolicLink'`, node-file-system.ts:91).
+The probe sandbox and script were deleted after the run.
+
+The question this package answers: **what physical authorization invariant
+must Core's mutating operations satisfy, which candidate mechanism implements
+it at which cost, what is the smallest interim protection available without
+any API change, and what must the owner decide before any of it is
+implemented.**
+
+### 11.1 The physical mutation authorization invariant
+
+The invariant is stated over five classes the design must never conflate (the
+§4.1 five-way split, made normative):
+
+**INV-A — the configured output root and its resolved physical target.** The
+territory anchor is the configured outdir root as spelled (`R_lex =
+config.outdir`, resolved per variant by `resolveBuildOutputPath`). Resolution
+of `R_lex` itself through an alias at or above it is **accepted semantics**
+(T2, §4.2): the resolved physical location `R_phys` is where every territory
+semantics (variant-folder reset, E1-E regeneration) applies, exactly as it
+would at the spelled location. Authorization never inspects `R_lex` itself or
+any component at or above it: **a user-configured junction outdir is
+intentional alias resolution and must not be classified as an escape.** What
+the reset then destroys inside `R_phys` (A4a's `LEGACY-USER`, B7's
+`B7-LEGACY`) is ownership territory (INV-D) — never an authorization question.
+
+**INV-B — the generated territory an operation is authorized to mutate.** A
+mutating operation is authorized iff, at its last observation before the OS
+call:
+
+1. **Ancestor condition.** Every path component **strictly below** `R_lex` on
+   the operation's lexical target path (for deletes: excluding the target
+   itself) exists — or is created fresh by this very operation — as a
+   **non-alias** entry: no component resolves through a `symbolicLink`-typed
+   entry of its parent directory (lookup per the `resolveDestinationChain`
+   witness rule: exact name match wins; a unique case-insensitive match counts
+   only where a `stat` of the plan spelling succeeds, execute.ts:296–318).
+2. **Leaf condition (operation-specific).** For writes, the final component
+   either does not exist (fresh creation inside an authorized parent —
+   in-territory **by construction**) or exists as a non-alias entry inside
+   territory. **For deletes, the leaf may be an alias entry** — removing the
+   link is leaf-local and link-safe (B1, B4-i, B-native-baseline 1–2).
+
+Under these two conditions the OS cannot resolve the mutation outside the
+lexical subtree of `R_lex`: case-insensitive folding maps a name onto another
+name **in the same directory**, 8.3 short names alias only within the same
+parent, and every out-of-subtree resolution mechanism executed in §2 is an
+alias entry in some parent listing. This is the **permissive bound**
+(resolved-outdir-root containment, §5-W1); the strict per-operation
+destination-subtree bound remains the §9.2 owner option. Note that these scan
+semantics are **stronger than W1-permissive on one class**: any alias route
+below the root is refused even when its landing would stay inside the root
+(A3), because the invariant authorizes **routes**, not only landings.
+
+**INV-C — legitimate source content inside supported overlapping layouts.**
+The invariant governs only where mutations **land**. What the copyTree walk
+**reads** remains governed by the accepted inclusion policy and the
+destination-subtree exclusion (execute.ts:275–354): `staging/collide.lua`
+incorporation (F23-R3/E1a-F), stale-root preservation (F23-R1), case twins
+(E1a-C), dual alias routes (S5) and the embedding policy are untouched. None
+of the supported classes requires an alias on a **mutation path**: the
+legitimate source-link class (S1/S5) lives in the source tree, which the
+invariant never inspects. The invariant introduces **no source-ownership
+statement of any kind** — it must not be implemented as a widening of the
+destination exclusion (no implicit Contract B / E1-exclusion), and it must not
+filter or reclassify source.
+
+**INV-D — pre-existing content with unknown ownership.** **Containment is
+necessary but not sufficient.** A mutation landing inside `R_lex`'s subtree
+satisfies INV-B and still has no bearing on whether pre-existing content there
+may be replaced: ownership remains exclusively doc 15 M1/M2's decision (§4.1
+item 4 and §7, verbatim). This invariant must not be read as declaring unknown
+content engine-owned, and no implementation of it may authorize E1-style
+destructive adoption (A4a) by redefining that content as generated output. The
+E1 destruction class inside the resolved root remains open regardless of this
+contract (§11.7).
+
+**INV-E — concurrent external modifications.** Authorization is valid **at the
+moment of its last observation**. Alias insertion (A6) or retargeting (B6)
+between that observation and the OS call is a structural residual no
+decide-then-act guard closes (§6); narrowing shifts the window, only
+handle-relative operations close it (W6 — unavailable on both hosts' contract
+surfaces). No all-schedules guarantee is claimed or implied by any candidate
+below.
+
+### 11.2 Mutation-specific semantics (the operation decision table)
+
+The brief's rule is proven, not assumed: **one generic
+`realpath(target)`-containment rule does not match the mutation semantics** —
+it false-fails the link-safe delete shapes (class 2: the resolved leaf
+identity is the junction target, yet removing the link touches nothing behind
+it — B1, B4-i) and it cannot handle fresh creation (class 4's common shape:
+the target does not exist and resolution rejects — D2/D3). The contract
+therefore mandates the per-operation ruleset of INV-B. "Today" is the executed
+§2 behavior at this HEAD; the leaf-file-symlink forms of classes 5/6 inherit
+§3's honesty split (junction forms executed; file-symlink equivalence asserted
+by the same OS mechanism, not executed).
+
+| # | Class (site) | Lexical path → physical target | Exists? | Parent identity | Leaf semantics | Authorized territory | Ownership | Today (executed) | Required behavior |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | Delete a normal directory (M1, M6-delete) | Plan path verbatim; OS resolves every ancestor | Either (missing = self-healing) | Must satisfy INV-B.1 | Subtree removed; junction children inside are removed as links (B1, B4-i) | Resolved subtree of R_lex (permissive bound) | Engine territory; E1's M1/M2 decide replaceability | In-territory deletes succeed; through an alias ancestor the target's content behind it is deleted (B2, B3, B4-ii) | Refuse unless INV-B.1 holds; missing leaf on a clean chain stays a silent no-op (legitimate self-healing, A6/B7 shape) |
+| 2 | Delete a junction/symlink at the final component (M1) | Plan path; physical = the LINK (not followed) | Exists (as alias) | INV-B.1 | **Link removed**; target bytes untouched (B1, native-baseline 1) | In-territory link removal | None touched | Link-safe today; a generic realpath rule would refuse this safe operation | **Allowed** when INV-B.1 holds (the delete leaf is exempt from the alias refusal) |
+| 3 | Delete a descendant through a junction ancestor (M1, M6-delete) | Plan path; physical = behind the alias (lstat follows every component but the last) | Exists behind the alias | **Violates INV-B.1** (an ancestor is an alias) | Subtree behind the alias removed (B2, B3, B4-ii) | None — outside any authorized territory | Unknown/foreign (B4-ii's source, B5's sentinel) | **Silent destructive escape** (maximum damage: source folder deleted, B4-ii) | **Refuse explicitly before the delete**, naming the alias component (A7/B5/B4-ii die at the M1 gate; B-extra's dangling-ancestor silent no-op becomes the same explicit refusal) |
+| 4 | Overwrite an existing normal file (M3–M8) | Plan path; physical = the same file | Exists, non-alias | INV-B.1 | Followed (same file) | In-territory overwrite | Engine territory (E1-E accepted; user-modified output per doc 15 §1 class 5) | In-territory overwrite, `errors: []` | Allowed when INV-B.1 and a non-alias leaf hold; ownership untouched (E1) |
+| 5 | Overwrite a file symlink whose physical target is outside the authorized output (M3–M8 leaf) | Plan path; physical = the symlink target | Exists (as alias) | INV-B.1 holds | **Followed by write** — bytes land at the target | Outside territory | Foreign (A5's `USER-ORIGINAL-BYTES`) | Executed in its ancestor-junction form (A5, B4-iv): **silent overwrite escape** | **Refuse**: the leaf lookup finds a `symbolicLink` entry → explicit error naming the route; never write through an alias leaf |
+| 6 | Create a new file through a junction ancestor (M2–M8) | Plan path; physical = behind the alias | Leaf missing; alias ancestor exists | **Violates INV-B.1** | Created behind the alias | Outside territory | Foreign (A1/A2/A4b/A6 victims) | **Silent redirection** (A1, A2, A4b, A6; ND5) | **Refuse** on INV-B.1 before the adapter's own `mkdir`+`write` (the adapter mkdir resolves aliases identically, node-file-system.ts:57–61) |
+| 7 | Create missing parent directories through an alias (M2, adapter-internal mkdir) | `joinPath(op.path, '.pzstudio-mkdir')`; `mkdir` recursive resolves every component | Ancestors exist or are created | INV-B.1 covers op.path's chain | Sentinel created then deleted (execute.ts:470–479) | Territory of the resolved chain | Foreign when an alias is in the chain | Redirected like any write (A4a's sentinel landed inside the junction target) | Refuse on INV-B.1; on a clean chain the makeDir is authorized fresh creation |
+| 8 | Copy into a destination whose physical root changes during execution (M3 + concurrent retarget) | Plan destRoot; the physical root is retargeted mid-operation (B6-class) | — (race) | Held at check time, violated at mutation time | Per-write resolution at call time | Undefined between observations | Foreign | **Silent redirection/destruction** (B6 executed for deletes; the write analogue is A6's window) | Not closable (INV-E): revalidation narrows; the residual is disclosed in the failure semantics — never claimed closed |
+| 9 | Incremental/scoped rebuild without a full-root reset (M6–M8; planScopedModRebuild's `makeDir`+`removeDir`) | Per-delta lexical joins (buildsession.ts:630–648) or the scoped plan | Alias pre-exists; **no race needed** | INV-B.1 on every per-delta path | Per-delta leaf rules (write = classes 4/5, delete = classes 1/2) | Scoped territory per variant | Foreign when aliased (B4-iii source, B4-iv victim) | **Silent source deletion (B4-iii) and victim overwrite (B4-iv)** with `errors: []`; scoped `removeDir` deletes through ancestor aliases (A7, B5) | Refuse per delta on INV-B.1; failures land in `SessionApplyResult.errors` (never silent); the scoped `removeDir` is gated like class 3 |
+| 10 | Sequential main/dev variant execution (planBuild ×2; B7) | Same R_lex, per-variant outPath; the outdir-root alias state may change between variants | Root alias retargeted between variants | Root not inspected (INV-A) | Per-variant reset + writes at the resolved location | Each variant authorized independently at its own resolution (no cross-variant caching) | `B7-LEGACY` = unowned → E1 | Both variants execute faithfully at two physical roots; legacy content destroyed | **Allowed and unchanged** (T2, INV-A); authorization is re-established per variant execution, never cached across variants; destruction stays E1-pinned |
+
+Two asymmetries carry the table (both executed, neither assumable): the
+delete/write leaf split (classes 2 vs 5 — `fs.rm` lstat-checks the leaf and
+removes links as links; `fs.writeFile` follows the leaf link), and the
+delete's missing-leaf semantics (class 1: a missing in-territory leaf is the
+legitimate self-healing no-op of every reset flow, while a missing leaf behind
+an alias ancestor is B-extra's silence — which INV-B.1 converts into an
+explicit refusal because the refusal fires at the ancestor, before the
+missing-leaf question can arise).
+
+### 11.3 Implementation candidates (evaluated to owner-decision depth)
+
+**Candidate A — resolve-and-validate (the §5-W1 mechanism, sharpened).**
+Resolve the existing physical identity of the target's parent chain
+(`resolveIdentity`, pending doc 16 §15.6.1), require containment, then mutate.
+
+- Prevents, statically: every executed alias-route escape whose alias exists
+  at resolution time — A1, A2, A4b, A5, A6 (caught **at write time**, the
+  post-insertion resolution), A7, B4-ii, B4-iii, B4-iv, B5; A3 under either
+  the route-based refusal (INV-B) or the §9.2 strict bound.
+- Missing paths: `resolveIdentity(target)` rejects (D2) — fresh creation, the
+  common first-build shape, must authorize **via the parent** with the §15.2
+  lazy-pin re-attempt; a snapshot-only design leaves fresh-destination builds
+  unprotected (D3). The delete-leaf exemption (class 2) must be carried into
+  the resolution ruleset: authorize the parent chain, then apply the leaf
+  semantics — the generic single-resolution rule is refuted above.
+- TOCTOU: **unresolved, recorded as such** — B6 executes the generic
+  invalidation; no all-schedules protection is claimed; W3-style
+  re-verification at the mutation site narrows only (§6).
+- Not available today: requires the pending §15.6.1 capability; capability-less
+  hosts degrade (honesty, not protection — the §15.3/§16.4 verdicts carry
+  over).
+
+**Candidate B — fail-closed authorization.** Refuse any mutating operation
+whose physical destination cannot be **proved** inside authorized territory.
+
+- Missing paths: fail-closed is satisfiable only **parent-relative** — the
+  leaf's absence is provably fresh creation when the parent chain is proved;
+  refusing the leaf itself would fail every first build (D3).
+- Adapters without identity resolution: cannot prove anything → either total
+  refusal (breaks the host; rejected) or **explicit host-limitation
+  degradation** (a warning naming the limitation; never silent, never a
+  doctor warning substituted for authorization — adopted verbatim as the
+  brief's constraint).
+- Configured junction outputs: keep working iff the pin is the **resolved**
+  root (INV-A); fail-closed against the spelled path would break T2.
+- Timing: the failure occurs **at mutation time, not before destructive
+  planning** — a plan-time preflight is W2-class (racy, false-failing; the
+  §5-W2 verdict stands). The first refusal aborts the remaining plan
+  (`executeFileOperations` throws); **partial output from earlier operations
+  can remain** — the existing mid-plan abort shape (post-`removeDir`
+  aborts), disclosed, never silent.
+- Exposure through the existing pipes: `start()` rejects via
+  `buildVariants`' error aggregation (buildsession.ts:408–437); `apply()`
+  collects into `SessionApplyResult.errors` (per-action try/catch already
+  wraps M6–M8); executor-direct callers receive the throw. Sources are never
+  silently omitted and success is never reported for an unauthorized
+  mutation.
+
+**Candidate C — atomic or handle-relative operations.** The minimum capability
+that binds validation to the actual mutation target.
+
+- Node: `fs.promises` exposes **no openat/dirfd family** (W6 recorded);
+  `O_NOFOLLOW` is POSIX-only in Node and binds only the leaf — ancestor
+  components remain kernel-resolved at call time. **Node's ordinary
+  `realpath` + `fs.writeFile` are two separate OS traversals and do not
+  constitute an atomic operation.** The exact guarantee that cannot be
+  provided on Node: *the mutation instant is bound to the authorization
+  observation*.
+- Web (`vscode.workspace.fs`): no realpath, no inode access, no handles —
+  not even post-hoc physical validation is expressible. The additional
+  guarantee that cannot be provided on the web host: *any resolved-physical
+  fact at all*. Only the contract-only scan of §11.4 (where `list` reports
+  link types faithfully) or explicit degradation exists.
+- Verdict: the complete TOCTOU closure; requires a new capability class
+  specified nowhere; **out of scope of every pending decision** — recorded so
+  the residual of A+B is stated precisely, not as a proposal.
+
+**Candidate D — isolated staging and controlled publication.** Build inside a
+newly created, engine-controlled directory; publish only after successful
+validation.
+
+- Structurally eliminates the **write-phase** exposure: a fresh
+  engine-created stage directory contains no pre-existing aliases, and every
+  component between `R_lex` and the stage name is created by the engine
+  (INV-B holds by construction for the build phase; the T2 root resolution
+  applies unchanged).
+- **Does not prevent E1 data loss**: the publication target may hold
+  pre-existing content (user files, planted aliases) — the
+  replace-or-refuse-or-capture decision at publication **is** E1's M1/M2
+  decision (doc 15 §11.1); staging changes nothing about it.
+- Rename/replace semantics: a clean publication needs the rename capability
+  (doc 15 §8 row 1 — a pending frozen-API exception). On today's contract
+  (no move), publication = copy+delete, and the delete half re-enters the
+  class-3/6 hazards at the destination — **gated by the same INV-B scan**;
+  staging without the scan adds little on today's contract.
+- Cross-volume: rename fails EXDEV → the copy+delete fallback applies (and
+  its scan gate with it).
+- Crash recovery: an orphaned stage directory is dot-prefixed — invisible to
+  copyTree walks and to `classifyDelta` (doc 15 Candidate C's dot-prefix
+  argument) — inert but persistent; retention/cleanup is a new
+  output-contract decision.
+- Concurrent target substitution: publication is itself a mutation through
+  the destination's ancestor chain; a junction planted after the last
+  observation redirects the publication. Staging narrows thousands of
+  write-windows to one publication window — **a reduction, not a closure**
+  (INV-E).
+- Main/dev consistency: per-variant stage directories inherit B7 verbatim —
+  the alias state between sequential variants is unobserved by staging as by
+  everything else.
+- Verdict: a real risk-reduction **component** for a future mechanism, not a
+  P0 and not a substitute for INV-B; owner option, separately gated.
+
+### 11.4 The interim P0 containment decision (no API change)
+
+**Decision: a narrowly scoped, contract-only interim containment is possible
+and is specified here — the alias-route scan.** It stops every executed
+static escape, fails explicitly when authorization cannot be established,
+and preserves every green behavior of record. It is an **interim mitigation
+against the escape class**, not the complete safety guarantee (§11.6
+separates the two).
+
+**Mechanism (INV-B implemented on today's contract, using only `list`'s
+existing type reports — the header-quoted probe):**
+
+1. **Per-mutation ancestor scan (all of M1–M8).** Before the mutating
+   contract call, walk the operation path's components strictly below
+   `R_lex` (deletes: excluding the leaf); look each up in its parent's
+   `list` (exact, else unique-CI + `stat` witness, execute.ts:296–318); a
+   `symbolicLink`-typed match → **refuse** with an explicit error naming the
+   operation, the lexical path, the alias component and the policy reason.
+2. **copyTree destination-entry guard (M3).** Once per operation, scan
+   `destRoot`'s ancestor chain (rule 1); additionally, at each source
+   directory descent, `list` the corresponding destination directory (when
+   it exists) and refuse when any name the walk is about to write onto or
+   descend through matches a `symbolicLink` entry of that directory (A1, A3,
+   A4b, A5 die here — the junction is a destination entry, not an ancestor).
+   The match is per-entry-name only: unrelated user links in an adopted
+   destination that the walk never touches cause no refusal (no blanket
+   "no links in the destination" rule — that would false-fail).
+3. **Per-write leaf lookup (M4/M5/M6/M7/M8).** The leaf, when it exists,
+   must not be a `symbolicLink` entry of its parent listing (class 5).
+4. **Failure semantics.** Refusals throw inside `executeFileOperations`
+   (→ `start()` rejection / full-rebuild errors / embedded-CLI stderr) and
+   sit inside M6–M8's existing per-action try/catch (→ `result.errors`);
+   partial output from earlier operations remains (disclosed); no silent
+   partial success, no doctor-warning substitution.
+
+**Executed-escape closure check** (each row = the §2 experiment): A1, A3,
+A4b, A5 — rule 2 (destination entry); A2, A7, B4-ii, B5 — rule 1 on the
+mutation path, with A7/B5/B4-ii refused **before** the destructive
+`removeDir`; A6's executed ordering — rule 2 at walk start (the junction is
+planted before the copyTree begins); B4-iii, B4-iv — rule 1 per delta;
+B-extra — rule 1 (the dangling alias is an ancestor entry → explicit
+refusal, ending the silent no-op); A3b — rule 2 replaces the cryptic
+`ENOTDIR` abort with an alias-naming error. **Green-behavior preservation:**
+B1, B4-i (link-as-leaf/child removal allowed — the delete-leaf exemption);
+A4a, B7 (the outdir-root junction is never inspected — INV-A); every
+permanent-suite shape (alias-free or case-variant destinations, no alias
+mutation paths — the scan passes vacuously); F23-R3/E1a-F incorporation
+(reads are never gated).
+
+**What the P0 does NOT stop (disclosed, load-bearing):**
+
+- **The TOCTOU family** — alias insertion after the last observation of its
+  component (A6's arbitrary-schedule form, B6): narrowed by scan placement,
+  not closed (INV-E).
+- **Hard-linked files at write leaves** — invisible to every listing *and*
+  to realpath (two names, one inode; no reparse point): an overwrite through
+  an in-territory hard link mutates the shared bytes outside territory.
+  Neither the scan nor the pending W1 catches this; deletion is unaffected
+  (removing one name leaves the other intact). Inherent residual for every
+  candidate, recorded because no prior record mentions it.
+- **8.3 short names** — invisible to `list`; they alias only within the same
+  parent, so the permissive bound survives them, but **any strict
+  per-operation bound does not** (a short-name component can land a write in
+  a sibling territory inside the root — the A3 class). Disclosed against the
+  §9.2 option.
+- **Hosts whose `list` cannot report link types faithfully** (remote vfs):
+  the scan cannot authorize → explicit degradation per the owner policy
+  (§11.10 Q3) — never silent.
+- **E1 destruction inside the resolved root** (A4a, B7): by design (INV-D) —
+  owned by doc 15's pending decision, not by this containment.
+
+**Rejection-criterion check (brief §6).** Under its stated conditions — a
+stable filesystem during the operation (no concurrent alias
+insertion/retargeting) and faithful link-type reporting — the P0 permits no
+demonstrated silent destruction of the escape class: every §2 experiment
+whose alias pre-exists its mutation is refused explicitly. The two
+experiments it still permits (A4a, B7) are territory-internal E1 destruction
+at an intentionally configured root — the class the brief itself carries as
+separately unresolved (gate P11). The P0 therefore qualifies as a P0 closure
+of the escape class while honestly excluding the ownership class.
+
+**Cost.** O(chain depth) `list` calls per mutating operation; one extra
+`list` per source-directory descent in copyTree; per-delta depth lists for
+M6–M8. Permanent-suite list budgets may need recalibration when the gate
+lands — calibration of harness caps only: the write budgets and every
+behavioral assertion must not move (§11.9).
+
+### 11.5 Filesystem capability requirements and the API-sufficiency verdict
+
+The brief's challenge — is `ProjectFileSystem.resolveIdentity?(uri)` alone
+enough? — **no, not alone; but no new API class is needed either.** The final
+design requires:
+
+| Requirement | Needed by | Exact semantics and host support | Status |
+| :--- | :--- | :--- | :--- |
+| Ancestry-comparable resolved identity (`resolveIdentity`: path-form, adapter-canonical `/` separators, equality, unresolvability, post-creation resolvability — doc 16 §15.4) | W1-stage containment (Candidates A/B); the strict bound; Tier-2 read-side closure | Optional method returning a canonical identity string; implementable on the Node adapter (`fs.promises.realpath`, D1–D4); **not expressible on `vscode.workspace.fs`** — hence the optional-method shape plus `PlatformCapabilities.resolvedIdentity` (false on `WEB_CAPABILITIES` today) | **Pending** doc 16 §15.6 decision 1 — the one queued frozen-API exception; approving this package approves **no** API change |
+| Resolved-parent identity as the call pattern | Deletes (authorize the chain, exempt the leaf — classes 2/3); fresh-creation writes (the D3 lazy pin) | The same single method called on the parent — a ruleset requirement, not a new API; the generic target-resolution rule is refuted (§11.2) | Same pending method |
+| Operation-specific physical containment | Every mutation class (§11.2) | A ruleset over the same method (ancestor condition + per-class leaf condition) | Ruleset, no API |
+| Link-entry visibility in listings | The P0 scan (§11.4) | `DirectoryEntry.type: 'symbolicLink'` — already in the contract; faithful on Node (the header probe); host-dependent on remote vfs | **Exists today** — no API change |
+| No-follow metadata inspection (lstat-equivalent) | Cost optimization only (per-component checks without parent listings) | A no-follow stat variant; correctness needs only `list`'s type field on hosts that report it | **Not required** |
+| Handle-relative mutation | The complete TOCTOU closure | Directory-handle-relative create/write/delete; not expressible on `ProjectFileSystem` (path-string-only) nor `vscode.workspace.fs` | **New capability class, specified nowhere**; out of scope (W6) |
+| Atomic directory replacement (rename/move) | Candidate D publication; E1's capture-then-adopt | `ProjectFileSystem.move(from, to)` + `PlatformCapabilities.rename` (doc 15 §8 row 1) | **Pending** doc 15 §8 exception — separately gated; **not required** by this contract's P0 or W1 stage |
+| Ownership/provenance capability | E1's M1/M2 only | Doc 15 Candidate B territory | **Explicitly out of scope** (§11.7); proposing it here is forbidden scope creep |
+
+The frozen API-v2 contract is not modified by this record, and the P0
+requires **no API change at all**.
+
+### 11.6 Guarantee statements: stable filesystem vs concurrent mutation
+
+**Stable-filesystem guarantee** (no concurrent alias insertion/retargeting
+during the operation). Under the P0 scan: every mutation whose route contains
+an alias below `R_lex` is refused explicitly; no mutation can land outside
+`R_lex`'s resolved subtree (folding and short-name aliasing cannot leave a
+parent directory; every executed out-of-subtree mechanism is a
+listing-visible alias); in-territory mutation behavior is today's behavior
+byte-for-byte. Residual: hard-linked file leaves (§11.4) — inherent, shared
+by every candidate including W1. Under the W1 stage (when the capability
+lands): the same statements at Tier-2 strength plus the strict-bound option;
+the scan's route-based refusal and W1's landing-based containment compose —
+the route refusal catches alias routes inside the root (A3) that a permissive
+landing bound alone would accept.
+
+**Concurrent-filesystem guarantee: none, on any candidate.** The window
+between the last observation and the OS call is structural (B6; A6 from the
+insertion side); re-validation narrows and shifts it (D5, §6); only
+handle-relative operations close it, and no current contract can express them
+(§11.5). Every candidate's user-facing failure semantics must disclose this
+residual; no all-schedules correctness claim may be made for any
+implementation of this contract.
+
+### 11.7 E1 independence
+
+Verbatim carried and re-affirmed: containment decides **where**, ownership
+decides **whether** (§4.1, §7). Nothing in this package classifies user
+content as engine-owned, extends or approves the E1 exclusion, touches strict
+S1/UX-09, or presages doc 15 §11.1's prevent/accept/scope-out decision. The
+P0's permitted A4a/B7 destruction is exactly the boundary F23-R5 already
+documents as unresolved. E1-M2's incidental alias mitigation (capture reads
+through the alias) is unaffected by and irrelevant to the scan. Approving
+this package approves nothing in doc 15.
+
+### 11.8 Core versus CLI applicability
+
+Every check site in this contract is Core (`executeFileOperations` M1–M5,
+`BuildSession` M6–M8). The CLI executor (`removeDirRecursive`
+helper.ts:243–266; `scaffoldProject`'s `cpSync`) executes the same OS
+semantics (B-native-baseline) and inherits the B-class verbatim, but it has
+no `ProjectFileSystem` contract to hang a scan on and no F23 fix of record —
+CLI parity remains the separate defect decision of doc 15 §4/§11.5, doc 16
+§10 and §9.6. Nothing here changes the CLI.
+
+### 11.9 Permanent RED-first implementation gate (P-series)
+
+Written against post-gate expectations; RED rows fail at today's HEAD, GREEN
+rows pin behavior that must survive the gate unchanged. Harness: the
+permanent suites' emulated filesystems (`F23Fs`, `CaseInsensitiveFs`,
+`SymlinkFs` — link maps over the existing budgets and listing orders) for CI
+portability, plus an optional native-junction tier (real `NodeFileSystem`,
+real NTFS junctions, `fs.realpath` landings; skipped off-Windows). Every
+escape row asserts byte-exact sentinels **at resolved physical stored paths**
+(emulated: the stored key is the landing; native: the logged `fs.realpath`).
+Existing F23 tests are not weakened or deleted; the only permitted harness
+change is list-budget recalibration for the scan's added listings — write
+caps and every behavioral assertion unchanged.
+
+| ID | Gate (fixture) | At today's HEAD | Green condition |
+| :--- | :--- | :--- | :--- |
+| F23-WB-P1 | Source-folder deletion through a junction ancestor (B4-ii) | **RED** (source deleted, `errors: []`) | Explicit refusal before the `removeDir`, naming the alias component; source tree byte-identical |
+| F23-WB-P2 | Incremental sync through a planted alias, no race (B4-iii delete + B4-iv overwrite) | **RED** (source deleted / victim overwritten, `errors: []`) | Refusal in `SessionApplyResult.errors`; source/victim bytes intact; `incremental` counts only authorized mutations |
+| F23-WB-P3 | External existing-file overwrite through a destination alias (A5; emulated + native tier) | **RED** (victim bytes replaced) | Victim bytes intact; explicit error naming the route |
+| F23-WB-P4 | Target absent at authorization time — fresh creation on a clean chain (every first build) | GREEN (must stay green) | Build succeeds byte-identically; the parent-anchored rule adds no false failure (the anti-false-failure gate for Candidate B) |
+| F23-WB-P5 | Retarget between authorization and mutation (B6 shape; the write analogue of A6's arbitrary-schedule form) | **RED** (no observation exists at all) | Detected when observable (revalidation narrowing reports it); the residual window is asserted **documented**, never claimed closed |
+| F23-WB-P6 | Outdir-root junction intentionally configured by the user (A4a, permissive bound) | GREEN (must stay green) | Build proceeds at the resolved root unchanged; the E1 destruction component stays pinned as the unresolved boundary (with P11) |
+| F23-WB-P7 | Main/dev variants resolving to different physical roots (B7) | GREEN (must stay green) | Each variant authorizes independently at its own resolution — no cross-variant authorization caching; sequential-alias behavior unchanged; destruction stays E1-pinned |
+| F23-WB-P8 | Failure propagation and partial-output state | **RED** (silent success today) | A refusal mid-plan surfaces through `start()` rejection / `result.errors` / executor-direct throw; operations executed before the refusal remain (asserted explicitly); no silent partial success |
+| F23-WB-P9 | Preservation matrix: case-6 exact key sets, stale roots, `staging/collide.lua` incorporation (R3/E1a-F), case twins (E1a-C), S1/S5 source links, both permanent suites (28 tests) | GREEN | All unchanged by the gate — no new false failures anywhere |
+| F23-WB-P10 | Web / no-faithful-type-reporting fallback (an adapter whose `list` cannot report link types) | n/a (new surface) | The approved §11.10-Q3 policy (warn-and-proceed **or** fail-closed) executes explicitly — the degradation is never silent |
+| F23-WB-P11 | E1 unowned-destination protection remains unresolved (A4a's `LEGACY-USER`) | GREEN (documents the boundary, like F23-R5) | The destruction at the resolved configured root still occurs pending doc 15 §11.1 — the P0 must not be misread as having closed it |
+
+Expected RED set at today's HEAD: P1, P2, P3, P5, P8 (plus §8's R1–R5, R7
+when the same stage lands). GREEN-preserving: P4, P6, P7, P9, P11 (P10 is a
+new surface). The §8 R-series and this P-series are one implementation
+stage's gate set: R1–R5/R7 assert the escape closures from the executor's
+perspective; P1–P3 re-express the highest-damage ones at the session level;
+P4–P11 pin what must not change and what stays open.
+
+### 11.10 Owner approval questions
+
+The §9 decisions (1–7) all remain open; this package adds and sharpens:
+
+1. **P0 approval (new).** Approve the contract-only alias-route scan (§11.4)
+   as an immediate containment, **separate from and not instead of** the W1
+   capability decision? (The scan needs no API; W1 upgrades the same check
+   sites when §15.6.1 lands.)
+2. **Bound semantics (sharpens §9.2).** The P0 implements the permissive
+   bound **plus route-based alias refusal** — which already catches A3
+   without the strict bound's embedding carve-out problem. Confirm this
+   posture, or require the strict per-operation landing bound for the W1
+   stage (which the 8.3 residual then weakens, §11.4).
+3. **Degradation policy on hosts without faithful link-type reporting (new;
+   sharpens §9.7).** Proceed with an explicit host-limitation warning
+   (recommended — honest degradation, zero false failures) or fail-closed
+   (refuse to build where authorization is impossible)? Either way the
+   output is never silent (P10 pins it).
+4. **Missing-leaf delete semantics (new).** Keep today's self-healing silent
+   no-op for in-territory missing leaves (recommended — A6/B7's legitimate
+   shape; the alias-ancestor dangling case is already converted to an
+   explicit refusal by the scan) or make every no-op delete reported?
+5. **W4/unresolved-identity policy** — carried verbatim (decide jointly with
+   doc 16 §15.6.3); the scan converts the B-extra shape regardless.
+6. **TOCTOU posture, T2 confirmation, CLI parity, W1 adoption** — §9.3, §9.5,
+   §9.6, §9.1 carried verbatim; nothing in this package pre-answers them.
+
+### 11.11 Implementation scope and STOP conditions
+
+**Authorized by an owner approval of this package (and only that):** the P0
+scan at the M1–M8 check sites per §11.4, with the §11.9 P-series gate set,
+the INV-B ruleset and the disclosed residuals — as a RED-first
+implementation stage. The W1 upgrade (same sites, resolved-identity ruleset)
+additionally requires the pending doc 16 §15.6.1 exception; the strict bound
+requires §11.10-Q2; CLI parity is a separate defect decision (§11.8);
+staging (Candidate D), rename, provenance and handle-relative work are
+**not** part of this contract.
+
+**STOP — this record authorizes none of:** any production source, contract,
+harness or test modification (none was made); any `resolveIdentity` or other
+API addition; any CLI executor change; any E1 quarantine/capture or
+ownership redefinition; any DX-13/reconciliation work; any Contract A/B
+change; any UX-09 filtering change; any change to strict S1 or the supported
+case-6 layouts; any rewrite of §1–§10's measurements or verdict.
+
+**Decision status: `MUTATION_AUTHORIZATION_READY_FOR_OWNER_DECISION`.** All
+eight readiness criteria hold: a concrete physical invariant (§11.1);
+operation-specific leaf/ancestor semantics with the generic-rule refutation
+proved (§11.2); explicit missing-destination treatment (§11.2 classes 1/4/7,
+§11.3-B); a defined static-escape protection (§11.4, with the
+executed-escape closure check); honest TOCTOU boundaries (§11.4, §11.6); a
+policy for hosts lacking identity capabilities (§11.4, §11.10-Q3, P10);
+clear separation from E1 ownership (§11.7); and a bounded permanent
+RED-first plan (§11.9).
+
 ---
 
 *Pointer: doc 16 §16.5 records the first write-side aliases and names the
