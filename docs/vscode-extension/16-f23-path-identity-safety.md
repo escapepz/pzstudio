@@ -559,6 +559,14 @@ the entry decision. Hence every descent path is finite and the walk terminates. 
 is a proof sketch against the contract, not a formalization; it holds per-operation
 and needs no budget.
 
+> **Refuted by §16 (executed counterexample):** the "fixed and finite graph" premise
+> is false for destinations inside the walk's reach. The walk itself creates ordinary
+> destination directories while it runs, and with one source alias into a populated
+> destination subtree the descent enters those freshly created directories forever —
+> no identity ever repeats on the active stack and the alias is dereferenced exactly
+> once. Tier 1 does not terminate; Tier 2 does. The corrected termination claim is
+> §16.3.
+
 **Executed evidence for the corrected candidate:**
 
 | # | Run | Executed result |
@@ -591,6 +599,13 @@ separate hazard class, same TOCTOU family — recorded so the implementation sta
 not claim more than the mechanism delivers. (c) TOCTOU generally — §7 stands, now with
 the identity-specific execution in D5.
 
+> **Refuted by §16:** residual (a)'s "bounded, non-recursive" claim holds only for the
+> A3-tiers fixture placement (alias at mod-root level, walk-path `zzz-medialink`); an
+> alias whose walk-path spelling extends the target's destination-relative path
+> (`media/lua/loop → <destRoot>/media`) makes the Tier-1 residual **unbounded**
+> (§16.2). Residual (b) is now executed (§16.5): the redirection is reachable and
+> silent on real NTFS junctions.
+
 ### 15.3 Gate C — missing-capability fallback verdict (executed)
 
 Method: the S2a ancestor cycle (real engine where possible, prototype walkers for the
@@ -621,6 +636,14 @@ explicit failure) is an honesty policy, not a safety guarantee; the guarantee ex
 only when the capability is present.** Recommended fallback: A's warn + C's budget as
 the termination backstop; B remains the owner-strict alternative; warn-only alone is
 refuted.
+
+> **Refuted by §16 (executed):** the alias-dereference budget does **not** bound the
+> dynamic-growth class — one dereference fuels an unbounded ordinary-directory
+> expansion (§16.4), so "C terminates the cycle class" extends only to cycles, not to
+> the traversal as a whole. The executed A/B/C/D comparison on the dynamic class and
+> the corrected fallback statement are §16.4. The implementation-stage caveat that an
+> fs-level budget throw is silently swallowed by `resolveEntryType`'s catch (the
+> budget must be enforced at the entry decision) is §16.4 as well.
 
 ### 15.4 Gate D — what `resolveIdentity` actually guarantees (and what identity alone cannot deliver)
 
@@ -664,14 +687,14 @@ would carry `resolvedIdentity: false`).
 
 | # | Obligation | Status under Option B′ | Evidence |
 | :--- | :--- | :--- | :--- |
-| 1 | No unbounded alias-driven traversal | **Proven** under the stable-fs assumption (termination argument, §15.2); budget-free execution demonstrated | A5 (4 writes, 1 refusal, no budget) |
+| 1 | No unbounded alias-driven traversal | **Proven** under the stable-fs assumption (termination argument, §15.2); budget-free execution demonstrated | A5 (4 writes, 1 refusal, no budget) — **refuted for Tier 1 by §16: the stable-fs assumption fails on dynamic destination graphs** |
 | 2 | No silent loss beneath destination ancestors | **Holds** (the refuted rule is the only violation found) | A1 vs A2; A3-corrected; A4 equivalence |
 | 3 | No silent loss through valid non-cyclic symlinks | **Holds** (incorporation unchanged; unresolvable targets become explicit) | A3-corrected (dual route); C-B1 contrast; A6 |
 | 4 | No over-exclusion on case-sensitive filesystems | **Holds** (adapter owns case; engine compares opaquely) | A4c (GEN twin incorporated); A4b (collapse on case-insensitive) |
 | 5 | No global-visited-set suppression | **Holds** (active stack only, pop-on-exit) | A3-corrected (dual-route incorporation) |
-| 6 | Destination subtree excluded through supported aliases | **Holds at Tier 2** (root, ancestor and deeper aliases); **partial at Tier 1** (deeper-alias bounded residual disclosed) | A3-corrected; A3-tiers (both tiers executed) |
+| 6 | Destination subtree excluded through supported aliases | **Holds at Tier 2** (root, ancestor and deeper aliases); **partial at Tier 1** (deeper-alias bounded residual disclosed) | A3-corrected; A3-tiers (both tiers executed) — **the Tier-1 residual's "bounded, non-recursive" claim is refuted by §16: the residual is unbounded for aliases whose walk-path extends the target's destination-relative path** |
 | 7 | Explicit behavior on unresolved identity | **Specified** (warn minimum / fail-closed owner option); explicit-event surface executed | A6; D2 |
-| 8 | Safe, bounded behavior when capabilities are absent | **Mitigation only** — graceful degradation, not a guarantee; recommended fallback = warn + alias-dereference budget | §15.3 (A refuted, B breaking, C bounded) |
+| 8 | Safe, bounded behavior when capabilities are absent | **Mitigation only** — graceful degradation, not a guarantee; recommended fallback = warn + alias-dereference budget | §15.3 (A refuted, B breaking, C bounded) — **the budget's termination guarantee is refuted for the dynamic class by §16; only fail-closed or a total-operation budget terminate without identity** |
 | 9 | Existing F23 tests remain semantically valid | **Verified** — byte-identical keys and write counts vs the real engine; both permanent suites green at this HEAD | A4 (×3 orders); A4b; 28 permanent tests |
 | 10 | TOCTOU and unstable-filesystem limitations disclosed | **Stands, extended**: re-verify-after-list narrows but does not close (D5); path-identity recreate residual; write-side alias residual; stable-fs assumption stated per claim | D5; §15.2 residuals (b)/(c); §7 |
 
@@ -721,6 +744,246 @@ Documentation-only. The prototype walkers, experiment suite and native scratch
 directories were disposable and are deleted before this commit; no Core, CLI,
 extension, harness, contract or test file was modified. F23 remains open pending the
 decisions above; nothing here implements, approves, or relaxes anything.
+
+---
+
+## 16. Follow-up 2: the dynamic-graph counterexample — §15.2's fixed-graph premise is false; Tier 2 closes the executed class; the alias budget does not bound recursion; write-side redirection executed
+
+**Status: documentation-only follow-up to §15. Nothing here authorizes
+implementation, changes any contract, or grants any of §15.6's pending decisions.**
+Written at HEAD `9385b9e` (branch `42.20.0-dev`, tree clean). The UX-09 regression
+stash was identified by its descriptive message (`stash@{0}`, unchanged from the
+header) and left untouched: never applied, popped, dropped or renamed. Every
+behavioral claim below was executed as a bounded, deterministic experiment against the
+unmodified real Core executor (`planBuild` → `executeFileOperations` → `copyTree`, one
+variant per run) on the permanent suites' emulated filesystems
+(`SymlinkFs`/`CaseInsensitiveFs`/`F23Fs` — budgets, listing orders and event tracing
+via a disposable instrumented subclass), plus the real `NodeFileSystem` adapter on
+real Windows NTFS junctions in temporary directories for the write-side gates and the
+native confirmation run. The prototype Tier-1/Tier-2 walkers and the policy runners
+were disposable experiment code (they mirror `copyTree`'s loop, use the exported
+`isSourcePathIncluded`, and dereference exactly like `resolveEntryType`; they are not
+production code) and were deleted before this commit. 21 executed experiment tests
+covering gates A-α…A-δ, B-eq, B-r3, B-s5, B-s2a, B-A3tiers, B-dyn, B-case, C-A…C-D,
+ND1–ND6 and NA1 (ND2/ND3 share one test) all ran green at this HEAD; both permanent
+F23 suites (`copytree-destination-exclusion.test.ts`, `copytree-case-alias.test.ts`,
+28 tests) ran green unchanged. §15's experimental record stands unchanged; this section corrects
+three of its claims (the termination argument, the Tier-1 residual bound, the
+fallback's termination guarantee) and executes one of its disclosed residuals
+(write-side redirection).
+
+### 16.1 The question and the mechanism facts it turns on
+
+The question §15.2's termination argument left open: **can one source symlink lead
+the walker into newly generated ordinary directories indefinitely, without repeating
+an active-stack identity or exceeding an alias-dereference budget?** The engine facts
+it turns on (execute.ts at this HEAD):
+
+- `copyTree` lists each directory **live at entry** (`fs.list` at execute.ts:388) and
+  processes entries strictly sequentially in listed order (DFS; execute.ts:389–410).
+- File writes go to the **lexical plan-space join** `joinPath(destRoot, rel)`
+  (execute.ts:404–407); destination directories materialize implicitly at the first
+  write beneath them (the Node adapter `mkdir`s parents; the memory filesystems
+  derive directories from key prefixes). The walk therefore **grows the physical
+  graph while it runs**.
+- The destination exclusion is lexical on walk-relative names
+  (`resolveDestinationChain` + `isInsideDestination`, execute.ts:275–354); an alias
+  route into the destination under different names is invisible to it (§3's S3/S8).
+- Dereference is per-entry (`resolveEntryType` stats the link, execute.ts:416–429);
+  after an alias is entered, everything below it is ordinary directories — no further
+  dereferences.
+
+**When destination directories are created relative to source `list()` calls:** a
+directory created by the walk's own write at walk-rel R exists before any *later*
+listing whose walk-path resolves into it. Listings at alias-resolved locations
+therefore observe directories the walk created moments earlier — the physical graph
+the stable-fs assumption declared fixed is, for destination-inside-reach layouts,
+**mutated by the walk itself**.
+
+### 16.2 Gate A — the single-alias dynamic-growth counterexample (executed)
+
+Fixture: the supported case-6 layout of the permanent harnesses — source root
+`/proj/my_mod`, destination root
+`D = /proj/my_mod/gen/Sync Project/Contents/mods/my_mod`. Source tree
+`media/hello.lua`, `media/lua/inner.lua`, `media/lua/util.lua`
+(plus the harness seed), and one directory alias:
+
+- **Suggested shape (A-α):** `media/loop → D/media`. **Bounded in all three listing
+  orders** (alphabetical 9 writes, insertion 13, reverse 8; identity depth ≤ 5; one
+  dereference). The alias's walk-path `media/loop` makes the write territory
+  `D/media/loop/…` a *sibling* of the alias target's child subtree; the walk never
+  re-lists `D/media`, so the extra generation never feeds back.
+- **Counterexample shape (A-β):** `media/lua/loop → D/media` — the walk-path is one
+  level deeper, so the write territory `D/media/lua/loop/…` nests **inside** the
+  alias target `D/media`, inside the directory (`D/media/lua`) the alias route will
+  list next. Under alphabetical order (files before directories at each level — the
+  order NTFS readdir approximates) the engine oscillates: it lists `D/media` (sees
+  `hello.lua`, `lua`), writes `D/media/lua/loop/hello.lua` (creating `D/media/lua/loop`
+  inside the read territory), enters `D/media/lua` (sees the fresh `loop`), writes
+  `D/media/lua/loop/lua/hello.lua`, enters `D/media/lua/loop` (sees the fresh `lua`), …
+  every step reads a directory the previous step created.
+
+Executed against the real engine with strict write budgets (the trip is the harness's
+stop, not the engine's):
+
+| # | Run | Executed result |
+| :--- | :--- | :--- |
+| A-β ×3 | write caps 30 / 60 / 120, alphabetical | Deterministic write-budget trip at 17 / 47 / 107 writes; **alias-dereference count 1 in all three**; reconstructed identity-keyed DFS stacks show **74 entered directories at cap 120 with zero identity repeats on any active stack**; identity nesting depth **9 → 29 → 69** — grows with the budget without bound; deepest write path shows the `lua/loop` alternation repeated to the trip point. No error is ever surfaced by the engine itself |
+| A-γ | same fixture, insertion order | **Bounded dead-end** (11 writes, depth 5): the directory child is processed before the file write that would have created its next level, so the descent finds nothing fresh |
+| A-δ | same fixture, reverse order | **Bounded dead-end** (10 writes, depth 4) |
+| NA1 | **Native**: real NTFS junction `media/lua/loop → D/media`, real `NodeFileSystem`, 60-write cap | Budget trip after 60 writes, **56 oscillating writes**, deepest path carrying ~24 `lua/loop` repetitions — the oscillation reproduces on real NTFS with the real adapter, one junction, one dereference |
+
+**Gate A record (mission items):** every source directory entered and its canonical
+identity at entry were logged (74 descents at cap 120, all identities distinct);
+every destination directory creation is implied by the write log (directories
+materialize at first write; the write list is the exact output-tree addition set);
+alias dereference count 1; active-stack identities recorded per entry with zero
+repeats; nesting depth and operation counts scale with the budget as tabled above;
+the output-tree additions are exactly the oscillating `…/media/lua/(lua/loop)ⁿ…`
+paths. A passing fixture is not proof of the negative — but here the suspected
+sequence **did occur**, deterministically, in the exact engine ordering (live list at
+entry → sequential DFS → lexical write joins with implicit parent creation).
+
+**The structural condition, stated precisely:** the oscillation requires (i) the
+alias target T strictly below the destination root, populated by the walk's own
+canonical writes before the alias is traversed; (ii) the alias's **walk-relative
+spelling extends the target's destination-relative path** (`media/lua/loop` extends
+`…/my_mod/media`), which places the write territory inside the read territory; and
+(iii) a listing order in which a file child is processed before the directory child
+that leads into the freshly created territory (alphabetical order satisfies this for
+this fixture). Condition (ii) is the decisive one: it is a property of the *names*,
+not of the destination's location — the same construction works with an external
+destination (S8a class), since the write territory is always `destRoot + walkRel`.
+
+### 16.3 Gate B — Option B′ tiers on the dynamic histories (executed)
+
+The disposable prototype walkers mirror `copyTree`'s loop exactly (live list,
+sequential DFS, `isSourcePathIncluded`, `resolveEntryType` dereference) and add the
+§15.2 rules over an emulated `resolveIdentity` (the emulation's canonical-form
+stand-in, matching `fs.realpath` semantics):
+
+| # | Run | Executed result |
+| :--- | :--- | :--- |
+| B-eq | Tier 1 and Tier 2 vs the real engine, alias-free case-6 tree, ×3 listing orders | **Byte-identical output key sets and contents** in all three orders — the identity rules preserve today's behavior on alias-free trees (§15.2's A4 re-confirmed at this HEAD) |
+| B-r3 | Tier 2 with legitimate `GEN/staging/collide.lua` and `staging` content | Both incorporated; no ancestor over-exclusion |
+| B-s5 | Two independent aliases to one directory (S5) | Both incorporated; zero refusals — no global-visited-set suppression |
+| B-s2a | S2a self-referential cycle (`media/zzz-cycle → media`), external destination, no budget | Both tiers **terminate on their own** with exactly one `cycle` refusal; non-cyclic content intact (A5 re-confirmed) |
+| B-A3tiers | §15.2's A3-tiers placement (`zzz-medialink → D/media` at mod-root level) | Tier 1: bounded garbage, exactly 3 files — **that placement's boundedness re-confirmed**; Tier 2: refused at the link (`destination-below`) |
+| B-dyn | **The §16.2 counterexample fixture** | **Tier 1: UNBOUNDED** — budget trip with zero refusals, one dereference, deep `lua/loop` oscillation in the write paths: the root-identity + active-stack rule never fires because every entered physical directory is newly created and distinct. **Tier 2: terminates** — exactly one refusal at `media/lua/loop`, reason `destination-below`; the output tree is **byte-identical to the same fixture without the link** (no garbage, no loss) |
+| B-case | E1a-B (case-insensitive collapse) and E1a-C (case-sensitive `GEN` twin) under Tier 2 | Both hold: the destination is excluded through the case alias; the `GEN` twin stays ordinary source |
+
+**Adjudication:** Tier 1 is **not** structurally terminating — the counterexample
+refutes §15.2's termination argument for Tier 1 (the argument's "some physical
+directory would repeat" premise fails when the walk grows the graph). Tier 2 **does**
+close the executed dynamic-growth class: refusing entry at any identity at or below
+the destination root removes the single alias route into the growing territory, and
+with it the only edge into freshly created directories. The tier separation §15.2
+disclosed as "the one class that separates the tiers" (A3-tiers) is thereby
+sharpened: it is not a bounded-garbage residual, it is an unbounded-traversal class.
+
+### 16.4 Gate C — the no-capability fallback on the dynamic class (executed)
+
+All rows executed on the §16.2 counterexample fixture without any identity
+capability:
+
+| Approach | Executed result on the dynamic fixture | Termination | Bounded resources | Legitimate-source preservation | Explicit failure |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **A — warn and continue** | One would-be warn (the single dereference); the expansion proceeds unbounded; the harness write budget is the only stop (C-A) | **No** | No | The corruption proceeds with a warning that streams past | Never fails — hangs/grows |
+| **B — fail-closed on directory aliases** | Explicit error naming `media/lua/loop`; nothing beyond (C-B) | **Yes** | Yes | **No** — the same policy refuses the S1/S5 legitimate-alias class (executed: a legitimate `shared → staging` alias aborts the build) | Yes |
+| **C — alias-dereference budget (8)** | **Never trips** — the counter stays at 1 while the copyTree writes reach 17 and 107 at write budgets of 30 and 120 (C-C); the budget bounds exactly the *cycle* class (S2a contrast: trips explicitly at dereference 9) | **No** | No | Yes (vacuously — it never engages) | The failure that arrives is the write/OS one, not the budget's |
+| **D — total-operation budget (400 ops)** | Trips with an explicit error (C-D) | **Yes** (as a cap, not a proof) | Yes | Yes under the cap | Yes |
+
+Two execution findings sharpen the implementation picture:
+
+1. **The budget dimension is wrong for termination.** §15.3's claim that the
+   alias-dereference budget "bounds exactly the hazardous operation class" is refuted:
+   the dynamic class needs **one** dereference and then grows through ordinary
+   directories. An alias-dereference budget is necessary-but-insufficient; the only
+   capability-less configurations that terminated the dynamic class are fail-closed
+   (B) and a total-operation budget (D) — the latter being the blunt
+   legitimate-tree-size limit §4-D already refuses to recommend as a correctness
+   mechanism.
+2. **An fs-level budget throw is silently swallowed.** A budget implemented as a
+   throwing wrapper inside `fs.stat` is converted by `resolveEntryType`'s existing
+   `try/catch` into a silent `'unknown'` skip: executed with cap 8 on the S2a cycle,
+   the build **completed without any error**, silently truncating the cycle tail
+   (deref count 9, budget never surfaced). Whatever budget the implementation stage
+   selects must be enforced at the entry decision (after `resolveEntryType` returns),
+   not inside a contract method whose failures the engine already maps to skips.
+
+**Corrected fallback statement:** warn-and-continue remains refuted as a safety
+posture; the alias-dereference budget remains a useful *diagnostic and cycle-class
+bound* but is **not a termination guarantee**; without the capability, only
+fail-closed or a total-operation budget terminates the executed dynamic class, and
+neither provides correctness — both leave the destination re-entry classes (S3/S8)
+open, as §15.3 already established. The capability remains the only sound mechanism;
+nothing in this section changes §15.6's decision list, and no fallback policy is
+approved here.
+
+### 16.5 Gate D — write-side alias safety (executed, native NTFS junctions)
+
+The read-side/descent protections say nothing about **write authorization**:
+`copyTree` writes `joinPath(destRoot, rel)` with no identity check on the write
+path, and the Node adapter resolves junctions at every path component. Executed with
+real junctions and the real adapter in temporary directories (bounded fixtures; each
+scenario a fresh directory):
+
+| # | Scenario | Executed result |
+| :--- | :--- | :--- |
+| ND1 | Junction inside the destination subtree (`dest/media → src/victim`, victim inside the source tree), copyTree onto the pre-existing destination (the adoption/incremental exposure shape — no `removeDir` in the plan) | **Source overwritten silently**: the write `dest/media/other.lua` landed at `src/victim/other.lua`; no error, no report |
+| ND2 | `removeDir` over a destination tree *containing* a junction | The junction link is removed; the target's content is untouched — the reset itself is not an escape |
+| ND3 | `removeDir` where the destination root itself is a junction | The junction is removed as a link; the target is untouched |
+| ND4 | Junction planted in the post-`removeDir`/post-`makeDir` window (the concurrent-insertion shape of planBuild's own ordering), then the mod copyTree | **Source overwritten silently** — identical to ND1 through the full-build operation order |
+| ND5 | Junction at an intermediate destination ancestor (`Contents/mods → unrelated/`) | The entire mod tree materializes **outside the output territory**, silently |
+| ND6 | Junction `dest/media → out` (a destination ancestor) | Ancestor-level writes land at the destination root (`out/a.lua`), silently |
+
+Reachability under the current operation ordering: `planBuild`'s `removeDir(outPath)`
+wipes pre-existing destination-subtree aliases before the walk (ND2/ND3), so the
+**full-build path is exposed only through the concurrent-insertion window** (ND4) or
+through an alias at or above `outPath` itself; the **incremental sync path
+(`BuildSession.apply` → per-file writes/deletes) and any host-driven
+`executeFileOperations` plan without a preceding `removeDir` are exposed with no race
+at all** (ND1/ND5/ND6). Every reproduced escape was **silent** — no error, no
+warning, no report. This is a separate hazard class from the traversal question:
+**source-traversal identity and destination-write authorization are different
+decisions**, and closing the former (Tier 2) does not close the latter. A write-side
+gate (identity-checking write targets against the operation's authorized territory)
+is its own design and approval task; nothing is implemented or approved here.
+
+### 16.6 Proof-obligation adjudication (this follow-up)
+
+- **Is the physical directory graph invariant during `copyTree`?** **No** — executed:
+  the walk creates destination directories mid-walk, and alias routes into them turn
+  the created set into the walk's own search space (§16.2). The stable-fs assumption
+  of §15.2 must be narrowed to "no concurrent retargeting **and** no alias route into
+  a graph region the operation itself grows".
+- **Is Tier 1 structurally terminating?** **No** — executed counterexample (B-dyn
+  Tier 1): unbounded descent with zero identity repeats and one dereference.
+- **Does Tier 2 close the tested dynamic-growth class?** **Yes** — executed (B-dyn
+  Tier 2): one refusal at the alias, output byte-identical to the link-free baseline,
+  with every §15 preservation property re-confirmed at this HEAD (B-eq, B-r3, B-s5,
+  B-s2a, B-A3tiers, B-case).
+- **Does alias-dereference counting alone bound recursion?** **No** — executed (C-C):
+  the counter stays at 1 while the traversal grows without bound. It bounds the cycle
+  class only.
+- **Does the optional-capability fallback still satisfy its stated S2 obligations?**
+  **Only as mitigation**: A+C degrades to warn + a bound that does not terminate the
+  dynamic class; the executed fallback matrix is §16.4, and the budget-enforcement
+  caveat (entry-decision, not fs-level) is binding for any implementation stage.
+- **Does the write-side finding require a separate safety gate?** **Yes** — executed
+  silent escapes (§16.5) that no read-side identity rule addresses; recorded as a
+  distinct hazard class with its own approval boundary.
+
+### 16.7 Scope of this follow-up
+
+Documentation-only. The instrumented harness subclass, prototype walkers, policy
+runners, native fixtures and temporary directories were disposable and are deleted
+before this commit; no Core, CLI, extension, harness, contract or test file was
+modified. F23 remains open pending the §15.6 decisions — which this section refines
+but does not grant: the Tier decision (§15.6.2) is now executed-evidence-weighted
+(Tier 1 is non-terminating on the dynamic class; Tier 2 closed it in every executed
+case), and the fallback decision (§15.6.5) must not cite the alias budget as a
+termination guarantee. Nothing here implements, approves, or relaxes anything.
 
 ---
 
