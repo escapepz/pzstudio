@@ -19,6 +19,13 @@ import type {
     ProjectFileSystem,
 } from '@pzstudio/platform';
 import type { FileOperation } from './buildplan';
+import {
+    aliasRouteError,
+    assertNoAliasRoute,
+    listRouteDirectory,
+    lookupRouteEntry,
+    MutationRouteOptions,
+} from './mutation-guard';
 
 export type OperationLogLevel = 'verbose' | 'info' | 'warn';
 export type OperationLogger = (
@@ -373,19 +380,45 @@ function isInsideDestination(
  * stale former output roots, case-variant twins on case-sensitive
  * filesystems, and files under the adopted output root outside this
  * operation's destination are still copied.
+ *
+ * When `outputRoot` is declared, every write below destRoot is guarded
+ * against alias routes (F23-WRITE P0): the destRoot chain is authorized once
+ * before the walk, and each source-directory descent lists the corresponding
+ * destination directory (when it exists) and refuses any name the walk is
+ * about to write onto or descend through that is a symbolicLink entry there
+ * — a planted junction at a destination entry redirects every write under it
+ * outside the generated territory. Unrelated links in an adopted destination
+ * that the walk never touches cause no refusal.
  */
 async function copyTree(
     fs: ProjectFileSystem,
     sourceRoot: string,
     destRoot: string,
     options: CopyTreeOptions,
+    outputRoot?: string,
 ): Promise<void> {
     const planSegments = segmentsBelow(sourceRoot, destRoot);
     const destinationChain = planSegments
         ? await resolveDestinationChain(fs, sourceRoot, planSegments)
         : null;
+    await assertNoAliasRoute(
+        fs,
+        outputRoot,
+        destRoot,
+        'write',
+        `copyTree destination '${destRoot}'`,
+    );
     const walk = async (dirUri: string, relDir: string): Promise<void> => {
         const entries = await fs.list(dirUri);
+        const destDirUri = relDir ? joinPath(destRoot, relDir) : destRoot;
+        const destEntries = outputRoot
+            ? await listRouteDirectory(
+                  fs,
+                  `copyTree destination '${destRoot}'`,
+                  destDirUri,
+                  destDirUri,
+              )
+            : null;
         for (const entry of entries) {
             const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
             if (
@@ -398,6 +431,24 @@ async function copyTree(
                 continue;
             }
             const type = await resolveEntryType(fs, entry);
+            if (type === 'directory' || type === 'file') {
+                const clash = destEntries
+                    ? await lookupRouteEntry(
+                          fs,
+                          destDirUri,
+                          destEntries,
+                          entry.name,
+                      )
+                    : null;
+                if (clash?.type === 'symbolicLink') {
+                    throw aliasRouteError(
+                        `copyTree destination '${destRoot}'`,
+                        joinPath(destRoot, rel),
+                        outputRoot!,
+                        clash.name,
+                    );
+                }
+            }
             if (type === 'directory') {
                 await walk(entry.uri, rel);
             } else if (type === 'file') {
@@ -443,18 +494,35 @@ function isLockError(e: unknown): boolean {
  * filesystem. Throws on the first failing operation; lock errors
  * (ENOTEMPTY/EBUSY/EPERM/EACCES) surface with the same actionable message
  * the CLI's removeDirRecursive produces.
+ *
+ * When `options.outputRoot` declares the configured build output root, every
+ * mutating operation is guarded against alias routes before it touches the
+ * filesystem (F23-WRITE P0, doc 17 §11.4): a symbolic link anywhere on a
+ * mutation's route below the root — including a write's leaf — aborts the
+ * plan with an explicit refusal naming the link; operations that already ran
+ * remain on disk (disclosed partial output, the existing mid-plan abort
+ * shape). Without an output root the executor keeps today's behavior.
  */
 export async function executeFileOperations(
     fs: ProjectFileSystem,
     operations: FileOperation[],
     log?: OperationLogger,
+    options?: MutationRouteOptions,
 ): Promise<void> {
+    const outputRoot = options?.outputRoot;
     for (const operation of operations) {
         switch (operation.type) {
             case 'log':
                 log?.(operation.level, operation.message);
                 break;
             case 'removeDir':
+                await assertNoAliasRoute(
+                    fs,
+                    outputRoot,
+                    operation.path,
+                    'delete',
+                    `removeDir '${operation.path}'`,
+                );
                 try {
                     await fs.delete(operation.path, { recursive: true });
                 } catch (e) {
@@ -467,27 +535,59 @@ export async function executeFileOperations(
                     throw e;
                 }
                 break;
-            case 'makeDir':
+            case 'makeDir': {
                 // ProjectFileSystem has no mkdir: materialize the directory
                 // through a write (adapters create missing parents) and drop
-                // the sentinel afterwards so the directory stays empty.
-                await fs.write(
-                    joinPath(operation.path, '.pzstudio-mkdir'),
-                    new Uint8Array(),
+                // the sentinel afterwards so the directory stays empty. The
+                // sentinel delete targets a plain file this very operation
+                // just created (leaf-local, non-recursive) — only the write
+                // needs the route guard.
+                const sentinelPath = joinPath(
+                    operation.path,
+                    '.pzstudio-mkdir',
                 );
-                await fs.delete(joinPath(operation.path, '.pzstudio-mkdir'));
+                await assertNoAliasRoute(
+                    fs,
+                    outputRoot,
+                    sentinelPath,
+                    'write',
+                    `makeDir '${operation.path}'`,
+                );
+                await fs.write(sentinelPath, new Uint8Array());
+                await fs.delete(sentinelPath);
                 break;
+            }
             case 'copyTree':
-                await copyTree(fs, operation.from, operation.to, {
-                    excludeIgnoreFile: operation.excludeIgnoreFile,
-                    ignoreDotFiles: operation.ignoreDotFiles,
-                    ignoreItems: operation.ignoreItems,
-                });
+                await copyTree(
+                    fs,
+                    operation.from,
+                    operation.to,
+                    {
+                        excludeIgnoreFile: operation.excludeIgnoreFile,
+                        ignoreDotFiles: operation.ignoreDotFiles,
+                        ignoreItems: operation.ignoreItems,
+                    },
+                    outputRoot,
+                );
                 break;
             case 'writeFile':
+                await assertNoAliasRoute(
+                    fs,
+                    outputRoot,
+                    operation.path,
+                    'write',
+                    `writeFile '${operation.path}'`,
+                );
                 await fs.write(operation.path, encodeUtf8(operation.content));
                 break;
             case 'copyFile':
+                await assertNoAliasRoute(
+                    fs,
+                    outputRoot,
+                    operation.to,
+                    'write',
+                    `copyFile to '${operation.to}'`,
+                );
                 await fs.write(operation.to, await fs.read(operation.from));
                 break;
         }
