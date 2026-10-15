@@ -21,6 +21,10 @@ import {
     removeDirRecursive,
     resolveProjectConfig,
 } from '../helper';
+import {
+    assertNoAliasRouteSync,
+    type CliMutationRouteOptions,
+} from '../mutation-route-guard';
 import { info, verbose, warn } from '../logger';
 import {
     resolveTemplateDirForEngine,
@@ -46,8 +50,21 @@ addHelp(
  * Executes the operations produced by planBuild. This is the only I/O layer of
  * the build: everything above it is pure planning. Exported so the sync
  * engine's filesystem-based executor can be kept in parity by tests.
+ *
+ * When `options.outputRoot` declares the configured build output root, every
+ * mutating operation is guarded against alias routes before it touches the
+ * filesystem (F23-WRITE P0, doc 17 §11.4 — the CLI tier of the Core guard):
+ * a symbolic link or junction anywhere on a mutation's route below the root —
+ * including a write's leaf — aborts the plan with an explicit refusal naming
+ * the link; operations that already ran remain on disk (disclosed partial
+ * output, the existing mid-plan abort shape). Without an output root the
+ * executor keeps today's behavior.
  */
-export function executeBuildPlan(operations: FileOperation[]) {
+export function executeBuildPlan(
+    operations: FileOperation[],
+    options?: CliMutationRouteOptions,
+) {
+    const outputRoot = options?.outputRoot;
     for (const operation of operations) {
         switch (operation.type) {
             case 'log':
@@ -57,9 +74,21 @@ export function executeBuildPlan(operations: FileOperation[]) {
                 else info(operation.message);
                 break;
             case 'removeDir':
+                assertNoAliasRouteSync(
+                    outputRoot,
+                    operation.path,
+                    'delete',
+                    `removeDir '${operation.path}'`,
+                );
                 removeDirRecursive(operation.path);
                 break;
             case 'makeDir':
+                assertNoAliasRouteSync(
+                    outputRoot,
+                    operation.path,
+                    'write',
+                    `makeDir '${operation.path}'`,
+                );
                 mkdirSync(operation.path, { recursive: true });
                 break;
             case 'copyTree':
@@ -67,12 +96,25 @@ export function executeBuildPlan(operations: FileOperation[]) {
                     excludeIgnoreFile: operation.excludeIgnoreFile,
                     ignoreDotFiles: operation.ignoreDotFiles,
                     ignoreItems: operation.ignoreItems,
+                    outputRoot,
                 });
                 break;
             case 'writeFile':
+                assertNoAliasRouteSync(
+                    outputRoot,
+                    operation.path,
+                    'write',
+                    `writeFile '${operation.path}'`,
+                );
                 writeFileSync(operation.path, operation.content);
                 break;
             case 'copyFile':
+                assertNoAliasRouteSync(
+                    outputRoot,
+                    operation.to,
+                    'write',
+                    `copyFile to '${operation.to}'`,
+                );
                 cpSync(operation.from, operation.to);
                 break;
         }
@@ -161,7 +203,9 @@ export async function buildCmd() {
                     );
                 }
                 info(`\nBuilding main workshop...`);
-                executeBuildPlan(planBuild({ ...planInput, variant: 'main' }));
+                executeBuildPlan(planBuild({ ...planInput, variant: 'main' }), {
+                    outputRoot: outDir,
+                });
                 variantOutcomes.push(OUTCOME_SUCCESS);
             }
         } catch (e) {
@@ -186,6 +230,7 @@ export async function buildCmd() {
                 info(`\nBuilding dev_branch workshop...`);
                 executeBuildPlan(
                     planBuild({ ...planInput, variant: 'development' }),
+                    { outputRoot: outDir },
                 );
                 variantOutcomes.push(OUTCOME_SUCCESS);
             }
