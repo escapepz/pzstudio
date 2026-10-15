@@ -80,6 +80,11 @@ describe('buildCmd', () => {
         vi.mocked(readWorkshopDescriptionLines).mockReturnValue([] as any);
         vi.mocked(hasFlag).mockReturnValue(false as any);
 
+        // The mutation-route guard inspects route directories; the fs mock
+        // has no on-disk state, so every listing reports an empty (missing)
+        // directory — fresh-creation authorization, the first-build shape.
+        vi.mocked(fs.readdirSync).mockReturnValue([] as any);
+
         // Only workshop/preview.png exists in the project root (normalize
         // separators: join() produces backslashes on Windows)
         vi.mocked(fs.existsSync).mockImplementation((p: any) => {
@@ -115,7 +120,11 @@ describe('buildCmd', () => {
             expect.stringContaining('Test Project'),
             false,
             false,
-            { excludeIgnoreFile: true, ignoreDotFiles: true },
+            {
+                excludeIgnoreFile: true,
+                ignoreDotFiles: true,
+                outputRoot: expect.any(String),
+            },
         );
         expect(fs.writeFileSync).toHaveBeenCalledWith(
             expect.stringMatching(/my_mod\/mod\.info$/),

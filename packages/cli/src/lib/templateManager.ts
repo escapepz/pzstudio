@@ -19,6 +19,10 @@ import {
     info,
     warn,
 } from './logger';
+import {
+    assertNoAliasDestinationEntry,
+    assertNoAliasRouteSync,
+} from './mutation-route-guard';
 import type {
     TemplateCategory,
     GlobalConfig,
@@ -762,6 +766,14 @@ function resolveTemplateDirWithIo(
 /**
  * Scaffolds a project by copying files from a template with filtering.
  * Supports directory junctions for specific folders if useSymlinks is enabled.
+ *
+ * When `options.outputRoot` declares the configured build output root, the
+ * copy is guarded against alias routes (F23-WRITE P0, doc 17 §11.4 rule 2 —
+ * opt-in; every other consumer of this helper keeps today's behavior): the
+ * destination chain is authorized once before the copy, and each destination
+ * entry the copy writes onto or descends through must not be a symbolic
+ * link. Unrelated links in the destination that the copy never touches
+ * cause no refusal.
  */
 export function scaffoldProject(
     templateDir: string,
@@ -772,6 +784,7 @@ export function scaffoldProject(
         excludeIgnoreFile?: boolean;
         ignoreDotFiles?: boolean;
         ignoreItems?: string[];
+        outputRoot?: string;
     } = {},
 ): void {
     if (useSymlinks && asJunction) {
@@ -792,6 +805,16 @@ export function scaffoldProject(
         }
     }
 
+    const copyOperation = `copyTree destination '${destDir}'`;
+    if (options.outputRoot) {
+        assertNoAliasRouteSync(
+            options.outputRoot,
+            destDir,
+            'write',
+            copyOperation,
+        );
+    }
+
     if (!existsSync(destDir)) {
         mkdirSync(destDir, { recursive: true });
     }
@@ -799,6 +822,32 @@ export function scaffoldProject(
     info(`- Scaffolding into ${destDir}...`);
 
     const filter = createIgnoreFilter(templateDir, options);
+    // The guard wraps the ignore filter so it runs at exactly the entries
+    // the copy is about to write onto or descend through — both for the
+    // top-level entries below and inside cpSync's recursive traversal
+    // (fs.cpSync invokes the filter for the root and for every entry before
+    // that entry is inspected or written, and propagates a throwing filter
+    // as a copy error). Inclusion comes first: an excluded source entry is
+    // never written onto or descended into, so its destination name must
+    // not trigger an alias refusal (F1 — Core parity: execute.ts evaluates
+    // the inclusion policy before the destination-entry clash). Each
+    // authorization lists the destination directory fresh: the copy itself
+    // can create destination links (an included source symlink is
+    // re-created as a destination link), so a listing captured earlier in
+    // this same copy may already be stale.
+    const guardedFilter = (srcPath: string, destPath: string): boolean => {
+        if (!filter(srcPath, destPath)) {
+            return false;
+        }
+        if (options.outputRoot) {
+            assertNoAliasDestinationEntry(
+                destPath,
+                options.outputRoot,
+                copyOperation,
+            );
+        }
+        return true;
+    };
 
     readdirSync(templateDir).forEach((file: string) => {
         if (options.ignoreItems?.includes(file)) {
@@ -808,13 +857,13 @@ export function scaffoldProject(
         const srcPath = join(templateDir, file);
         const destPath = join(destDir, file);
 
-        if (!filter(srcPath, destPath)) {
+        if (!guardedFilter(srcPath, destPath)) {
             return;
         }
 
         cpSync(srcPath, destPath, {
             recursive: true,
-            filter: (src: string, _dest: string) => filter(src, _dest),
+            filter: (src: string, _dest: string) => guardedFilter(src, _dest),
         });
     });
 }
