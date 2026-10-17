@@ -12,6 +12,7 @@ vi.mock('../../packages/cli/src/lib/helper', () => ({
     findProjectDir: vi.fn(() => undefined),
     readProjectConfig: vi.fn(),
     resolveProjectConfig: vi.fn(),
+    readRawProjectOutdir: vi.fn(() => undefined),
     formatTitleToId: vi.fn((t) => t?.toLowerCase()),
     updateProjectConfig: vi.fn(),
     updateExperimentalScripts: vi.fn(),

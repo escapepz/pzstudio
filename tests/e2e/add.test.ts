@@ -113,4 +113,171 @@ describe('add command e2e', () => {
         workspace.assertFailure(result);
         workspace.assertStderr(result, 'already exists');
     });
+
+    it('should derive the mod id from the mod name when the id is omitted', async () => {
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: {
+                    title: 'Main Project',
+                    visibility: 'public',
+                    tags: ['Building'],
+                },
+                mods: {
+                    main_mod: { name: 'Main Mod', description: 'Main Desc' },
+                },
+                excludes: [],
+            }),
+        );
+
+        const result = await workspace.run('add', ['Second Mod']);
+
+        workspace.assertSuccess(result);
+        expect(workspace.exists('second_mod')).toBe(true);
+        const config = workspace.readJson('project.json');
+        expect(config.mods.second_mod.name).toBe('Second Mod');
+    });
+
+    it('should derive the mod id from the mod name when an explicit empty id is given', async () => {
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: {
+                    title: 'Main Project',
+                    visibility: 'public',
+                    tags: ['Building'],
+                },
+                mods: {
+                    main_mod: { name: 'Main Mod', description: 'Main Desc' },
+                },
+                excludes: [],
+            }),
+        );
+
+        const result = await workspace.run('add', ['Second Mod', '']);
+
+        workspace.assertSuccess(result);
+        expect(workspace.exists('second_mod')).toBe(true);
+        const config = workspace.readJson('project.json');
+        expect(config.mods.second_mod.name).toBe('Second Mod');
+        expect(config.mods['']).toBeUndefined();
+    });
+
+    it('should fail with a clear error when the name normalizes to an empty id', async () => {
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: { title: 'P', visibility: 'public', tags: [] },
+                mods: {},
+                excludes: [],
+            }),
+        );
+
+        const result = await workspace.run('add', ['???']);
+
+        workspace.assertFailure(result);
+        workspace.assertStderr(result, 'Cannot derive a valid mod id');
+        expect(workspace.exists('???')).toBe(false);
+        const config = workspace.readJson('project.json');
+        expect(config.mods).toEqual({});
+    });
+
+    it('should retain normalization of an explicit valid id', async () => {
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: { title: 'P', visibility: 'public', tags: [] },
+                mods: {},
+                excludes: [],
+            }),
+        );
+
+        const result = await workspace.run('add', [
+            'Second Mod',
+            'My Custom-ID!',
+        ]);
+
+        workspace.assertSuccess(result);
+        expect(workspace.exists('my_customid')).toBe(true);
+        const config = workspace.readJson('project.json');
+        expect(config.mods.my_customid.name).toBe('Second Mod');
+    });
+
+    it('should reject a derived id that collides with an existing mod', async () => {
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: { title: 'P', visibility: 'public', tags: [] },
+                mods: { main_mod: { name: 'Main Mod', description: 'D' } },
+                excludes: [],
+            }),
+        );
+
+        const result = await workspace.run('add', ['Main Mod']);
+
+        workspace.assertFailure(result);
+        workspace.assertStderr(result, 'already exists');
+        expect(workspace.exists('main_mod/poster.png')).toBe(false);
+    });
+
+    it('should not write a runtime-resolved outdir into a project.json that has none', async () => {
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: { title: 'P', visibility: 'public', tags: [] },
+                mods: {},
+                excludes: [],
+            }),
+        );
+        workspace.writeGlobalConfig({ outdir: 'C:/fake/workshop' });
+
+        const result = await workspace.run('add', ['Second Mod', 'second_mod']);
+
+        workspace.assertSuccess(result);
+        const config = workspace.readJson('project.json');
+        expect(config.outdir).toBeUndefined();
+    });
+
+    it('should preserve an explicitly configured outdir exactly', async () => {
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: { title: 'P', visibility: 'public', tags: [] },
+                outdir: './bin',
+                mods: {},
+                excludes: [],
+            }),
+        );
+
+        const result = await workspace.run('add', ['Second Mod', 'second_mod']);
+
+        workspace.assertSuccess(result);
+        const config = workspace.readJson('project.json');
+        expect(config.outdir).toBe('./bin');
+    });
+
+    it('should keep existing-mod defaults enrichment and custom fields', async () => {
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                customRoot: 'keep-me',
+                workshop: { title: 'P', visibility: 'public', tags: [] },
+                mods: {
+                    existing: { name: 'E', description: 'D', customField: 'v' },
+                },
+                excludes: [],
+            }),
+        );
+
+        const result = await workspace.run('add', ['Second Mod', 'second_mod']);
+
+        workspace.assertSuccess(result);
+        const config = workspace.readJson('project.json');
+        expect(config.customRoot).toBe('keep-me');
+        expect(config.mods.existing.poster).toBe('poster.png');
+        expect(config.mods.existing.icon).toBe('icon.png');
+        expect(config.mods.existing.build.modInfo).toBe('auto-if-missing');
+        expect(config.mods.existing.customField).toBe('v');
+        expect(config.mods.second_mod.build?.modInfo).toBeUndefined();
+    });
 });

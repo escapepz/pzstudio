@@ -5,6 +5,7 @@ import {
     generateModInfoText,
     readProjectConfig,
     updateProjectConfig,
+    readRawProjectOutdir,
     getOutDir,
     atomicWriteJson,
     migrateStoreDirIfNeeded,
@@ -1059,6 +1060,70 @@ describe('Helper Library', () => {
                 mods: {},
             });
             expect(result.needsMigration).toBe(true);
+        });
+    });
+
+    describe('readRawProjectOutdir', () => {
+        // D3-a fail-closed contract: the raw reader may only return
+        // undefined when it can PROVE the config carries no string outdir.
+        // Any indeterminate state (missing file, read failure, parse
+        // failure, non-object JSON, non-string outdir) must throw — a
+        // silent undefined would authorize Add/Delete to rewrite
+        // project.json with the configured outdir discarded.
+        function mockRawConfigRead(content: string) {
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(content as any);
+        }
+
+        it('should return undefined when a valid config has no outdir key', () => {
+            mockRawConfigRead('{}');
+            expect(readRawProjectOutdir('C:/proj')).toBeUndefined();
+        });
+
+        it('should return the exact relative outdir value', () => {
+            mockRawConfigRead('{"outdir": "./bin"}');
+            expect(readRawProjectOutdir('C:/proj')).toBe('./bin');
+        });
+
+        it('should return the exact absolute outdir', () => {
+            mockRawConfigRead('{"outdir": "C:/workshop"}');
+            expect(readRawProjectOutdir('C:/proj')).toBe('C:/workshop');
+        });
+
+        it('should fail closed when the config file is missing (snapshot unobtainable)', () => {
+            vi.mocked(fs.existsSync).mockReturnValue(false);
+            expect(() => readRawProjectOutdir('C:/proj')).toThrow();
+        });
+
+        it('should fail closed when the config read fails', () => {
+            mockRawConfigRead('{}');
+            vi.mocked(fs.readFileSync).mockImplementation(() => {
+                throw new Error('EIO: simulated read failure');
+            });
+            expect(() => readRawProjectOutdir('C:/proj')).toThrow(/outdir/i);
+        });
+
+        it('should fail closed when the config JSON is corrupt', () => {
+            mockRawConfigRead('{"outdir": "./bin" // truncated');
+            expect(() => readRawProjectOutdir('C:/proj')).toThrow(/outdir/i);
+        });
+
+        it.each([['[]'], ['5'], ['"str"'], ['null']])(
+            'should fail closed when the config parses to a non-object (%s)',
+            (content) => {
+                mockRawConfigRead(content);
+                expect(() => readRawProjectOutdir('C:/proj')).toThrow(/outdir/);
+            },
+        );
+
+        it('should fail closed when outdir is present but not a string', () => {
+            mockRawConfigRead('{"outdir": 123}');
+            expect(() => readRawProjectOutdir('C:/proj')).toThrow(/outdir/);
+        });
+
+        it('should preserve a null outdir by failing closed (it is configured, not absent)', () => {
+            mockRawConfigRead('{"outdir": null}');
+            expect(() => readRawProjectOutdir('C:/proj')).toThrow(/outdir/);
         });
     });
 });

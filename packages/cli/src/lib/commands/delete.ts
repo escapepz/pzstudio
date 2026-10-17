@@ -7,6 +7,7 @@ import { registerCommand } from '../registry';
 import { info, log, verbose, warn } from '../logger';
 import {
     projectDir,
+    readRawProjectOutdir,
     resolveProjectConfig,
     updateExperimentalScripts,
     updateProjectConfig,
@@ -48,6 +49,14 @@ export function deleteCmd(modId: string) {
     const projectConfigPath = join(projectPath, 'project.json');
     const modPath = join(projectPath, modId);
 
+    // D3-a fail-closed: snapshot the RAW configured outdir BEFORE any
+    // filesystem mutation. If the config became unreadable since
+    // resolveProjectConfig(), this throws here — with the mod directory
+    // and project.json still intact — instead of after rmSync, where a
+    // swallowed failure would authorize a write-back that discards the
+    // configured outdir.
+    const rawOutdir = readRawProjectOutdir(projectPath);
+
     // Dry run (CLI-9): compute the plan, show it, change nothing.
     if (hasFlag('dry-run')) {
         log(`Would: delete mod '${modId}' directory (${modPath})`);
@@ -82,6 +91,12 @@ export function deleteCmd(modId: string) {
     projectConfig.excludes = projectConfig.excludes.filter(
         (e: string) => e !== modId,
     );
+    // D3-a: write back the RAW configured outdir captured above (before
+    // the directory removal), never the runtime-resolved one
+    // resolveProjectConfig merged in — a project without `outdir` stays
+    // without one, an explicit one survives exactly (undefined is dropped
+    // by JSON.stringify).
+    projectConfig.outdir = rawOutdir;
     updateProjectConfig(projectConfigPath, projectConfig);
     info(`Mod '${modId}' deleted from project.json!`);
 

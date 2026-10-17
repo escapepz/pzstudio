@@ -570,6 +570,73 @@ export function atomicWriteJson(
 }
 
 /**
+ * Reads the RAW on-disk project.json `outdir` — the value as configured,
+ * before defaults or runtime resolution. Mutating commands that received a
+ * config from resolveProjectConfig() restore this before write-back so the
+ * runtime-resolved effective outdir is never persisted: a project.json
+ * without `outdir` stays without one, and an explicitly configured value
+ * survives the round-trip exactly.
+ *
+ * Fail-closed: `undefined` is returned ONLY when the config is readable and
+ * demonstrably carries no string outdir. Any indeterminate state — missing
+ * config file, read failure, parse failure, non-object JSON, or an outdir
+ * key that is present but not a string — throws, so callers abort before
+ * mutating anything instead of authorizing a write-back that would discard
+ * a configured outdir they could not read.
+ */
+export function readRawProjectOutdir(projectPath: string): string | undefined {
+    const configPath = join(projectPath, 'project.json');
+    if (!existsSync(configPath)) {
+        throw new Error(
+            `Cannot snapshot the configured 'outdir': '${basename(configPath)}' is missing. ` +
+                'Aborting without changes to avoid discarding the configured outdir.',
+        );
+    }
+
+    let content: string;
+    try {
+        content = readFileSync(configPath, 'utf8');
+    } catch (err) {
+        throw new Error(
+            `Cannot snapshot the configured 'outdir': reading '${basename(configPath)}' failed: ${(err as Error).message}. ` +
+                'Aborting without changes to avoid discarding the configured outdir.',
+            { cause: err },
+        );
+    }
+
+    let parsed: any;
+    try {
+        parsed = JSON.parse(content);
+    } catch (err) {
+        throw new Error(
+            `Cannot snapshot the configured 'outdir': '${basename(configPath)}' is not valid JSON: ${(err as Error).message}. ` +
+                'Aborting without changes to avoid discarding the configured outdir.',
+            { cause: err },
+        );
+    }
+
+    if (
+        parsed === null ||
+        typeof parsed !== 'object' ||
+        Array.isArray(parsed)
+    ) {
+        throw new Error(
+            `Cannot snapshot the configured 'outdir': '${basename(configPath)}' does not contain a project config object. ` +
+                'Aborting without changes to avoid discarding the configured outdir.',
+        );
+    }
+
+    if (parsed.outdir === undefined) return undefined;
+    if (typeof parsed.outdir !== 'string') {
+        throw new Error(
+            `Cannot snapshot the configured 'outdir': '${basename(configPath)}' has a non-string 'outdir'. ` +
+                'Aborting without changes to avoid discarding the configured outdir.',
+        );
+    }
+    return parsed.outdir;
+}
+
+/**
  * Updates the a project config
  * @param {string} path The path to the project config
  * @param {IProjectConfig} updated The updated project config

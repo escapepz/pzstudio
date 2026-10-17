@@ -70,6 +70,49 @@ describe('delete command e2e', () => {
         workspace.assertStderr(result, 'No pzstudio project found.');
     });
 
+    it('should not write a runtime-resolved outdir when deleting a mod', async () => {
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                workshop: { title: 'P', visibility: 'public', tags: [] },
+                mods: {
+                    target_mod: { name: 'T', description: 'D' },
+                },
+                excludes: [],
+            }),
+        );
+        workspace.writeGlobalConfig({ outdir: 'C:/fake/workshop' });
+
+        const result = await workspace.run('delete', ['target_mod', '--yes']);
+
+        workspace.assertSuccess(result);
+        const config = workspace.readJson('project.json');
+        expect(config.outdir).toBeUndefined();
+    });
+
+    it('should preserve an explicit outdir and custom fields when deleting a mod', async () => {
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                customRoot: 'keep-me',
+                workshop: { title: 'P', visibility: 'public', tags: [] },
+                outdir: './bin',
+                mods: {
+                    target_mod: { name: 'T', description: 'D' },
+                },
+                excludes: [],
+            }),
+        );
+
+        const result = await workspace.run('delete', ['target_mod', '--yes']);
+
+        workspace.assertSuccess(result);
+        const config = workspace.readJson('project.json');
+        expect(config.outdir).toBe('./bin');
+        expect(config.customRoot).toBe('keep-me');
+        expect(config.mods.target_mod).toBeUndefined();
+    });
+
     it('should log error if mod directory is missing but still try to delete from config', async () => {
         const modId = 'missing_dir';
         workspace.write(

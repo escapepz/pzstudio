@@ -6,6 +6,7 @@ import { registerCommand } from '../registry';
 import {
     formatTitleToId,
     projectDir,
+    readRawProjectOutdir,
     removeDirRecursive,
     resolveProjectConfig,
     updateExperimentalScripts,
@@ -71,13 +72,34 @@ export function addCmd(modName: string, modId?: string) {
         verbose(`Mod template path: ${templateModPath}`);
     }
 
-    // Prepare mod id
-    modId = formatTitleToId(modId ?? modName);
+    // Prepare mod id (D1): an omitted or confirmed-empty mod id derives
+    // from the mod name; an explicit non-empty id keeps its normalization.
+    modId = formatTitleToId(modId || modName);
+
+    // An id that normalizes to empty must never fall through to the
+    // root-directory collision probe: join(projectPath, '') IS the project
+    // root, so the empty id would read as "the root is already a mod".
+    if (!modId) {
+        throw new CliError(
+            `Cannot derive a valid mod id from '${modName}' (the result would be empty).`,
+            {
+                tryHint:
+                    'Use a name or id containing letters, digits or underscores.',
+            },
+        );
+    }
 
     // Check if mod already exists
     if (projectConfig.mods[modId] || existsSync(join(projectPath, modId))) {
         throw new Error(`A mod with id '${modId}' already exists!`);
     }
+
+    // D3-a fail-closed: snapshot the RAW configured outdir BEFORE any
+    // filesystem mutation. If the config became unreadable since
+    // resolveProjectConfig(), this throws here — before scaffoldProject
+    // runs — instead of mid-try, where a swallowed failure would authorize
+    // a write-back that discards the configured outdir.
+    const rawOutdir = readRawProjectOutdir(projectPath);
 
     // Copy mod template. Junctions are intentionally NOT used here: a mod
     // folder must diverge from its template, and the seeded local
@@ -121,6 +143,12 @@ export function addCmd(modName: string, modId?: string) {
             name: modName,
             description: '',
         };
+        // D3-a: write back the RAW configured outdir captured above (before
+        // scaffolding), never the runtime-resolved one resolveProjectConfig
+        // merged in — a project without `outdir` stays without one, an
+        // explicit one survives exactly (undefined is dropped by
+        // JSON.stringify).
+        projectConfig.outdir = rawOutdir;
         updateProjectConfig(join(projectPath, 'project.json'), projectConfig);
     } catch (e) {
         // Roll back exactly what was created, newest first; a failed
