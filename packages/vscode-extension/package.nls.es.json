@@ -43,7 +43,7 @@
     "command.explorer.toggleFiles.title": "PZStudio: Alternar todos/archivos esenciales en el Explorador",
     "command.explorer.toggleFiles.hidden.title": "PZStudio: Alternar todos/archivos esenciales en el Explorador",
     "command.newHere.title": "PZStudio: Nuevo proyecto aquí",
-    "config.newProject.defaultLocation.description": "Carpeta predeterminada preferida para nuevos proyectos. El selector de New Project abre aquí y, si se cancela, se usa esta carpeta.",
+    "config.newProject.defaultLocation.description": "Carpeta predeterminada preferida para nuevos proyectos. El selector de New Project abre aquí; si se cancela, se aborta la creación del proyecto sin seleccionar una carpeta de reserva.",
     "command.watch.title": "PZStudio: Alternar sincronización de desarrollo",
     "command.doctor.title": "PZStudio: Ejecutar diagnóstico"
 }

@@ -413,6 +413,12 @@ addressed** (root cause removed by v2; residual UX concern noted),
 - Regression tests: explicit cancel with a default present → abort, no
   title prompt; no default configured → previous fallback acceptable or
   also abort (decide in implementation; spec favors abort).
+- **Status annotation (added with the UX-14 docs/l10n patch):** UX-14
+  remediation implemented in R1.2-P source (branch `42.20.0-dev`, patch on
+  top of `e539b72`; no default → abort as well); installed-VSIX interactive
+  acceptance pending R1.3. The "HEAD:" bullet above remains the historical
+  `f83704c` baseline of this matrix, including the issue #43 fallback
+  rationale and its test evidence — not rewritten.
 
 ### UX-15 — Development Sync toggle is global and does not name the running project — **Open (v2 enabled the fix; UX work remains)**
 

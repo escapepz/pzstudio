@@ -65,7 +65,7 @@ You can configure PZ Studio directly through VS Code settings (`settings.json`).
 | `pzstudio.templates.language.url` | Repository URL for the default language template (overrides global config). |
 | `pzstudio.templates.language.ref` | Git ref (branch, tag, or commit) for the language template. |
 | `pzstudio.language` | Display language for the extension UI. `auto` (default) follows the VS Code display language. |
-| `pzstudio.newProject.defaultLocation` | Preferred default folder for new projects (user setting): the New Project picker starts here and cancelling the picker falls back to it. |
+| `pzstudio.newProject.defaultLocation` | Preferred default folder for new projects (user setting): the New Project picker opens at this location; cancelling the picker aborts project creation without selecting a fallback destination. |
 
 **Precedence Order**:
 1. `project.json` (Project-specific, highest precedence)

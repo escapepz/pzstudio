@@ -43,7 +43,7 @@
     "command.explorer.toggleFiles.title": "PZStudio: Alle/wesentliche Dateien im Explorer umschalten",
     "command.explorer.toggleFiles.hidden.title": "PZStudio: Alle/wesentliche Dateien im Explorer umschalten",
     "command.newHere.title": "PZStudio: Neues Projekt hier",
-    "config.newProject.defaultLocation.description": "Bevorzugter Standardordner für neue Projekte. Der New-Project-Auswahldialog beginnt hier; beim Abbrechen wird dieser Ordner verwendet.",
+    "config.newProject.defaultLocation.description": "Bevorzugter Standardordner für neue Projekte. Der New-Project-Auswahldialog beginnt hier; beim Abbrechen wird die Projekterstellung abgebrochen, ohne einen Ersatzordner auszuwählen.",
     "command.watch.title": "PZStudio: Entwicklungssynchronisierung umschalten",
     "command.doctor.title": "PZStudio: Diagnose ausführen"
 }

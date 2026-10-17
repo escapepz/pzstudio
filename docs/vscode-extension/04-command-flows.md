@@ -10,52 +10,72 @@ file ([`05`](05-build-clean-and-tasks.md)); watch and doctor too
 ## The generic runner path
 
 Every runner-driven command ends in the same sequence
-(`util/execute.ts:30-80`):
+(`util/execute.ts:30-106`):
 
 ```mermaid
 flowchart TD
-    C["command handler<br/>(may pre-resolve project/mod,<br/>may confirm)"] --> G{"busy?"}
+    C["command handler<br/>(may pre-resolve project/mod,<br/>may confirm)"] --> G{"busy? (same command id,<br/>execute.ts:38,41-47)"}
     G -- yes --> W["warning: command already running<br/>(raw command id, UX-17)"]
     G -- no --> P{"projectDir option<br/>provided?"}
-    P -- yes --> A["setProjectDir(option)"]
-    P -- no --> RES["resolveProjectDir()"]
+    P -- yes --> A["use it for this invocation"]
+    P -- no --> RP{"requiresProject !== false?"}
+    RP -- no --> GLB["global run: no picker, no warning,<br/>no projectDir key (execute.ts:56,82-91)"]
+    RP -- yes --> RES["resolveProjectDir(command)"]
     RES -- none --> WN["warnNoProject + stop"]
-    RES -- found --> A2["setProjectDir(fsPath)"]
-    A --> F["flags = resolveFlags(cmd) + extraFlags"]
+    RES -- found --> A2["projectDir = fsPath"]
+    A --> F["flags = resolveFlags(cmd, undefined, projectDir)<br/>+ extraFlags (execute.ts:68-71)"]
     A2 --> F
+    GLB --> F
     F --> PR["withProgress(Notification,<br/>non-cancellable)"]
-    PR --> R["runCLI(cmd, args, { flags })"]
-    R -- throws --> SW["swallowed — logger.error<br/>already notified + logged"]
+    PR --> R["studio.run(command, args,<br/>{ flags, projectDir? }) (execute.ts:85-92)"]
+    R -- throws --> SW["swallowed — logger.error<br/>already notified + logged (execute.ts:93-95)"]
     R -- ok --> V{"--verbose in flags?"}
     V -- yes --> SHOW["outputChannel.show(true)"]
     V -- no --> DONE
-    SHOW --> DONE["finally: release guard,<br/>refresh explorer"]
+    SHOW --> DONE["finally: release guard,<br/>onFinished (refresh explorer)<br/>(execute.ts:102-105)"]
 ```
 
 Notes pinned by code/tests:
 
-- The busy-guard is keyed by **command id** (`util/execute.ts:28`), so two
-  *different* commands can overlap (`build` while `modconfig` runs) — only a
-  repeat of the same command is refused (audit UX-08).
-- The progress title is `PZStudio: <command id>` (`execute.ts:61`) — the raw
+- The busy-guard is keyed by **command id** (`util/execute.ts:38,41-47`), so
+  a repeat of the same command is refused instead of queued (audit UX-08).
+  *Different* commands are not refused by the guard — their overlap is
+  serialized by the engine lock inside `studio.run` (runner comment:
+  "Cross-command overlap is serialized by the engine lock inside
+  studio.run").
+- The invocation context is per-run (API v2): a tree-menu `projectDir`
+  option is used directly; otherwise the runner resolves the project and
+  passes `projectDir` **inside the run options** — the pre-v2 module-state
+  `setProjectDir` anchor is gone from the runner path
+  (`execute.ts:55-63,85-91`).
+- A command declaring `requiresProject: false` runs project-less: no
+  picker, no "no project" warning, no `projectDir` key at all — used by
+  `update` since the UX-03 fix (`commands/update.ts:11-13`).
+- Flags resolve through `resolveFlags(command, undefined, projectDir)`,
+  scoped to the operated project's folder resource (UX-05,
+  `util/flags.ts:15-23`).
+- The progress title is `PZStudio: <command id>` (`execute.ts:77`) — the raw
   id, not the localized title (audit UX-17).
-- Errors are **swallowed** in the runner (`execute.ts:67-69`): the CLI
+- Errors are **swallowed** in the runner (`execute.ts:93-95`): the CLI
   `logger.error` path already showed a notification and logged to the
   channel. `CliUsageError`s (usage/flag problems, embedded refusals) are
   reported the same way, exit codes are irrelevant in-process.
 - The OutputChannel auto-shows **only** when `--verbose` is among the flags
-  (`execute.ts:73-75`) — errors do not open the channel (audit UX-16).
+  (`execute.ts:99-101`) — errors do not open the channel (audit UX-16).
 
 ## New Project / New Project Here (`commands/new.ts`)
 
 ```mermaid
 flowchart TD
-    N["pzstudio.new"] --> DEST["folder picker<br/>default: pzstudio.newProject.defaultLocation (global inspect)<br/>→ workspaceState lastUsed → first workspace folder<br/>(new.ts:12-26)"]
-    DEST -- "cancel" --> FB["fall back to default destination<br/>(new.ts:49-50) — cancel ≠ abort (UX-14)"]
-    FB --> TITLE
-    DEST -- picked --> MEM["remember in workspaceState<br/>(new.ts:46-47)"] --> TITLE
-    TITLE["showInputBox: Enter Project Title<br/>(empty → abort, new.ts:87-91)"] --> MODID["showInputBox: Mod ID (optional)"]
-    MODID --> EXEC["execute('new', [title, modId or ''], ['--path', dest],<br/>{ projectDir: dest })<br/>(new.ts:98-105)"]
+    N["pzstudio.new"] --> DEST["folder picker<br/>initial location: pzstudio.newProject.defaultLocation (global inspect)<br/>→ workspaceState lastUsed → first workspace folder<br/>(new.ts:13-27)"]
+    DEST -- "cancel / empty selection" --> ABORT["silent abort: no fallback destination,<br/>no further prompts, no engine call<br/>(A13/UX-14, new.ts:53-56,186-190)"]
+    DEST -- picked --> TITLE
+    TITLE["showInputBox: Enter Project Title<br/>(cancel/empty → abort, new.ts:144-148)"] --> MODID["showInputBox: Mod ID (optional)<br/>(cancel → abort; empty = auto-id, new.ts:150-158)"]
+    MODID --> EXEC["execute('new', [title, modId or ''], ['--path', dest],<br/>{ projectDir: dest })<br/>(new.ts:163-170)"]
+    EXEC --> SCAN{"new child project.json<br/>appeared? (best-effort before/after<br/>child scan, new.ts:161-177)"}
+    SCAN -- "yes (pzstudio.new)" --> MEM["record destination in workspaceState<br/>(LAST_DESTINATION_KEY, new.ts:195-200)"]
+    SCAN -- "no / scan failed (pzstudio.new)" --> NOM["destination not recorded"]
+    SCAN -- "any result (pzstudio.newHere)" --> NOM
     H["pzstudio.newHere"] --> WS{"workspace folders?"}
     WS -- none --> ERR["error: open a workspace folder first"]
     WS -- 1 --> USE["use it"]
@@ -65,22 +85,48 @@ flowchart TD
     QP -- picked --> TITLE
 ```
 
+- Cancelling the folder picker aborts silently (A13/UX-14): no fallback
+  destination is selected, no later prompt opens, the engine is not invoked
+  and nothing is recorded. The resolved default (setting → last used →
+  first workspace folder) is only the picker's **initial location** — it is
+  never treated as user confirmation.
 - Empty mod id is passed as the empty string — the CLI treats it as
-  "auto-generate" (pinned by `tests/unit/extCommandsNew.test.ts`).
+  "auto-generate" (pinned by `tests/unit/extCommandsNew.test.ts`); an
+  explicit cancel (Esc) of the mod-id prompt aborts the whole flow.
 - Anchoring the destination as `projectDir` before any project exists is
   deliberate ("no project exists yet, so the generic resolveProjectDir flow
-  must be skipped", `new.ts:102-104`).
+  must be skipped", `new.ts:166-169`).
 - `pzstudio.newProject.defaultLocation` is read via
-  `inspect().globalValue` (`new.ts:15-17`) — it is a machine-scoped setting.
+  `inspect().globalValue` (`new.ts:16-18`) — it is a machine-scoped setting.
+- The destination is recorded in `workspaceState` **only after the flow
+  completes** and a new `<destination>/<child>/project.json` appeared in
+  the before/after child scan (`new.ts:161-177,195-200`) — a best-effort
+  convenience heuristic (the runner swallows engine failures, so the
+  outcome is verified on disk), not an authoritative engine creation
+  receipt. Accepted limitation: a concurrent, unrelated project creation
+  under the same destination between the two scans may produce a
+  false-positive destination-memory update. Cancelled or failed runs never
+  poison the next picker's initial location.
+- Recording is **exclusive to `pzstudio.new`** (`new.ts:195-200`);
+  `pzstudio.newHere` never updates `LAST_DESTINATION_KEY` — its workspace
+  folder (or picked multi-root folder) is not remembered for the next
+  picker default (`new.ts:202-206`).
 
 ## Add Mod (`commands/add.ts`)
 
 1. Project first (`resolveProjectDir('add a mod to')`) — abort with
    `warnNoProject` when cancelled/none (`add.ts:12-16`).
-2. Mod name input (empty → abort), optional mod id (`add.ts:18-29`).
-3. `execute('add', [modName, modId || ''])` with the picked project anchored.
-4. Flags: `--offline` / `--force-update` when the settings say so
-   (`util/flags.ts:11-18`).
+2. Mod name input — empty or cancelled → abort (`add.ts:18-22`).
+3. Optional Mod ID input — three distinct outcomes after D4
+   (`add.ts:24-34`): Esc (`undefined`) aborts the whole flow without
+   invoking the engine; a confirmed blank input (`''`) is passed through
+   so the engine auto-generates the id from the mod name; an explicit id
+   is passed unchanged.
+4. `execute('add', [modName, modId], undefined, { projectDir })` with the
+   picked project anchored (`add.ts:36-38`) — the id is never collapsed
+   with a truthiness check.
+5. Flags: `--offline` / `--force-update` when the settings say so, resolved
+   by the runner for the picked project (`util/flags.ts:30-37`).
 
 ## Delete Mod (`commands/delete.ts`)
 
@@ -116,10 +162,11 @@ flowchart TD
 ## ModInfo Generate (`commands/modinfo.ts`)
 
 1. Target via tree node or `pickModId`.
-2. **Direct global-anchor use**: `setProjectDir(projectDir.fsPath)` then
-   `resolveModInfoTargets(modId)` + node `existsSync` to count existing
-   branch `mod.info` files (`modinfo.ts:30-33`) — outside the runner, before
-   any `runCLI` call (audit UX-10).
+2. **Direct host-instance use**: `studio.resolveModInfoTargets(modId,
+   projectDir.fsPath)` + node `existsSync` to count existing branch
+   `mod.info` files (`modinfo.ts:34-36`) — outside the runner, before any
+   engine run, with the explicit project passed per-call and no legacy
+   project-anchor write (audit UX-10).
 3. If any exist: **modal** *"mod.info already exists in {0} branch folder(s)
    of '{1}'. Overwrite?"* — confirm → `extraFlags = ['--force']`; dismissal
    aborts (`modinfo.ts:34-48`). No existing mod.info → runs without asking.
@@ -157,10 +204,13 @@ flowchart TD
 
 ## Update (`commands/update.ts`)
 
-`execute('update')` — no project/mod args, no confirmation, generic runner
-path. Because the runner resolves a project first, this command is
-unusable in a project-less workspace even though the CLI operation is
-global (audit UX-03). Flags: only `--verbose` applies (`util/flags.ts:7-9`).
+`execute('update', [], undefined, { requiresProject: false })`
+(`update.ts:11-13`) — no project/mod args, no confirmation, generic runner
+path. Since the UX-03 fix it runs project-less in any workspace — including
+an empty one: no picker, no "no project" warning, and no `projectDir`
+handed to the engine (its discovery falls back to cwd,
+`execute.ts:14-20,82-91`). Flags: only `--verbose` applies
+(`util/flags.ts:26-28`).
 
 ## Cancellation map
 
@@ -170,7 +220,7 @@ global (audit UX-03). Flags: only `--verbose` applies (`util/flags.ts:7-9`).
 | Project quick-pick (build/clean) | first cancel **re-prompts**; second cancel → false "no project" warning | UX-02 |
 | Mod quick-pick / typed input | silent stop | — |
 | Title input (new/add) | silent stop | — |
-| Folder picker (new) | **falls back to default destination** and continues | UX-14 (intentional, test-pinned) |
+| Folder picker (new) | silent abort — **no fallback destination**, no further prompts, no engine call | UX-14 remediation (A13); historical fallback was issue #43, test-pinned at the audit baseline |
 | Confirm modals (build/clean/delete/rename/modinfo) | dismiss = abort | nothing runs |
 | Progress (runner) | not cancellable (`cancellable: false`) | must wait |
 | Development Sync | run toggle again to stop | see [`06`](06-development-sync.md) |
