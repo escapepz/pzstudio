@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { addCmd } from '../../packages/cli/src/lib/commands/add';
 import {
     projectDir,
+    readRawProjectOutdir,
     resolveProjectConfig,
     updateProjectConfig,
     updateExperimentalScripts,
@@ -24,6 +25,7 @@ vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
         typeof import('../../packages/cli/src/lib/helper')
     >()),
     projectDir: vi.fn(),
+    readRawProjectOutdir: vi.fn(),
     resolveProjectConfig: vi.fn(),
     updateProjectConfig: vi.fn(),
     updateExperimentalScripts: vi.fn(),
@@ -36,6 +38,9 @@ describe('addCmd rollback ownership guard', () => {
 
         vi.mocked(hasFlag).mockReturnValue(false);
         vi.mocked(projectDir).mockReturnValue('/project' as any);
+        // Default raw outdir snapshot: absence (the real fail-closed reader
+        // would throw under the unit fs mock's nonexistent config path).
+        vi.mocked(readRawProjectOutdir).mockReturnValue(undefined as any);
         vi.mocked(resolveProjectConfig).mockReturnValue({
             workshop: { title: 'T', visibility: 'public', tags: [] },
             mods: {},
@@ -65,6 +70,26 @@ describe('addCmd rollback ownership guard', () => {
         ]);
         // The post-mutation hooks never ran.
         expect(updateExperimentalScripts).not.toHaveBeenCalled();
+    });
+
+    it('fails closed before scaffolding when the raw outdir snapshot is unreadable (D3-a)', () => {
+        // The raw outdir snapshot must be captured BEFORE any filesystem
+        // mutation: an unreadable snapshot aborts addCmd before the mod
+        // directory is scaffolded and before any rollback bookkeeping is
+        // needed — never mid-try with dirs already created.
+        vi.mocked(readRawProjectOutdir).mockImplementation(() => {
+            throw new Error('snapshot unavailable');
+        });
+
+        expect(() => addCmd('Second Mod', 'second_mod')).toThrow(
+            'snapshot unavailable',
+        );
+
+        expect(scaffoldProject).not.toHaveBeenCalled();
+        expect(updateProjectConfig).not.toHaveBeenCalled();
+        expect(updateExperimentalScripts).not.toHaveBeenCalled();
+        // Nothing was created, so nothing needed rolling back.
+        expect(vi.mocked(removeDirRecursive)).not.toHaveBeenCalled();
     });
 
     it('never rolls back a pre-existing .template-mod it only seeded into', () => {

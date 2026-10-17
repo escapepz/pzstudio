@@ -5,6 +5,7 @@ import { deleteCmd } from '../../packages/cli/src/lib/commands/delete';
 import { setInvocationOptions } from '../../packages/cli/src/lib/args';
 import {
     projectDir,
+    readRawProjectOutdir,
     resolveProjectConfig,
     updateProjectConfig,
     updateExperimentalScripts,
@@ -17,6 +18,7 @@ vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
         typeof import('../../packages/cli/src/lib/helper')
     >()),
     projectDir: vi.fn(),
+    readRawProjectOutdir: vi.fn(),
     resolveProjectConfig: vi.fn(),
     updateProjectConfig: vi.fn(),
     updateExperimentalScripts: vi.fn(),
@@ -38,6 +40,9 @@ describe('deleteCmd', () => {
         // in embedded mode — publish --yes as the confirmation intent.
         setInvocationOptions({ yes: true });
         vi.mocked(projectDir).mockReturnValue('/proj' as any);
+        // Default raw outdir snapshot: absence (unit fs mock makes the
+        // config path nonexistent — the fail-closed reader would throw).
+        vi.mocked(readRawProjectOutdir).mockReturnValue(undefined as any);
         // Fresh copy per call: deleteCmd mutates the config it receives
         vi.mocked(resolveProjectConfig).mockImplementation(
             () => JSON.parse(JSON.stringify(project)) as any,
@@ -85,6 +90,22 @@ describe('deleteCmd', () => {
         );
         expect(fs.rmSync).not.toHaveBeenCalled();
         expect(updateProjectConfig).not.toHaveBeenCalled();
+    });
+
+    it('should fail closed before removing the directory when the raw outdir snapshot is unreadable (D3-a)', () => {
+        // The raw outdir snapshot must be captured BEFORE the mod directory
+        // is removed: an unreadable snapshot aborts the command with the
+        // directory and project.json still intact, instead of deleting
+        // first and discovering the unreadable snapshot afterwards.
+        vi.mocked(readRawProjectOutdir).mockImplementation(() => {
+            throw new Error('snapshot unavailable');
+        });
+
+        expect(() => deleteCmd('old_mod')).toThrow('snapshot unavailable');
+
+        expect(fs.rmSync).not.toHaveBeenCalled();
+        expect(updateProjectConfig).not.toHaveBeenCalled();
+        expect(updateExperimentalScripts).not.toHaveBeenCalled();
     });
 
     it('should still update project.json when the directory is missing', () => {

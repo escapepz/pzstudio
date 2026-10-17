@@ -27,8 +27,13 @@ export function registerAddCommand(
             ),
             placeHolder: 'my_new_mod',
         });
+        // undefined = cancelled (Esc): abort without invoking the engine.
+        // '' = confirmed blank: passed through so the engine derives the id
+        // from the mod name. Distinct semantics — never collapse them with
+        // a truthiness check.
+        if (modId === undefined) return;
 
-        await execute('add', [modName, modId || ''], undefined, {
+        await execute('add', [modName, modId], undefined, {
             projectDir,
         });
     });
