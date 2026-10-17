@@ -399,6 +399,19 @@ treat an explicit dialog cancel as abort when a default destination existed
 
 **Scope:** backlog (needs a UX decision).
 
+**Status annotation (added with the UX-14 docs/l10n patch):** the finding
+above records the historical issue #43 behavior at the documentation-set
+baseline (`f83704c`: cancel → `defaultUri?.fsPath`, destination recorded at
+pick time, pinned by the then-current "cancel fallback" test). UX-14
+remediation implemented in R1.2-P source (branch `42.20.0-dev`, patch on
+top of `e539b72`); installed-VSIX interactive acceptance pending R1.3. The
+picker's resolved default is now only the initial location: cancelling
+aborts silently — no fallback destination, no further prompt, no engine
+call — and the destination is remembered only after an apparently
+successful creation (A13 best-effort heuristic, not a transactional engine
+receipt). This annotation records status; the original finding above is
+retained as the historical baseline and is not rewritten.
+
 ---
 
 ## UX-15 — Development Sync toggle is global and does not name the running project

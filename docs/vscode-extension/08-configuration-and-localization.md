@@ -26,7 +26,7 @@ localization layers.
 | `pzstudio.build.target` | resource | `default` | flag `--production`/`--development`/`--both` | `build` command and (leaking, UX-01) tasks |
 | `pzstudio.confirmBeforeRun` | resource | `true` | extension only | modal gate for build/clean; "Don't Ask Again" writes `false` |
 | `pzstudio.language` | window | `auto` | extension only | l10n override (below) |
-| `pzstudio.newProject.defaultLocation` | machine | `""` | extension only | New Project picker default + cancel fallback |
+| `pzstudio.newProject.defaultLocation` | machine | `""` | extension only | New Project picker initial location only; cancelling the picker aborts (never a fallback destination) |
 
 14 of the 17 reach the CLI: the 8 template keys + `outdir` + `useSymlinks`
 through the settings bridge; `verbose`, `offline`, `forceUpdate` and
