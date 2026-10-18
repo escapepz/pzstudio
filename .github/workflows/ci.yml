@@ -53,7 +53,12 @@ jobs:
             - name: Build CLI
               run: pnpm build
 
+            - name: Test (Windows - sequential files)
+              if: runner.os == 'Windows'
+              run: pnpm exec vitest run --no-file-parallelism
+
             - name: Test
+              if: runner.os != 'Windows'
               run: pnpm test
 
             - name: Build VS Code extension
