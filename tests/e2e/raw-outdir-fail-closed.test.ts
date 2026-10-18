@@ -61,7 +61,13 @@ describe('raw outdir snapshot fail-closed (D3-a)', () => {
         });
         workspace.write('project.json', projectJson);
         workspace.write(`${modId}/mod.info`, `id=${modId}`);
-        mockReadFailure.targetPath = path.join(workspace.dir, 'project.json');
+        // macOS canonical-path fix: chdir'ing into the tmpdir resolves the
+        // /var → /private/var symlink, so the CLI reads project.json via
+        // process.cwd()'s canonical form. Compare against that form.
+        mockReadFailure.targetPath = path.join(
+            fs.realpathSync(workspace.dir),
+            'project.json',
+        );
 
         const result = await workspace.run('delete', [modId, '--yes']);
 
@@ -88,7 +94,13 @@ describe('raw outdir snapshot fail-closed (D3-a)', () => {
             excludes: [],
         });
         workspace.write('project.json', projectJson);
-        mockReadFailure.targetPath = path.join(workspace.dir, 'project.json');
+        // macOS canonical-path fix: chdir'ing into the tmpdir resolves the
+        // /var → /private/var symlink, so the CLI reads project.json via
+        // process.cwd()'s canonical form. Compare against that form.
+        mockReadFailure.targetPath = path.join(
+            fs.realpathSync(workspace.dir),
+            'project.json',
+        );
 
         const result = await workspace.run('add', ['Second Mod', 'second_mod']);
 
