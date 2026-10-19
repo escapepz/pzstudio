@@ -53,5 +53,14 @@
     "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio: không thể bắt đầu đồng bộ phát triển cho '{0}': {1} — xem chi tiết trong đầu ra của PZ Studio.",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: không tìm thấy vấn đề nào trong '{0}'. Mọi thứ có vẻ ổn.",
     "Diagnostics for '{0}'": "Chẩn đoán cho '{0}'",
-    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} lỗi, {1} cảnh báo, {2} thông tin — không có gì bị thay đổi"
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} lỗi, {1} cảnh báo, {2} thông tin — không có gì bị thay đổi",
+    "Update": "Update",
+    "New Project": "Project mới",
+    "Add Mod": "Thêm Mod",
+    "Delete Mod": "Xoá Mod",
+    "Rename Mod ID": "Đổi Mod ID",
+    "New Language": "Ngôn ngữ mới",
+    "Generate ModInfo": "Sinh ModInfo",
+    "Configure Mod": "Sửa cấu hình Mod",
+    "Show Details": "Hiển thị chi tiết"
 }

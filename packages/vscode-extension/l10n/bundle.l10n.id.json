@@ -53,5 +53,14 @@
     "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio: gagal memulai sinkronisasi pengembangan untuk '{0}': {1} — lihat output PZ Studio untuk detailnya.",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: tidak ada masalah yang ditemukan di '{0}'. Semua terlihat baik.",
     "Diagnostics for '{0}'": "Diagnostik untuk '{0}'",
-    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} kesalahan, {1} peringatan, {2} info — tidak ada yang diubah"
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} kesalahan, {1} peringatan, {2} info — tidak ada yang diubah",
+    "Update": "Update",
+    "New Project": "Proyek Baru",
+    "Add Mod": "Tambah Mod",
+    "Delete Mod": "Hapus Mod",
+    "Rename Mod ID": "Ganti Nama ID Mod",
+    "New Language": "Bahasa Baru",
+    "Generate ModInfo": "Hasilkan ModInfo",
+    "Configure Mod": "Edit Konfigurasi Mod",
+    "Show Details": "Tampilkan detail"
 }

@@ -170,7 +170,7 @@ describe('createCommandRunner', () => {
         expect(asMock(vscode.window.withProgress)).toHaveBeenCalledWith(
             {
                 location: vscode.ProgressLocation.Notification,
-                title: 'PZStudio: build',
+                title: 'PZStudio: Build',
                 cancellable: false,
             },
             expect.any(Function),
@@ -216,7 +216,7 @@ describe('createCommandRunner', () => {
         await runner('build'); // second call while busy
 
         expect(asMock(vscode.window.showWarningMessage)).toHaveBeenCalledWith(
-            expect.stringContaining("command 'build' is already running"),
+            expect.stringContaining("command 'Build' is already running"),
         );
         release();
         await first;
@@ -425,7 +425,7 @@ describe('createCommandRunner', () => {
             expect(
                 asMock(vscode.window.showWarningMessage),
             ).toHaveBeenCalledWith(
-                expect.stringContaining("command 'update' is already running"),
+                expect.stringContaining("command 'Update' is already running"),
             );
             release();
             await first;
@@ -563,5 +563,165 @@ describe('createCommandRunner (UX-05 project-scoped flag resolution)', () => {
         expect(asMock(studio.run)).toHaveBeenCalledWith('update', [], {
             flags: [],
         });
+    });
+});
+
+/**
+ * UX-17: progress titles and the "already running" warning show localized,
+ * human-readable operation labels instead of the raw engine command ids.
+ * The stable internal ids (studio.run, pzstudio.* registrations) never
+ * change; unknown ids fall back to the raw id; and the labels localize
+ * through the same l10n bundle as every other runtime string.
+ */
+describe('createCommandRunner (UX-17 localized operation titles)', () => {
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        configurationStore.reset();
+        asMock(vscode.workspace.getConfiguration).mockImplementation(
+            defaultGetConfiguration as never,
+        );
+        asMock(vscode.window.withProgress).mockImplementation(
+            async (_o: unknown, task: () => unknown) => task(),
+        );
+    });
+
+    /** Reuses the l10n test pattern: a language override + a bundle file. */
+    async function withOverrideBundle(entries: Record<string, string>) {
+        asMock(vscode.workspace.getConfiguration).mockImplementation(
+            () =>
+                ({
+                    get: vi.fn((key: string, defaultValue?: unknown) =>
+                        key === 'language' ? 'cs' : defaultValue,
+                    ),
+                    inspect: vi.fn(() => undefined),
+                    update: vi.fn(),
+                }) as never,
+        );
+        asMock(vscode.workspace.fs.readFile).mockResolvedValue(
+            new TextEncoder().encode(JSON.stringify(entries)),
+        );
+        const { initExtensionL10n } =
+            await import('../../packages/vscode-extension/src/util/l10n');
+        await initExtensionL10n({
+            extensionUri: vscode.Uri.file('/ext'),
+        } as never);
+    }
+
+    async function backToAutoLanguage() {
+        asMock(vscode.workspace.getConfiguration).mockImplementation(
+            defaultGetConfiguration as never,
+        );
+        const { initExtensionL10n } =
+            await import('../../packages/vscode-extension/src/util/l10n');
+        await initExtensionL10n({
+            extensionUri: vscode.Uri.file('/ext'),
+        } as never);
+    }
+
+    it('shows a localized human-readable title for a known command', async () => {
+        const output = vscode.window.createOutputChannel('test');
+        const runner = createCommandRunner(
+            studioStub() as never,
+            output as never,
+        );
+
+        await runner('build', [], [], { projectDir: 'C:/p' });
+
+        expect(asMock(vscode.window.withProgress)).toHaveBeenCalledWith(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: 'PZStudio: Build',
+                cancellable: false,
+            },
+            expect.any(Function),
+        );
+    });
+
+    it('falls back to the raw command id for unknown commands', async () => {
+        const output = vscode.window.createOutputChannel('test');
+        const runner = createCommandRunner(
+            studioStub() as never,
+            output as never,
+        );
+
+        await runner('mystery', [], [], { projectDir: 'C:/p' });
+
+        expect(asMock(vscode.window.withProgress)).toHaveBeenCalledWith(
+            expect.objectContaining({ title: 'PZStudio: mystery' }),
+            expect.any(Function),
+        );
+    });
+
+    it('localizes the title through the pzstudio.language override bundle', async () => {
+        try {
+            await withOverrideBundle({
+                Build: 'Sestavit',
+                'PZStudio: {0}': 'PZStudio: {0}',
+            });
+            const output = vscode.window.createOutputChannel('test');
+            const runner = createCommandRunner(
+                studioStub() as never,
+                output as never,
+            );
+
+            await runner('build', [], [], { projectDir: 'C:/p' });
+
+            expect(asMock(vscode.window.withProgress)).toHaveBeenCalledWith(
+                expect.objectContaining({ title: 'PZStudio: Sestavit' }),
+                expect.any(Function),
+            );
+        } finally {
+            // The bundle is module state — clear it so later tests stay on
+            // the vscode.l10n delegate.
+            await backToAutoLanguage();
+        }
+    });
+
+    it("localizes the busy warning label and keeps 'update' as the engine command id", async () => {
+        try {
+            await withOverrideBundle({
+                Update: 'Aktualizovat',
+                "PZStudio: command '{0}' is already running.":
+                    "PZStudio: príkaz '{0}' už beží.",
+                'PZStudio: {0}': 'PZStudio: {0}',
+            });
+            let release!: () => void;
+            const studio = studioStub();
+            const asRunMock = asMock(studio.run);
+            asRunMock.mockImplementation(
+                () =>
+                    new Promise<void>((resolve) => {
+                        release = resolve;
+                    }),
+            );
+            const output = vscode.window.createOutputChannel('test');
+            const runner = createCommandRunner(studio, output as never);
+
+            const first = runner('update', [], [], {
+                requiresProject: false,
+            });
+            await vi.waitFor(() => {
+                expect(asRunMock).toHaveBeenCalledTimes(1);
+            });
+            // Second trigger while the first still runs → warning, and the
+            // label (not the raw id) is named.
+            await runner('update', [], [], { requiresProject: false });
+            expect(
+                asMock(vscode.window.showWarningMessage),
+            ).toHaveBeenCalledWith("PZStudio: príkaz 'Aktualizovat' už beží.");
+
+            release();
+            await first;
+            // The engine run dispatched with the unchanged raw id, exactly
+            // once (the busy second trigger never reached the engine).
+            expect(asRunMock).toHaveBeenCalledTimes(1);
+            expect(asRunMock).toHaveBeenCalledWith(
+                'update',
+                [],
+                expect.objectContaining({ flags: [] }),
+            );
+        } finally {
+            await backToAutoLanguage();
+        }
     });
 });

@@ -53,5 +53,14 @@
     "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio: vývojovou synchronizaci se nepodařilo spustit pro '{0}': {1} — podrobnosti najdete ve výstupu PZ Studio.",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: v '{0}' nebyly nalezeny žádné problémy. Vše vypadá v pořádku.",
     "Diagnostics for '{0}'": "Diagnostika pro '{0}'",
-    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} chyb(y), {1} varování, {2} informací — nic nebylo změněno"
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} chyb(y), {1} varování, {2} informací — nic nebylo změněno",
+    "Update": "Update",
+    "New Project": "Nový projekt",
+    "Add Mod": "Přidat mod",
+    "Delete Mod": "Smazat mod",
+    "Rename Mod ID": "Přejmenovat ID modu",
+    "New Language": "Nový jazyk",
+    "Generate ModInfo": "Vygenerovat ModInfo",
+    "Show Details": "Zobrazit podrobnosti",
+    "Configure Mod": "Upravit konfiguraci modu"
 }

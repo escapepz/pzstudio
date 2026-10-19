@@ -53,5 +53,14 @@
     "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio: a fejlesztési szinkronizálás elindítása sikertelen ehhez: '{0}': {1} — részletek a PZ Studio kimenetében.",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: nem találtunk problémát itt: '{0}'. Minden rendben.",
     "Diagnostics for '{0}'": "Diagnosztika: '{0}'",
-    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} hiba, {1} figyelmeztetés, {2} információ — semmi nem változott"
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} hiba, {1} figyelmeztetés, {2} információ — semmi nem változott",
+    "Update": "Update",
+    "New Project": "Új projekt",
+    "Add Mod": "Mod hozzáadása",
+    "Delete Mod": "Mod törlése",
+    "Rename Mod ID": "Mod azonosító átnevezése",
+    "New Language": "Új nyelv",
+    "Generate ModInfo": "ModInfo előállítása",
+    "Configure Mod": "Mod beállításainak szerkesztése",
+    "Show Details": "Részletek megjelenítése"
 }

@@ -53,5 +53,14 @@
     "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio: Entwicklungssynchronisierung für '{0}' konnte nicht gestartet werden: {1} — Details stehen in der PZ Studio-Ausgabe.",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: keine Probleme in '{0}' gefunden. Alles sieht gut aus.",
     "Diagnostics for '{0}'": "Diagnose für '{0}'",
-    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} Fehler, {1} Warnungen, {2} Infos — nichts wurde geändert"
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} Fehler, {1} Warnungen, {2} Infos — nichts wurde geändert",
+    "Update": "Update",
+    "New Project": "Neues Projekt",
+    "Add Mod": "Mod hinzufügen",
+    "Delete Mod": "Mod löschen",
+    "Rename Mod ID": "Mod-ID umbenennen",
+    "New Language": "Neue Sprache",
+    "Generate ModInfo": "ModInfo generieren",
+    "Show Details": "Details anzeigen",
+    "Configure Mod": "Mod-Konfiguration bearbeiten"
 }

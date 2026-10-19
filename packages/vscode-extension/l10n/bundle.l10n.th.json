@@ -53,5 +53,14 @@
     "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio: ไม่สามารถเริ่มการซิงค์การพัฒนาสำหรับ '{0}' ได้: {1} — ดูรายละเอียดในเอาต์พุตของ PZ Studio",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: ไม่พบปัญหาใน '{0}' ทุกอย่างดูดี",
     "Diagnostics for '{0}'": "การวินิจฉัยสำหรับ '{0}'",
-    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "ข้อผิดพลาด {0}, คำเตือน {1}, ข้อมูล {2} — ไม่มีการเปลี่ยนแปลง"
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "ข้อผิดพลาด {0}, คำเตือน {1}, ข้อมูล {2} — ไม่มีการเปลี่ยนแปลง",
+    "Update": "Update",
+    "New Project": "โปรเจกต์ใหม่",
+    "Add Mod": "เพิ่มมอด",
+    "Delete Mod": "ลบมอด",
+    "Rename Mod ID": "เปลี่ยนชื่อมอด ID",
+    "New Language": "ภาษาใหม่",
+    "Generate ModInfo": "สร้าง ModInfo",
+    "Configure Mod": "แก้ไขการตั้งค่ามอด",
+    "Show Details": "แสดงรายละเอียด"
 }
