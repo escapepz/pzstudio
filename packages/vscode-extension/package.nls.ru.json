@@ -14,6 +14,7 @@
     "config.templates.language.url.description": "URL репозитория для стандартного языкового шаблона",
     "config.templates.language.ref.description": "Ссылка Git (ветка, тег или коммит) для языкового шаблона",
     "config.outdir.description": "Стандартный выходной каталог сборки",
+    "config.gameBuild.description": "Сборка игры, с которой проверка совместимости сравнивает pzBuildCompatibility проекта (напр. 42.20.1). Оставьте пустым, чтобы отключить проверку.",
     "config.useSymlinks.description": "Использовать соединения каталогов (junction) вместо копирования общих папок шаблонов (.libraries, .template-*) при выполнении New Project (--symlinks). Вывод build не затрагивается.",
     "config.verbose.description": "Включить подробный/диагностический вывод для всех команд (--verbose)",
     "config.offline.description": "Пропустить удалённое обновление шаблонов и использовать кэшированные/устаревшие данные (--offline). Относится к New Project и Add Mod.",

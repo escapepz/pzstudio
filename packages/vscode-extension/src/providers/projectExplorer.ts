@@ -319,6 +319,14 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         string,
         Promise<ProjectDiagnosticsSummary | undefined>
     >();
+    /**
+     * Cache generation (UX-11): every full invalidation bumps it. An
+     * in-flight doctor run captured the generation it started under — a
+     * run a newer generation already abandoned must never repopulate the
+     * cache, so previously started findings cannot resurface as
+     * newly validated results after a configuration change.
+     */
+    private diagnosticsGeneration = 0;
     private disposed = false;
 
     constructor(extensionUri: vscode.Uri, diagnostics?: DiagnosticsSource) {
@@ -357,9 +365,25 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
      */
     refresh(options?: { invalidateDiagnostics?: boolean }): void {
         if (options?.invalidateDiagnostics) {
-            this.diagnosticsCache.clear();
+            this.invalidateDiagnostics();
         }
         this._onDidChangeTreeData.fire();
+    }
+
+    /**
+     * Full diagnostics invalidation (UX-11): called when configuration the
+     * doctor consumed changes (pzstudio.gameBuild) — a change the
+     * project.json fingerprint cannot observe. Drops every cached
+     * summary and severs all in-flight runs (nothing may join them as
+     * current results, and their resolutions cannot repopulate the
+     * cache), so the next render recomputes against the fresh
+     * configuration. Bounded: no new state, just the two existing maps
+     * plus a generation counter.
+     */
+    invalidateDiagnostics(): void {
+        this.diagnosticsGeneration++;
+        this.diagnosticsCache.clear();
+        this.inFlightDiagnostics.clear();
     }
 
     /** Drops the diagnostics cache with the provider (extension teardown). */
@@ -440,6 +464,7 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                 return summary;
             });
         }
+        const runGeneration = this.diagnosticsGeneration;
         const promise = this.diagnostics!(dir);
         // Keep a handled tail on the stored promise so a rejection can
         // never surface as an unhandled rejection between renders.
@@ -450,7 +475,14 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                 if (this.inFlightDiagnostics.get(key) === promise) {
                     this.inFlightDiagnostics.delete(key);
                 }
-                if (!this.disposed) {
+                // Only a still-current run may populate the cache: a run
+                // invalidated mid-flight (UX-11 configuration change,
+                // dispose) must not repopulate a cache that was already
+                // abandoned — its result stays decoration only.
+                if (
+                    !this.disposed &&
+                    runGeneration === this.diagnosticsGeneration
+                ) {
                     this.diagnosticsCache.set(key, { summary, fingerprint });
                 }
                 return summary;

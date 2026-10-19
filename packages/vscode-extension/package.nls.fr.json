@@ -14,6 +14,7 @@
     "config.templates.language.url.description": "URL du dépôt pour le template de langue par défaut",
     "config.templates.language.ref.description": "Référence Git (branche, tag ou commit) pour le template de langue",
     "config.outdir.description": "Répertoire de sortie de build par défaut",
+    "config.gameBuild.description": "Build du jeu auquel la vérification de compatibilité compare le pzBuildCompatibility du projet (ex. 42.20.1). Laissez vide pour désactiver la vérification.",
     "config.useSymlinks.description": "Utiliser des junctions de répertoires au lieu de copier les dossiers de modèles partagés (.libraries, .template-*) lors de l'exécution de New Project (--symlinks). La sortie de build n'est pas affectée.",
     "config.verbose.description": "Activer la sortie détaillée/diagnostique pour toutes les commandes (--verbose)",
     "config.offline.description": "Ignorer l'actualisation des templates distants et utiliser les données en cache/legacy (--offline). S'applique à New Project et Add Mod.",

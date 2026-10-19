@@ -14,6 +14,7 @@
     "config.templates.language.url.description": "Tároló URL az alapértelmezett nyelvi sablonhoz",
     "config.templates.language.ref.description": "Git-hivatkozás (branch, tag vagy commit) a nyelvi sablonhoz",
     "config.outdir.description": "Alapértelmezett build-kimeneti könyvtár",
+    "config.gameBuild.description": "Az a játékbuild, amellyel a kompatibilitás-ellenőrzés összeveti a projekt pzBuildCompatibility értékét (pl. 42.20.1). Az ellenőrzés kikapcsoltatásához hagyja üresen.",
     "config.useSymlinks.description": "Könyvtár-junctionok használata a megosztott sablonmappák (.libraries, .template-*) másolása helyett a New Project futtatásakor (--symlinks). A build kimenetét nem érinti.",
     "config.verbose.description": "Részletes/diagnosztikai kimenet engedélyezése minden parancshoz (--verbose)",
     "config.offline.description": "Távoli sablonfrissítés kihagyása, gyorsítótárazott/legacy adatok használata (--offline). A New Project és az Add Mod parancsokra vonatkozik.",

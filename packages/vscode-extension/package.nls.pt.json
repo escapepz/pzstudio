@@ -14,6 +14,7 @@
     "config.templates.language.url.description": "URL do repositório para o modelo de idioma predefinido",
     "config.templates.language.ref.description": "Referência Git (branch, tag ou commit) para o modelo de idioma",
     "config.outdir.description": "Diretório de saída de compilação predefinido",
+    "config.gameBuild.description": "Build do jogo contra o qual a verificação de compatibilidade compara pzBuildCompatibility do projeto (ex.: 42.20.1). Deixe vazio para desativar a verificação.",
     "config.useSymlinks.description": "Usar junctions de diretórios em vez de copiar as pastas de modelos partilhadas (.libraries, .template-*) ao executar New Project (--symlinks). O output do build não é afetado.",
     "config.verbose.description": "Ativar saída detalhada/diagnóstica para todos os comandos (--verbose)",
     "config.offline.description": "Ignorar a atualização remota de modelos e usar dados em cache/legacy (--offline). Aplica-se a New Project e Add Mod.",

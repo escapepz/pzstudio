@@ -14,6 +14,7 @@
     "config.templates.language.url.description": "URL repository cho template ngôn ngữ mặc định",
     "config.templates.language.ref.description": "Git ref (branch, tag hoặc commit) cho template ngôn ngữ",
     "config.outdir.description": "Thư mục output build mặc định",
+    "config.gameBuild.description": "Bản build của trò chơi mà kiểm tra tương thích so sánh với pzBuildCompatibility của dụ án (vd. 42.20.1). Để trống để tắt kiểm tra.",
     "config.useSymlinks.description": "Dùng directory junction thay vì copy các folder template dùng chung (.libraries, .template-*) khi chạy New Project (--symlinks). Không ảnh hưởng output build.",
     "config.verbose.description": "Bật output chi tiết/chẩn đoán cho mọi lệnh (--verbose)",
     "config.offline.description": "Bỏ refresh template từ remote, dùng dữ liệu cache/legacy (--offline). Áp dụng cho New Project và Add Mod.",

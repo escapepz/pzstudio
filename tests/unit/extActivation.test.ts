@@ -271,3 +271,173 @@ describe('extension activation (host instance wiring)', () => {
         expect(hits).toHaveLength(0);
     });
 });
+
+/* ------------------------------------------------------------------ */
+/* UX-11: gameBuild forwarding, doctor failure routing and cache       */
+/* invalidation wiring                                                  */
+/* ------------------------------------------------------------------ */
+
+describe('UX-11 wiring (activation graph)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // The default dismissal path: notifications resolve with no choice.
+        asMock(vscode.window.showErrorMessage).mockResolvedValue(undefined);
+    });
+
+    /** The provider instance captured from the createTreeView wiring. */
+    function activatedProvider() {
+        const calls = asMock(vscode.window.createTreeView).mock.calls as Array<
+            [string, { treeDataProvider: unknown }]
+        >;
+        const entry = calls.find(([id]) => id === 'pzstudio.projectExplorer');
+        expect(entry).toBeDefined();
+        return entry![1].treeDataProvider as {
+            getChildren: (element?: unknown) => Promise<
+                Array<{
+                    kind: string;
+                    description?: string;
+                    tooltip?: string;
+                }>
+            >;
+        };
+    }
+
+    /** The single configuration-change listener extension.ts registers. */
+    function configListener() {
+        const calls = asMock(vscode.workspace.onDidChangeConfiguration).mock
+            .calls as Array<[unknown]>;
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+        return calls[0][0] as (event: {
+            affectsConfiguration: (section: string) => boolean;
+        }) => Promise<void>;
+    }
+
+    function activatedDoctorHandler() {
+        const calls = asMock(vscode.commands.registerCommand).mock
+            .calls as Array<[string, (node?: unknown) => Promise<void>]>;
+        const entry = calls.find(([id]) => id === 'pzstudio.doctor');
+        expect(entry).toBeDefined();
+        return entry![1];
+    }
+
+    function activatedStudio() {
+        return asMock(createPzStudio).mock.results[0].value as {
+            runProjectDoctor: import('vitest').Mock;
+        };
+    }
+
+    it('forwards the default empty gameBuild as the unchanged single-argument call', async () => {
+        withSingleProject();
+        const context = activationContext();
+        await activate(context as never);
+
+        await activatedDoctorHandler()({ projectDir: new UriCtor(['proj']) });
+
+        const calls = asMock(activatedStudio().runProjectDoctor).mock.calls;
+        expect(calls).toHaveLength(1);
+        expect(calls[0][0]).toBe(path.sep + path.join('proj'));
+        // Single argument while pzstudio.gameBuild stays at its default ''.
+        expect(calls[0]).toHaveLength(1);
+    });
+
+    it('a pzstudio.gameBuild configuration change invalidates diagnostics and repaints (UX-11)', async () => {
+        withSingleProject();
+        const context = activationContext();
+        await activate(context as never);
+        const provider = activatedProvider();
+        const onConfig = configListener();
+        const doctorCalls = () =>
+            asMock(activatedStudio().runProjectDoctor).mock.calls.length;
+
+        // First render: exactly one doctor run; the fingerprint alone keeps
+        // a presentation refresh cheap.
+        await provider.getChildren();
+        expect(doctorCalls()).toBe(1);
+        await provider.getChildren();
+        expect(doctorCalls()).toBe(1);
+
+        // pzstudio.gameBuild changed — invisible to the project.json
+        // fingerprint — yet the badge must recompute.
+        await onConfig({
+            affectsConfiguration: (section) => section === 'pzstudio.gameBuild',
+        });
+        await provider.getChildren();
+        expect(doctorCalls()).toBe(2);
+
+        // An unrelated pzstudio.* change does not invalidate diagnostics.
+        await onConfig({
+            affectsConfiguration: (section) => section === 'pzstudio.language',
+        });
+        await provider.getChildren();
+        expect(doctorCalls()).toBe(2);
+    });
+
+    it('a user-invoked doctor failure surfaces exactly one UX-16 notification with full channel detail', async () => {
+        withSingleProject();
+        const context = activationContext();
+        await activate(context as never);
+        asMock(activatedStudio().runProjectDoctor).mockRejectedValue(
+            new Error('engine boom'),
+        );
+
+        await activatedDoctorHandler()({ projectDir: new UriCtor(['proj']) });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(asMock(vscode.window.showErrorMessage)).toHaveBeenCalledTimes(1);
+        expect(asMock(vscode.window.showErrorMessage)).toHaveBeenCalledWith(
+            'PZStudio Error: engine boom',
+            'Show Details',
+        );
+        // One channel: the PZ Studio one, holding the full error detail.
+        expect(asMock(vscode.window.createOutputChannel)).toHaveBeenCalledTimes(
+            1,
+        );
+        const channel = asMock(vscode.window.createOutputChannel).mock
+            .results[0].value as {
+            appendLine: import('vitest').Mock;
+            show: import('vitest').Mock;
+        };
+        const lines = channel.appendLine.mock.calls.map((c) => String(c[0]));
+        expect(lines.some((l) => /\[ERROR\] engine boom\n/.test(l))).toBe(true);
+        // No auto-open on the default dismissal path.
+        expect(channel.show).not.toHaveBeenCalled();
+    });
+
+    it('automatic explorer diagnostics failures stay decoration-only (no popups, no loops, no rejections)', async () => {
+        withSingleProject();
+        const context = activationContext();
+        await activate(context as never);
+        asMock(activatedStudio().runProjectDoctor).mockRejectedValue(
+            new Error('engine boom'),
+        );
+        const provider = activatedProvider();
+
+        // Neither render may throw or surface a notification.
+        const first = await provider.getChildren();
+        const second = await provider.getChildren();
+
+        expect(asMock(vscode.window.showErrorMessage)).not.toHaveBeenCalled();
+        expect(first.every((node) => !node.description?.includes('✗'))).toBe(
+            true,
+        );
+        expect(second.every((node) => !node.description?.includes('✗'))).toBe(
+            true,
+        );
+    });
+
+    it('command IDs and instances stay untouched by the UX-11 additions', async () => {
+        withSingleProject();
+        const context = activationContext();
+        await activate(context as never);
+
+        const ids = asMock(vscode.commands.registerCommand).mock.calls.map(
+            ([id]) => id,
+        );
+        expect(new Set(ids).size).toBe(ids.length);
+        expect(ids).toContain('pzstudio.doctor');
+        // Exactly one doctor registration (the command + the shared
+        // diagnostics runner wiring), the doctor keeps the pre-existing id.
+        expect(ids.filter((id) => id === 'pzstudio.doctor')).toHaveLength(1);
+    });
+});

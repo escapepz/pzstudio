@@ -14,6 +14,7 @@
     "config.templates.language.url.description": "URL repositori untuk templat bahasa bawaan",
     "config.templates.language.ref.description": "Referensi Git (branch, tag, atau commit) untuk templat bahasa",
     "config.outdir.description": "Direktori keluaran build bawaan",
+    "config.gameBuild.description": "Build game yang diperbandingkan pemeriksa kompatibilitas dengan pzBuildCompatibility proyek (mis. 42.20.1). Biarkan kosong untuk menonaktifkan pemeriksaan.",
     "config.useSymlinks.description": "Gunakan directory junction alih-alih menyalin folder template bersama (.libraries, .template-*) saat menjalankan New Project (--symlinks). Output build tidak terpengaruh.",
     "config.verbose.description": "Aktifkan keluaran terperinci/diagnostik untuk semua perintah (--verbose)",
     "config.offline.description": "Lewati penyegaran templat jarak jauh dan gunakan data cache/legacy (--offline). Berlaku untuk New Project dan Add Mod.",
