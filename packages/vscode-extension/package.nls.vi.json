@@ -45,5 +45,6 @@
     "command.newHere.title": "PZStudio: Project mới tại đây",
     "config.newProject.defaultLocation.description": "Folder mặc định ưu tiên cho project mới. Picker của New Project sẽ mở tại đây; nếu bỏ qua picker thì việc tạo project sẽ bị huỷ bỏ mà không chọn folder thay thế.",
     "command.watch.title": "PZStudio: Bật/tắt đồng bộ phát triển",
-    "command.doctor.title": "PZStudio: Chạy chẩn đoán"
+    "command.doctor.title": "PZStudio: Chạy chẩn đoán",
+    "command.openProjectJson.title": "PZStudio: Mở project.json"
 }

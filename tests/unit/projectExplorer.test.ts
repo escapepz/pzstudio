@@ -27,6 +27,20 @@ const vscodeMock = vi.hoisted(() => {
         },
         FileType: { File: 1, Directory: 2, SymbolicLink: 64 },
         TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+        TreeItem: class {
+            label: unknown;
+            collapsible: unknown;
+            constructor(label: unknown, collapsible: unknown) {
+                this.label = label;
+                this.collapsible = collapsible;
+            }
+        },
+        ThemeIcon: class {
+            id: string;
+            constructor(id: string) {
+                this.id = id;
+            }
+        },
         EventEmitter: class {
             event = vi.fn();
             fire = vi.fn();
@@ -497,6 +511,181 @@ describe('constants and manifest', () => {
                 `${id} must stay palette-visible`,
             ).toBe(false);
         }
+    });
+
+    // UX-13: a mod declared in project.json but absent on disk renders as
+    // 'mod-missing'. The row must be clearly identifiable AND must not offer
+    // normal-mod actions (Configure/Generate/Rename/Delete) — its approved
+    // lean v1 remediation is Open project.json + Refresh, exactly the two
+    // commands the manifest exposes for it. These tests simulate the
+    // manifest's view/item/context when-clauses per contextValue, matching
+    // which menu entries VS Code would actually show.
+    describe('missing-mod context menu (UX-13)', () => {
+        const MENUS = PKG.contributes.menus['view/item/context'] as Array<{
+            command: string;
+            when?: string;
+            group?: string;
+        }>;
+
+        /**
+         * Evaluator for the when-clause forms used in view/item/context:
+         * parens-joined OR groups, `&&`, and the atoms
+         * `view == pzstudio.projectExplorer`, `viewItem == <value>` and
+         * `viewItem =~ /regex/`. Unknown atoms (context keys the tree never
+         * publishes here) count as false so a future entry enabled by an
+         * unmatched key fails loudly in tests, not silently.
+         */
+        function menuVisible(when: string, viewItem: string): boolean {
+            // Pull out `=~ /regex/` atoms first: their body may contain
+            // `|`, `&&` and other operator characters.
+            const regexes: RegExp[] = [];
+            const prepared = when.replace(
+                /viewItem\s*=~\s*\/([^/]*)\/[a-z]*/g,
+                (_matter: string, body: string) =>
+                    `@r${regexes.push(new RegExp(body)) - 1}@`,
+            );
+            const tokens = prepared
+                .replace(/\(/g, ' ( ')
+                .replace(/\)/g, ' ) ')
+                .split(/\s+/);
+
+            let pos = 0;
+            const peek = (): string | undefined => tokens[pos];
+            const take = (): string | undefined => tokens[pos++];
+            const parseAtom = (): boolean => {
+                const tok = take();
+                if (tok === undefined) {
+                    return false;
+                }
+                if (tok === '(') {
+                    const value = parseOr();
+                    take(); // ')'
+                    return value;
+                }
+                if (tok.startsWith('@r')) {
+                    return regexes[Number(tok.slice(2, tok.length - 1))].test(
+                        viewItem,
+                    );
+                }
+                if (tok === 'viewItem') {
+                    const op = take();
+                    const value = take() ?? '';
+                    if (op !== '==') {
+                        // Unhandled comparison (never used in these menus).
+                        return false;
+                    }
+                    return viewItem === value;
+                }
+                if (tok === 'view') {
+                    take(); // '=='
+                    take(); // 'pzstudio.projectExplorer'
+                    return true;
+                }
+                // Anything else (context keys, negations) is not part of the
+                // missing-mod surface — treat as not matching.
+                return false;
+            };
+            const parseAndGroup = (): boolean => {
+                let value = parseAtom();
+                while (peek() === '&&') {
+                    pos++;
+                    value = parseAtom() && value;
+                }
+                return value;
+            };
+            const parseOr = (): boolean => {
+                let value = parseAndGroup();
+                while (peek() === '||') {
+                    pos++;
+                    const other = parseAndGroup();
+                    value = other || value;
+                }
+                return value;
+            };
+            return parseOr();
+        }
+
+        const commandsFor = (viewItem: string) =>
+            MENUS.filter((entry) =>
+                menuVisible(entry.when ?? '', viewItem),
+            ).map((entry) => entry.command);
+
+        it('offers only the lean remediation actions on missing-mod rows', () => {
+            expect(commandsFor('mod-missing').sort()).toEqual([
+                'pzstudio.explorer.refresh',
+                'pzstudio.openProjectJson',
+            ]);
+        });
+
+        it('offers no inline buttons on missing-mod rows', () => {
+            const inline = MENUS.filter(
+                (entry) =>
+                    (entry.group ?? '').startsWith('inline') &&
+                    menuVisible(entry.when ?? '', 'mod-missing'),
+            );
+            expect(inline).toEqual([]);
+        });
+
+        it('does not leak a destructive or remove action onto missing rows', () => {
+            // The approved v1 remediation has no "Remove from Project": a
+            // delete on a missing folder is today's destructive `mod delete`
+            // flow, not an entry removal (Q4 is still open).
+            for (const entry of MENUS) {
+                if (menuVisible(entry.when ?? '', 'mod-missing')) {
+                    expect(entry.command).toMatch(
+                        /^(pzstudio\.openProjectJson|pzstudio\.explorer\.refresh)$/,
+                    );
+                }
+            }
+        });
+
+        it('keeps the normal-mod actions on concrete-state rows', () => {
+            // State toggles stay per-state (the manifest's existing pairs);
+            // all four rows' edits/actions apply to every concrete state.
+            const expected: Record<string, string[]> = {
+                'mod-included': [
+                    'pzstudio.modIncluded',
+                    'pzstudio.modDevOnly.dim',
+                ],
+                'mod-devonly': ['pzstudio.modIncluded', 'pzstudio.modDevOnly'],
+                'mod-excluded': [
+                    'pzstudio.modExcluded',
+                    'pzstudio.modDevOnly.dim',
+                ],
+            };
+            for (const [viewItem, toggles] of Object.entries(expected)) {
+                const visible = commandsFor(viewItem);
+                for (const id of [
+                    ...toggles,
+                    'pzstudio.modinfoGenerate',
+                    'pzstudio.rename',
+                    'pzstudio.delete',
+                    'pzstudio.modConfigure',
+                ]) {
+                    expect(visible, `${viewItem} must keep ${id}`).toContain(
+                        id,
+                    );
+                }
+            }
+        });
+
+        it('renders missing-mod rows identifiable and free of state buttons', () => {
+            const provider = new ProjectExplorerProvider(asUri('ext'));
+            const item = provider.getTreeItem({
+                kind: 'missing-mod',
+                uri: asUri('proj/ghost'),
+                projectDir: asUri('proj'),
+                label: 'ghost',
+                collapsible: 0,
+                modId: 'ghost',
+                description: 'missing on disk',
+            } as never);
+            expect(item.contextValue).toBe('mod-missing');
+            expect(item.description).toBe('missing on disk');
+            expect((item.iconPath as unknown as { id: string }).id).toBe(
+                'warning',
+            );
+        });
     });
 });
 

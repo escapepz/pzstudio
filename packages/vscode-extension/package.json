@@ -105,23 +105,33 @@
                     "group": "inline@6"
                 },
                 {
-                    "command": "pzstudio.modConfigure",
-                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod/",
+                    "command": "pzstudio.openProjectJson",
+                    "when": "view == pzstudio.projectExplorer && viewItem == mod-missing",
                     "group": "0_mod@1"
                 },
                 {
+                    "command": "pzstudio.explorer.refresh",
+                    "when": "view == pzstudio.projectExplorer && viewItem == mod-missing",
+                    "group": "1_mod"
+                },
+                {
+                    "command": "pzstudio.modConfigure",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod-(included|devonly|excluded)$/",
+                    "group": "0_mod@2"
+                },
+                {
                     "command": "pzstudio.modinfoGenerate",
-                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod/",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod-(included|devonly|excluded)$/",
                     "group": "1_mod@1"
                 },
                 {
                     "command": "pzstudio.rename",
-                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod/",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod-(included|devonly|excluded)$/",
                     "group": "2_mod@1"
                 },
                 {
                     "command": "pzstudio.delete",
-                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod/",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod-(included|devonly|excluded)$/",
                     "group": "3_mod"
                 }
             ],
@@ -148,6 +158,10 @@
                 },
                 {
                     "command": "pzstudio.modConfigure",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.openProjectJson",
                     "when": "false"
                 },
                 {
@@ -380,6 +394,10 @@
                 "command": "pzstudio.modConfigure",
                 "title": "%command.modConfigure.title%",
                 "icon": "$(settings-gear)"
+            },
+            {
+                "command": "pzstudio.openProjectJson",
+                "title": "%command.openProjectJson.title%"
             },
             {
                 "command": "pzstudio.delete",

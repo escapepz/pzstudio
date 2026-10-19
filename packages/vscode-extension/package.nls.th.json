@@ -45,5 +45,6 @@
     "command.newHere.title": "PZStudio: สร้างโปรเจกต์ใหม่ที่นี่",
     "config.newProject.defaultLocation.description": "โฟลเดอร์เริ่มต้นที่ต้องการสำหรับโปรเจกต์ใหม่ ตัวเลือกของ New Project จะเปิดที่นี่ หากยกเลิกจะหยุดการสร้างโปรเจกต์โดยไม่เลือกโฟลเดอร์สำรอง",
     "command.watch.title": "PZStudio: สลับการซิงค์การพัฒนา",
-    "command.doctor.title": "PZStudio: รันการวินิจฉัย"
+    "command.doctor.title": "PZStudio: รันการวินิจฉัย",
+    "command.openProjectJson.title": "PZStudio: เปิด project.json"
 }

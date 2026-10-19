@@ -45,5 +45,6 @@
     "command.newHere.title": "PZStudio: Proyek Baru di Sini",
     "config.newProject.defaultLocation.description": "Folder default yang diutamakan untuk proyek baru. Pemilih New Project terbuka di sini; jika dibatalkan, pembuatan proyek dibatalkan tanpa memilih folder pengganti.",
     "command.watch.title": "PZStudio: Alihkan Sinkronisasi Pengembangan",
-    "command.doctor.title": "PZStudio: Jalankan Diagnostik"
+    "command.doctor.title": "PZStudio: Jalankan Diagnostik",
+    "command.openProjectJson.title": "PZStudio: Buka project.json"
 }

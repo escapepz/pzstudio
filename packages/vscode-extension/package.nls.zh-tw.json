@@ -45,5 +45,6 @@
     "command.newHere.title": "PZStudio: 於此處建立新專案",
     "config.newProject.defaultLocation.description": "新專案的首選預設資料夾。New Project 的選擇器從此處開啟；取消該選擇器會中止專案建立，不會選擇任何後備資料夾。",
     "command.watch.title": "PZStudio: 切換開發同步",
-    "command.doctor.title": "PZStudio: 執行診斷"
+    "command.doctor.title": "PZStudio: 執行診斷",
+    "command.openProjectJson.title": "PZStudio: 開啟 project.json"
 }

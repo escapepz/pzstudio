@@ -45,5 +45,6 @@
     "command.newHere.title": "PZStudio: Nuovo progetto qui",
     "config.newProject.defaultLocation.description": "Cartella predefinita preferita per i nuovi progetti. Il selettore di New Project si apre qui; se annullato, la creazione del progetto viene interrotta senza selezionare una cartella di riserva.",
     "command.watch.title": "PZStudio: Attiva/disattiva sincronizzazione sviluppo",
-    "command.doctor.title": "PZStudio: Esegui diagnostica"
+    "command.doctor.title": "PZStudio: Esegui diagnostica",
+    "command.openProjectJson.title": "PZStudio: Apri project.json"
 }

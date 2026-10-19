@@ -45,5 +45,6 @@
     "command.newHere.title": "PZStudio: ここに新規プロジェクト",
     "config.newProject.defaultLocation.description": "新しいプロジェクトの優先既定フォルダー。New Project のピッカーはここから開き、キャンセルした場合は代替フォルダーを選択せずにプロジェクト作成を中止します。",
     "command.watch.title": "PZStudio: 開発同期の切り替え",
-    "command.doctor.title": "PZStudio: 診断を実行"
+    "command.doctor.title": "PZStudio: 診断を実行",
+    "command.openProjectJson.title": "PZStudio: project.json を開く"
 }
