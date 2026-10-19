@@ -14,6 +14,7 @@
     "config.templates.language.url.description": "Varsayılan dil şablonu için depo URL'si",
     "config.templates.language.ref.description": "Dil şablonu için Git referansı (dal, etiket veya işleme)",
     "config.outdir.description": "Varsayılan derleme çıktı dizini",
+    "config.gameBuild.description": "Uyumluluk denetiminin projenin pzBuildCompatibility değeriyle karşılaştırdığı oyun sürümü (örn. 42.20.1). Denetimi devre dışı bırakmak için boş bırakın.",
     "config.useSymlinks.description": "New Project çalıştırılırken paylaşılan şablon klasörlerini (.libraries, .template-*) kopyalamak yerine dizin junction'ları kullan (--symlinks). Derleme çıktısını etkilemez.",
     "config.verbose.description": "Tüm komutlar için ayrıntılı/tanısal çıktıyı etkinleştir (--verbose)",
     "config.offline.description": "Uzak şablon yenilemeyi atla ve önbelleğe alınmış/eski verileri kullan (--offline). New Project ve Add Mod için geçerlidir.",

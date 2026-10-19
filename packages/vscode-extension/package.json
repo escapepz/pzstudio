@@ -299,6 +299,12 @@
                     "scope": "resource",
                     "default": "default"
                 },
+                "pzstudio.gameBuild": {
+                    "type": "string",
+                    "default": "",
+                    "scope": "resource",
+                    "description": "%config.gameBuild.description%"
+                },
                 "pzstudio.confirmBeforeRun": {
                     "type": "boolean",
                     "description": "%config.confirmBeforeRun.description%",

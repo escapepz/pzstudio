@@ -14,6 +14,7 @@
     "config.templates.language.url.description": "Repository-URL für die Standard-Sprachvorlage",
     "config.templates.language.ref.description": "Git-Referenz (Branch, Tag oder Commit) für die Sprachvorlage",
     "config.outdir.description": "Standard-Ausgabeverzeichnis für Builds",
+    "config.gameBuild.description": "Game-Build, gegen den der Kompatibilitätscheck die pzBuildCompatibility des Projekts prüft (z. B. 42.20.1). Leer lassen, um die Prüfung zu deaktivieren.",
     "config.useSymlinks.description": "Verzeichnisjunctions statt Kopien der gemeinsamen Vorlagenordner (.libraries, .template-*) beim Ausführen von New Project verwenden (--symlinks). Die Build-Ausgabe ist nicht betroffen.",
     "config.verbose.description": "Ausführliche/Diagnose-Ausgabe für alle Befehle aktivieren (--verbose)",
     "config.offline.description": "Remote-Template-Aktualisierung überspringen und zwischengespeicherte/Legacy-Daten verwenden (--offline). Gilt für New Project und Add Mod.",

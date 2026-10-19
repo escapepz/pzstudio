@@ -335,6 +335,29 @@ describe('constants and manifest', () => {
         expect(nls(PKG.displayName)).toBe('PZ Studio');
     });
 
+    it('declares the optional gameBuild setting exactly as approved (UX-11)', () => {
+        const setting =
+            PKG.contributes.configuration.properties['pzstudio.gameBuild'];
+        expect(setting).toBeDefined();
+        expect(setting.type).toBe('string');
+        // Empty default: the compatibility check stays off until the user
+        // explicitly provides a build.
+        expect(setting.default).toBe('');
+        expect(setting.scope).toBe('resource');
+        expect(setting.description).toBe('%config.gameBuild.description%');
+        expect(NLS_EN['config.gameBuild.description']).toBeDefined();
+    });
+
+    it('keeps every public command ID unchanged (UX-11)', () => {
+        const commands = PKG.contributes.commands.map(
+            (c: { command: string }) => c.command,
+        );
+        expect(commands).toContain('pzstudio.doctor');
+        expect(
+            commands.filter((c: string) => c === 'pzstudio.doctor'),
+        ).toHaveLength(1);
+    });
+
     it('every %key% in the manifest resolves in en and vi NLS tables', () => {
         const keys = (JSON.stringify(PKG).match(/"%[^"]+%"/g) || []).map((m) =>
             m.slice(2, -2),
@@ -1271,5 +1294,158 @@ describe('project diagnostics cache (UX-07)', () => {
 
         expect(source).toHaveBeenCalledTimes(2);
         expect(after[0].description).toBe('id 1 · Project A · ✗ 2');
+    });
+
+    /* UX-11: configuration the doctor consumes (pzstudio.gameBuild) is
+     * invisible to the project.json fingerprint — full invalidation must
+     * force a recompute and sever in-flight runs. */
+
+    it('invalidation drops cached findings and recomputes for the fresh configuration', async () => {
+        const seed = seedWorkspace();
+        seed.addProject('A', PROJECT_A_V1);
+        const results = [
+            withIssues(1, 0, 'finding under the old configuration'),
+            clean(),
+        ];
+        const source = vi.fn(async () => results.shift() ?? clean());
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const first = await provider.getChildren();
+        expect(source).toHaveBeenCalledTimes(1);
+        expect(first[0].description).toBe('id 1 · Project A · ✗ 1');
+
+        // The configuration changes without ANY project.json touch — the
+        // fingerprint alone would reuse the cache forever.
+        provider.invalidateDiagnostics();
+        const second = await provider.getChildren();
+
+        expect(source).toHaveBeenCalledTimes(2);
+        expect(second[0].description).toBe('id 1 · Project A');
+
+        // The fresh result then holds the cache as usual.
+        provider.refresh();
+        await provider.getChildren();
+        expect(source).toHaveBeenCalledTimes(2);
+    });
+
+    it('an in-flight run invalidated mid-flight cannot repopulate the cache', async () => {
+        const seed = seedWorkspace();
+        seed.addProject('A', PROJECT_A_V1);
+        const gate = deferred<Summary>();
+        const fresh = deferred<Summary>();
+        const queue = [gate.promise, fresh.promise];
+        const source = vi.fn(() => queue.shift()!);
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const first = provider.getChildren();
+        await untilCalled(source);
+
+        // The configuration changes while run 1 is still in flight.
+        provider.invalidateDiagnostics();
+        gate.resolve(withIssues(9, 9, 'pre-invalidation finding'));
+        const nodes1 = await first;
+        // The already-begun render finishes with the value the run returned
+        // (same lifecycle as a mid-run project.json change)…
+        expect(nodes1[0].description).toBe('id 1 · Project A · ✗ 9 ⚠ 9');
+
+        // …but it must not hold the cache: the next render recomputes and
+        // the new state renders instead of the stale findings.
+        const second = provider.getChildren();
+        await untilCalled(source, 2);
+        expect(source).toHaveBeenCalledTimes(2);
+        fresh.resolve(clean());
+        const nodes2 = await second;
+        expect(nodes2[0].description).toBe('id 1 · Project A');
+
+        // The fresh (post-change) result is then the one cached.
+        provider.refresh();
+        await provider.getChildren();
+        expect(source).toHaveBeenCalledTimes(2);
+    });
+
+    it('a severed stale promise is never reused as the current result', async () => {
+        const seed = seedWorkspace();
+        seed.addProject('A', PROJECT_A_V1);
+        const gate = deferred<Summary>();
+        const freshRun = deferred<Summary>();
+        const queue = [gate.promise, freshRun.promise];
+        const source = vi.fn(() => queue.shift()!);
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const first = provider.getChildren();
+        await untilCalled(source);
+        provider.invalidateDiagnostics();
+
+        // A render after invalidation may not join the severed in-flight
+        // run as its current result — a NEW execution starts.
+        const second = provider.getChildren();
+        await untilCalled(source, 2);
+        expect(source).toHaveBeenCalledTimes(2);
+
+        gate.resolve(withIssues(9, 9, 'severed stale finding'));
+        const nodes1 = await first;
+        expect(nodes1[0].description).toBe('id 1 · Project A · ✗ 9 ⚠ 9');
+
+        // The second render's result comes from the NEW run.
+        freshRun.resolve(clean());
+        const nodes2 = await second;
+        expect(nodes2[0].description).toBe('id 1 · Project A');
+
+        // And its fresh state holds the cache.
+        provider.refresh();
+        await provider.getChildren();
+        expect(source).toHaveBeenCalledTimes(2);
+    });
+
+    it('an obsolete run completing out of order cannot put back an old badge', async () => {
+        const seed = seedWorkspace();
+        seed.addProject('A', PROJECT_A_V1);
+        const oldRun = deferred<Summary>();
+        const newRun = deferred<Summary>();
+        const queue = [oldRun.promise, newRun.promise];
+        const source = vi.fn(() => queue.shift()!);
+        const provider = new ProjectExplorerProvider(
+            asUri('ext'),
+            source as never,
+        );
+
+        const first = provider.getChildren();
+        await untilCalled(source);
+
+        // The configuration changes; the render that observed it starts the
+        // fresh run and completes BEFORE the pre-change run resolves.
+        provider.invalidateDiagnostics();
+        const second = provider.getChildren();
+        await untilCalled(source, 2);
+        expect(source).toHaveBeenCalledTimes(2);
+        newRun.resolve(clean());
+        const freshNodes = await second;
+        expect(freshNodes[0].description).toBe('id 1 · Project A');
+
+        // NOW the obsolete out-of-order result arrives — after the fresh
+        // run already populated the cache (the final rendered state).
+        oldRun.resolve(withIssues(9, 9, 'obsolete compatibility badge'));
+
+        // Any render after that resolves keeps the fresh (generation-1)
+        // badge: the obsolete result was never written over it, so the
+        // Explorer's final state stays clean and the source stays cold.
+        const finalNodes = await provider.getChildren();
+        expect(source).toHaveBeenCalledTimes(2);
+        expect(finalNodes).toEqual(freshNodes);
+        expect(finalNodes[0].description).toBe('id 1 · Project A');
+
+        // The awaited-out first render settles harmlessly (handled tail;
+        // its late resolution decorated only that already-begun render).
+        const oldNodes = await first;
+        expect(oldNodes[0].description).toBe('id 1 · Project A · ✗ 9 ⚠ 9');
     });
 });

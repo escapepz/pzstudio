@@ -12,14 +12,18 @@ vi.mock('vscode', async () => {
 // stub a plain runner.
 import * as vscode from 'vscode';
 import { registerDoctorCommand } from '../../packages/vscode-extension/src/commands/doctor';
+import { createPZLogger } from '../../packages/vscode-extension/src/util/logger';
 import type { ProjectDiagnosticsRunner } from '../../packages/vscode-extension/src/util/doctor';
 
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 const UriCtor = vscode.Uri as unknown as new (parts: string[]) => vscode.Uri;
 
 /** Registers the command and returns its handler. */
-async function setupHandler(runner: ProjectDiagnosticsRunner) {
-    registerDoctorCommand(runner);
+async function setupHandler(
+    runner: ProjectDiagnosticsRunner,
+    onError?: (error: unknown) => void,
+) {
+    registerDoctorCommand(runner, onError);
     const calls = asMock(vscode.commands.registerCommand).mock.calls as Array<
         [string, (node?: unknown) => Promise<void>]
     >;
@@ -123,6 +127,168 @@ describe('pzstudio.doctor', () => {
         expect(asMock(runProjectDiagnostics)).not.toHaveBeenCalled();
         expect(asMock(vscode.window.showWarningMessage)).toHaveBeenCalledTimes(
             1,
+        );
+    });
+});
+
+/* ------------------------------------------------------------------ */
+/* UX-16: user-invoked doctor failures report through the host logger  */
+/* ------------------------------------------------------------------ */
+
+describe('pzstudio.doctor error reporting (UX-16)', () => {
+    let runProjectDiagnostics: ReturnType<typeof vi.fn>;
+    let onError: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        runProjectDiagnostics = vi.fn();
+        onError = vi.fn();
+    });
+
+    function failingRunner() {
+        return runProjectDiagnostics as never as ProjectDiagnosticsRunner;
+    }
+
+    it('a failed run never rejects raw, notifies once through the handed sink and renders nothing', async () => {
+        const boom = new Error('engine boom');
+        asMock(runProjectDiagnostics).mockRejectedValue(boom);
+        const { handler } = await setupHandler(failingRunner(), onError);
+
+        // No unhandled command rejection: the handler resolves normally.
+        await expect(handler(projectNode)).resolves.toBeUndefined();
+
+        expect(onError).toHaveBeenCalledTimes(1);
+        expect(onError.mock.calls[0][0]).toBe(boom);
+        // The command itself stays silent: the logger's notification is the
+        // single popup, no quick-pick rendering on top of it.
+        expect(asMock(vscode.window.showQuickPick)).not.toHaveBeenCalled();
+        expect(asMock(vscode.window.showErrorMessage)).not.toHaveBeenCalled();
+    });
+
+    it('counts project resolution first: no runner failure when there is no project', async () => {
+        asMock(vscode.workspace.fs.stat).mockRejectedValue(new Error('ENOENT'));
+        const { handler } = await setupHandler(failingRunner(), onError);
+
+        await handler(undefined);
+
+        expect(asMock(runProjectDiagnostics)).not.toHaveBeenCalled();
+        expect(onError).not.toHaveBeenCalled();
+        expect(asMock(vscode.window.showWarningMessage)).toHaveBeenCalledTimes(
+            1,
+        );
+    });
+
+    it('through the real UX-16 logger: one notification, full detail in the channel, no auto-open', async () => {
+        const channel = vscode.window.createOutputChannel('PZ Studio');
+        const logger = createPZLogger(channel);
+        asMock(runProjectDiagnostics).mockRejectedValue(
+            new Error('engine boom'),
+        );
+        const { handler } = await setupHandler(failingRunner(), (error) =>
+            logger.error(error as Error),
+        );
+
+        await handler(projectNode);
+
+        // Exactly one error notification, with the localized action item.
+        expect(asMock(vscode.window.showErrorMessage)).toHaveBeenCalledTimes(1);
+        expect(asMock(vscode.window.showErrorMessage)).toHaveBeenCalledWith(
+            'PZStudio Error: engine boom',
+            'Show Details',
+        );
+        // The full detail (message + stack) landed in the channel record.
+        const lines = asMock(channel.appendLine).mock.calls.map((c) =>
+            String(c[0]),
+        );
+        expect(lines.some((l) => /\[ERROR\] engine boom\n/.test(l))).toBe(true);
+        // Merely reporting never opens the panel.
+        await Promise.resolve();
+        expect(asMock(channel.show)).not.toHaveBeenCalled();
+    });
+
+    it('dismissing the notification never opens the Output panel (real logger wiring)', async () => {
+        const channel = vscode.window.createOutputChannel('PZ Studio');
+        const logger = createPZLogger(channel);
+        asMock(vscode.window.showErrorMessage).mockResolvedValue(undefined);
+        asMock(runProjectDiagnostics).mockRejectedValue(
+            new Error('engine boom'),
+        );
+        const { handler } = await setupHandler(failingRunner(), (error) =>
+            logger.error(error as Error),
+        );
+
+        await handler(projectNode);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(asMock(channel.show)).not.toHaveBeenCalled();
+    });
+
+    it('choosing the localized Show Details action opens the PZ Studio channel with preserveFocus', async () => {
+        const channel = vscode.window.createOutputChannel('PZ Studio');
+        const logger = createPZLogger(channel);
+        asMock(vscode.window.showErrorMessage).mockResolvedValue(
+            'Show Details',
+        );
+        asMock(runProjectDiagnostics).mockRejectedValue(
+            new Error('engine boom'),
+        );
+        const { handler } = await setupHandler(failingRunner(), (error) =>
+            logger.error(error as Error),
+        );
+
+        await handler(projectNode);
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(asMock(channel.show)).toHaveBeenCalledTimes(1);
+        expect(asMock(channel.show)).toHaveBeenCalledWith(true);
+    });
+
+    it('cancellation is recorded but never presented as an unexpected error', async () => {
+        const channel = vscode.window.createOutputChannel('PZ Studio');
+        const logger = createPZLogger(channel);
+        const cancelled = new Error('user cancelled');
+        cancelled.name = 'CancellationError';
+        asMock(runProjectDiagnostics).mockRejectedValue(cancelled);
+        const { handler } = await setupHandler(failingRunner(), (error) =>
+            logger.error(error as Error),
+        );
+
+        await handler(projectNode);
+
+        expect(asMock(vscode.window.showErrorMessage)).not.toHaveBeenCalled();
+        // Detail stays in the channel record; the sink drops the popup.
+        const lines = asMock(channel.appendLine).mock.calls.map((c) =>
+            String(c[0]),
+        );
+        expect(lines.some((l) => /\[ERROR\] user cancelled/.test(l))).toBe(
+            true,
+        );
+    });
+
+    it('a successful run with the same wiring keeps the normal rendering', async () => {
+        asMock(runProjectDiagnostics).mockResolvedValue({
+            errors: 0,
+            warnings: 0,
+            infos: 0,
+            report: { projectDir: '/proj', diagnostics: [] },
+        });
+        const { handler } = await setupHandler(
+            failingRunner(), // the mock is the runner; it resolves here
+            onError,
+        );
+
+        await handler(projectNode);
+
+        expect(onError).not.toHaveBeenCalled();
+        expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
+        expect(asMock(vscode.window.showErrorMessage)).not.toHaveBeenCalled();
+        expect(
+            asMock(vscode.window.showInformationMessage),
+        ).toHaveBeenCalledWith(
+            "PZStudio: no problems found in 'proj'. Everything looks good.",
         );
     });
 });

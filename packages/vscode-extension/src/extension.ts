@@ -78,7 +78,12 @@ export async function activate(context: vscode.ExtensionContext) {
         projectExplorer,
         ...registerAllCommands(context, executePZCommand, studio),
         registerWatchCommand(devSync),
-        registerDoctorCommand(runProjectDiagnostics),
+        // UX-16: user-invoked doctor failures route through the host logger
+        // (one notification, channel detail, Show Details) — the runner
+        // itself stays notification-free.
+        registerDoctorCommand(runProjectDiagnostics, (error) =>
+            pzLogger.error(error instanceof Error ? error : String(error)),
+        ),
         treeView,
         projectJsonWatcher,
         ...registerExplorerCommands(projectExplorer),
@@ -86,10 +91,17 @@ export async function activate(context: vscode.ExtensionContext) {
             PZ_TASK_TYPE,
             new BuildTaskProvider(studio),
         ),
-        // Re-read pzstudio.language and repaint the tree when it changes.
+        // Re-read pzstudio.language and repaint the tree when it changes;
+        // UX-11: pzstudio.gameBuild is invisible to the project.json
+        // fingerprint, so changing it bumps a full diagnostics invalidation
+        // (in-flight runs severed) and repaints the Explorer badges.
         vscode.workspace.onDidChangeConfiguration(async (e) => {
             if (e.affectsConfiguration('pzstudio.language')) {
                 await initExtensionL10n(context);
+                projectExplorer.refresh();
+            }
+            if (e.affectsConfiguration('pzstudio.gameBuild')) {
+                projectExplorer.invalidateDiagnostics();
                 projectExplorer.refresh();
             }
         }),

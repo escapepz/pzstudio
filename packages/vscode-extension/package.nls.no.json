@@ -14,6 +14,7 @@
     "config.templates.language.url.description": "Repository-URL for standard språkmal",
     "config.templates.language.ref.description": "Git-referanse (branch, tag eller commit) for språkmalen",
     "config.outdir.description": "Standard byggeutdatamappe",
+    "config.gameBuild.description": "Spill-build som kompatibilitetskontrollen sammenligner prosjektets pzBuildCompatibility med (f.eks. 42.20.1). La stå tom for å deaktivere kontrollen.",
     "config.useSymlinks.description": "Bruk katalogjunksjoner i stedet for å kopiere delte malmapper (.libraries, .template-*) ved New Project (--symlinks). Byggeutdata påvirkes ikke.",
     "config.verbose.description": "Aktiver detaljert/diagnostisk utdata for alle kommandoer (--verbose)",
     "config.offline.description": "Hopp over ekstern maloppdatering og bruk hurtigbufret/legacy-data (--offline). Gjelder New Project og Add Mod.",
