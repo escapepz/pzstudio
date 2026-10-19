@@ -89,7 +89,10 @@ describe('createPZLogger (host OutputChannel bridge)', () => {
         );
     });
 
-    it('error decorates, prints the stack for Error values and notifies', () => {
+    // UX-16: the notification is actionable — a localized "Show Details"
+    // button opens the handed PZ Studio channel on demand. The panel is
+    // never auto-opened merely by reporting the error.
+    it('error decorates, prints the stack for Error values and notifies with a Show Details action', async () => {
         const { channel, appendLine } = makeChannel();
         const logger = createPZLogger(channel);
 
@@ -102,12 +105,67 @@ describe('createPZLogger (host OutputChannel bridge)', () => {
         expect(String(appendLine.mock.calls[1][0])).toMatch(
             new RegExp(`^${TIMESTAMP.source} \\[ERROR\\] boom\\n`),
         );
-        expect(asMock(vscode.window.showErrorMessage)).toHaveBeenCalledWith(
+        // Exactly one popup per error (no duplicate notifications), with the
+        // action item attached.
+        expect(asMock(vscode.window.showErrorMessage)).toHaveBeenCalledTimes(2);
+        expect(asMock(vscode.window.showErrorMessage)).toHaveBeenNthCalledWith(
+            1,
             'PZStudio Error: plain failure',
+            'Show Details',
         );
-        expect(asMock(vscode.window.showErrorMessage)).toHaveBeenCalledWith(
+        expect(asMock(vscode.window.showErrorMessage)).toHaveBeenNthCalledWith(
+            2,
             'PZStudio Error: boom',
+            'Show Details',
         );
+        // Merely reporting never touches the panel's visibility.
+        await Promise.resolve();
+        expect(asMock(channel.show)).not.toHaveBeenCalled();
+    });
+
+    it('opens the channel with preserveFocus when Show Details is chosen', async () => {
+        const { channel } = makeChannel();
+        asMock(vscode.window.showErrorMessage).mockResolvedValue(
+            'Show Details',
+        );
+        const logger = createPZLogger(channel);
+
+        logger.error('boom');
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(asMock(channel.show)).toHaveBeenCalledTimes(1);
+        expect(asMock(channel.show)).toHaveBeenCalledWith(true);
+    });
+
+    it('ignoring the notification never opens the Output panel', async () => {
+        const { channel } = makeChannel();
+        asMock(vscode.window.showErrorMessage).mockResolvedValue(undefined);
+        const logger = createPZLogger(channel);
+
+        logger.error('boom');
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(asMock(channel.show)).not.toHaveBeenCalled();
+    });
+
+    // Cancellation is a normal flow: it stays recorded in the channel but
+    // must not surface as an error notification.
+    it('records a cancellation error in the channel without the notification', () => {
+        const { channel, appendLine } = makeChannel();
+        const logger = createPZLogger(channel);
+
+        const cancelled = new Error('user cancelled') as Error & {
+            name: string;
+        };
+        cancelled.name = 'CancellationError';
+        logger.error(cancelled);
+
+        expect(String(appendLine.mock.calls[0][0])).toMatch(
+            new RegExp(`^${TIMESTAMP.source} \\[ERROR\\] user cancelled`),
+        );
+        expect(asMock(vscode.window.showErrorMessage)).not.toHaveBeenCalled();
     });
 
     // UX-04: verbose diagnostics must reach the SAME channel, decorated like

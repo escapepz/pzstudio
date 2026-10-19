@@ -53,5 +53,14 @@
     "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio：无法为“{0}”启动开发同步：{1} — 详情请查看 PZ Studio 输出。",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: 在「{0}」中未发现问题。一切正常。",
     "Diagnostics for '{0}'": "「{0}」的诊断",
-    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} 个错误、{1} 个警告、{2} 条信息 — 未做任何更改"
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} 个错误、{1} 个警告、{2} 条信息 — 未做任何更改",
+    "Update": "Update",
+    "New Project": "新建项目",
+    "Add Mod": "添加模组",
+    "Delete Mod": "删除模组",
+    "Rename Mod ID": "重命名模组 ID",
+    "New Language": "新建语言",
+    "Generate ModInfo": "生成 ModInfo",
+    "Configure Mod": "编辑模组配置",
+    "Show Details": "显示详细信息"
 }

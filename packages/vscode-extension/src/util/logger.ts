@@ -22,19 +22,40 @@ export function createPZLogger(outputChannel: vscode.OutputChannel): ILogger {
             outputChannel.appendLine(`[${getTimestamp()}] [WARN] ${msg}`),
         error: (err: string | Error) => {
             const timestamp = getTimestamp();
+            // UX-16: the full detail (Problem/Cause/Try, stack) always lands
+            // in the PZ Studio channel — but the panel itself is only opened
+            // on explicit request via the notification's action button
+            // (show(true) preserves focus; no auto-focus merely for
+            // reporting).
+            let message: string;
             if (err instanceof Error) {
+                message = err.message;
                 outputChannel.appendLine(
                     `[${timestamp}] [ERROR] ${err.message}\n${err.stack}`,
                 );
             } else {
+                message = err;
                 outputChannel.appendLine(`[${timestamp}] [ERROR] ${err}`);
             }
-            vscode.window.showErrorMessage(
-                t(
-                    'PZStudio Error: {0}',
-                    err instanceof Error ? err.message : err,
+            // Cancellation is a normal user flow, not an error: keep the
+            // channel record, skip the error notification.
+            if (err instanceof Error && err.name === 'CancellationError') {
+                return;
+            }
+            // Actionable notification: the details live in this channel, so
+            // offer them one click away instead of auto-opening the panel
+            // (and instead of telling the user to hunt the Output dropdown).
+            const showDetails = t('Show Details');
+            void Promise.resolve(
+                vscode.window.showErrorMessage(
+                    t('PZStudio Error: {0}', message),
+                    showDetails,
                 ),
-            );
+            ).then((choice) => {
+                if (choice === showDetails) {
+                    outputChannel.show(true);
+                }
+            });
         },
         // Debug diagnostics (UX-04): the engine gates verbose emission on the
         // invocation's --verbose/--quiet flags before calling this sink, so

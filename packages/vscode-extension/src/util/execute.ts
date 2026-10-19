@@ -27,6 +27,34 @@ export type ExecutePZCommand = (
     options?: ExecuteOptions,
 ) => Promise<void>;
 
+/**
+ * UX-17: human-readable labels for the engine commands the runner executes,
+ * resolved through the shared l10n bundle (same tables every other runtime
+ * string uses — no parallel translation source). The keys reuse the existing
+ * confirmed-choice verbs ("Build", "Clean") and mirror the wording of the
+ * manifest titles in package.nls.*.json, minus the "PZ Studio:" prefix.
+ * Unknown ids fall back to the raw command id, which is still honest — the
+ * stable internal ids and the studio.run contract are never translated.
+ */
+const COMMAND_LABEL_KEYS: Record<string, string> = {
+    build: 'Build',
+    clean: 'Clean',
+    update: 'Update',
+    new: 'New Project',
+    add: 'Add Mod',
+    delete: 'Delete Mod',
+    rename: 'Rename Mod ID',
+    lang: 'New Language',
+    modinfo: 'Generate ModInfo',
+    modconfig: 'Configure Mod',
+};
+
+/** Localized label for an engine command id; the raw id is the fallback. */
+export function commandLabel(command: string): string {
+    const key = COMMAND_LABEL_KEYS[command];
+    return key ? t(key) : command;
+}
+
 export function createCommandRunner(
     studio: PzStudio,
     outputChannel: vscode.OutputChannel,
@@ -40,7 +68,10 @@ export function createCommandRunner(
     return async (command, args = [], extraFlags = [], options = {}) => {
         if (busyCommands.has(command)) {
             vscode.window.showWarningMessage(
-                t("PZStudio: command '{0}' is already running.", command),
+                t(
+                    "PZStudio: command '{0}' is already running.",
+                    commandLabel(command),
+                ),
             );
             return;
         }
@@ -74,7 +105,7 @@ export function createCommandRunner(
             await vscode.window.withProgress(
                 {
                     location: vscode.ProgressLocation.Notification,
-                    title: t('PZStudio: {0}', command),
+                    title: t('PZStudio: {0}', commandLabel(command)),
                     cancellable: false,
                 },
                 async () => {

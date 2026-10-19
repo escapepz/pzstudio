@@ -53,5 +53,14 @@
     "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio：無法為「{0}」啟動開發同步：{1} — 詳情請查看 PZ Studio 輸出。",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: 在「{0}」中未發現問題。一切正常。",
     "Diagnostics for '{0}'": "「{0}」的診斷",
-    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} 個錯誤、{1} 個警告、{2} 條資訊 — 未做任何變更"
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} 個錯誤、{1} 個警告、{2} 條資訊 — 未做任何變更",
+    "Update": "Update",
+    "New Project": "新增專案",
+    "Add Mod": "新增模組",
+    "Delete Mod": "刪除模組",
+    "Rename Mod ID": "重新命名模組 ID",
+    "New Language": "新增語言",
+    "Generate ModInfo": "產生 ModInfo",
+    "Configure Mod": "編輯模組設定",
+    "Show Details": "顯示詳細資訊"
 }

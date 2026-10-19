@@ -53,5 +53,14 @@
     "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio: '{0}' için geliştirme eşitlemesi başlatılamadı: {1} — ayrıntılar için PZ Studio çıktısına bakın.",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: '{0}' içinde sorun bulunamadı. Her şey iyi görünüyor.",
     "Diagnostics for '{0}'": "'{0}' için tanılama",
-    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} hata, {1} uyarı, {2} bilgi — hiçbir şey değiştirilmedi"
+    "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} hata, {1} uyarı, {2} bilgi — hiçbir şey değiştirilmedi",
+    "Update": "Update",
+    "New Project": "Yeni Proje",
+    "Add Mod": "Mod Ekle",
+    "Delete Mod": "Modu Sil",
+    "Rename Mod ID": "Mod Kimliğini Yeniden Adlandır",
+    "New Language": "Yeni Dil",
+    "Generate ModInfo": "ModInfo Oluştur",
+    "Configure Mod": "Mod Yapılandırmasını Düzenle",
+    "Show Details": "Ayrıntıları göster"
 }
