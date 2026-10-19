@@ -12,6 +12,7 @@ import { registerLangCommand } from './lang';
 import { registerModinfoCommand } from './modinfo';
 import { registerModStateCommands } from './modstate';
 import { registerConfigureCommand } from './configure';
+import { registerOpenProjectJsonCommand } from './openProjectJson';
 
 export function registerAllCommands(
     context: vscode.ExtensionContext,
@@ -30,5 +31,6 @@ export function registerAllCommands(
         registerModinfoCommand(execute, studio),
         ...registerModStateCommands(execute),
         registerConfigureCommand(execute),
+        registerOpenProjectJsonCommand(),
     ];
 }

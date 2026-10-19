@@ -45,5 +45,6 @@
     "command.newHere.title": "PZStudio: Nouveau projet ici",
     "config.newProject.defaultLocation.description": "Dossier par défaut préféré pour les nouveaux projets. Le sélecteur de New Project s'ouvre ici ; en cas d'annulation, la création du projet est abandonnée sans sélectionner de dossier de repli.",
     "command.watch.title": "PZStudio : Basculer la synchronisation de développement",
-    "command.doctor.title": "PZStudio : Lancer le diagnostic"
+    "command.doctor.title": "PZStudio : Lancer le diagnostic",
+    "command.openProjectJson.title": "PZStudio: Ouvrir project.json"
 }

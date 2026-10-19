@@ -45,5 +45,6 @@
     "command.newHere.title": "PZStudio: Nyt projekt her",
     "config.newProject.defaultLocation.description": "Foretrukken standardmappe for nye projekter. Nyt projekt-vælgeren starter her; annullering afbryder projektoprettelsen uden at vælge en reservemappe.",
     "command.watch.title": "PZStudio: Skift udviklingssynkronisering",
-    "command.doctor.title": "PZStudio: Kør diagnostik"
+    "command.doctor.title": "PZStudio: Kør diagnostik",
+    "command.openProjectJson.title": "PZStudio: Åbn project.json"
 }
