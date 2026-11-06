@@ -35,7 +35,12 @@ import {
     isSourcePathIncluded,
     OperationLogLevel,
 } from './execute';
-import { assertNoAliasRoute } from './mutation-guard';
+import {
+    assertNoAliasRoute,
+    assertOwnedOrEmptyDestination,
+    assertWritableOwnedOrEmptyDestination,
+    isEmptyDestination,
+} from './mutation-guard';
 
 export type BuildVariant = 'main' | 'development';
 
@@ -51,6 +56,11 @@ export interface FileDelta {
 
 /** Normalizes a path for comparison (never for filesystem access). */
 function normalizePath(path: string): string {
+    return path.replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+/** Normalizes a plan-space path for the ownership set's comparisons. */
+function ownershipKey(path: string): string {
     return path.replace(/\\/g, '/').replace(/\/+$/, '');
 }
 
@@ -342,6 +352,16 @@ export class BuildSession {
     private stopped = false;
     /** Serializes apply()/rebuild() so overlapping saves cannot interleave. */
     private queue: Promise<unknown> = Promise.resolve();
+    /**
+     * Output subtrees this session has itself produced (variant roots and
+     * mod folders it rebuilt) — the E1 ownership evidence. Destructive
+     * rebuilds may replace content only inside these, or at destinations
+     * that are verifiably empty; everything else fails closed. Scoped by
+     * DEC-2=c (Owner, 2026-11-07) to destinations inside a configured
+     * mod's source folder: an out-of-mod output root is adopted exactly
+     * as `pzstudio build` always has.
+     */
+    private readonly ownedOutputPaths: Set<string> = new Set();
 
     constructor(host: BuildSessionHost) {
         this.host = host;
@@ -349,6 +369,44 @@ export class BuildSession {
 
     private log(level: OperationLogLevel, message: string): void {
         this.host.log?.(level, message);
+    }
+
+    /**
+     * The ownership key a successful write should claim for its variant
+     * root, or undefined when the root is already owned (the steady state:
+     * no scan, no behavior change for legitimate output).
+     */
+    private unclaimedRootKey(outPath: string): string | undefined {
+        const key = ownershipKey(outPath);
+        return this.ownedOutputPaths.has(key) ? undefined : key;
+    }
+
+    /**
+     * DEC-2=c (Owner, 2026-11-07): the Stage-1 ownership boundary guards
+     * only destinations inside a configured mod's source folder — the
+     * case-6 layout (doc 15 §1) where an output root nested in the mod
+     * source adopts and destroys user-placed content on the next build.
+     * Destinations outside every mod folder keep the committed adoption
+     * behavior: a fresh session may replace its configured output root
+     * exactly as `pzstudio build` always has. This is a recorded,
+     * temporary deviation from doc 18 B1-A (receipt-less content
+     * preserved everywhere) until the receipt ledger (doc 18 §2–§9)
+     * provides cross-session ownership evidence.
+     */
+    private guardsE1Territory(
+        destination: string,
+        planInput: Omit<PlanBuildInput, 'variant'>,
+    ): boolean {
+        const key = ownershipKey(destination);
+        for (const modId of Object.keys(planInput.config.mods)) {
+            const modRoot = normalizePath(
+                joinPosix(planInput.projectDir, modId),
+            );
+            if (key === modRoot || key.startsWith(`${modRoot}/`)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -420,13 +478,30 @@ export class BuildSession {
                 );
                 continue;
             }
+            const outPath = resolveBuildOutputPath(planInput.config, variant);
             try {
+                // E1: the plan's leading removeDir may only replace output
+                // this session produced, or a verifiably empty destination —
+                // never unproven content. DEC-2=c scopes the boundary to
+                // in-mod destinations; an out-of-mod root is adopted exactly
+                // as `pzstudio build` always has.
+                if (this.guardsE1Territory(outPath, planInput)) {
+                    await assertOwnedOrEmptyDestination(
+                        this.host.fs,
+                        'full rebuild removeDir',
+                        outPath,
+                        this.ownedOutputPaths,
+                    );
+                }
                 await executeFileOperations(
                     this.host.fs,
                     planBuild({ ...planInput, variant }),
                     (level, message) => this.log(level, message),
                     { outputRoot: planInput.config.outdir },
                 );
+                // The rebuild replaced the root's content wholesale: the
+                // root is now entirely this session's own output.
+                this.ownedOutputPaths.add(ownershipKey(outPath));
             } catch (e) {
                 errors.push(
                     `${variant === 'main' ? 'main' : 'dev_branch'}: ${describeError(e)}`,
@@ -518,20 +593,72 @@ export class BuildSession {
         // Scoped rebuilds last, with fresh source snapshots: the delta that
         // triggered them is part of the tree they re-read.
         if (scopedByMod.size > 0) {
-            const freshInput = await this.host.getPlanInput();
+            let freshInput: Omit<PlanBuildInput, 'variant'>;
+            try {
+                freshInput = await this.host.getPlanInput();
+            } catch (e) {
+                // The fresh read failed (project resolution, template
+                // lookup, source snapshotting): the batch's scoped work is
+                // abandoned into result.errors. The baseline below is only
+                // replaced after a successful read, so the session keeps
+                // its committed plan input for the next batch.
+                result.errors.push(describeError(e));
+                return result;
+            }
             this.planInput = freshInput;
             for (const [modId, variantSet] of scopedByMod) {
                 const variants = [...variantSet].filter((variant) =>
                     this.variants.includes(variant),
                 );
                 for (const variant of variants) {
+                    const outPath = resolveBuildOutputPath(
+                        freshInput.config,
+                        variant,
+                    );
+                    const outModsPath = joinPosix(
+                        outPath,
+                        'Contents',
+                        'mods',
+                        modIdForVariant(modId, variant),
+                    );
                     try {
+                        // E1: the scoped plan's removeDir may only replace a
+                        // mod folder inside output this session produced, or
+                        // a verifiably empty destination — DEC-2=c scopes the
+                        // boundary to in-mod destinations.
+                        const guarded = this.guardsE1Territory(
+                            outModsPath,
+                            freshInput,
+                        );
+                        if (guarded) {
+                            await assertOwnedOrEmptyDestination(
+                                this.host.fs,
+                                'scoped rebuild removeDir',
+                                outModsPath,
+                                this.ownedOutputPaths,
+                            );
+                        }
+                        // A scoped rebuild that materializes an entirely
+                        // fresh variant root writes every file in it — the
+                        // root itself becomes owned output once it succeeds.
+                        const adoptsRoot =
+                            guarded &&
+                            !this.ownedOutputPaths.has(ownershipKey(outPath)) &&
+                            (await isEmptyDestination(
+                                this.host.fs,
+                                'scoped rebuild removeDir',
+                                outPath,
+                            ));
                         await executeFileOperations(
                             this.host.fs,
                             planScopedModRebuild(freshInput, variant, modId),
                             (level, message) => this.log(level, message),
                             { outputRoot: freshInput.config.outdir },
                         );
+                        this.ownedOutputPaths.add(ownershipKey(outModsPath));
+                        if (adoptsRoot) {
+                            this.ownedOutputPaths.add(ownershipKey(outPath));
+                        }
                     } catch (e) {
                         result.errors.push(describeError(e));
                     }
@@ -641,6 +768,10 @@ export class BuildSession {
                     modIdForVariant(file.modId, variant),
                     ...file.relativePath.split('/'),
                 );
+                const claimsRoot = this.unclaimedRootKey(outPath);
+                // DEC-2=c: the E1 boundary only applies to in-mod
+                // destinations; the route guard below always applies.
+                const guarded = this.guardsE1Territory(outPath, planInput);
                 try {
                     // F23-WRITE P0: the per-delta mutation route is guarded
                     // like every executor mutation — a planted alias on the
@@ -655,11 +786,40 @@ export class BuildSession {
                             : `incremental write '${modDestination}'`,
                     );
                     if (file.type === 'delete') {
+                        // E1: a recursive delete may only remove content
+                        // inside output this session produced (or at a
+                        // verifiably absent path — same behavior as today).
+                        // DEC-2=c scopes the boundary to in-mod destinations.
+                        if (guarded) {
+                            await assertOwnedOrEmptyDestination(
+                                this.host.fs,
+                                'incremental delete',
+                                modDestination,
+                                this.ownedOutputPaths,
+                            );
+                        }
                         await this.host.fs.delete(modDestination, {
                             recursive: true,
                         });
                     } else {
+                        // E1 write boundary: the write may only land inside
+                        // output this session produced, or into a verifiably
+                        // empty variant root. The decision is made at the
+                        // root, so a missing leaf elsewhere in an unowned
+                        // tree proves nothing. DEC-2=c scopes the boundary to
+                        // in-mod destinations.
+                        if (claimsRoot && guarded) {
+                            await assertWritableOwnedOrEmptyDestination(
+                                this.host.fs,
+                                `incremental write '${modDestination}'`,
+                                outPath,
+                                this.ownedOutputPaths,
+                            );
+                        }
                         await this.host.fs.write(modDestination, content!);
+                        if (claimsRoot) {
+                            this.ownedOutputPaths.add(claimsRoot);
+                        }
                     }
                     result.incremental += 1;
                 } catch (e) {
@@ -689,10 +849,12 @@ export class BuildSession {
         }
         for (const variant of this.variants) {
             try {
-                const target = joinPosix(
-                    resolveBuildOutputPath(planInput.config, variant),
-                    'workshop.txt',
+                const outPath = resolveBuildOutputPath(
+                    planInput.config,
+                    variant,
                 );
+                const target = joinPosix(outPath, 'workshop.txt');
+                const claimsRoot = this.unclaimedRootKey(outPath);
                 // F23-WRITE P0: guarded route (a link at workshop.txt or any
                 // component below the outdir refuses the rewrite).
                 await assertNoAliasRoute(
@@ -702,6 +864,16 @@ export class BuildSession {
                     'write',
                     `workshop.txt rewrite '${target}'`,
                 );
+                // E1 write boundary at the variant root (see the incremental
+                // write site) — DEC-2=c scopes it to in-mod destinations.
+                if (claimsRoot && this.guardsE1Territory(outPath, planInput)) {
+                    await assertWritableOwnedOrEmptyDestination(
+                        this.host.fs,
+                        `workshop.txt rewrite into '${target}'`,
+                        outPath,
+                        this.ownedOutputPaths,
+                    );
+                }
                 await this.host.fs.write(
                     target,
                     encodeUtf8(
@@ -712,6 +884,9 @@ export class BuildSession {
                         ),
                     ),
                 );
+                if (claimsRoot) {
+                    this.ownedOutputPaths.add(claimsRoot);
+                }
                 result.incremental += 1;
             } catch (e) {
                 result.errors.push(describeError(e));
@@ -726,10 +901,12 @@ export class BuildSession {
         const planInput = this.planInput!;
         for (const variant of this.variants) {
             try {
-                const target = joinPosix(
-                    resolveBuildOutputPath(planInput.config, variant),
-                    'preview.png',
+                const outPath = resolveBuildOutputPath(
+                    planInput.config,
+                    variant,
                 );
+                const target = joinPosix(outPath, 'preview.png');
+                const claimsRoot = this.unclaimedRootKey(outPath);
                 // F23-WRITE P0: guarded route, like every session mutation.
                 await assertNoAliasRoute(
                     this.host.fs,
@@ -738,10 +915,23 @@ export class BuildSession {
                     'write',
                     `preview.png copy '${target}'`,
                 );
+                // E1 write boundary at the variant root (see the incremental
+                // write site) — DEC-2=c scopes it to in-mod destinations.
+                if (claimsRoot && this.guardsE1Territory(outPath, planInput)) {
+                    await assertWritableOwnedOrEmptyDestination(
+                        this.host.fs,
+                        `preview.png copy into '${target}'`,
+                        outPath,
+                        this.ownedOutputPaths,
+                    );
+                }
                 await this.host.fs.write(
                     target,
                     await this.host.fs.read(delta.path),
                 );
+                if (claimsRoot) {
+                    this.ownedOutputPaths.add(claimsRoot);
+                }
                 result.incremental += 1;
             } catch (e) {
                 result.errors.push(describeError(e));

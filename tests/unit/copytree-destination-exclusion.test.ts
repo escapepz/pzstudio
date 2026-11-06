@@ -30,12 +30,13 @@
  *   outdir, a stale former output root, legitimate source under the output
  *   root outside the destination subtree, or siblings with similar string
  *   prefixes (R3).
- * - E1 (the engine's removeDir destroys user files pre-placed inside a
- *   future variant folder) is a separate, unresolved source-ownership
- *   defect. R5 reproduces it for documentation only and asserts the F23
- *   fix introduces no destruction beyond the engine's own removeDir
- *   semantics. These assertions document current behavior; they do not
- *   endorse it.
+ * - E1 (the engine's removeDir destroying user files pre-placed inside a
+ *   future variant folder) is closed for in-mod destinations by the E1
+ *   Stage-1 fail-closed ownership guard (DEC-2=c): an adoption may only
+ *   replace an in-mod destination this session produced, or one that is
+ *   verifiably empty. Out-of-mod output roots keep the committed adoption
+ *   behavior (recorded deviation from doc 18 B1-A). R5 pins the refusal
+ *   (the pre-placed file survives; only the empty variants build).
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -666,7 +667,7 @@ describe('F23-R4: other build paths', () => {
 });
 
 describe('F23-R5: source protection boundary', () => {
-    it('adoption destroys pre-placed future-variant-folder files (E1, unresolved) and nothing else', async () => {
+    it('adoption refuses a non-empty future variant folder before any mutation (E1 fail-closed) and builds only the empty variants', async () => {
         const fs = new F23Fs();
         fs.order = 'alphabetical';
         fs.writeCap = 150;
@@ -678,11 +679,10 @@ describe('F23-R5: source protection boundary', () => {
         await session.start(['main', 'development']);
 
         // E1 reproduction (EXP-3a): a user file inside the FUTURE root's
-        // variant folder. This documents an UNRESOLVED source-ownership
-        // defect (E1): the engine's own removeDir deletes it during
-        // adoption. It is recorded here as current behavior — NOT endorsed
-        // as acceptable — and its existence must not weaken the
-        // preservation assertions below.
+        // variant folder. The adoption's removeDir must REFUSE this
+        // destination (E1 Stage-1 fail-closed): the content is not provably
+        // generated output, so it is preserved untouched and the refusal is
+        // reported through the result errors.
         await fs.writeText(
             `${MOD_ROOT}/gen-b/${MAIN_OUT_PREFIX}/Contents/mods/my_mod/extra.lua`,
             'E1 casualty',
@@ -704,35 +704,39 @@ describe('F23-R5: source protection boundary', () => {
         const result = await session.apply([
             { type: 'change', path: `${PROJECT_DIR}\\project.json` },
         ]);
-        expect(result.fullRebuild).toBe(true);
-        expect(result.errors).toEqual([]);
 
-        // E1 documentation: the future-variant-folder file is gone.
+        // The main variant's adoption is refused — reported, never silent.
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0]).toContain(
+            `${MOD_ROOT}/gen-b/${MAIN_OUT_PREFIX}`,
+        );
+        expect(result.fullRebuild).toBe(false);
+
+        // E1: the pre-placed file is PRESERVED byte-exact.
         expect(
-            fs.files.has(
+            await fs.readText(
                 `${MOD_ROOT}/gen-b/${MAIN_OUT_PREFIX}/Contents/mods/my_mod/extra.lua`,
             ),
-        ).toBe(false);
+        ).toBe('E1 casualty');
 
-        // Nothing outside the engine's own removeDir targets was deleted:
-        // the delete log is exactly the two variant folders + sentinels.
+        // The refused variant executed nothing — its removeDir never ran.
+        // The delete log carries only the built (empty-destination) dev
+        // variant's own removeDir + makeDir sentinel.
         expect(fs.deletes.sort()).toEqual(
             [
-                `${MOD_ROOT}/gen-b/${MAIN_OUT_PREFIX}`,
-                `${MOD_ROOT}/gen-b/${MAIN_OUT_PREFIX}/.pzstudio-mkdir`,
                 `${MOD_ROOT}/gen-b/${DEV_OUT_PREFIX}`,
                 `${MOD_ROOT}/gen-b/${DEV_OUT_PREFIX}/.pzstudio-mkdir`,
             ].sort(),
         );
 
-        // The outdir file outside variant folders survives on disk.
+        // The outdir file outside variant folders survives on disk…
         expect(await fs.readText(`${MOD_ROOT}/gen-b/staging/keep.lua`)).toBe(
             'keep',
         );
-        // ...and is incorporated as source (pre-existing policy).
+        // …and is incorporated as source by the variant that DID build.
         expect(
             await fs.readText(
-                `${variantRoot(`${MOD_ROOT}/gen-b`, 'main')}/Contents/mods/my_mod/gen-b/staging/keep.lua`,
+                `${variantRoot(`${MOD_ROOT}/gen-b`, 'development')}/Contents/mods/my_mod_dev/gen-b/staging/keep.lua`,
             ),
         ).toBe('keep');
 
@@ -742,12 +746,7 @@ describe('F23-R5: source protection boundary', () => {
             expect(Buffer.from(fs.files.get(key)!)).toEqual(content);
         }
 
-        // The source edit reached the output in both variants.
-        expect(
-            await fs.readText(
-                `${variantRoot(`${MOD_ROOT}/gen-b`, 'main')}/Contents/mods/my_mod/media/lua/late.lua`,
-            ),
-        ).toBe('late');
+        // The source edit reached the built variant's output.
         expect(
             await fs.readText(
                 `${variantRoot(`${MOD_ROOT}/gen-b`, 'development')}/Contents/mods/my_mod_dev/media/lua/late.lua`,

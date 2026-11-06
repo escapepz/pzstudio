@@ -33,7 +33,11 @@
  * This module is Core-internal: it is not re-exported through the package
  * index and adds no public API surface.
  */
-import type { DirectoryEntry, ProjectFileSystem } from '@pzstudio/platform';
+import type {
+    DirectoryEntry,
+    FileStat,
+    ProjectFileSystem,
+} from '@pzstudio/platform';
 
 /** Leaf semantics of the guarded mutation (doc 17 §11.2). */
 export type MutationLeafMode = 'write' | 'delete';
@@ -247,4 +251,205 @@ export async function assertNoAliasRoute(
         }
         current = joinRoute(current, entry.name);
     }
+}
+
+/**
+ * E1 (doc 15 §1) — the ownership decision the alias guard explicitly
+ * leaves open ("ownership is E1's decision, not this guard's"): whether a
+ * destructive destination may be replaced at all. Stage-1 is a fail-closed
+ * refusal boundary around the session's destructive windows: a destination
+ * may be replaced only when the engine can prove the content there is its
+ * own (the destination lies at or below a subtree this session produced),
+ * or that there is nothing to preserve (absent, or a directory with zero
+ * entries — dot entries included, so a folder holding only hidden files
+ * is NOT empty; a non-directory entry at the destination is content).
+ * Every other destination is refused BEFORE any mutation: unproven
+ * content is never silently deleted or adopted.
+ *
+ * Disclosed residuals: the scan narrows but cannot close the
+ * scan-to-delete window (doc 17 B6/A6 TOCTOU — a concurrent retarget or
+ * insertion between the check and the deletion still lands), and
+ * hard-linked leaves stay invisible to every listing. This is containment
+ * plus disclosure, not a proven all-schedules guarantee.
+ */
+export async function assertOwnedOrEmptyDestination(
+    fs: ProjectFileSystem,
+    operation: string,
+    destination: string,
+    ownedSubtrees: ReadonlySet<string>,
+): Promise<void> {
+    if (
+        (await destinationOwnership(
+            fs,
+            operation,
+            destination,
+            ownedSubtrees,
+        )) !== 'unproven'
+    ) {
+        return;
+    }
+    throw unownedDestinationError(operation, destination);
+}
+
+/**
+ * The E1 write boundary: the same ownership/emptiness decision as
+ * assertOwnedOrEmptyDestination, for operations that create or overwrite
+ * rather than delete. A write may land only inside output the session can
+ * prove its own, or into a destination that is verifiably empty (the
+ * write itself then establishes the engine's territory there). A missing
+ * leaf is never proof that its parent output tree is safe — callers make
+ * this decision at the destination boundary (the variant root), not at
+ * the leaf.
+ */
+export async function assertWritableOwnedOrEmptyDestination(
+    fs: ProjectFileSystem,
+    operation: string,
+    destination: string,
+    ownedSubtrees: ReadonlySet<string>,
+): Promise<void> {
+    if (
+        (await destinationOwnership(
+            fs,
+            operation,
+            destination,
+            ownedSubtrees,
+        )) !== 'unproven'
+    ) {
+        return;
+    }
+    throw unownedWriteDestinationError(operation, destination);
+}
+
+/** The E1 verdict for a destination: engine-owned, empty, or unproven. */
+async function destinationOwnership(
+    fs: ProjectFileSystem,
+    operation: string,
+    destination: string,
+    ownedSubtrees: ReadonlySet<string>,
+): Promise<'owned' | 'empty' | 'unproven'> {
+    for (const owned of ownedSubtrees) {
+        if (await resolvesInsideRoot(fs, owned, destination)) {
+            return 'owned';
+        }
+    }
+    return (await isEmptyDestination(fs, operation, destination))
+        ? 'empty'
+        : 'unproven';
+}
+
+/**
+ * Whether `candidate` denotes a location at or below `root`: an exact
+ * segment match, or — the resolveDestinationChain witness rule — a
+ * case-only spelling difference the filesystem itself resolves (a stat of
+ * the candidate spelling succeeds). On a case-insensitive host the stored
+ * root answers the variant spelling (same physical directory — engine
+ * territory); on a case-sensitive host the stat fails and the case twin
+ * is a distinct, unowned path. Windows drive prefixes compare
+ * case-insensitively, as everywhere in plan space.
+ */
+async function resolvesInsideRoot(
+    fs: ProjectFileSystem,
+    root: string,
+    candidate: string,
+): Promise<boolean> {
+    const rootSegments = pathSegments(root);
+    const candidateSegments = pathSegments(candidate);
+    if (candidateSegments.length < rootSegments.length) {
+        return false;
+    }
+    let caseVariant = false;
+    for (let i = 0; i < rootSegments.length; i += 1) {
+        const rootSegment = rootSegments[i];
+        const candidateSegment = candidateSegments[i];
+        if (rootSegment === candidateSegment) {
+            continue;
+        }
+        if (rootSegment.toLowerCase() !== candidateSegment.toLowerCase()) {
+            return false;
+        }
+        caseVariant = true;
+    }
+    if (!caseVariant) {
+        return true;
+    }
+    try {
+        await fs.stat(candidate);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Whether nothing at `destination` needs preserving: absent, or a
+ * directory with zero entries. Dot entries count as content (the listing
+ * is complete — a folder holding only hidden files is not empty), and a
+ * non-directory entry at the destination is content, not emptiness. A
+ * destination whose state cannot be read fails closed: an authorization
+ * error from the route listing, or the explicit unreadable-state refusal.
+ */
+export async function isEmptyDestination(
+    fs: ProjectFileSystem,
+    operation: string,
+    destination: string,
+): Promise<boolean> {
+    let stat: FileStat;
+    try {
+        stat = await fs.stat(destination);
+    } catch (e) {
+        if (isNoSuchEntryError(e)) {
+            return true;
+        }
+        throw unverifiableDestinationError(operation, destination, e);
+    }
+    if (stat.type !== 'directory') {
+        return false;
+    }
+    const entries = await listRouteDirectory(
+        fs,
+        operation,
+        destination,
+        destination,
+    );
+    return entries === null || entries.length === 0;
+}
+
+/**
+ * The actionable E1 refusal for content that cannot be proven safe to
+ * delete.
+ */
+export function unownedDestinationError(
+    operation: string,
+    destination: string,
+): Error {
+    return new Error(
+        `Refusing ${operation}: '${destination}' is not empty and is not output this session generated, so its content cannot be proven safe to delete. Move the folder's contents elsewhere (or delete the folder) and retry.`,
+    );
+}
+
+/**
+ * The actionable E1 refusal for a write into content the engine cannot
+ * prove its own.
+ */
+export function unownedWriteDestinationError(
+    operation: string,
+    destination: string,
+): Error {
+    return new Error(
+        `Refusing ${operation}: '${destination}' is not empty and is not output this session generated, so writing there could overwrite content the engine cannot prove its own. Move the folder's contents elsewhere (or delete the folder) and retry.`,
+    );
+}
+
+/** The fail-closed E1 refusal for a destination whose state cannot be read. */
+export function unverifiableDestinationError(
+    operation: string,
+    destination: string,
+    cause: unknown,
+): Error {
+    return new Error(
+        `Refusing ${operation}: the state of '${destination}' could not be read (${
+            cause instanceof Error ? cause.message : String(cause)
+        }) — the destination's safety cannot be verified.`,
+        { cause },
+    );
 }
