@@ -16,6 +16,14 @@ deterministic scratch experiment against the unmodified real `BuildSession`
 plus a gated memory filesystem (the experiments are described verbatim in
 §4 and were deleted before the commit, per the spike's ground rules).
 
+**Status note (2026-11-07):** the UX-09 regression stash is **gone** from
+this clone — `git stash list` is empty and `git fsck --unreachable` lists
+no dangling commits, so the stash identified by message above cannot be
+recovered. RED-first plan §11 step 1 ("Unstash A1/B1/C1 and re-target")
+must be re-authored from scratch when strict-S1 implementation is
+authorized; the red assertions survive only as prose in §4/§11 and the
+doc-14 experiment descriptions.
+
 ---
 
 ## 1. Product decision and scope
@@ -439,6 +447,17 @@ mechanism the brief demands, with events as the latency mechanism only.
 | Reconciliation driver, cadence, narrowed drop rule | Extension controller + CLI watch (host-internal) | Behavior change | **DX-9-reversal (new decision)**: the drop set narrows from whole-committed-outdir (F18, A1-control) to engine-written-paths-only. The stash's A1 *control* expectation (under-B-outside-variant events stay filtered) **reverses** under Contract A — its red assertion (failure-window delivery) becomes the norm. Non-case-6 layouts: unchanged behavior (nothing under outdir classifies as source) |
 | C6/C11/C12 (engine) | As doc 13 §14 already specifies | Independent correctness fixes | DX-4/DX-7/DX-8 (unchanged) |
 | F23 fix | `copyTree` destination exclusion or pre-listed snapshot | Engine defect fix | New decision (sibling ticket, not strict-S1) |
+
+**Decision note (2026-11-07, Owner):** DX-9-reversal is **declined for the
+0.42200.x release window**. B.5a — settings A→B with only a plain delta:
+the engine keeps writing A and no switch point fires — stays the
+committed, test-pinned behavior (`extUtilDevSync.test.ts` B.5a), and the
+§3.2 temporal gate plus P0-A residual remain as documented in doc 13. The
+narrowed engine-written-paths-only drop set and the A1-control inversion
+become post-release strict-S1 workstream items, gated on the same
+approvals listed in §10. Combined with the loss of the A1/B1/C1 stash
+(provenance note above), §11's RED-first plan must be re-authored before
+any implementation authorization.
 
 ## 11. RED-first regression plan (for the implementation stage)
 
