@@ -13,6 +13,38 @@ Stage-1 remains **unapproved** and, per the standing operational rule,
 excluded from commits. No source, test, harness, contract or configuration
 file was modified for this record.
 
+**Amendment — Stage-1 scope decisions (Owner, 2026-11-07; DEC-1=a,
+DEC-2=c, DEC-3=a).** The Owner has since decided the fate of the Stage-1
+guard this record documents as unapproved; the amendment below supersedes
+the paragraph above where they conflict:
+
+- **DEC-1=a — Stage-1 is approved for commit.** The standing operational
+  rule that kept the six Stage-1 files excluded from commits is
+  **superseded for Stage-1 itself**. This record's decision content
+  (O-1…O-7, D1–D12, I-DIGEST, I-UNOWNED) stands unchanged, and C11 stays
+  frozen. Nothing in §2–§9 (receipts, ledger, digest checks, `_backup`
+  rescue, cleanup, doctor catalog) is authorized or implemented by this —
+  Stage-1 remains the volatile, session-scoped, subtree-granular stopgap
+  it was recorded as.
+- **DEC-2=c — the boundary is scoped to destinations inside a configured
+  mod's source folder** (the case-6 layout, doc 15 §1). Destinations
+  outside every mod folder keep the committed adoption behavior: a fresh
+  session may replace its configured output root exactly as `pzstudio
+  build` always has. This is a recorded, **temporary deviation from
+  B1-A** (receipt-less content preserved everywhere): it trades
+  cross-session universality for an unbroken build/watch-restart loop,
+  and is to be retired when the receipt ledger (§2–§9) provides
+  cross-session ownership evidence.
+- **DEC-3=a — DevSync variant-folder mutations are in-contract** via the
+  same guard: the apply path (full rebuild, scoped rebuild, incremental
+  writes/deletes, workshop.txt/preview.png) may mutate variant folders,
+  gated by the ownership boundary scoped per DEC-2=c (this resolves §10
+  item 15).
+
+Recorded the same day (doc 14): **DEC-4=a** — B.5a stays the committed,
+test-pinned behavior; the DX-9-reversal narrowing is declined for the
+0.42200.x window.
+
 **Provenance.** The E1 ownership/path decisions below were taken through an
 Owner review that produced draft decision records (v2→v4.1) **outside the
 repository**; an independent read-only audit at this HEAD confirmed no
@@ -823,10 +855,13 @@ at design level.
     its semantics, and the conditions of its frozen-API approval — is not
     decided. Doc 15 §8 row 2 / §11 item 4 record the historical proposal;
     D8c is the approval process, not an approval. No option is chosen here.
-15. **DevSync variant-folder mutation contract scope (open).** Carried
-    from doc 15 §11 item 2: whether variant-folder mutations are
-    in-contract for DevSync remains separate and undecided (the destruction
-    half of that item is superseded by B1-A/B2-B).
+15. **DevSync variant-folder mutation contract scope — DECIDED (DEC-3=a,
+    2026-11-07).** Carried from doc 15 §11 item 2: variant-folder
+    mutations ARE in-contract for DevSync, gated by the Stage-1 ownership
+    boundary scoped per DEC-2=c (in-mod destinations refuse unproven
+    content — abort, preserve, report; out-of-mod destinations keep the
+    committed adoption behavior). The full receipt/digest contract of
+    §2–§9 remains open design work.
 
 ## 11. Verdict and STOP
 

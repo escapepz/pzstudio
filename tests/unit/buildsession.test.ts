@@ -607,6 +607,114 @@ describe('BuildSession (fs-driven sync engine)', () => {
         await session.stop();
     });
 
+    it('normalizes a failed scoped plan-input fetch into result.errors', async () => {
+        // The scoped phase re-reads the world through the host; when that
+        // read rejects (project resolution, template lookup, source
+        // snapshotting), apply() must still resolve — never throw — with
+        // the failure collected and the committed baseline untouched.
+        await fs.writeText(
+            `${PROJECT_DIR}/my_mod/mod.info`,
+            'id=my_mod\nname=My Mod\n',
+        );
+        const { host } = createHost(fs, config);
+        let fetches = 0;
+        let failFetch = false;
+        const failingHost: BuildSessionHost = {
+            ...host,
+            getPlanInput: async () => {
+                fetches += 1;
+                if (failFetch) {
+                    return Promise.reject(new Error('plan input unreadable'));
+                }
+                return host.getPlanInput();
+            },
+        };
+        const session = new BuildSession(failingHost);
+        await session.start();
+        expect(fetches).toBe(1);
+
+        await fs.writeText(
+            `${PROJECT_DIR}/my_mod/mod.info`,
+            'id=my_mod\nname=Renamed Mod\n',
+        );
+        await fs.writeText(
+            `${PROJECT_DIR}/my_mod/media/lua/shared/hello.lua`,
+            'print("v2")',
+        );
+        failFetch = true;
+        const result = await session.apply([
+            { type: 'change', path: `${PROJECT_DIR}/my_mod/mod.info` },
+            {
+                type: 'change',
+                path: `${PROJECT_DIR}/my_mod/media/lua/shared/hello.lua`,
+            },
+        ]);
+        failFetch = false;
+
+        // Resolved with the failure collected — not a rejection, and not
+        // represented as a successful scoped sync.
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0]).toContain('plan input unreadable');
+        expect(result.scoped).toEqual([]);
+        expect(result.fullRebuild).toBe(false);
+        // The batch's earlier incremental phase keeps its committed
+        // writes…
+        expect(result.incremental).toBe(2);
+        expect(
+            await fs.readText(
+                `${MAIN_OUT}/Contents/mods/my_mod/media/lua/shared/hello.lua`,
+            ),
+        ).toBe('print("v2")');
+        // …while the scoped rebuild never ran: the output mod.info is
+        // unchanged.
+        expect(
+            await fs.readText(`${MAIN_OUT}/Contents/mods/my_mod/mod.info`),
+        ).toBe('id=my_mod\nname=My Mod\n');
+        // Exactly one fetch for the failed batch: no retry, no replay.
+        expect(fetches).toBe(2);
+
+        // The baseline survived and the queue accepts the next batch: the
+        // same scoped change rebuilds once the host reads again.
+        const second = await session.apply([
+            { type: 'change', path: `${PROJECT_DIR}/my_mod/mod.info` },
+        ]);
+        expect(second.errors).toEqual([]);
+        expect(second.scoped).toEqual([
+            { modId: 'my_mod', variants: ['main', 'development'] },
+        ]);
+        expect(
+            await fs.readText(`${MAIN_OUT}/Contents/mods/my_mod/mod.info`),
+        ).toContain('name=Renamed Mod');
+        await session.stop();
+    });
+
+    it('normalizes a non-Error scoped plan-input rejection with a usable message', async () => {
+        const { host } = createHost(fs, config);
+        let rejectString = false;
+        const failingHost: BuildSessionHost = {
+            ...host,
+            getPlanInput: async () => {
+                if (rejectString) {
+                    // A non-Error rejection value: describeError's
+                    // String(e) fallback must still produce a usable
+                    // message at this boundary.
+                    return Promise.reject('plan input vanished');
+                }
+                return host.getPlanInput();
+            },
+        };
+        const session = new BuildSession(failingHost);
+        await session.start();
+
+        rejectString = true;
+        const result = await session.apply([
+            { type: 'change', path: `${PROJECT_DIR}/my_mod/mod.info` },
+        ]);
+        expect(result.errors).toEqual(['plan input vanished']);
+        expect(result.scoped).toEqual([]);
+        await session.stop();
+    });
+
     it('serializes overlapping apply() calls in order', async () => {
         const { host } = createHost(fs, config);
         const session = new BuildSession(host);
@@ -783,5 +891,367 @@ describe('BuildSession transient sources and batch summary', () => {
                 errors: [],
             }),
         ).toBe('');
+    });
+});
+
+/**
+ * E1 Stage-1 ownership guard, scoped by DEC-2=c (Owner, 2026-11-07): the
+ * fail-closed boundary applies to destinations inside a configured mod's
+ * source folder (the case-6 layout, doc 15 §1); out-of-mod output roots
+ * keep the committed adoption behavior — a recorded, temporary deviation
+ * from doc 18 B1-A until the receipt ledger provides cross-session
+ * ownership evidence. Every fixture below therefore plants foreign content
+ * at an in-mod root unless it is explicitly pinning the out-of-mod adopt.
+ */
+describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => {
+    let fs: MemoryFileSystem;
+    let config: IProjectConfig;
+
+    beforeEach(async () => {
+        fs = new MemoryFileSystem();
+        config = baseConfig();
+        await seedProject(fs, config);
+    });
+
+    it('full rebuild fails closed on a non-empty unowned in-mod root, preserves it, and adopts once cleared', async () => {
+        const { host, setConfig } = createHost(fs, config);
+        const session = new BuildSession(host);
+        await session.start();
+
+        // A foreign, non-empty destination at the future output root inside
+        // the mod source (case-6): the adoption full rebuild must refuse to
+        // delete it (E1 fail-closed) instead of silently replacing it with
+        // generated output. A second foreign file exercises the
+        // incremental-delete window after the failed adoption re-bases the
+        // session onto the new config.
+        const moved = baseConfig();
+        moved.outdir = '/proj/my_mod/nested-out';
+        setConfig(moved);
+        await fs.writeText(
+            '/proj/my_mod/nested-out/Sync Project/Contents/mods/foreign/precious.lua',
+            'user data',
+        );
+        await fs.writeText(
+            '/proj/my_mod/nested-out/Sync Project/Contents/mods/my_mod/media/lua/victim.lua',
+            'victim',
+        );
+
+        const refused = await session.apply([
+            { type: 'change', path: '/proj/project.json' },
+        ]);
+        // The main variant's destination is refused and reported through
+        // the existing error contract — never a silent success…
+        expect(refused.errors).toHaveLength(1);
+        expect(refused.errors[0]).toContain('Refusing full rebuild removeDir');
+        expect(refused.errors[0]).toContain(
+            '/proj/my_mod/nested-out/Sync Project',
+        );
+        expect(refused.fullRebuild).toBe(false);
+        // …the development variant's destination was absent (safe to
+        // create) and still builds…
+        expect(
+            await fs.readText(
+                '/proj/my_mod/nested-out/Sync Project - dev_branch/Contents/mods/my_mod_dev/media/lua/shared/hello.lua',
+            ),
+        ).toBe('print("v1")');
+        // …and the unproven content is preserved byte-exact, with nothing
+        // written into the refused destination.
+        expect(
+            await fs.readText(
+                '/proj/my_mod/nested-out/Sync Project/Contents/mods/foreign/precious.lua',
+            ),
+        ).toBe('user data');
+        expect(
+            fs.files.has('/proj/my_mod/nested-out/Sync Project/workshop.txt'),
+        ).toBe(false);
+        // The former root is untouched.
+        expect(fs.files.has(`${MAIN_OUT}/workshop.txt`)).toBe(true);
+
+        // An incremental delete below the unowned in-mod root fails closed
+        // too — the M6–M8 destructive window.
+        const deleteRefused = await session.apply([
+            { type: 'delete', path: '/proj/my_mod/media/lua/victim.lua' },
+        ]);
+        expect(deleteRefused.errors).toHaveLength(1);
+        expect(deleteRefused.errors[0]).toContain(
+            'Refusing incremental delete',
+        );
+        expect(
+            await fs.readText(
+                '/proj/my_mod/nested-out/Sync Project/Contents/mods/my_mod/media/lua/victim.lua',
+            ),
+        ).toBe('victim');
+
+        // Recovery: once the destination is cleared, the same batch adopts
+        // it (empty destinations build) and the session continues.
+        await fs.delete('/proj/my_mod/nested-out', { recursive: true });
+        const adopted = await session.apply([
+            { type: 'change', path: '/proj/project.json' },
+        ]);
+        expect(adopted.errors).toEqual([]);
+        expect(adopted.fullRebuild).toBe(true);
+        expect(
+            await fs.readText(
+                '/proj/my_mod/nested-out/Sync Project/Contents/mods/my_mod/media/lua/shared/hello.lua',
+            ),
+        ).toBe('print("v1")');
+
+        // Inside output the session itself produced, deletes proceed.
+        const deleted = await session.apply([
+            { type: 'delete', path: '/proj/my_mod/media/lua/shared/util.lua' },
+        ]);
+        expect(deleted.errors).toEqual([]);
+        expect(deleted.incremental).toBe(2);
+        expect(
+            fs.files.has(
+                '/proj/my_mod/nested-out/Sync Project/Contents/mods/my_mod/media/lua/shared/util.lua',
+            ),
+        ).toBe(false);
+        await session.stop();
+    });
+
+    it('hidden dot entries defeat the empty-destination check', async () => {
+        const { host, setConfig } = createHost(fs, config);
+        const session = new BuildSession(host);
+        await session.start();
+
+        // Only hidden content at the future in-mod variant root: an
+        // enumeration that skipped dot entries would call this destination
+        // empty and delete the user's data.
+        const moved = baseConfig();
+        moved.outdir = '/proj/my_mod/dot-out';
+        setConfig(moved);
+        await fs.writeText(
+            '/proj/my_mod/dot-out/Sync Project/.git/config',
+            'git',
+        );
+        await fs.writeText('/proj/my_mod/dot-out/Sync Project/.hidden', 'h');
+
+        const result = await session.apply([
+            { type: 'change', path: '/proj/project.json' },
+        ]);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0]).toContain('/proj/my_mod/dot-out/Sync Project');
+        expect(
+            await fs.readText('/proj/my_mod/dot-out/Sync Project/.git/config'),
+        ).toBe('git');
+        expect(
+            await fs.readText('/proj/my_mod/dot-out/Sync Project/.hidden'),
+        ).toBe('h');
+        await session.stop();
+    });
+
+    it('scoped rebuild fails closed on a foreign mod folder at an unowned root', async () => {
+        const { host, setConfig } = createHost(fs, config);
+        const session = new BuildSession(host);
+        await session.start();
+
+        // An out-of-band outdir move into the mod source (no project.json
+        // delta): a mod.info edit re-reads the config in the scoped phase,
+        // so the scoped plan's removeDir targets the NEW in-mod root. A
+        // foreign file inside the future mod folder must stop it before any
+        // mutation.
+        const moved = baseConfig();
+        moved.outdir = '/proj/my_mod/scoped-out';
+        setConfig(moved);
+        await fs.writeText(
+            '/proj/my_mod/scoped-out/Sync Project/Contents/mods/my_mod/keepme.lua',
+            'user',
+        );
+
+        const result = await session.apply([
+            { type: 'change', path: '/proj/my_mod/mod.info' },
+        ]);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0]).toContain('Refusing scoped rebuild removeDir');
+        expect(result.errors[0]).toContain(
+            '/proj/my_mod/scoped-out/Sync Project/Contents/mods/my_mod',
+        );
+        // Attempted scoped work is still reported alongside the errors
+        // (the existing failed-scoped convention) — never a clean success.
+        expect(result.scoped).toEqual([
+            { modId: 'my_mod', variants: ['main', 'development'] },
+        ]);
+        // The foreign file survived and the engine wrote nothing into the
+        // refused destination…
+        expect(
+            await fs.readText(
+                '/proj/my_mod/scoped-out/Sync Project/Contents/mods/my_mod/keepme.lua',
+            ),
+        ).toBe('user');
+        expect(
+            fs.files.has(
+                '/proj/my_mod/scoped-out/Sync Project/Contents/mods/my_mod/mod.info',
+            ),
+        ).toBe(false);
+        // …while the absent dev destination built normally.
+        expect(
+            await fs.readText(
+                '/proj/my_mod/scoped-out/Sync Project - dev_branch/Contents/mods/my_mod_dev/media/lua/shared/hello.lua',
+            ),
+        ).toBe('print("v1")');
+        await session.stop();
+    });
+
+    it('start() adopts a non-empty out-of-mod destination — the committed behavior DEC-2=c preserves', async () => {
+        // DEC-2=c: destinations outside every mod folder keep the committed
+        // adoption behavior — a fresh session may replace its configured
+        // output root exactly as `pzstudio build` always has, foreign
+        // content included. This is the recorded deviation from doc 18
+        // B1-A until the receipt ledger (doc 18 §2–§9) provides
+        // cross-session ownership evidence; the in-mod equivalent refuses.
+        await fs.writeText(
+            `${MAIN_OUT}/Contents/mods/foreign/precious.lua`,
+            'user data',
+        );
+        const { host } = createHost(fs, config);
+        const session = new BuildSession(host);
+        await session.start();
+        // The root was replaced with generated output…
+        expect(fs.files.has(`${MAIN_OUT}/workshop.txt`)).toBe(true);
+        expect(
+            fs.files.has(`${MAIN_OUT}/Contents/mods/foreign/precious.lua`),
+        ).toBe(false);
+        // …and a fresh session adopts the non-empty root again: the
+        // repeated `pzstudio build` / watch-restart loop stays intact for
+        // out-of-mod roots.
+        const second = new BuildSession(host);
+        await second.start();
+        expect(fs.files.has(`${MAIN_OUT}/workshop.txt`)).toBe(true);
+        await second.stop();
+    });
+
+    it('start() refuses per variant regardless of iteration order — a foreign in-mod dev-only root is preserved too', async () => {
+        // DEC-2=c: the refusal applies per variant at in-mod destinations.
+        const case6 = baseConfig();
+        case6.outdir = '/proj/my_mod/nested';
+        await fs.writeText(
+            '/proj/my_mod/nested/Sync Project - dev_branch/Contents/mods/foreign/keep.lua',
+            'user data',
+        );
+        const { host, setConfig } = createHost(fs, config);
+        setConfig(case6);
+        const session = new BuildSession(host);
+        await expect(session.start()).rejects.toThrow(
+            /Refusing full rebuild removeDir/,
+        );
+        expect(
+            await fs.readText(
+                '/proj/my_mod/nested/Sync Project - dev_branch/Contents/mods/foreign/keep.lua',
+            ),
+        ).toBe('user data');
+        expect(
+            fs.files.has(
+                '/proj/my_mod/nested/Sync Project - dev_branch/workshop.txt',
+            ),
+        ).toBe(false);
+        // Variant independence: the absent main destination still built.
+        expect(
+            fs.files.has('/proj/my_mod/nested/Sync Project/workshop.txt'),
+        ).toBe(true);
+    });
+
+    it('after a refused adoption, later incremental writes cannot overwrite foreign in-mod content', async () => {
+        const { host, setConfig } = createHost(fs, config);
+        const session = new BuildSession(host);
+        await session.start();
+
+        const moved = baseConfig();
+        moved.outdir = '/proj/my_mod/nested-out';
+        setConfig(moved);
+        // A foreign file at exactly the path a later source change would
+        // write, inside the otherwise non-empty unowned in-mod root.
+        await fs.writeText(
+            '/proj/my_mod/nested-out/Sync Project/Contents/mods/my_mod/media/lua/shared/hello.lua',
+            'foreign bytes',
+        );
+        const refused = await session.apply([
+            { type: 'change', path: '/proj/project.json' },
+        ]);
+        expect(refused.errors).toHaveLength(1);
+
+        // The failed adoption re-based the session onto the new config: a
+        // later plain change must not silently write into the unowned root
+        // — the decision is made at the variant-root boundary, so a missing
+        // leaf elsewhere in the tree proves nothing either.
+        await fs.writeText(
+            `${PROJECT_DIR}/my_mod/media/lua/shared/hello.lua`,
+            'print("v2")',
+        );
+        const write = await session.apply([
+            {
+                type: 'change',
+                path: '/proj/my_mod/media/lua/shared/hello.lua',
+            },
+        ]);
+        expect(write.errors).toHaveLength(1);
+        expect(write.errors[0]).toContain('Refusing incremental write');
+        expect(write.errors[0]).toContain(
+            '/proj/my_mod/nested-out/Sync Project',
+        );
+        // The foreign same-path file is intact.
+        expect(
+            await fs.readText(
+                '/proj/my_mod/nested-out/Sync Project/Contents/mods/my_mod/media/lua/shared/hello.lua',
+            ),
+        ).toBe('foreign bytes');
+        await session.stop();
+    });
+
+    it('workshop-text and preview writes respect the ownership boundary', async () => {
+        const { host, setConfig } = createHost(fs, config);
+        const session = new BuildSession(host);
+        await session.start();
+
+        const moved = baseConfig();
+        moved.outdir = '/proj/my_mod/nested-out';
+        setConfig(moved);
+        // Foreign metadata at the exact rewrite target inside the unowned
+        // in-mod main root.
+        await fs.writeText(
+            '/proj/my_mod/nested-out/Sync Project/workshop.txt',
+            'user text',
+        );
+        const refused = await session.apply([
+            { type: 'change', path: '/proj/project.json' },
+        ]);
+        expect(refused.errors).toHaveLength(1);
+
+        await fs.writeText(
+            `${PROJECT_DIR}/workshop/description.txt`,
+            'brand new line',
+        );
+        const textResult = await session.apply([
+            { type: 'change', path: '/proj/workshop/description.txt' },
+        ]);
+        expect(textResult.errors).toHaveLength(1);
+        expect(textResult.errors[0]).toContain('Refusing workshop.txt rewrite');
+        // The foreign metadata is intact; the owned dev root still rewrote.
+        expect(
+            await fs.readText(
+                '/proj/my_mod/nested-out/Sync Project/workshop.txt',
+            ),
+        ).toBe('user text');
+        expect(
+            await fs.readText(
+                '/proj/my_mod/nested-out/Sync Project - dev_branch/workshop.txt',
+            ),
+        ).toContain('brand new line');
+
+        await fs.writeText(`${PROJECT_DIR}/workshop/preview.png`, 'PNGDATA');
+        const previewResult = await session.apply([
+            { type: 'change', path: '/proj/workshop/preview.png' },
+        ]);
+        expect(previewResult.errors).toHaveLength(1);
+        expect(previewResult.errors[0]).toContain('Refusing preview.png copy');
+        expect(
+            fs.files.has('/proj/my_mod/nested-out/Sync Project/preview.png'),
+        ).toBe(false);
+        expect(
+            fs.files.has(
+                '/proj/my_mod/nested-out/Sync Project - dev_branch/preview.png',
+            ),
+        ).toBe(true);
+        await session.stop();
     });
 });
