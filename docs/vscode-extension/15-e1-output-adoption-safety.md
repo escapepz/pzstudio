@@ -68,6 +68,12 @@ The accepted model separates five content classes at the times that matter
   as engine output merely because a later configuration change selects their
   parent folder as a destination.
 
+**Class-5 status (recorded later, at doc 18):** the accepted
+silent-overwrite semantics of class 5 are superseded for every file
+lacking valid ownership evidence — a digest mismatch ⇒ preserve and report
+(doc 18 §3, I-DIGEST); a receipt-less file ⇒ ownership-unknown ⇒ preserve
+(doc 18 §2 B1-A). Regeneration applies only to validly-evidenced files.
+
 ## 2. The destructive mechanism, exactly
 
 The destruction is a property of the engine's own build semantics, shared by
@@ -129,6 +135,17 @@ file under the adopted variant folder; the delete log is exactly the
 acted on** before adoption (the G1-B refinement: delivery does not save
 content) — the destruction is exclusively `planBuild`'s
 `removeDir(outPath)` at execution time.
+
+**E1-E supersession (recorded later, at doc 18):** the executed E1-E row
+above stands as reproduction history only. The silent-overwrite semantics
+are superseded for **every** file lacking valid ownership evidence: a
+receipt-covered digest mismatch is reported immediately and the file
+preserved (doc 18 §3, I-DIGEST); a receipt-less file is ownership-unknown
+and preserved in every flow, including rebuild (doc 18 §2 B1-A). A rebuild
+regenerates only validly-evidenced files, and the pending mutation batch
+is aborted before it starts. A running watch session that detects
+the mismatch stops mutating and continues in read-only observation until
+the user acts and revalidation passes (doc 18 §3 / D9).
 
 ## 4. Core versus CLI execution coverage
 
@@ -218,7 +235,8 @@ marker at the output root; content hashes of generated files).
   migration path — and a migration that *adopts* unproven trees once
   re-opens exactly the hole being closed. A structural proof ("the tree
   matches what the planner would generate for the current plan input")
-  is false-failure-prone: any user modification of generated output (E1-E)
+  is false-failure-prone: any user modification of generated output
+  (E1-E — receipt-covered files are preserved instead, doc 18 §1)
   breaks the match, and case-6 variant-folder content is simultaneously
   source — the match test cannot distinguish "user's stale build" from
   "user's modified source" without re-running the classification this
@@ -282,6 +300,14 @@ be proven engine-owned.
   output), and on its own it does not answer the check-to-delete race
   (§5-A) unless the capture happens by *rename before* the delete.
 
+**Copy-form supersession (recorded later, at doc 18):** the copy-then-delete
+crash analysis above is historical candidate evaluation. Doc 18 §2 O-5
+selects **atomic-rename-only** rescue, failing closed when safe rename
+conditions cannot be verified; copy-and-delete is **not** an automatic
+fallback. The completeness-check reasoning survives only as a
+validation/gate design input, never as authority to switch to copy-delete
+when rename is unavailable.
+
 ### Candidate D — narrow hybrid (preflight + capture-then-remove)
 
 The minimum composition: **provable-ownership preflight whose failure mode
@@ -316,6 +342,17 @@ target as:
   cross-session rebuild of an old output tree, and every CLI build of a
   pre-existing root.
 
+**M1 evidence supersession (recorded later, at doc 18 §2 B1-A):** the
+"provably engine-owned" branch above is superseded — a subtree's presence
+inside the committed output root of the same session is **not** ownership
+evidence, and neither is the committed baseline, the build plan, session
+history or subtree location. Under doc 18, ownership proof is per-file: a
+valid receipt whose digest matches the current content, plus boundary and
+authorization checks; receipt-less files are ownership-unknown and
+preserved, and preflight findings abort the batch (doc 18 §2 B1-A/B2-B).
+The baseline rule above stands as the record of this document's original
+design, not as a rule in force.
+
 **M2 — Capture-then-adopt for unproven targets.** An unproven non-empty
 destination is not deleted silently. The engine moves it aside —
 `<outdir>/.pzstudio-rescue/<UTC-timestamp>-<folderName>/` (dot-prefixed:
@@ -327,19 +364,49 @@ silent loss, no refusal of a legitimate build. Deletion of the *captured*
 subtree is then safe by construction; the completeness gate applies only
 in the copy-then-delete form (rename form is atomic).
 
-**M3 — Same-root rebuilds keep today's semantics.** A committed root
-rebuild (E1-D) and the user-modification overwrite (E1-E) proceed exactly
-as today: content inside a committed variant folder is engine territory by
-the accepted semantics (doc 14 §16.1 plan-resolution-time claim). No
-quarantine noise, no false failures.
+**Name supersession (recorded later, at doc 18):** the reserved
+rescue-folder base name was set to `_backup` by the Owner (doc 18 §7). The
+`.pzstudio-rescue` spelling here and in the §5-C / §9 illustrations remains
+the historical candidate-form record; `_backup` is not dot-prefixed, so
+doc 18 replaces this section's dot-prefix invisibility argument with an
+explicit reserved-name exclusion requirement. Doc 18 §1 also supersedes
+M3/E1-E silent overwrite for files covered by a valid ownership receipt.
+Doc 18 §2 O-5 likewise supersedes this section's copy-then-delete
+completeness-gate sentence: rescue is atomic-rename-only and fails closed
+when rename safety cannot be verified (no automatic copy-and-delete
+fallback). Doc 18 §2 D1/D5 additionally place the ownership ledger at
+`<project-root>/.pzstudio/ownership-ledger/` and protect it and the
+reserved rescue paths through a centralized exact-scope exclusion policy —
+never copied, overwritten or deleted as ordinary output. Read M2 together
+with doc 18 §4 (I-UNOWNED) and §2 B2-B: non-empty output without valid
+ownership evidence is rejected before mutation, and M2's automatic
+rescue-then-proceed execution is superseded — abort, preserve, report
+(resolved at doc 18 §10 item 13). Per doc 18 §2 B1-A, a file without valid
+ownership evidence is preserved in every flow, including rebuild.
 
-**M4 — Failure semantics.** A rescue that cannot complete (lock errors,
-cross-device failure, quota) fails the build with the existing actionable
-lock-error wording plus the reason (unproven content inside the variant
-destination); the destination is left untouched (fail-closed, never
-partial-destruct). The rescue folder and its retention are user-inspectable
-and doctor-visible; cleanup is a user action (the engine never deletes
-quarantined content).
+**M3 — Same-root rebuilds (reconciled).** This section originally pinned
+today's semantics — a committed-root rebuild (E1-D) and the
+user-modification overwrite (E1-E) "proceed exactly as today", no quarantine
+noise, no false failures — citing doc 14 §16.1's plan-resolution-time
+claim. As superseded by doc 18 §2 B1-A/B2-B and §3 (I-DIGEST), that is no
+longer the rule: a same-root rebuild may regenerate **only** files with
+valid ownership evidence whose current digest matches the receipt, and
+only after the required safety checks pass; receipt-less files are
+ownership-unknown — preserved and reported; digest mismatches are
+preserved and reported, never overwritten or restored. A preflight
+finding of unowned content aborts the batch before it starts.
+
+**M4 — Failure semantics (re-scoped by doc 18 §2 B2-B).** Preflight and
+rescue are separate: a preflight finding of unowned content aborts the
+mutation batch (preserve, report) — it never triggers an automatic rescue
+and never lets the build continue after one. The failure semantics below
+apply only to a **user-initiated rescue** (O-6): a rescue that cannot
+complete (lock errors, cross-device failure, quota) fails closed with the
+existing actionable lock-error wording plus the reason; the destination is
+left untouched (never partial-destruct). The rescue folder and its
+retention are user-inspectable and doctor-visible; cleanup is a user
+action (the engine never deletes quarantined content) — and a completed
+rescue neither establishes ownership nor unblocks a batch.
 
 **Race-closure summary (per candidate):** A's scan-then-delete window and
 B's verify-then-delete window both end in destruction; M2's
@@ -357,6 +424,17 @@ without breaking E1-D; nothing larger (registry, migration framework) is
 needed either — M1 needs no new registry, M2 no new public API beyond what
 §8 lists, and no migration framework: legacy trees are simply *unproven*
 and get the rescue path on their first re-adoption.
+
+**Race-closure supersession (recorded later, at doc 18 §2 B1-A/B2-B and
+§7):** the summary above is the historical candidate analysis. In force
+now: scan-then-capture is not a mechanism for letting a mutation batch
+pass an ownership conflict — preflight findings abort the batch (preserve,
+report); rescue is a separate user-initiated operation (O-6, D8a
+rename-only, fail-closed); and legacy trees without ownership evidence are
+ownership-unknown (preserved, reported) — no re-adoption or rescue process
+for them is inferred here, and any such process needs separate Owner
+approval. The copy-form wording above ("manifest-verified copy in the copy
+form") is likewise superseded (doc 18 §2 O-5/D8a: no copy fallback).
 
 **Compatibility with frozen API-v2 boundaries.** M1/M2 live inside the
 planner/executor contract (`FileOperation` gains no type; the executor's
@@ -443,6 +521,24 @@ blocker exactly as the brief requires.
 No registry, migration framework or new public API beyond the two
 mechanical capability additions is required by the preferred mechanism.
 
+**Capture-form supersession (recorded later, at doc 18):** row 1's
+"falls back to copy+verify+delete" phrasing is superseded by doc 18 §2
+O-5 — atomic-rename-only, failing closed when safe-rename conditions
+cannot be verified; copy-and-delete is not an automatic fallback. The
+rename capability itself remains a pending frozen-API exception. Row 1's
+"closes the capture race cleanly" is a design property claimed for atomic
+rename, not a runtime-verified closure: residual race windows and their
+consequences are recorded (§5; the §6 race-closure summary), never
+claimed eliminated.
+
+**Row-2 status (recorded later, at doc 18 §10 item 14):** the
+planner-level ownership field is an OPEN Owner decision — a historical
+proposal, not an approved contract. Committed baseline is not ownership
+evidence (doc 18 §2 B1-A); a planner field, if ever adopted, would carry
+assertions of intent only, never proof, and executors would still
+independently verify receipts/digests, boundary and authorization
+(doc 18 §6). No API field is designed or standardized here.
+
 ## 9. Compatibility implications
 
 - **Non-case-6 layouts.** A destination outside the project is always
@@ -469,10 +565,16 @@ mechanical capability additions is required by the preferred mechanism.
   approves the E1 exclusion nor relaxes strict S1; it makes the
   destruction the E1 exclusion was named for preventable, which §16.1
   disposition (b) requires as a *separate engine decision*.
-- **No new F23 behavior.** The quarantine is dot-prefixed, so it cannot
-  re-enter any copyTree walk or classification (no new F23-shaped
-  feedback); rescue content is not re-copied into the build, so no
-  unbounded copying or recursive growth is introduced.
+- **No new F23 behavior.** (Historical candidate rationale — superseded by
+  doc 18 §7: safety was argued from the quarantine being dot-prefixed,
+  hence invisible to `copyTree` and classification. The decided name
+  `_backup` is **not** dot-prefixed, so no automatic by-name exclusion
+  exists; the reserved-path exclusion is a design requirement to be
+  specified and tested — doc 18 §10 item 5 — before any no-re-embedding
+  claim can be made. Standing design requirements, **not**
+  runtime-verified behavior: rescue content must never be re-embedded,
+  foreign rescue content must never be overwritten or merged, and rescue
+  content must never be automatically deleted — doc 18 §2 O-5, §6.)
 - **Frozen API-v2 boundaries.** No `PzStudio`/v2 surface change in the
   preferred mechanism's core; the only possible frozen-surface deltas are
   the optional rename capability and the additive planner field (§8), each
@@ -493,6 +595,33 @@ mechanical capability additions is required by the preferred mechanism.
 | Same-root rebuild failure (locks) | Unchanged: today's actionable lock-error semantics (execute.ts:352-359 / helper.ts:259-262) |
 | E1-E (user edits generated output) | Unchanged: overwritten on rebuild, engine-owned semantics (accepted) |
 
+*(Supersession, recorded later at doc 18: the copy-form and dot-prefix
+rows above are historical candidate semantics — doc 18 §2 O-5 selects
+rename-only rescue, and doc 18 §7 replaces dot-prefix exclusion with a
+reserved-name exclusion; the final E1-E row is superseded for every file
+lacking valid evidence (doc 18 §2 B1-A and §3); adoption of non-empty
+output lacking valid ownership evidence is rejected before mutation per
+doc 18 §4 (I-UNOWNED); and the first row's rescue-and-proceed behavior is
+superseded by doc 18 §2 B2-B — abort, preserve, report. The compatibility
+bullets above are likewise superseded where they rest on the old model:
+"Same-root rebuilds are provable via the committed baseline" (baseline is
+not evidence — doc 18 §2 B1-A), quarantine-at-adoption and
+"rescued (not refused)" (preflight findings abort — doc 18 §2 B2-B),
+"Expected rebuild behavior preserved … exactly as today" (regeneration
+applies only to validly-evidenced files — doc 18 §2 B1-A, §3), and the
+"No new F23 behavior" bullet's dot-prefix reasoning (historical candidate
+rationale — doc 18 §7). Compatibility under the current decisions, by
+output state: an **empty or absent** output root may be initialized after
+the mandatory checks; **old content without valid receipts** is
+ownership-unknown — the batch aborts and the content is preserved and
+reported, never adopted; files with **valid receipts and matching
+digests** may be regenerated; **receipt-but-mismatched** files are
+preserved and reported. The "byte-identical to today" claim of the
+non-case-6 bullet — including for a previously "engine-generated" external
+outdir, which is not engine-owned merely because the engine once wrote it
+or a committed baseline recognizes the root — described the superseded
+mechanism and does not hold under B1-A/B2-B.)*
+
 ## 10. RED-first permanent regression matrix (for the implementation stage)
 
 Every row was executed as a disposable experiment at `47abe28` (§3); the
@@ -500,17 +629,27 @@ implementation stage re-lands them as permanent gates. RED-first means:
 each gate is written against the *post-fix* expectation and fails at
 today's HEAD.
 
+**Gate reconciliation (recorded later, at doc 18 §2 B2-B):** the green
+conditions of E1-R1/R2/R3/R5/R6/R7 are re-targeted from rescue-then-proceed
+to abort/preserve/report — a preflight finding of content without valid
+ownership evidence aborts the pending batch; nothing is automatically
+moved to `_backup` to bypass preflight, and a successful rescue never
+authorizes continuing the batch. E1-R4's receipt-less scope is likewise
+superseded by doc 18 §2 B1-A (every file lacking valid evidence is
+preserved, including rebuild). The red conditions remain the executed
+record of today's HEAD.
+
 | ID | Gate | Red condition at today's HEAD | Green condition |
 | :--- | :--- | :--- | :--- |
-| E1-R1 | Adoption destroys a pre-placed future-variant-folder file silently (Core session) | Destruction happens, `errors: []` — pin as documented boundary until the mechanism is approved; after the mechanism lands: file is quarantined, rebuild proceeds, result names the rescue path | File present under the rescue path; original path rebuilt; `fullRebuild: true` |
-| E1-R2 | Same flow with the event delivered first (E1-B) | Nested garbage under old root + original destroyed at adoption | Rescue path preserves the original; no nested-capture change |
-| E1-R3 | Same victim, CLI `executeBuildPlan` on a real fs | Today: `cpSync` self-copy abort *after* the `removeDir` destroyed the victim | No destruction before the plan's ownership decision; CLI rescue parity with Core |
-| E1-R4 | Same-root rebuild (E1-D) and user-modified generated file (E1-E) | Today: silent overwrite — stays identical under M3 (green today, must stay green) | No quarantine noise, no preflight failure, byte-identical output |
-| E1-R5 | Sanitized variant names (E1-F): title `Sync: Project?` | Destruction target is exactly `sanitizeFolderName(title)`-derived; near-miss folders survive | Same, plus the sanitized-name quarantine path is exact |
-| E1-R6 | A→B→A with stale generated folders (E1-G) | Stale trees preserved (F23-fix policy) while the future-variant victim is destroyed | Stale trees still survive; victims quarantined; re-adopted root rebuilt normally |
-| E1-R7 | Check-to-delete race probe | A file created between the ownership scan and the `removeDir` is destroyed (structural TOCTOU of any decide-then-delete mechanism) | Capture form: file quarantined (no destruction possible post-capture); race residual = post-capture concurrent write into new build territory (§16.2-priced) |
-| E1-R8 | Rescue visibility | — | Quarantined paths never classify as source; never re-embedded (dot-prefix pin); never deleted by the engine |
-| E1-R9 | CLI/Core parity of the mechanism | CLI executor currently *loudly* destroys (cpSync guard) — parity fails today | Both executors honor planner-provided ownership data (§8) with identical rescue semantics |
+| E1-R1 | Adoption destroys a pre-placed future-variant-folder file silently (Core session) | Destruction happens, `errors: []` — pin as documented boundary until the approved mechanism lands (doc 18 §2 B2-B: abort, preserve, report) | Pending batch aborted before any mutation; the pre-placed file preserved byte-exact; conflict reported with paths, reason and next steps; retry only after resolution and revalidation (doc 18 §2 B2-B) |
+| E1-R2 | Same flow with the event delivered first (E1-B) | Nested garbage under old root + original destroyed at adoption | Batch aborted; the original file intact — no rescue, no nested capture; conflict reported (doc 18 §2 B2-B) |
+| E1-R3 | Same victim, CLI `executeBuildPlan` on a real fs | Today: `cpSync` self-copy abort *after* the `removeDir` destroyed the victim | No destruction before the ownership decision; identical abort/preserve/report parity between the CLI and Core executors (doc 18 §2 B2-B) |
+| E1-R4 | Same-root rebuild (E1-D) and user-modified generated file (E1-E) | Today: silent overwrite of user-modified generated output (historical baseline behavior; the old "stays identical under M3 — green today, must stay green" expectation is superseded — see the green column) | Rebuild regenerates only validly-evidenced files (receipt with matching digest); every file lacking valid evidence — receipt-less or mismatched — is preserved and reported (doc 18 §2 B1-A, §3) |
+| E1-R5 | Sanitized variant names (E1-F): title `Sync: Project?` | Destruction target is exactly `sanitizeFolderName(title)`-derived; near-miss folders survive | Same refusal semantics against the exact `sanitizeFolderName`-derived segments; near-miss folders untouched; no quarantine path created (doc 18 §2 B2-B) |
+| E1-R6 | A→B→A with stale generated folders (E1-G) | Stale trees preserved (F23-fix policy) while the future-variant victim is destroyed | Stale trees still survive; victims preserved — batch aborted and reported (doc 18 §2 B2-B); the re-adopted root rebuilds only over validly-evidenced files; old output roots are never auto-cleaned and may be doctor-reported (doc 18 O-2/D10) |
+| E1-R7 | Check-to-delete race probe | A file created between the ownership scan and the `removeDir` is destroyed (structural TOCTOU of any decide-then-delete mechanism) | No destruction of unverified content in the observable window; findings abort the batch (preserve, report); the residual race window is documented, never claimed closed (doc 18 §2 B2-B, §6) |
+| E1-R8 | Rescue visibility | — | Quarantined paths never classify as source; never re-embedded (reserved-name exclusion of `_backup` — supersedes the dot-prefix pin, doc 18 §7); never deleted by the engine |
+| E1-R9 | CLI/Core parity of the mechanism | CLI executor currently *loudly* destroys (cpSync guard) — parity fails today | Both executors abort the pending batch before mutation on preflight-unowned findings and preserve/report identically (doc 18 §2 B2-B); a planner ownership field joins any contract only by separate Owner decision and approvals (doc 18 §10 item 14) |
 | E1-R10 | F23-E1a (case-variant destination) | Alphabetical: nesting depth > 2 (measured 6); insertion order: write-budget trip (unbounded) | Containment resolves case; both orders bounded; regression pins both flows |
 
 The suite above is specified, not implemented (the disposable experiment
@@ -518,6 +657,27 @@ suite was deleted before this commit). E1-R1/E1-R2 re-target the executed
 reproductions of §3; E1-R3..R8 are new gates for the mechanism stage.
 
 ## 11. Explicit owner decisions required before implementation
+
+**Decision-status supersession (recorded later, at doc 18):** the list
+below is the **original historical decision list** as written at
+`47abe28`; several items have since been decided by the Owner in doc 18,
+and where an item's text still reads as an open question, the status here
+governs. Current status per item — (1) is decided: prevent, via
+fail-closed refusal (doc 18 §1, §2
+B1-A/B2-B); (2) is decided as to destruction (superseded by B1-A/B2-B)
+while the DevSync sync-contract scoping question remains open (doc 18 §10
+item 15); (3) is decided: atomic rename only, fail-closed when rename
+safety cannot be verified — no copy fallback (doc 18 O-5, D8a; the
+rename-capability frozen-API approval remains a separate gate under D8c);
+(4) remains OPEN — whether to adopt a planner-level ownership field as
+planner contract is undecided (doc 18 §10 item 14; §6 there fixes only the
+field's meaning: an assertion of intent, never proof); (5) remains tracked
+as sibling defect tickets (F23-E1a partially landed; the CLI-side exposure
+of §4 remains open); (6) is decided: reserved name `_backup`, collision
+format `_backup-<timestamp>-<unique-suffix>`, ledger at
+`<project-root>/.pzstudio/ownership-ledger/`, manual retention with no
+automatic purge (doc 18 O-5, D4, D1); the reserved-path exclusion
+mechanics stay open (doc 18 §10 item 5).
 
 1. **Prevent vs accept vs scope out** (doc 14 §16.1 disposition (b), restated
    as the E1 decision this record serves): prevent the destruction (the §6
@@ -530,18 +690,32 @@ reproductions of §3; E1-R3..R8 are new gates for the mechanism stage.
    the *destruction* class (content is rescued), but the sync-contract
    scoping question (whether variant-folder mutations are in-contract for
    DevSync) remains separate.
-3. **Capture form**: rename capability (§8 row 1 — frozen-surface
-   exception) versus copy+manifest-verify+delete (no new capability, crash
-   window wider). The rename form is recommended; both are specified.
-4. **Planner-ownership field** (§8 row 2): required for CLI parity — a
-   frozen-API additive decision.
+3. **Capture form (decided — doc 18 §2 O-5/D8a):** atomic rename only,
+   failing closed when rename safety cannot be verified; copy +
+   manifest-verify + delete is **not** a permitted fallback. (Historical
+   record: this item originally posed rename versus
+   copy+manifest-verify+delete with both specified — that choice is
+   closed. The rename capability's frozen-API approval remains a separate
+   gate, doc 18 D8c.)
+4. **Planner-ownership field** (§8 row 2): originally proposed as required
+   for CLI parity — now **OPEN — Owner decision required** (doc 18 §10
+   item 14): not an approved contract; CLI parity is defined by identical
+   abort/preserve/report behavior (doc 18 §2 B2-B), not by this field; any
+   frozen-API additive decision remains a separate gate.
 5. **F23-E1a** (§7 blocker) and the **CLI-side F23 exposure** (§4): file as
    sibling defect tickets; no case-6 reliability claim survives without
    them (doc 14 §16.3's condition, now including the CLI executor).
 6. **Rescue-folder contract**: location, naming, retention policy and
-   doctor visibility are user-facing output-contract decisions (the
-   reserved `.pzstudio-rescue` name becomes part of the output-root
-   contract).
+   doctor visibility are user-facing output-contract decisions. (Decided
+   later at doc 18: reserved base name **`_backup`** with collision format
+   `_backup-<timestamp>-<unique-suffix>` — O-5/D4; ledger at
+   `<project-root>/.pzstudio/ownership-ledger/` — D1; manual retention,
+   never automatically purged, with Doctor reporting pending rescue and
+   next steps — O-5/D7 at design level; detailed UX/reporting remains open
+   where doc 18 §10 marks it so. The historical `.pzstudio-rescue`
+   spelling is superseded — see §6 M2's note; `_backup` is not
+   dot-prefixed, and neither the rescue folder nor its manifest is
+   ownership proof.)
 
 ## 12. Verdict
 
@@ -549,8 +723,9 @@ reproductions of §3; E1-R3..R8 are new gates for the mechanism stage.
 
 The destructive mechanism is fully specified and reproduced (E1-A…E1-G,
 Core and CLI separately); the accepted ownership boundary is preserved
-verbatim; the candidates are evaluated with their check-to-delete races
-closed analytically; the preferred mechanism (capture-then-adopt with
+verbatim; the candidates are evaluated, with their check-to-delete races
+analyzed and the residual race windows and their consequences recorded;
+the preferred mechanism (capture-then-adopt with
 provable-ownership preflight) meets the brief's criteria with the two
 gated surface deltas of §8 named; one new demonstrable F23 escape is
 reported as a separate blocker (§7, F23-E1a). Nothing here is an
@@ -564,6 +739,27 @@ its manifest-check design (§8 row 1); (3) the exact quarantine retention
 and doctor-surfacing UX; (4) the E1-B nested-garbage cleanup semantics
 (bounded garbage under abandoned roots is recorded behavior, unchanged by
 this design).
+
+**Verdict status (recorded later, at doc 18):** the verdict and residual
+list above are the historical investigation record at `47abe28`. The
+current state, per doc 18: the §6 mechanism direction was selected, but
+its automatic capture-then-adopt / rescue-then-proceed execution is
+superseded — preflight findings of unowned content abort the batch
+(doc 18 §2 B2-B), and rescue is a separate user-initiated operation
+(O-6, D8a); the rename-vs-copy choice is **decided** (atomic rename only,
+no copy/manifest-check fallback — O-5/D8a; the rename capability's
+frozen-API approval remains a separate gate, D8c). The residual
+obligations, re-classified: **decided** — the resolved §11 items (see
+§11's status note), rescue naming/collision and ledger location and
+retention (O-5/D4/D1), cleanup trigger and semantics (O-2/O-3/O-4/O-6),
+concurrency model (D6), retention architecture at design level (D12);
+**open** — planner-level ownership field (doc 18 §10 item 14), DevSync
+variant-folder scope (item 15), reserved-path exclusion mechanics
+(item 5), legacy-output handling process, the remaining §10 implementation
+details; **approval gates outstanding** — each frozen-API exception
+individually (D8c); **not implemented or verified** — everything.
+Nothing here is an implementation approval, an E1-exclusion approval, or
+a strict-S1 satisfaction claim (unchanged).
 
 ---
 
