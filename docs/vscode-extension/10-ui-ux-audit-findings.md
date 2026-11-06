@@ -313,6 +313,17 @@ failures.
 
 **Scope:** backlog (needs a small settings decision).
 
+**Status annotation (added with the game-build diagnostics patch):** fixed
+at `44df635`. The resource-scoped `pzstudio.gameBuild` setting is forwarded
+to `studio.runProjectDoctor` when non-empty, enabling the
+`pzBuildCompatibility` check in the quick-pick and the explorer badge
+(`util/doctor.ts`); empty disables the check and nothing is auto-detected
+or written to project config. Engine failures from the diagnostics path no
+longer propagate raw: the doctor command catches them and routes them
+through the host-owned logger error sink — one localized notification with
+a Show Details action (`commands/doctor.ts`). This annotation records
+status; the original finding above is retained as the historical baseline.
+
 ---
 
 ## UX-12 — README drift (extension `README.md`)
@@ -371,6 +382,17 @@ whose folder is missing). The UI implies these operations are meaningful.
 or make Delete-on-missing the one-tap "remove stale entry" flow.
 
 **Scope:** MVP ext polish / backlog.
+
+**Status annotation (added with the missing-mod remediation patch):** fixed
+at `b23291f`. Missing mods render `contextValue: 'mod-missing'` with a
+warning icon and their context menu offers only safe remediation — the
+read-only `pzstudio.openProjectJson` plus explorer refresh; Mod
+Configuration / ModInfo Generate / Rename / Delete are restricted to
+`viewItem =~ /^mod-(included|devonly|excluded)$/`, so the destructive
+entries are hidden rather than merely disabled (`projectExplorer.ts`,
+`package.json`). The remediation chose "safe context only" over the
+suggested Delete-on-missing flow. This annotation records status; the
+original finding above is retained as the historical baseline.
 
 ---
 
@@ -463,6 +485,14 @@ notification.
 
 **Scope:** MVP ext polish.
 
+**Status annotation (added with the actionable-errors patch):** addressed
+at `c1118c3`, with a different shape than suggested: no auto-open. Errors
+now log full detail to the PZ Studio channel and raise a localized
+notification whose Show Details button opens the channel
+(`util/logger.ts`), so the structured Problem/Cause/Try detail is one
+click away exactly when it matters. This annotation records status; the
+original finding above is retained as the historical baseline.
+
 ---
 
 ## UX-17 — Progress/notification strings use raw command ids
@@ -485,6 +515,13 @@ every command.
 tables).
 
 **Scope:** MVP ext polish.
+
+**Status annotation (added with the actionable-errors patch):** fixed at
+`c1118c3`. Progress titles and already-running warnings use the localized
+command-label map (`COMMAND_LABEL_KEYS` / `commandLabel()` with
+`t('PZ Studio: {0}', ...)`) instead of raw command ids
+(`util/execute.ts`). This annotation records status; the original finding
+above is retained as the historical baseline.
 
 ---
 
