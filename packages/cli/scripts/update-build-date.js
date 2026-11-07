@@ -92,6 +92,13 @@ if (templateLegacySource) {
     // Stamp the bundled copy so `pzstudio update` can tell whether the
     // installed global templates differ from the ones this build shipped.
     const version = JSON.parse(fs.readFileSync(packagePath, 'utf8')).version;
+    // A missing version would produce an unreadable stamp and a silent
+    // permanent skip of every future refresh — fail the build loudly.
+    if (typeof version !== 'string') {
+        throw new Error(
+            'Cannot stamp legacy templates: packages/cli/package.json has no version',
+        );
+    }
     const stampPath = path.join(templateLegacyDest, '.pzstudio-templates.json');
     fs.writeFileSync(
         stampPath,

@@ -606,4 +606,38 @@ describe('templateManager - refreshLegacyTemplates', () => {
         // A skip must not create or touch the global cache.
         expect(actualFs.existsSync(globalLegacyDir())).toBe(false);
     });
+
+    it('C7 - failed copy: throw propagates and no stamp is stranded', () => {
+        const bundled = makeBundledLegacyDir('a', 'd1');
+        writeGlobalLegacyEntry('.pzstudio-templates.json', stamp('a', 'd0'));
+
+        // Simulate a copy that got part-way before failing: delegate to the
+        // real cpSync with the implementation's own args (filter included)
+        // and throw afterwards. A plain-throwing mock would prove nothing —
+        // with nothing copied there is no stamp to strand under either
+        // ordering.
+        vi.mocked(fs.cpSync).mockImplementation(((
+            src: any,
+            dest: any,
+            opts: any,
+        ) => {
+            actualFs.cpSync(src, dest, opts);
+            throw new Error('simulated cpSync failure');
+        }) as any);
+
+        expect(() =>
+            templateManager.refreshLegacyTemplates(undefined, bundled),
+        ).toThrow('simulated cpSync failure');
+
+        // The copy really ran — template content landed in the global cache
+        // — but the stamp did not: a failed refresh can never leave a stamp
+        // behind, or every future update would report "up to date" on a
+        // broken (missing categories) cache forever.
+        expect(
+            actualFs.existsSync(
+                join(globalLegacyDir(), '.template-project', 'x.txt'),
+            ),
+        ).toBe(true);
+        expect(actualFs.existsSync(stampPathIn(globalLegacyDir()))).toBe(false);
+    });
 });
