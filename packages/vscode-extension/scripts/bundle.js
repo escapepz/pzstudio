@@ -53,8 +53,15 @@ async function run() {
                 if (fs.existsSync(from)) {
                     console.log(`Syncing ${template}...`);
                     // dereference: follow symlinks instead of writing the
-                    // link target as a plain text file
-                    fs.cpSync(from, to, { recursive: true, dereference: true });
+                    // link target as a plain text file. The filter drops the
+                    // submodule checkout's .git gitfile — dead metadata in
+                    // the shipped package (tracked .gitignore/.gitmodules
+                    // are template content and must survive).
+                    fs.cpSync(from, to, {
+                        recursive: true,
+                        dereference: true,
+                        filter: (src) => path.basename(src) !== '.git',
+                    });
                 }
             }
 

@@ -70,6 +70,10 @@ function copyDirRecursive(src, dest) {
     }
     const entries = fs.readdirSync(src, { withFileTypes: true });
     for (const entry of entries) {
+        // The submodule checkouts' .git gitfiles are runtime state, not
+        // template content — never ship them (tracked .gitignore and
+        // .gitmodules inside the templates ARE content and stay).
+        if (entry.name === '.git') continue;
         const srcPath = path.join(src, entry.name);
         const destPath = path.join(dest, entry.name);
         if (entry.isDirectory()) {
