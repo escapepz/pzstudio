@@ -221,3 +221,84 @@ describe('update — per-category failure isolation (E2E)', () => {
         expect(stderrHasCloneFailure(result, 'workshop')).toBe(false);
     });
 });
+
+describe('update — legacy template cache refresh (E2E)', () => {
+    let workspace: E2ETestWorkspace;
+
+    // The stamped bundled copy Task 1's build step produces
+    // (packages/cli/dist/.template-legacy/.pzstudio-templates.json). In the
+    // in-process suite the bundled-dir probe reaches only
+    // <cwd>/.template-legacy, and workspace.run() chdirs to the workspace,
+    // so planting it there pins the bundled side of the stamp comparison.
+    const stampedBundledDir = path.resolve(
+        __dirname,
+        '..',
+        '..',
+        'packages',
+        'cli',
+        'dist',
+        '.template-legacy',
+    );
+
+    /** Plants the stamped bundled copy where the cwd probe will find it. */
+    const plantBundledLegacyCopy = () => {
+        if (
+            !fs.existsSync(
+                path.join(stampedBundledDir, '.pzstudio-templates.json'),
+            )
+        ) {
+            throw new Error(
+                'Missing stamped dist copy of .template-legacy — run `pnpm build` before this suite.',
+            );
+        }
+        fs.cpSync(
+            stampedBundledDir,
+            path.join(workspace.dir, '.template-legacy'),
+            { recursive: true },
+        );
+    };
+
+    const globalLegacyDir = () =>
+        path.join(workspace.fakeHome, '.pzstudio', '.template-legacy');
+
+    beforeEach(() => {
+        workspace = createE2EWorkspace();
+        mockFailSubstrings = [];
+    });
+
+    afterEach(() => {
+        workspace.cleanup();
+    });
+
+    it('reports the legacy cache as up to date on a fresh home', async () => {
+        plantBundledLegacyCopy();
+        // A fresh home: drop the pre-seeded junction (rmSync unlinks the
+        // link, never the shared store) so the category loop's bootstrap
+        // fills the cache from the bundled copy — the stamps then already
+        // match when the refresh step compares them.
+        fs.rmSync(globalLegacyDir(), { recursive: true, force: true });
+
+        const result = await workspace.run('update');
+        workspace.assertSuccess(result);
+        workspace.assertStderr(result, 'Legacy templates up to date.');
+    });
+
+    it('refreshes a stale legacy cache and washes out stale content', async () => {
+        plantBundledLegacyCopy();
+        // Seed the installed cache with content the bundled copy does not
+        // carry (and no stamp): the refresh must replace it wholesale.
+        fs.rmSync(globalLegacyDir(), { recursive: true, force: true });
+        fs.mkdirSync(globalLegacyDir(), { recursive: true });
+        fs.writeFileSync(
+            path.join(globalLegacyDir(), 'stale-marker.txt'),
+            'stale',
+        );
+
+        const result = await workspace.run('update');
+        workspace.assertSuccess(result);
+        workspace.assertStderr(result, 'Legacy templates refreshed');
+        expect(
+            fs.existsSync(path.join(globalLegacyDir(), 'stale-marker.txt')),
+        ).toBe(false);
+    });
+});
