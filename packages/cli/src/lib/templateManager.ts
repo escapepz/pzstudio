@@ -360,7 +360,10 @@ function legacyStampsEqual(a: unknown, b: unknown): boolean {
  *   (a bad stamp is data, never a crash — Review Focus 2),
  * - otherwise the cache is replaced wholesale with the bundled copy
  *   ('refreshed') — the remove also washes out stray .git gitfiles a
- *   pre-stamp install may hold (Review Focus 1).
+ *   pre-stamp install may hold (Review Focus 1). The bundled stamp never
+ *   rides the copy: cpSync excludes it and the stamp is written only after
+ *   the copy completes, so an interrupted refresh leaves a stamp-less
+ *   cache that the next update refreshes instead of trusting.
  * `bundledDirOverride` pins the bundled source (test seam; Task 3's update
  * command stays on the probe). cpSync/remove failures throw — the caller
  * owns the catch. `io` (Appendix C) is the emission target; an omitted
@@ -399,7 +402,21 @@ export function refreshLegacyTemplates(
         removeDirRecursive(globalLegacyDir);
     }
     mkdirSync(dirname(globalLegacyDir), { recursive: true });
-    cpSync(bundledLegacyDir, globalLegacyDir, { recursive: true });
+    // Stamp-last: the copy excludes the bundled stamp and the stamp is
+    // written only after the copy completes. On NTFS the stamp sorts ahead
+    // of the category dirs, so a copy that rode the stamp along could
+    // strand it on an interrupted copy — leaving a global cache that
+    // carries the current stamp but is missing category dirs, which every
+    // future update would then report "up to date" forever.
+    cpSync(bundledLegacyDir, globalLegacyDir, {
+        recursive: true,
+        filter: (src) => basename(src) !== LEGACY_STAMP_FILE,
+    });
+    writeFileSync(
+        join(globalLegacyDir, LEGACY_STAMP_FILE),
+        JSON.stringify(bundledStamp, null, 4) + '\n',
+        'utf8',
+    );
     emitInfo(
         io,
         `Legacy templates refreshed (${bundledStamp.version}, ${bundledStamp.buildDate}).`,

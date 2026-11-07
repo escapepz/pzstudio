@@ -79,7 +79,7 @@ export async function updateCmd() {
         throw new CliError(
             categoryFailure
                 ? `Refreshed ${refreshed}/${categories.length} template caches — ${categories.length - refreshed} update(s) failed. Fix the reported causes and run 'pzstudio update' again.`
-                : `Refreshed ${refreshed}/${categories.length} template caches — the legacy template refresh failed. Fix the reported cause and run 'pzstudio update' again.`,
+                : `All ${categories.length} template caches refreshed — the legacy template refresh failed. Fix the reported cause and run 'pzstudio update' again.`,
         );
     }
     info('\nAll template caches refreshed successfully!');
