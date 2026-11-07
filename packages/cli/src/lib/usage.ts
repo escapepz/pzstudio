@@ -307,7 +307,7 @@ function spanHost(interactionMode: InteractionMode): UsageHost {
 function spanFlags(
     invocationOptions: InvocationContext['invocationOptions'],
 ): string[] {
-    return Object.keys(invocationOptions)
+    return Object.keys(invocationOptions ?? {})
         .filter((name) => {
             const value = invocationOptions[name];
             return value !== undefined && value !== false;
@@ -366,7 +366,11 @@ function recordSpanSettled(input: {
     }
 }
 
-/** Lifecycle chokepoint: times body, records one event, rethrows. */
+/**
+ * Lifecycle chokepoint: times body, records one event, rethrows. The
+ * `usage` command manages the recorder's own config, so its runs never
+ * land in the log they configure — enabled or not.
+ */
 export async function recordUsageSpan(
     op: string,
     ctx: Pick<
@@ -375,6 +379,7 @@ export async function recordUsageSpan(
     >,
     body: () => Promise<void>,
 ): Promise<void> {
+    if (op === 'usage') return body();
     if (!spanEnabled()) return body();
     const t0 = performance.now();
     const settle = (status: 'ok' | 'error', thrown?: unknown): void =>
