@@ -60,6 +60,7 @@
     "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: development sync started for '{0}' — run the command again to stop.",
     "PZStudio: starting development sync for '{0}'…": "PZStudio: starting development sync for '{0}'…",
     "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.",
+    "Development sync: {0} change(s) failed to apply. Show Details lists every failure.": "Development sync: {0} change(s) failed to apply. Show Details lists every failure.",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: no problems found in '{0}'. Everything looks good.",
     "Diagnostics for '{0}'": "Diagnostics for '{0}'",
     "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed"

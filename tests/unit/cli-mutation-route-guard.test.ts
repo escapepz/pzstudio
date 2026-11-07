@@ -58,6 +58,7 @@ import { planBuild } from '../../packages/core/src/buildplan';
 import type { PlanBuildInput } from '../../packages/core/src/buildplan';
 import type { IProjectConfig } from '../../packages/core/src/project';
 import { executeBuildPlan } from '../../packages/cli/src/lib/commands/build';
+import { cleanOutputPath } from '../../packages/cli/src/lib/commands/clean';
 import { assertNoAliasDestinationEntry } from '../../packages/cli/src/lib/mutation-route-guard';
 import {
     createIgnoreFilter,
@@ -1439,3 +1440,75 @@ describe.skipIf(process.platform !== 'win32')(
         });
     },
 );
+
+/* ------------------------------------------------------------------ */
+/* DEC-6 — pzstudio clean joins the build guard (CLI parity): clean's  */
+/* deletions go through cleanOutputPath, the clean tier of the         */
+/* F23-WRITE P0 guard. Containment rows are cross-platform; junction   */
+/* rows need NTFS junctions (win32 only, like the native tiers above). */
+/* ------------------------------------------------------------------ */
+
+describe('clean output path guard (DEC-6)', () => {
+    it('refuses a clean target outside the configured output root', async () => {
+        const outside = path.join(sandbox, 'elsewhere', 'Sync Project');
+        await fsp.mkdir(outside, { recursive: true });
+        expect(() => cleanOutputPath(OUT(), outside)).toThrow(
+            /not inside the configured build output root/,
+        );
+        // The refusal happens before anything is deleted.
+        expect(fs.existsSync(outside)).toBe(true);
+    });
+
+    it('cleans a variant directory below the configured root', async () => {
+        const variant = path.join(OUT(), 'Sync Project');
+        await fsp.mkdir(path.join(variant, 'Contents'), { recursive: true });
+        await fsp.writeFile(
+            path.join(variant, 'Contents', 'stale.txt'),
+            'stale',
+        );
+        expect(() => cleanOutputPath(OUT(), variant)).not.toThrow();
+        expect(fs.existsSync(variant)).toBe(false);
+        // The configured root itself is never the deletion target.
+        expect(fs.existsSync(OUT())).toBe(true);
+    });
+
+    it('without an output root the clean keeps the unguarded behavior (opt-in parity)', async () => {
+        const variant = path.join(OUT(), 'Sync Project');
+        await fsp.mkdir(variant, { recursive: true });
+        expect(() => cleanOutputPath(undefined, variant)).not.toThrow();
+        expect(fs.existsSync(variant)).toBe(false);
+    });
+
+    it.skipIf(process.platform !== 'win32')(
+        'a junction variant leaf is removed link-only — the junction target survives (delete-leaf B1)',
+        async () => {
+            const victim = path.join(sandbox, 'victim');
+            await fsp.mkdir(path.join(victim, 'media'), { recursive: true });
+            await fsp.writeFile(path.join(victim, 'media', 'keep.txt'), 'keep');
+            const variant = path.join(OUT(), 'Sync Project');
+            await junction(variant, victim);
+            expect(() => cleanOutputPath(OUT(), variant)).not.toThrow();
+            expect(fs.existsSync(variant)).toBe(false);
+            expect(
+                fs.readFileSync(path.join(victim, 'media', 'keep.txt'), 'utf8'),
+            ).toBe('keep');
+        },
+    );
+
+    it.skipIf(process.platform !== 'win32')(
+        'a junction below the variant root is unlinked, not followed — the target survives',
+        async () => {
+            const victim = path.join(sandbox, 'victim');
+            await fsp.mkdir(victim, { recursive: true });
+            await fsp.writeFile(path.join(victim, 'keep.txt'), 'keep');
+            const variant = path.join(OUT(), 'Sync Project');
+            await fsp.mkdir(variant, { recursive: true });
+            await junction(path.join(variant, 'linked'), victim);
+            expect(() => cleanOutputPath(OUT(), variant)).not.toThrow();
+            expect(fs.existsSync(variant)).toBe(false);
+            expect(
+                fs.readFileSync(path.join(victim, 'keep.txt'), 'utf8'),
+            ).toBe('keep');
+        },
+    );
+});

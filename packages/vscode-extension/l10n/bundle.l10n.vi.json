@@ -51,6 +51,7 @@
     "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: đã bắt đầu đồng bộ phát triển cho '{0}' — chạy lệnh lần nữa để dừng.",
     "PZStudio: starting development sync for '{0}'…": "PZStudio: đang bắt đầu đồng bộ phát triển cho '{0}'…",
     "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio: không thể bắt đầu đồng bộ phát triển cho '{0}': {1} — xem chi tiết trong đầu ra của PZ Studio.",
+    "Development sync: {0} change(s) failed to apply. Show Details lists every failure.": "Đồng bộ phát triển: {0} thay đổi chưa được áp dụng. Hiển thị chi tiết liệt kê từng lỗi.",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: không tìm thấy vấn đề nào trong '{0}'. Mọi thứ có vẻ ổn.",
     "Diagnostics for '{0}'": "Chẩn đoán cho '{0}'",
     "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} lỗi, {1} cảnh báo, {2} thông tin — không có gì bị thay đổi",

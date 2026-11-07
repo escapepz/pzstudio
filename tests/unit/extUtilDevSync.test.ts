@@ -261,6 +261,13 @@ describe('DevSyncController (unit, stubbed studio)', () => {
             method: 'warn',
             message: '- boom',
         });
+        // DEC-6: the failed batch also surfaces through the error
+        // notification path (logger.error), carrying the failure count.
+        expect(logger.calls).toContainEqual({
+            method: 'error',
+            message:
+                'Development sync: 1 change(s) failed to apply. Show Details lists every failure.',
+        });
         // The session stays active after a reported error.
         expect(controller.active).toBe(true);
         await controller.dispose();
@@ -457,6 +464,71 @@ describe('DevSyncController pre-filtering (UX-09)', () => {
         expect(appliedBatches(session)).toEqual([
             [{ type: 'change', path: sourceFile }],
         ]);
+        await controller.dispose();
+    });
+
+    it('reports filtered events once per batch at verbose level, never per-event (DEC-9)', async () => {
+        const session = fakeSession();
+        const studio = studioStub(session, () => outA);
+        const logger = recordingLogger();
+
+        const controller = new DevSyncController(studio, logger.logger);
+        await controller.start(proj);
+
+        handlers.change.forEach((fn) => fn({ fsPath: outAFile }));
+        handlers.create.forEach((fn) =>
+            fn({ fsPath: `${outA}/My Title/workshop.txt` }),
+        );
+        // A dot entry is a second drop class through the same decision.
+        handlers.change.forEach((fn) => fn({ fsPath: '/proj/.git/config' }));
+        handlers.change.forEach((fn) => fn({ fsPath: sourceFile }));
+        await flushOnce();
+
+        expect(appliedBatches(session)).toEqual([
+            [{ type: 'change', path: sourceFile }],
+        ]);
+        expect(logger.calls).toContainEqual({
+            method: 'verbose',
+            message:
+                'Filtered 3 watcher event(s) below the output root or outside the project — not synced.',
+        });
+        // The drops themselves stay quiet — no per-event warnings.
+        expect(logger.calls.filter((c) => c.method === 'warn')).toEqual([]);
+        // The counter resets: the next drop-free batch reports nothing more.
+        handlers.change.forEach((fn) => fn({ fsPath: sourceFile }));
+        await flushOnce();
+        expect(
+            logger.calls.filter((c) => c.method === 'verbose'),
+        ).toHaveLength(1);
+        await controller.dispose();
+    });
+
+    it('reports a rejected flush through the error surface and stays alive (DEC-6)', async () => {
+        const session = fakeSession();
+        asMock(session.apply).mockRejectedValue(new Error('apply exploded'));
+        const studio = studioStub(session);
+        const logger = recordingLogger();
+
+        const controller = new DevSyncController(studio, logger.logger);
+        await controller.start(proj);
+        handlers.change.forEach((fn) => fn({ fsPath: sourceFile }));
+        await flushOnce();
+        await drain();
+
+        expect(
+            logger.calls.some(
+                (c) =>
+                    c.method === 'error' &&
+                    c.message instanceof Error &&
+                    c.message.message === 'apply exploded',
+            ),
+        ).toBe(true);
+        expect(controller.active).toBe(true);
+        // The next event starts the next flush; the controller recovers.
+        asMock(session.apply).mockResolvedValue({ ...emptyResult } as never);
+        handlers.change.forEach((fn) => fn({ fsPath: sourceFile }));
+        await flushOnce();
+        expect(appliedBatches(session)).toHaveLength(2);
         await controller.dispose();
     });
 

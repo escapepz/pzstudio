@@ -51,6 +51,7 @@
     "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio：已为“{0}”启动开发同步 — 再次运行该命令可停止。",
     "PZStudio: starting development sync for '{0}'…": "PZStudio：正在为“{0}”启动开发同步…",
     "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio：无法为“{0}”启动开发同步：{1} — 详情请查看 PZ Studio 输出。",
+    "Development sync: {0} change(s) failed to apply. Show Details lists every failure.": "开发同步：{0} 项更改未能应用。显示详细信息列出每个失败项。",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: 在「{0}」中未发现问题。一切正常。",
     "Diagnostics for '{0}'": "「{0}」的诊断",
     "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} 个错误、{1} 个警告、{2} 条信息 — 未做任何更改",

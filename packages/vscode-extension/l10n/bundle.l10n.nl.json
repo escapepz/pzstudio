@@ -51,6 +51,7 @@
     "PZStudio: development sync started for '{0}' — run the command again to stop.": "PZStudio: ontwikkelsynchronisatie gestart voor '{0}' — voer de opdracht opnieuw uit om te stoppen.",
     "PZStudio: starting development sync for '{0}'…": "PZStudio: ontwikkelsynchronisatie wordt gestart voor '{0}'…",
     "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.": "PZStudio: ontwikkelsynchronisatie kon niet worden gestart voor '{0}': {1} — zie de PZ Studio-uitvoer voor details.",
+    "Development sync: {0} change(s) failed to apply. Show Details lists every failure.": "Ontwikkelsynchronisatie: {0} wijziging(en) kon(nen) niet worden toegepast. Details weergeven toont elke fout.",
     "PZStudio: no problems found in '{0}'. Everything looks good.": "PZStudio: geen problemen gevonden in '{0}'. Alles ziet er goed uit.",
     "Diagnostics for '{0}'": "Diagnostiek voor '{0}'",
     "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} fout(en), {1} waarschuwing(en), {2} info — er is niets gewijzigd",
