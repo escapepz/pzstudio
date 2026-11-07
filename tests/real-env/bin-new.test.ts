@@ -60,6 +60,7 @@ describe.skipIf(!hasLegacyTemplates())(
 
         it('does not inject experimental scripts by default (CLI-10 BREAKING)', async () => {
             const result = await workspace.run([
+                '--verbose',
                 'new',
                 '--offline',
                 'Real Env Project',
@@ -67,19 +68,25 @@ describe.skipIf(!hasLegacyTemplates())(
             ]);
             expect(result.exitCode).toBe(0);
 
-            const pkg = workspace.readJson(
-                path.join('real_mod', 'package.json'),
+            // Since the 42.21.0 template, scaffolds ship no package.json, so
+            // there is nothing for the experimental scripts to augment: the
+            // default run keeps the integration off and conjures no
+            // package.json either.
+            expect(result.stderr).toContain(
+                'Experimental integration is disabled (default)',
             );
-            expect(pkg.scripts['experimental:setup:vanilla']).toBeUndefined();
-            expect(JSON.stringify(pkg)).not.toContain('experimental:');
+            expect(
+                workspace.exists(path.join('real_mod', 'package.json')),
+            ).toBe(false);
         });
 
-        it('injects experimental scripts when the global config opts in', async () => {
+        it('completes the experimental opt-in flow when no package.json exists (CLI-10)', async () => {
             workspace.writeHome(
                 path.join('.pzstudio', 'config.json'),
                 JSON.stringify({ experimental: { integration: true } }),
             );
             const result = await workspace.run([
+                '--verbose',
                 'new',
                 '--offline',
                 'Real Env Project',
@@ -87,15 +94,20 @@ describe.skipIf(!hasLegacyTemplates())(
             ]);
             expect(result.exitCode).toBe(0);
 
-            const pkg = workspace.readJson(
-                path.join('real_mod', 'package.json'),
+            // Since the 42.21.0 template, fresh scaffolds have no
+            // package.json for the experimental scripts to augment: the
+            // opt-in is honored (no "disabled" verbose line), the script
+            // skips silently instead of creating the file or warning, and
+            // the scaffold still completes end-to-end.
+            expect(result.stderr).not.toContain(
+                'Experimental integration is disabled (default)',
             );
-            expect(pkg.scripts['experimental:setup:vanilla']).toContain(
-                'mklink /J',
+            expect(result.stderr).not.toContain(
+                'Failed to run experimental script',
             );
             expect(
-                pkg.scripts['experimental:setup:nonsteam:real_mod'],
-            ).toContain('real_mod');
+                workspace.exists(path.join('real_mod', 'package.json')),
+            ).toBe(false);
         });
 
         it('refuses to create a project over an existing directory', async () => {
