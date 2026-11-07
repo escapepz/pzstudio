@@ -1,0 +1,79 @@
+{
+    "name": "@pzstudio/cli",
+    "version": "0.42210.0",
+    "pzBuildCompatibility": "42.x",
+    "description": "Effortlessly create and maintain Lua mods for Project Zomboid with intuitive structuring.",
+    "exports": {
+        "./api": {
+            "types": "./dist/api.d.ts",
+            "import": "./dist/api.js",
+            "require": "./dist/api.js"
+        }
+    },
+    "type": "commonjs",
+    "engines": {
+        "node": ">=20"
+    },
+    "bin": {
+        "pzstudio": "./dist/index.js"
+    },
+    "files": [
+        "dist",
+        "THIRD_PARTY_NOTICES.md"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "tag": "next"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/escapepz/pzstudio.git"
+    },
+    "bugs": {
+        "url": "https://github.com/escapepz/pzstudio/issues"
+    },
+    "author": "Konijima",
+    "contributors": [
+        {
+            "name": "asledgehammer",
+            "url": "https://github.com/asledgehammer"
+        },
+        {
+            "name": "demiurgeQuantified",
+            "url": "https://github.com/demiurgeQuantified"
+        }
+    ],
+    "funding": [
+        {
+            "type": "ko-fi",
+            "url": "https://ko-fi.com/konijima"
+        }
+    ],
+    "license": "Apache-2.0",
+    "keywords": [
+        "pzstudio",
+        "modding-tool",
+        "project-zomboid",
+        "project-zomboid-studio"
+    ],
+    "scripts": {
+        "clean": "node -e \"require('fs').rmSync('./dist', { recursive: true, force: true })\"",
+        "build": "pnpm run clean && tsc -p tsconfig.build.json && node scripts/bundle-types.js && node scripts/bundle.js && node scripts/update-build-date.js",
+        "watch": "pnpm run clean && tsc --watch"
+    },
+    "dependencies": {
+        "@parcel/watcher": "2.6.0"
+    },
+    "devDependencies": {
+        "@types/node": "20.19.39",
+        "typescript": "5.9.3",
+        "esbuild": "0.27.3",
+        "@pzstudio/core": "workspace:*",
+        "@pzstudio/platform": "workspace:*",
+        "@pzstudio/platform-node": "workspace:*",
+        "commander": "14.0.3",
+        "fflate": "0.8.3",
+        "picocolors": "1.1.1",
+        "tslib": "2.8.1"
+    }
+}

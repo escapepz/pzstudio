@@ -1,0 +1,157 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties": {
+        "build": {
+            "description": "Project-level build behaviour.",
+            "properties": {
+                "target": {
+                    "default": "production",
+                    "description": "Which workshop outputs 'pzstudio build' produces when no target flag is given. An explicit --production/--development/--both flag wins.",
+                    "enum": ["production", "development", "both"],
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "excludes": {
+            "description": "List of mod IDs to exclude from the workshop build.",
+            "items": {
+                "type": "string"
+            },
+            "type": "array"
+        },
+        "experimental": {
+            "description": "Opt-in switches for experimental behaviour. Nothing here is enabled by default.",
+            "properties": {
+                "integration": {
+                    "default": false,
+                    "description": "Inject experimental helper scripts into the project's package.json on new/add/delete/rename. Disabled by default; must be enabled explicitly.",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
+        "outdir": {
+            "description": "The output directory for generated workshop files.",
+            "type": "string"
+        },
+        "schemaVersion": {
+            "default": 2,
+            "description": "Version of the project.json schema this file was written against. Files without it are treated as version 1 and migrated on load.",
+            "minimum": 1,
+            "type": "integer"
+        },
+        "pzBuildCompatibility": {
+            "description": "The Project Zomboid build line this project targets (e.g. \"42.x\").",
+            "type": "string"
+        },
+        "workshop": {
+            "description": "Workshop metadata for the project.",
+            "properties": {
+                "description": {
+                    "$ref": "workshop.schema.json#/properties/description"
+                },
+                "id": {
+                    "$ref": "workshop.schema.json#/properties/id"
+                },
+                "tags": {
+                    "$ref": "workshop.schema.json#/properties/tags"
+                },
+                "title": {
+                    "$ref": "workshop.schema.json#/properties/title"
+                },
+                "visibility": {
+                    "$ref": "workshop.schema.json#/properties/visibility"
+                }
+            },
+            "required": ["title", "visibility", "tags"],
+            "type": "object"
+        },
+        "mods": {
+            "description": "List of mods in this project.",
+            "patternProperties": {
+                "^.*$": {
+                    "$ref": "#/$defs/mod"
+                }
+            }
+        }
+    },
+    "required": ["workshop", "mods"],
+    "title": "JSON schema for Project Zomboid Studio project.json files",
+    "type": "object",
+    "$defs": {
+        "mod": {
+            "description": "The mod unique id.",
+            "properties": {
+                "build": {
+                    "additionalProperties": false,
+                    "description": "Custom build flags for this mod.",
+                    "properties": {
+                        "modInfo": {
+                            "default": "auto-if-missing",
+                            "description": "Controls whether mod.info is auto-generated from project.json.\n- \"auto-if-missing\" (default) — generate only if mod.info is not already present in the mod folder\n- \"auto\" — generate mod.info from project.json, overwriting existing files\n- \"skip\" — never generate; use whatever file exists in the mod folder\nDevelopment (dev_branch) builds always align the mod.info id with the _dev-suffixed output folder, regardless of this setting.",
+                            "enum": ["auto", "skip", "auto-if-missing"],
+                            "type": "string"
+                        },
+                        "devOnly": {
+                            "default": false,
+                            "description": "Build this mod in the development (dev_branch) output only; the production (main) build skips it.",
+                            "type": "boolean"
+                        }
+                    },
+                    "type": "object"
+                },
+                "author": {
+                    "$ref": "mod.info.schema.json#/properties/author"
+                },
+                "category": {
+                    "$ref": "mod.info.schema.json#/properties/category"
+                },
+                "description": {
+                    "$ref": "mod.info.schema.json#/properties/description"
+                },
+                "icon": {
+                    "$ref": "mod.info.schema.json#/properties/icon"
+                },
+                "incompatible": {
+                    "$ref": "mod.info.schema.json#/properties/incompatible"
+                },
+                "loadModAfter": {
+                    "$ref": "mod.info.schema.json#/properties/loadModAfter"
+                },
+                "loadModBefore": {
+                    "$ref": "mod.info.schema.json#/properties/loadModBefore"
+                },
+                "modversion": {
+                    "$ref": "mod.info.schema.json#/properties/modversion"
+                },
+                "name": {
+                    "$ref": "mod.info.schema.json#/properties/name"
+                },
+                "pack": {
+                    "$ref": "mod.info.schema.json#/properties/pack"
+                },
+                "poster": {
+                    "$ref": "mod.info.schema.json#/properties/poster"
+                },
+                "require": {
+                    "$ref": "mod.info.schema.json#/properties/require"
+                },
+                "tiledef": {
+                    "$ref": "mod.info.schema.json#/properties/tiledef"
+                },
+                "url": {
+                    "$ref": "mod.info.schema.json#/properties/url"
+                },
+                "versionMax": {
+                    "$ref": "mod.info.schema.json#/properties/versionMax"
+                },
+                "versionMin": {
+                    "$ref": "mod.info.schema.json#/properties/versionMin"
+                }
+            },
+            "required": ["name", "description"],
+            "type": "object"
+        }
+    }
+}

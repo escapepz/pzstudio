@@ -1,0 +1,50 @@
+import * as vscode from 'vscode';
+import { ExecutePZCommand } from '../util/execute';
+import { asProjectNode } from '../providers/projectExplorer';
+import {
+    readProjectSummary,
+    resolveProjectDirResult,
+    warnNoProject,
+} from '../util/project';
+import { basename } from 'path';
+import { confirmBeforeRun, disableConfirmBeforeRun } from '../util/confirm';
+
+export function registerBuildCommand(
+    execute: ExecutePZCommand,
+): vscode.Disposable {
+    return vscode.commands.registerCommand(
+        'pzstudio.build',
+        async (node?: unknown) => {
+            const nodeDir = asProjectNode(node)?.projectDir;
+            const resolved = nodeDir
+                ? { status: 'resolved' as const, dir: nodeDir }
+                : await resolveProjectDirResult('build');
+
+            if (resolved.status !== 'resolved') {
+                // Cancelled (UX-02): abort silently — no second prompt, no
+                // "no project" warning. Only a project-less workspace warns.
+                if (resolved.status === 'no-project') {
+                    warnNoProject('build');
+                }
+                return;
+            }
+            const dir = resolved.dir;
+
+            // Name the workshop in the confirm so a wrong-project pick
+            // is obvious before anything is written.
+            const { title } = await readProjectSummary(dir);
+            const decision = await confirmBeforeRun(
+                'build',
+                title ?? basename(dir.fsPath),
+            );
+            if (decision === 'cancel') {
+                return;
+            }
+            if (decision === 'never') {
+                await disableConfirmBeforeRun(dir.fsPath);
+            }
+
+            await execute('build', [], undefined, { projectDir: dir.fsPath });
+        },
+    );
+}

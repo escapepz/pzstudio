@@ -1,0 +1,28 @@
+{
+    "compilerOptions": {
+        "target": "esnext",
+        "module": "CommonJS",
+        "moduleResolution": "node",
+        "lib": ["esnext", "DOM"],
+        "noEmit": true,
+        "strict": true,
+        "skipLibCheck": true,
+        "noImplicitAny": true,
+        "esModuleInterop": true,
+        "strictNullChecks": false,
+        "resolveJsonModule": true,
+        "strictFunctionTypes": true,
+        "allowSyntheticDefaultImports": true,
+        "baseUrl": ".",
+        "paths": {
+            "@pzstudio/platform": ["packages/platform/src/index.ts"],
+            "@pzstudio/core": ["packages/core/src/index.ts"],
+            "@pzstudio/platform-node": ["packages/platform-node/src/index.ts"],
+            "@pzstudio/platform-web": ["packages/platform-web/src/index.ts"]
+        },
+        "typeRoots": ["./node_modules/@types"],
+        "types": ["node"]
+    },
+    "include": ["tests/**/*.ts"],
+    "exclude": ["node_modules", "dist"]
+}

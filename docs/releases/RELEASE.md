@@ -1,0 +1,376 @@
+# Release Runbook — `@pzstudio/cli` + extension (`pzstudio42`)
+
+This runbook defines the exact steps to produce, smoke-test, and publish a
+new `@pzstudio/cli` release (Steps 0–8) and the matching VS Code extension
+release (Steps E1–E3 below). Every step is automated or documented; do not
+deviate unless the deviation is recorded here.
+
+---
+
+## Version model
+
+Two version shapes exist and must not be confused:
+
+- **Logical version (bare, e.g. `0.42210.0`)** — lives in git, `package.json`,
+  tags and release notes. It is the release's identity and is reserved for
+  **latest-channel builds only** — it is never consumed by the routine
+  next-channel flow.
+- **Publish version** — the shape of every next-channel build; each build
+  gets a fresh unix-seconds timestamp so a failed or burned attempt can
+  never block a retry (npm burns an exact version name forever once
+  published, even if unpublished afterwards):
+  - **npm (CLI)**: semver prerelease `<bare>-next.<ts>`, e.g.
+    `0.42210.0-next.1794079070`.
+  - **Marketplace (extension)**: the plain bare `${EXT_VERSION}` — the
+    gallery requires **exactly three numeric segments** (major.minor.patch,
+    each `0..2147483647`, at least one non-zero). Confirmed empirically on
+    2026-11-08: `0.42210.0-next.<ts>`, `0.42210.0-<ts>` AND the 4-part
+    `0.42210.0.<ts>` were ALL rejected — no stamp of any kind fits in a
+    marketplace version. The `--pre-release` flag is what puts the upload
+    on the pre-release channel. Marketplace versions are consumed only by
+    **successful** uploads — rejected attempts burn nothing — so a broken
+    upload that already landed is retried as a REAL patch bump
+    (`0.42210.1`, ...), the standard marketplace practice.
+
+Promotion to `latest` happens by dist-tagging the **verified `-next` build**
+(Step 7). Publishing the bare version is a deliberate latest-channel build,
+not part of the routine flow.
+
+Marketplace versions are immutable (no unpublish): rejected uploads burn
+nothing, and a broken upload that already landed is retried as a REAL patch
+bump. After a bare `<bare>` lands for latest, the next next-channel cycle
+starts from the following minor.
+
+## Version parameter
+
+Resolve the logical release version from the package once per run and use
+`${VERSION}` everywhere below — never hardcode a version into a command:
+
+```bash
+VERSION="$(node -p "require('./packages/cli/package.json').version")"
+```
+
+Derive the publish version once per run too (all of Steps 0–7 use it):
+
+```bash
+TS="$(date +%s)"
+PUB_VERSION="${VERSION}-next.${TS}"
+```
+
+---
+
+## Preflight
+
+Before starting, verify:
+
+- [ ] `npm whoami` — you are logged into the target registry as the `@pzstudio` scope owner.
+- [ ] `@pzstudio` scope is writable (you have permission to publish).
+- [ ] Target registry is correct (`npm config get registry`).
+- [ ] `@pzstudio/cli@<version>` does not already exist on the registry.
+
+---
+
+## Step 0 — Stamp the publish version (next channel)
+
+Bump the package to `${PUB_VERSION}` BEFORE building — `build.json` and the
+bundled legacy-template stamps embed the version, so everything in the
+artifact must carry the same value:
+
+```bash
+cd packages/cli
+npm version "${PUB_VERSION}" --no-git-tag-version --allow-same-version
+```
+
+`package.json` is now intentionally dirty; it is restored in Step 8. The
+stamp is a temp edit and is **never committed**.
+
+## Step 1 — Build once
+
+From the repo root:
+
+```bash
+pnpm --filter @pzstudio/cli... build
+```
+
+This runs, in order:
+1. `tsc -p tsconfig.build.json` — type-checks and emits JavaScript + declarations to `dist/`.
+2. `node scripts/bundle.js` — esbuild bundles `src/index.ts` → `dist/index.js` and `src/api.ts` → `dist/api.js`. The closure gate asserts `package.json.dependencies` exactly equals the normalized externals set derived from the metafile.
+3. `node scripts/update-build-date.js` — stamps `dist/build.json` with the build timestamp.
+
+If the build fails, fix the root cause before proceeding.
+
+---
+
+## Step 2 — Pack once
+
+```bash
+node pack-artifact.mjs <release-dir>
+```
+
+Where `<release-dir>` is an absolute path to an empty directory.
+
+**Rules:**
+- Run exactly once per release. Never run `npm pack` a second time.
+- `--ignore-scripts` is always used — no `prepare`/`prepack`/`postpack` may mutate the artifact.
+- The exact tarball filename is read from the JSON output. Do not construct it yourself.
+- Assert the file exists at the resolved path.
+
+If this step fails, diagnose and rebuild (back to Step 1).
+
+---
+
+## Step 3 — Isolated smoke test
+
+```bash
+node pack-smoke.mjs <exact-tgz>
+```
+
+This script performs all acceptance gate checks in an **isolated OS temp project** (never under the repo to avoid climbing to ancestor `node_modules`):
+
+- `npm install <exact-tgz>` into the temp project.
+- `npm ls --omit=dev` — must be clean (no unmet deps, no extraneous).
+- **Metadata:** version matches the source `package.json`; the only runtime dep is `@parcel/watcher`; no `workspace:*` references; no root `main`/`types` (embedders must use `@pzstudio/cli/api`); the packed `LICENSE` matches the repo `LICENSE.md` byte-for-byte.
+- **Bin smoke:** `pzstudio --version` and `pzstudio --help` succeed; pure invocation leaves no `~/.pzstudio`.
+- **Library smoke:** `require("@pzstudio/cli/api")` returns the API functions; embedded `runCLI("new", ..., { flags: ["--offline"] })` creates a real project from the bundled `/api` surface, and the bin surface does the same (proving `__dirname`-relative resource resolution survives bundling on both entries).
+- **Negative smoke:** `require("@pzstudio/cli")` yields `ERR_PACKAGE_PATH_NOT_EXPORTED` — there is no supported package-root library import.
+- **Type consumer:** isolated `tsc --noEmit` with `module: NodeNext, moduleResolution: NodeNext, strict: true, skipLibCheck: false` compiles the import from `@pzstudio/cli/api` exit 0.
+- **Packlist:** read directly from the exact tarball (`tar -tzf`) — required entries present (including `dist/.template-legacy/` and `dist/vendor/`), no `src/`, `tests/`, `docs/`, `.tmp/`, lockfiles, or tsc intermediate `dist/lib/*.js`.
+- The real `~/.pzstudio` is untouched by the whole run (existence sentinel).
+
+If any check fails, diagnose, fix, rebuild (Step 1), pack (Step 2), then re-smoke. Do not repack without rebuilding.
+
+---
+
+## Step 4 — Golden-path smoke (3 HOMEs)
+
+```bash
+node pack-golden.mjs <exact-tgz>
+```
+
+Installs the exact tarball once and walks the user golden path in three NON-REUSED isolated HOMEs:
+
+- **HOME_A offline:** `new "Offline Smoke" --offline` → `doctor` exits 0.
+- **HOME_B online:** `new "Smoke Mod"` → `doctor` → `build` — build resolves the workshop template through the real network path (git clone or zip fetch), with a hard timeout.
+- **HOME_C POSIX:** `watch` → banner → touch a Lua source → wait for the sync summary → SIGINT → exit 130 with exactly one `Development sync stopped.` message. Skipped on win32 (SIGINT delivery to children is unreliable there; CI ubuntu/macos verify it).
+
+The workshop template cache in HOME_C is seeded from the tarball's own `.template-legacy` bundle so the watch startup build is hermetic. Every scenario has hard timeouts and the script always terminates the child process trees it spawned, so CI can never hang.
+
+If any check fails, diagnose, fix, rebuild (Step 1), pack (Step 2), re-smoke (Step 3), then re-run the golden smoke. Do not repack without rebuilding.
+
+---
+
+## Step 5 — Publish to `next`
+
+```bash
+npm publish "<exact-tgz>" --ignore-scripts --access public --tag next
+```
+
+`--ignore-scripts` mirrors the pack step. Publish the **exact bytes** from the tgz — do not rebuild between pack and publish.
+
+If publish succeeds, proceed to Step 6. If it fails:
+
+**On failure DO NOT promote / DO NOT rebuild+republish the same version.**
+Published name@version pairs are not reusable, and an unpublished version
+name stays burned forever. Fix the root cause, take a **fresh timestamp**
+(`TS="$(date +%s)"`, re-derive `${PUB_VERSION}`), then restart at Step 0:
+stamp → build → pack → smoke → publish the new `-next` version to `next`.
+Optionally `npm deprecate` the failed version. The bare `${VERSION}` is
+never consumed by this flow, so it stays available as the release identity.
+
+---
+
+## Step 6 — Registry smoke
+
+Verify the published package works end-to-end via the registry:
+
+```bash
+# Via npx (fetches latest next)
+npx -y @pzstudio/cli@next --version
+
+# Via pnpm dlx
+pnpm dlx @pzstudio/cli@${PUB_VERSION} --version
+```
+
+Both must succeed. If either fails, investigate (possible registry CDN lag; retry after 60 s).
+
+---
+
+## Step 7 — Promote `next` → `latest`
+
+```bash
+npm dist-tag add @pzstudio/cli@${PUB_VERSION} latest
+```
+
+This makes the verified `-next` build the default for
+`npm install @pzstudio/cli` without a tag. The bare `${VERSION}` is NOT
+published — `latest` intentionally points at the `-next.<ts>` build.
+
+Known tradeoff (accepted): semver ranges like `^0.42210.0` never match a
+prerelease build; consumers pinning ranges only move when a future stable
+bare version (a new patch/minor — the burned name can never return)
+publishes through this same flow.
+
+## Step 8 — Restore the logical version
+
+Only AFTER Step 5 (publish) has succeeded:
+
+```bash
+cd packages/cli
+git checkout -- package.json
+node -p "require('./package.json').version"   # must print the bare ${VERSION}
+cd ../..
+git status --short                             # must be clean
+```
+
+The working tree must end the release run exactly as it began — the stamp
+and every other release artifact decision live in git history, not in
+dirty files.
+
+---
+
+## Tagging
+
+Tag the release-prep commit when the release ships — the tag name records
+the **logical (bare) version** and reflects WHAT the release contains:
+
+- **Joint CLI + extension release** (the normal case): bare version —
+  e.g. `0.42210.0`.
+- **CLI-only release**: `cli-<version>` — e.g. `cli-0.42215.1`.
+- Extension-only release (if it ever happens): `ext-<version>` —
+  e.g. `ext-0.42215.1`.
+
+## Extension release runbook (`pzstudio42`)
+
+The extension release is coupled to the CLI release: the extension bundles
+the engine from `packages/cli/dist` (`@pzstudio/cli/api`), so the CLI build
+(Step 1) must exist before packaging. Produce the CLI release first, or at
+minimum run the CLI build in the same working tree.
+
+### Version parameter
+
+Resolve the extension version once per run:
+
+```bash
+EXT_VERSION="$(node -p "require('./packages/vscode-extension/package.json').version")"
+```
+
+### Preflight
+
+- [ ] Publisher `escapepz` publishing rights — a PAT with **Marketplace →
+      Manage** scope, or web-upload access at
+      <https://marketplace.visualstudio.com/manage>.
+- [ ] `escapepz.pzstudio42@<EXT_VERSION>` does not already exist on the
+      marketplace (published versions are immutable).
+- [ ] **Display-name uniqueness**: the `displayName` resolved from
+      `package.nls.json` must be unique within the publisher. The
+      marketplace **rejects** an upload whose display name is taken by the
+      publisher's other listing ("This extension display name is taken").
+      The legacy listing `escapepz.pzstudio` owns `PZ Studio`; the
+      `pzstudio42` listing must resolve a different display name.
+- [ ] `@types/vscode` is pinned to the `engines.vscode` minimum in
+      `packages/vscode-extension/package.json` (vsce packaging requirement;
+      see the packaging-restore fix).
+- [ ] `homepage` does NOT point at the marketplace — marketplace item URLs
+      are rejected at upload ("already in use by another publisher");
+      point it at the project repo instead (confirmed empirically
+      2026-11-08).
+
+### Step E1 — Build
+
+```bash
+pnpm --filter pzstudio42... build
+```
+
+Builds the CLI engine first (workspace dependency order), then cleans,
+typechecks and esbuild-bundles `dist/extension.js`, and syncs
+`.template-legacy/` plus the JSON schemas into the package. If this fails,
+fix the root cause before proceeding.
+
+### Step E2 — Package (always `--pre-release`)
+
+```bash
+pnpm --filter pzstudio42 vsce:package --pre-release
+```
+
+`--pre-release` is **required for every release packaged from this runbook**:
+the version lands on the marketplace **pre-release channel**, and
+stable-channel users are never auto-updated into it. The artifact is
+`pzstudio42-${EXT_VERSION}.vsix` — assert it exists. No stamping, no
+manifest surgery: the marketplace accepts exactly what vsce produces.
+
+### Step E3 — Publish
+
+Either:
+
+```bash
+pnpm --filter pzstudio42 exec vsce publish --pre-release -p <PAT>
+```
+
+or upload the vsix through
+<https://marketplace.visualstudio.com/manage> (publisher `escapepz`) — the
+vsix carries the pre-release flag. Verify the listing shows
+`${EXT_VERSION}` flagged **Pre-release**. A broken upload that already
+landed cannot be replaced — fix and bump the patch for the retry.
+
+### Rollback
+
+Marketplace versions cannot be replaced or unpublished. Fix the issue, bump
+the patch version in `packages/vscode-extension/package.json`, and rerun
+E1 → E3.
+
+### Legacy-listing bridge (one-off, `escapepz.pzstudio`)
+
+The legacy marketplace listing predates the `pzstudio42` rename and keeps
+the `2.242170.x` version line; the marketplace refuses any upload whose
+version is not higher than the listing's current one. A bridge update
+packages the SAME build under the legacy identity so old-listing users
+receive the current engine (its listing content is intentionally replaced
+by the pzstudio42 README/CHANGELOG pointing at the new listing):
+
+1. Temporarily edit `packages/vscode-extension/package.json`:
+   `name: pzstudio42 → pzstudio`,
+   `version: <EXT_VERSION> → 2.242170.<current+1>`, and
+   `displayName: "%displayName%" → "PZ Studio"` — the nls token now
+   resolves to the NEW listing's display name (`PZ Studio 42`), which the
+   marketplace would reject; the bridge must carry the legacy listing's
+   own literal display name.
+2. Package **directly in the package directory**, WITHOUT `--pre-release`
+   (owner decision 2026-11-08: the bridge rides the legacy listing's
+   stable channel so its users actually receive it) — the pnpm `--filter
+   pzstudio42` selector matches by package NAME, which the temp edit just
+   changed, and the `vsce:package` script's `-o` name is for the other
+   identity:
+   ```bash
+   cd packages/vscode-extension
+   pnpm exec vsce package --no-dependencies
+   ```
+3. Revert the manifest immediately — re-edit by hand, **never**
+   `git checkout` (the release version bump may be uncommitted) — and
+   verify `git diff` shows only the intended version line. The temp edit
+   is **never committed**.
+
+Bridge artifacts are exempt from the `-next` scheme: the legacy listing
+keeps its `2.242170.x` line and receives stable-channel uploads only.
+
+## Rollback procedure
+
+If a promoted release is broken in production:
+
+1. **Do not rebuild and republish the same version.** Versions are immutable
+   once published, and an unpublished name stays burned forever.
+2. Fix the issue in the codebase (the logical `${VERSION}` in git does not
+   need to move for an npm-side fix).
+3. Take a fresh timestamp and re-run Steps 0–8 with the new
+   `${PUB_VERSION}`.
+4. Re-promote (Step 7).
+5. Optionally `npm deprecate @pzstudio/cli@<broken-pub-version> "Fixed in @<new-pub-version>"`.
+
+---
+
+## CI integration
+
+The full pipeline can run in CI with:
+- Node 20+ environment.
+- Registry credentials via `NPM_TOKEN` env var (for publish).
+- Repo checkout with submodules (`git clone --recurse-submodules`).
+- No workspace dependencies required at smoke-test time (the tgz is self-contained).

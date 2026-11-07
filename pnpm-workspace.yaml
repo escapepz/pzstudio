@@ -1,0 +1,17 @@
+packages:
+    - 'packages/*'
+
+overrides:
+    picomatch: 2.3.2
+    undici: 7.24.0
+    lodash: 4.17.24
+
+# Exact pins are the manifest policy; make future `pnpm add` follow it.
+saveExact: true
+
+allowBuilds:
+    '@parcel/watcher': true
+    '@vscode/vsce-sign': true
+    esbuild: true
+    keytar: true
+    lefthook: true
