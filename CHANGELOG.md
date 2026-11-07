@@ -11,6 +11,33 @@ Project Zomboid build (build 42.20 → `42200`), the patch bumps for
 tool-only releases. Game compatibility is declared separately in
 `pzBuildCompatibility` (e.g. `"42.x"`).
 
+## [CLI 0.42210.0 / Extension 0.42210.0] - 2026-11-08
+
+### CLI (@pzstudio/cli 0.42210.0) — notes: [`docs/releases/0.42210.0.md`](docs/releases/0.42210.0.md)
+
+- `pzstudio update` refreshes the global legacy template cache
+  (`~/.pzstudio/.template-legacy`) when the bundled templates are newer —
+  the stamp is written only after the copy completes; `--force-update`
+  bypasses the stamp check.
+- Project/mod template targets move to **PZ 42.21.0** (vendored pins and
+  runtime defaults; workshop `42.0` / language `42.13.1` unchanged).
+- Shipped declarations are self-contained again: internal route-guard
+  helpers no longer leak Node's `Dirent` type into the
+  `@pzstudio/cli/api` d.ts chain.
+- No changes to the JSON contract, the exit-code matrix, or the stream
+  contract.
+
+### Extension (pzstudio42 0.42210.0) — changelog: [`packages/vscode-extension/CHANGELOG.md`](packages/vscode-extension/CHANGELOG.md)
+
+- Marketplace display name is now **PZ Studio 42** (the legacy listing keeps
+  "PZ Studio"); releases publish on the **pre-release channel**.
+- Bundles engine `@pzstudio/cli` 0.42210.0; `PZStudio: Update` surfaces the
+  legacy template cache refresh; project/mod template defaults target
+  42.21.0.
+- The legacy marketplace listing (`escapepz.pzstudio`) receives the same
+  engine as a one-off bridge update **2.242170.1**; its listing content is
+  replaced by the pzstudio42 README/CHANGELOG pointing at the new listing.
+
 ## [CLI 0.42200.2 / Extension 0.42200.1] - 2026-11-07
 
 ### CLI (@pzstudio/cli 0.42200.2) — notes: [`docs/releases/0.42200.2.md`](docs/releases/0.42200.2.md)
