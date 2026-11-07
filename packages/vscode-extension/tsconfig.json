@@ -1,0 +1,22 @@
+{
+    "compilerOptions": {
+        "target": "esnext",
+        "module": "CommonJS",
+        "moduleResolution": "node",
+        "lib": ["esnext"],
+        "outDir": "dist",
+        "rootDir": "src",
+        "strict": true,
+        "skipLibCheck": true,
+        "esModuleInterop": true,
+        "resolveJsonModule": true,
+        "declaration": false,
+        "typeRoots": ["./node_modules/@types", "../../node_modules/@types"],
+        "baseUrl": ".",
+        "paths": {
+            "@pzstudio/cli/*": ["../cli/dist/*"]
+        }
+    },
+    "include": ["./src/**/*.ts"],
+    "exclude": ["./node_modules"]
+}

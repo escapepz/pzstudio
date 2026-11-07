@@ -1,0 +1,514 @@
+{
+    "name": "pzstudio42",
+    "displayName": "%displayName%",
+    "publisher": "escapepz",
+    "version": "0.42210.0",
+    "description": "%description%",
+    "main": "./dist/extension.js",
+    "type": "commonjs",
+    "engines": {
+        "vscode": "^1.102.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "icon": "icon.png",
+    "activationEvents": [
+        "workspaceContains:project.json"
+    ],
+    "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "pzstudio-container",
+                    "title": "%viewContainer.title%",
+                    "icon": "resources/icons/pzstudio-icon.svg"
+                }
+            ]
+        },
+        "views": {
+            "pzstudio-container": [
+                {
+                    "id": "pzstudio.projectExplorer",
+                    "name": "%view.projectExplorer.name%",
+                    "icon": "resources/icons/pzstudio-icon.svg"
+                }
+            ]
+        },
+        "menus": {
+            "view/title": [
+                {
+                    "command": "pzstudio.explorer.toggleFiles",
+                    "when": "view == pzstudio.projectExplorer && pzstudioExplorer.showAllFiles",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "pzstudio.explorer.toggleFiles.hidden",
+                    "when": "view == pzstudio.projectExplorer && !pzstudioExplorer.showAllFiles",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "pzstudio.explorer.refresh",
+                    "when": "view == pzstudio.projectExplorer",
+                    "group": "navigation@3"
+                }
+            ],
+            "view/item/context": [
+                {
+                    "command": "pzstudio.doctor",
+                    "when": "view == pzstudio.projectExplorer && viewItem == project",
+                    "group": "0_project@1"
+                },
+                {
+                    "command": "pzstudio.build",
+                    "when": "view == pzstudio.projectExplorer && viewItem == project",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "pzstudio.clean",
+                    "when": "view == pzstudio.projectExplorer && viewItem == project",
+                    "group": "inline@2"
+                },
+                {
+                    "command": "pzstudio.modIncluded",
+                    "when": "view == pzstudio.projectExplorer && (viewItem == mod-included || viewItem == mod-devonly)",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "pzstudio.modExcluded",
+                    "when": "view == pzstudio.projectExplorer && viewItem == mod-excluded",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "pzstudio.modDevOnly.dim",
+                    "when": "view == pzstudio.projectExplorer && (viewItem == mod-included || viewItem == mod-excluded)",
+                    "group": "inline@2"
+                },
+                {
+                    "command": "pzstudio.modDevOnly",
+                    "when": "view == pzstudio.projectExplorer && viewItem == mod-devonly",
+                    "group": "inline@2"
+                },
+                {
+                    "command": "pzstudio.modinfoGenerate",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod-(included|devonly|excluded)$/",
+                    "group": "inline@4"
+                },
+                {
+                    "command": "pzstudio.rename",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod-(included|devonly|excluded)$/",
+                    "group": "inline@5"
+                },
+                {
+                    "command": "pzstudio.delete",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod-(included|devonly|excluded)$/",
+                    "group": "inline@6"
+                },
+                {
+                    "command": "pzstudio.openProjectJson",
+                    "when": "view == pzstudio.projectExplorer && viewItem == mod-missing",
+                    "group": "0_mod@1"
+                },
+                {
+                    "command": "pzstudio.explorer.refresh",
+                    "when": "view == pzstudio.projectExplorer && viewItem == mod-missing",
+                    "group": "1_mod"
+                },
+                {
+                    "command": "pzstudio.modConfigure",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod-(included|devonly|excluded)$/",
+                    "group": "0_mod@2"
+                },
+                {
+                    "command": "pzstudio.modinfoGenerate",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod-(included|devonly|excluded)$/",
+                    "group": "1_mod@1"
+                },
+                {
+                    "command": "pzstudio.rename",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod-(included|devonly|excluded)$/",
+                    "group": "2_mod@1"
+                },
+                {
+                    "command": "pzstudio.delete",
+                    "when": "view == pzstudio.projectExplorer && viewItem =~ /^mod-(included|devonly|excluded)$/",
+                    "group": "3_mod"
+                }
+            ],
+            "commandPalette": [
+                {
+                    "command": "pzstudio.modIncluded",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.modExcluded",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.modDevOnly",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.modDevOnly.dim",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.explorer.toggleFiles.hidden",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.modConfigure",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.openProjectJson",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.explorer.refresh",
+                    "when": "false"
+                },
+                {
+                    "command": "pzstudio.explorer.toggleFiles",
+                    "when": "false"
+                }
+            ]
+        },
+        "taskDefinitions": [
+            {
+                "type": "pzstudio",
+                "required": [
+                    "target"
+                ],
+                "properties": {
+                    "target": {
+                        "type": "string",
+                        "enum": [
+                            "production",
+                            "development",
+                            "both",
+                            "clean"
+                        ],
+                        "description": "%taskDefinition.target.description%"
+                    }
+                }
+            }
+        ],
+        "jsonValidation": [
+            {
+                "fileMatch": "project.json",
+                "url": "./schemas/pzstudio.schema.json"
+            }
+        ],
+        "configuration": {
+            "title": "%configuration.title%",
+            "properties": {
+                "pzstudio.templates.project.url": {
+                    "type": "string",
+                    "description": "%config.templates.project.url.description%",
+                    "scope": "resource",
+                    "default": "https://github.com/escapepz/pzstudio-template-project.git"
+                },
+                "pzstudio.templates.project.ref": {
+                    "type": "string",
+                    "description": "%config.templates.project.ref.description%",
+                    "scope": "resource",
+                    "default": "42.21.0"
+                },
+                "pzstudio.templates.mod.url": {
+                    "type": "string",
+                    "description": "%config.templates.mod.url.description%",
+                    "scope": "resource",
+                    "default": "https://github.com/escapepz/pzstudio-template-mod.git"
+                },
+                "pzstudio.templates.mod.ref": {
+                    "type": "string",
+                    "description": "%config.templates.mod.ref.description%",
+                    "scope": "resource",
+                    "default": "42.21.0"
+                },
+                "pzstudio.templates.workshop.url": {
+                    "type": "string",
+                    "description": "%config.templates.workshop.url.description%",
+                    "scope": "resource",
+                    "default": "https://github.com/escapepz/pzstudio-template-workshop.git"
+                },
+                "pzstudio.templates.workshop.ref": {
+                    "type": "string",
+                    "description": "%config.templates.workshop.ref.description%",
+                    "scope": "resource",
+                    "default": "42.0"
+                },
+                "pzstudio.templates.language.url": {
+                    "type": "string",
+                    "description": "%config.templates.language.url.description%",
+                    "scope": "resource",
+                    "default": "https://github.com/escapepz/pzstudio-template-language.git"
+                },
+                "pzstudio.templates.language.ref": {
+                    "type": "string",
+                    "description": "%config.templates.language.ref.description%",
+                    "scope": "resource",
+                    "default": "42.13.1"
+                },
+                "pzstudio.outdir": {
+                    "type": "string",
+                    "description": "%config.outdir.description%",
+                    "scope": "resource",
+                    "default": ""
+                },
+                "pzstudio.useSymlinks": {
+                    "type": "boolean",
+                    "description": "%config.useSymlinks.description%",
+                    "scope": "resource",
+                    "default": true
+                },
+                "pzstudio.verbose": {
+                    "type": "boolean",
+                    "description": "%config.verbose.description%",
+                    "scope": "resource",
+                    "default": false
+                },
+                "pzstudio.offline": {
+                    "type": "boolean",
+                    "description": "%config.offline.description%",
+                    "scope": "resource",
+                    "default": false
+                },
+                "pzstudio.forceUpdate": {
+                    "type": "boolean",
+                    "description": "%config.forceUpdate.description%",
+                    "scope": "resource",
+                    "default": false
+                },
+                "pzstudio.build.target": {
+                    "type": "string",
+                    "enum": [
+                        "default",
+                        "production",
+                        "development",
+                        "both"
+                    ],
+                    "enumDescriptions": [
+                        "%config.build.target.enumDescriptions.default%",
+                        "%config.build.target.enumDescriptions.production%",
+                        "%config.build.target.enumDescriptions.development%",
+                        "%config.build.target.enumDescriptions.both%"
+                    ],
+                    "description": "%config.build.target.description%",
+                    "scope": "resource",
+                    "default": "default"
+                },
+                "pzstudio.gameBuild": {
+                    "type": "string",
+                    "default": "",
+                    "scope": "resource",
+                    "description": "%config.gameBuild.description%"
+                },
+                "pzstudio.confirmBeforeRun": {
+                    "type": "boolean",
+                    "description": "%config.confirmBeforeRun.description%",
+                    "scope": "resource",
+                    "default": true
+                },
+                "pzstudio.language": {
+                    "type": "string",
+                    "enum": [
+                        "auto",
+                        "cs",
+                        "da",
+                        "de",
+                        "en",
+                        "es",
+                        "es-419",
+                        "fi",
+                        "fr",
+                        "hu",
+                        "id",
+                        "it",
+                        "ja",
+                        "ko",
+                        "nl",
+                        "no",
+                        "pl",
+                        "pt",
+                        "pt-br",
+                        "ru",
+                        "th",
+                        "tr",
+                        "uk",
+                        "vi",
+                        "zh-cn",
+                        "zh-tw"
+                    ],
+                    "description": "%config.language.description%",
+                    "scope": "window",
+                    "default": "auto"
+                },
+                "pzstudio.newProject.defaultLocation": {
+                    "type": "string",
+                    "description": "%config.newProject.defaultLocation.description%",
+                    "scope": "machine",
+                    "default": ""
+                }
+            }
+        },
+        "commands": [
+            {
+                "command": "pzstudio.new",
+                "title": "%command.new.title%"
+            },
+            {
+                "command": "pzstudio.newHere",
+                "title": "%command.newHere.title%"
+            },
+            {
+                "command": "pzstudio.add",
+                "title": "%command.add.title%"
+            },
+            {
+                "command": "pzstudio.build",
+                "title": "%command.build.title%",
+                "icon": "$(play)"
+            },
+            {
+                "command": "pzstudio.clean",
+                "title": "%command.clean.title%",
+                "icon": "$(clear-all)"
+            },
+            {
+                "command": "pzstudio.modIncluded",
+                "title": "%command.modIncluded.title%",
+                "icon": "$(eye)"
+            },
+            {
+                "command": "pzstudio.modDevOnly",
+                "title": "%command.modDevOnly.title%",
+                "icon": "$(beaker)"
+            },
+            {
+                "command": "pzstudio.modDevOnly.dim",
+                "title": "%command.modDevOnly.dim.title%",
+                "icon": "resources/icons/beaker-dim.svg"
+            },
+            {
+                "command": "pzstudio.modExcluded",
+                "title": "%command.modExcluded.title%",
+                "icon": "$(eye-closed)"
+            },
+            {
+                "command": "pzstudio.modConfigure",
+                "title": "%command.modConfigure.title%",
+                "icon": "$(settings-gear)"
+            },
+            {
+                "command": "pzstudio.openProjectJson",
+                "title": "%command.openProjectJson.title%"
+            },
+            {
+                "command": "pzstudio.delete",
+                "title": "%command.delete.title%",
+                "icon": "$(trash)"
+            },
+            {
+                "command": "pzstudio.lang",
+                "title": "%command.lang.title%"
+            },
+            {
+                "command": "pzstudio.rename",
+                "title": "%command.rename.title%",
+                "icon": "$(edit)"
+            },
+            {
+                "command": "pzstudio.update",
+                "title": "%command.update.title%"
+            },
+            {
+                "command": "pzstudio.watch",
+                "title": "%command.watch.title%"
+            },
+            {
+                "command": "pzstudio.doctor",
+                "title": "%command.doctor.title%"
+            },
+            {
+                "command": "pzstudio.modinfoGenerate",
+                "title": "%command.modinfoGenerate.title%",
+                "icon": "$(note)"
+            },
+            {
+                "command": "pzstudio.explorer.refresh",
+                "title": "%command.explorer.refresh.title%",
+                "icon": "$(refresh)"
+            },
+            {
+                "command": "pzstudio.explorer.toggleFiles",
+                "title": "%command.explorer.toggleFiles.title%",
+                "icon": "$(eye)",
+                "enablement": "view == pzstudio.projectExplorer"
+            },
+            {
+                "command": "pzstudio.explorer.toggleFiles.hidden",
+                "title": "%command.explorer.toggleFiles.hidden.title%",
+                "icon": "$(eye-closed)",
+                "enablement": "view == pzstudio.projectExplorer"
+            }
+        ]
+    },
+    "homepage": "https://github.com/escapepz/pzstudio",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/escapepz/pzstudio.git",
+        "directory": "packages/vscode-extension"
+    },
+    "bugs": {
+        "url": "https://github.com/escapepz/pzstudio/issues"
+    },
+    "author": "escapepz",
+    "contributors": [
+        {
+            "name": "escapepz",
+            "url": "https://github.com/escapepz"
+        },
+        {
+            "name": "asledgehammer",
+            "url": "https://github.com/asledgehammer"
+        },
+        {
+            "name": "demiurgeQuantified",
+            "url": "https://github.com/demiurgeQuantified"
+        }
+    ],
+    "funding": [
+        {
+            "type": "ko-fi",
+            "url": "https://ko-fi.com/escapepz"
+        },
+        {
+            "type": "ko-fi",
+            "url": "https://ko-fi.com/konijima"
+        }
+    ],
+    "license": "Apache-2.0",
+    "scripts": {
+        "clean": "node -e \"require('fs').rmSync('./dist', { recursive: true, force: true })\"",
+        "typecheck": "tsc --noEmit -p tsconfig.json",
+        "bundle": "node scripts/bundle.js",
+        "build": "pnpm run clean && pnpm run typecheck && pnpm run bundle",
+        "vsce:package": "vsce package --no-dependencies",
+        "watch": "pnpm run clean && node scripts/bundle.js --watch",
+        "test:integration": "tsc -p tsconfig.test.json && vscode-test"
+    },
+    "devDependencies": {
+        "@types/mocha": "10.0.10",
+        "@types/vscode": "1.102.0",
+        "@vscode/test-cli": "0.0.15",
+        "@vscode/test-electron": "3.1.0",
+        "@vscode/vsce": "4.0.0",
+        "esbuild": "0.27.3"
+    },
+    "dependencies": {
+        "@pzstudio/cli": "workspace:*"
+    },
+    "l10n": "./l10n"
+}

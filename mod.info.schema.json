@@ -1,0 +1,167 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "Project Zomboid mod metadata file. Parsed line-by-line as key=value pairs.",
+    "properties": {
+        "author": {
+            "description": "Mod author name.",
+            "type": "string"
+        },
+        "category": {
+            "description": "Category string for the mod.",
+            "type": "string"
+        },
+        "description": {
+            "default": "",
+            "description": "Mod description. Multiple lines are concatenated into a single string.",
+            "oneOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            ]
+        },
+        "icon": {
+            "description": "Relative path to an icon image file.",
+            "type": "string"
+        },
+        "id": {
+            "default": "undefined_id",
+            "description": "Unique mod identifier. Must start at the beginning of the line. Required.",
+            "minLength": 1,
+            "type": "string"
+        },
+        "incompatible": {
+            "description": "Mod IDs incompatible with this mod.",
+            "oneOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "items": {
+                        "minLength": 1,
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            ]
+        },
+        "loadModAfter": {
+            "description": "Mod IDs this mod should load after.",
+            "oneOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "items": {
+                        "minLength": 1,
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            ]
+        },
+        "loadModBefore": {
+            "description": "Mod IDs this mod should load before.",
+            "oneOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "items": {
+                        "minLength": 1,
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            ]
+        },
+        "modversion": {
+            "description": "Version string for the mod.",
+            "type": "string"
+        },
+        "name": {
+            "default": "Unnamed Mod",
+            "description": "Display name of the mod.",
+            "type": "string"
+        },
+        "pack": {
+            "description": "Texture pack files to load.",
+            "oneOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            ]
+        },
+        "poster": {
+            "description": "Poster/thumbnail images. Single string or array of paths.",
+            "oneOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            ]
+        },
+        "require": {
+            "description": "Mod IDs this mod depends on.",
+            "oneOf": [
+                {
+                    "description": "Comma-separated mod IDs.",
+                    "type": "string"
+                },
+                {
+                    "items": {
+                        "minLength": 1,
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            ]
+        },
+        "tiledef": {
+            "description": "Tile definition files to load.",
+            "oneOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            ]
+        },
+        "url": {
+            "description": "URL for the mod.",
+            "format": "uri",
+            "type": "string"
+        },
+        "versionMax": {
+            "description": "Maximum game version supported.",
+            "type": "string"
+        },
+        "versionMin": {
+            "description": "Minimum game version required.",
+            "type": "string"
+        }
+    },
+    "required": ["id"],
+    "title": "mod.info",
+    "type": "object"
+}

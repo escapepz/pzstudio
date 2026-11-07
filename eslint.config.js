@@ -1,0 +1,136 @@
+const eslint = require('@eslint/js');
+const tseslint = require('typescript-eslint');
+const prettier = require('eslint-config-prettier');
+const globals = require('globals');
+
+module.exports = tseslint.config(
+    eslint.configs.recommended,
+    ...tseslint.configs.recommended,
+    prettier,
+    {
+        languageOptions: {
+            globals: {
+                ...globals.node,
+            },
+        },
+    },
+    {
+        ignores: [
+            '**/dist/',
+            '**/node_modules/',
+            '.vscode/',
+            '.idea/',
+            'coverage/',
+            'bin/',
+            '*.config.js',
+            'packages/vscode-extension/',
+            '**/*.js',
+            '**/*.d.ts',
+        ],
+    },
+    {
+        files: ['packages/cli/src/**/*.ts'],
+        languageOptions: {
+            parserOptions: {
+                project: './packages/cli/tsconfig.build.json',
+            },
+        },
+        rules: {
+            '@typescript-eslint/no-explicit-any': 'off',
+            '@typescript-eslint/no-unused-vars': [
+                'warn',
+                {
+                    argsIgnorePattern: '^_',
+                    varsIgnorePattern: '^_',
+                    caughtErrorsIgnorePattern: '^_',
+                },
+            ],
+            '@typescript-eslint/no-require-imports': 'off',
+            'no-undef': 'off',
+            'prefer-const': 'warn',
+        },
+    },
+    {
+        files: ['packages/platform/src/**/*.ts'],
+        languageOptions: {
+            parserOptions: {
+                project: './packages/platform/tsconfig.build.json',
+            },
+        },
+        rules: {
+            '@typescript-eslint/no-explicit-any': 'off',
+            '@typescript-eslint/no-unused-vars': [
+                'warn',
+                {
+                    argsIgnorePattern: '^_',
+                    varsIgnorePattern: '^_',
+                    caughtErrorsIgnorePattern: '^_',
+                },
+            ],
+            'no-undef': 'off',
+            'prefer-const': 'warn',
+        },
+    },
+    {
+        files: [
+            'packages/platform-node/src/**/*.ts',
+            'packages/platform-web/src/**/*.ts',
+        ],
+        languageOptions: {
+            parserOptions: {
+                project: [
+                    './packages/platform-node/tsconfig.build.json',
+                    './packages/platform-web/tsconfig.build.json',
+                ],
+            },
+        },
+        rules: {
+            '@typescript-eslint/no-explicit-any': 'off',
+            '@typescript-eslint/no-unused-vars': [
+                'warn',
+                {
+                    argsIgnorePattern: '^_',
+                    varsIgnorePattern: '^_',
+                    caughtErrorsIgnorePattern: '^_',
+                },
+            ],
+            'no-undef': 'off',
+            'prefer-const': 'warn',
+        },
+    },
+    {
+        files: ['packages/core/src/**/*.ts'],
+        languageOptions: {
+            parserOptions: {
+                project: './packages/core/tsconfig.build.json',
+            },
+        },
+        rules: {
+            '@typescript-eslint/no-explicit-any': 'off',
+            '@typescript-eslint/no-unused-vars': [
+                'warn',
+                {
+                    argsIgnorePattern: '^_',
+                    varsIgnorePattern: '^_',
+                    caughtErrorsIgnorePattern: '^_',
+                },
+            ],
+            'no-undef': 'off',
+            'prefer-const': 'warn',
+        },
+    },
+    {
+        files: ['tests/**/*.ts'],
+        languageOptions: {
+            parserOptions: {
+                project: './tsconfig.json',
+            },
+        },
+        rules: {
+            '@typescript-eslint/no-explicit-any': 'off',
+            '@typescript-eslint/no-unused-vars': 'off',
+            '@typescript-eslint/no-require-imports': 'off',
+            'no-undef': 'off',
+        },
+    },
+);
