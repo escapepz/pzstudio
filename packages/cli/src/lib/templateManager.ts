@@ -39,6 +39,7 @@ import {
     getVsCodeSettings,
     mergeHostSettingsLayers,
     migrationHostOptions,
+    removeDirRecursive,
 } from './helper';
 import { getTemplateTransport } from './transport';
 
@@ -227,6 +228,33 @@ export function getConfigPath(): string {
 }
 
 /**
+ * Finds the bundled .template-legacy directory to install or refresh from.
+ * Probes cover, in order: the esbuild bundle (co-located
+ * dist/.template-legacy next to dist/index.js), the repo root during
+ * development on the tsc layout (packages/cli/dist/lib -> repo root), the
+ * package root when published on the tsc layout (dist/lib -> package
+ * root), the dist folder on the tsc layout (dist/lib ->
+ * dist/.template-legacy), and the working directory. The first existing
+ * non-empty probe wins; undefined when none matches.
+ */
+export function findBundledLegacyDir(): string | undefined {
+    const installRootPaths = [
+        join(__dirname, '.template-legacy'),
+        join(__dirname, '..', '..', '..', '.template-legacy'),
+        join(__dirname, '..', '..', '.template-legacy'),
+        join(__dirname, '..', '.template-legacy'),
+        join(process.cwd(), '.template-legacy'),
+    ];
+
+    for (const p of installRootPaths) {
+        if (existsSync(p) && isDirNonEmpty(p)) {
+            return p;
+        }
+    }
+    return undefined;
+}
+
+/**
  * Bootstraps the bundled legacy templates into ~/.pzstudio (one-time, cold
  * caches only). `io` (doc 11 §17 commit 6, Appendix C) is the emission
  * target of the bootstrap info/warn: the v2 non-engine paths thread the
@@ -239,28 +267,7 @@ function bootstrapLegacyTemplates(io?: IoScope | undefined): void {
         return;
     }
 
-    // Find the bundled .template-legacy directory. Probes cover, in order:
-    // the esbuild bundle (co-located dist/.template-legacy next to dist/
-    // index.js), the repo root during development on the tsc layout
-    // (packages/cli/dist/lib -> repo root), the package root when published
-    // on the tsc layout (dist/lib -> package root), the dist folder on the
-    // tsc layout (dist/lib -> dist/.template-legacy), and the working
-    // directory.
-    const installRootPaths = [
-        join(__dirname, '.template-legacy'),
-        join(__dirname, '..', '..', '..', '.template-legacy'),
-        join(__dirname, '..', '..', '.template-legacy'),
-        join(__dirname, '..', '.template-legacy'),
-        join(process.cwd(), '.template-legacy'),
-    ];
-
-    let bundledLegacyDir: string | undefined;
-    for (const p of installRootPaths) {
-        if (existsSync(p) && isDirNonEmpty(p)) {
-            bundledLegacyDir = p;
-            break;
-        }
-    }
+    const bundledLegacyDir = findBundledLegacyDir();
 
     if (bundledLegacyDir) {
         emitInfo(
@@ -274,6 +281,130 @@ function bootstrapLegacyTemplates(io?: IoScope | undefined): void {
             emitWarn(io, `Failed to bootstrap legacy templates: ${e}`);
         }
     }
+}
+
+export type LegacyRefreshStatus = 'refreshed' | 'up-to-date' | 'skipped';
+
+/**
+ * The Task 1 build stamp written by scripts/update-build-date.js into the
+ * bundled .template-legacy copy (`.pzstudio-templates.json`): the handle
+ * `pzstudio update` compares to decide whether the installed global cache
+ * still matches what this build shipped.
+ */
+interface LegacyTemplateStamp {
+    version: string;
+    buildDate: string;
+}
+
+const LEGACY_STAMP_FILE = '.pzstudio-templates.json';
+
+/**
+ * Reads a Task 1 stamp file from a .template-legacy dir. Returns undefined
+ * when the file is missing, unparseable or malformed (missing/non-string
+ * keys) — a bad stamp is data for the caller ('skipped' for the bundled
+ * side, 'outdated' for the global side), never a crash (Review Focus 2).
+ * The full parsed object comes back so equality can consider every field.
+ */
+function readLegacyTemplateStamp(dir: string): LegacyTemplateStamp | undefined {
+    const stampPath = join(dir, LEGACY_STAMP_FILE);
+    if (!existsSync(stampPath)) return undefined;
+    try {
+        const parsed: unknown = JSON.parse(readFileSync(stampPath, 'utf-8'));
+        if (
+            typeof parsed !== 'object' ||
+            parsed === null ||
+            typeof (parsed as Record<string, unknown>).version !== 'string' ||
+            typeof (parsed as Record<string, unknown>).buildDate !== 'string'
+        ) {
+            return undefined;
+        }
+        return parsed as LegacyTemplateStamp;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Deep-equal on the parsed stamp objects: two stamps are equal only when
+ * every key (including extras a future writer may add) matches.
+ */
+function legacyStampsEqual(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (
+        typeof a !== 'object' ||
+        a === null ||
+        typeof b !== 'object' ||
+        b === null
+    ) {
+        return false;
+    }
+    const aKeys = Object.keys(a).sort();
+    const bKeys = Object.keys(b).sort();
+    if (aKeys.length !== bKeys.length) return false;
+    return aKeys.every(
+        (key, i) =>
+            key === bKeys[i] &&
+            legacyStampsEqual(
+                (a as Record<string, unknown>)[key],
+                (b as Record<string, unknown>)[key],
+            ),
+    );
+}
+
+/**
+ * Refreshes the global legacy template cache (~/.pzstudio/.template-legacy)
+ * when the bundled copy differs from the installed one, judged by the Task
+ * 1 stamp file each bundled copy carries:
+ * - equal stamps → 'up-to-date' (the cache is left untouched),
+ * - no bundled copy, or a bundled copy without a usable stamp → 'skipped'
+ *   (a bad stamp is data, never a crash — Review Focus 2),
+ * - otherwise the cache is replaced wholesale with the bundled copy
+ *   ('refreshed') — the remove also washes out stray .git gitfiles a
+ *   pre-stamp install may hold (Review Focus 1).
+ * `bundledDirOverride` pins the bundled source (test seam; Task 3's update
+ * command stays on the probe). cpSync/remove failures throw — the caller
+ * owns the catch. `io` (Appendix C) is the emission target; an omitted
+ * scope routes raw legacy (R1).
+ */
+export function refreshLegacyTemplates(
+    io?: IoScope | undefined,
+    bundledDirOverride?: string | undefined,
+): LegacyRefreshStatus {
+    const bundledLegacyDir = bundledDirOverride ?? findBundledLegacyDir();
+    if (!bundledLegacyDir || !isDirNonEmpty(bundledLegacyDir)) {
+        emitVerbose(
+            io,
+            'No bundled legacy template directory found; skipping refresh.',
+        );
+        return 'skipped';
+    }
+
+    const bundledStamp = readLegacyTemplateStamp(bundledLegacyDir);
+    if (!bundledStamp) {
+        emitVerbose(
+            io,
+            'Bundled legacy templates carry no readable stamp; skipping refresh.',
+        );
+        return 'skipped';
+    }
+
+    const globalLegacyDir = join(getConfigDir(), '.template-legacy');
+    const globalStamp = readLegacyTemplateStamp(globalLegacyDir);
+    if (legacyStampsEqual(bundledStamp, globalStamp)) {
+        emitInfo(io, 'Legacy templates up to date.');
+        return 'up-to-date';
+    }
+
+    if (existsSync(globalLegacyDir)) {
+        removeDirRecursive(globalLegacyDir);
+    }
+    mkdirSync(dirname(globalLegacyDir), { recursive: true });
+    cpSync(bundledLegacyDir, globalLegacyDir, { recursive: true });
+    emitInfo(
+        io,
+        `Legacy templates refreshed (${bundledStamp.version}, ${bundledStamp.buildDate}).`,
+    );
+    return 'refreshed';
 }
 
 function getEmbeddedTemplateDir(
