@@ -398,3 +398,212 @@ describe('templateManager - config and resolution', () => {
         });
     });
 });
+
+describe('templateManager - refreshLegacyTemplates', () => {
+    let actualFs: any;
+    let bundledDirs: string[] = [];
+
+    const fakeHome = (): string =>
+        (globalThis as any).__PZSTUDIO_FAKE_HOME as string;
+    const globalLegacyDir = (): string =>
+        join(fakeHome(), '.pzstudio', '.template-legacy');
+    const stampPathIn = (dir: string): string =>
+        join(dir, '.pzstudio-templates.json');
+
+    // Task 1's build script (scripts/update-build-date.js) writes the stamp
+    // as { version, buildDate } with a 4-space indent and trailing newline;
+    // fixtures use the same shape.
+    const stamp = (version: string, buildDate: string): string =>
+        JSON.stringify({ version, buildDate }, null, 4) + '\n';
+
+    /**
+     * Builds a bundled .template-legacy fixture: .template-project/x.txt is
+     * always present, the Task 1 stamp file when version+buildDate are.
+     */
+    function makeBundledLegacyDir(
+        version?: string,
+        buildDate?: string,
+    ): string {
+        const dir = actualFs.mkdtempSync(join(tmpdir(), 'pzstudio-bundled-'));
+        actualFs.mkdirSync(join(dir, '.template-project'), {
+            recursive: true,
+        });
+        actualFs.writeFileSync(
+            join(dir, '.template-project', 'x.txt'),
+            'template',
+        );
+        if (version !== undefined && buildDate !== undefined) {
+            actualFs.writeFileSync(stampPathIn(dir), stamp(version, buildDate));
+        }
+        bundledDirs.push(dir);
+        return dir;
+    }
+
+    function writeGlobalLegacyEntry(name: string, content: string): void {
+        actualFs.mkdirSync(globalLegacyDir(), { recursive: true });
+        actualFs.writeFileSync(join(globalLegacyDir(), name), content);
+    }
+
+    beforeEach(async () => {
+        vi.restoreAllMocks();
+        actualFs = await vi.importActual('fs');
+        bundledDirs = [];
+        // Vitest 4's restoreAllMocks also resets the vi.fn(actual.*)
+        // wrappers this file's fs mock factory installed, so re-prime them:
+        // C1-C6 verify real filesystem behavior through the module under
+        // test, not mocks.
+        vi.mocked(fs.existsSync).mockImplementation(actualFs.existsSync as any);
+        vi.mocked(fs.readFileSync).mockImplementation(
+            actualFs.readFileSync as any,
+        );
+        vi.mocked(fs.lstatSync).mockImplementation(actualFs.lstatSync as any);
+        vi.mocked(fs.readdirSync).mockImplementation(
+            actualFs.readdirSync as any,
+        );
+        vi.mocked(fs.mkdirSync).mockImplementation(actualFs.mkdirSync as any);
+        vi.mocked(fs.writeFileSync).mockImplementation(
+            actualFs.writeFileSync as any,
+        );
+        vi.mocked(fs.rmSync).mockImplementation(actualFs.rmSync as any);
+        vi.mocked(fs.cpSync).mockImplementation(actualFs.cpSync as any);
+        // vi.restoreAllMocks leaves call records on the auto-mocked logger
+        // module fns (see helper.test.ts) — clear them for call isolation.
+        vi.mocked(logger.emitInfo).mockClear();
+        vi.mocked(logger.emitWarn).mockClear();
+        vi.mocked(logger.emitVerbose).mockClear();
+    });
+
+    afterEach(() => {
+        for (const dir of bundledDirs) {
+            actualFs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it('C1 - equal stamps: up-to-date, global dir untouched', () => {
+        const bundled = makeBundledLegacyDir('v', 'b');
+        writeGlobalLegacyEntry('.pzstudio-templates.json', stamp('v', 'b'));
+        // The marker proves the up-to-date path never rewrites the cache.
+        writeGlobalLegacyEntry('marker.txt', 'keep me');
+
+        const status = templateManager.refreshLegacyTemplates(
+            undefined,
+            bundled,
+        );
+
+        expect(status).toBe('up-to-date');
+        expect(logger.emitInfo).toHaveBeenCalledWith(
+            undefined,
+            'Legacy templates up to date.',
+        );
+        expect(actualFs.existsSync(join(globalLegacyDir(), 'marker.txt'))).toBe(
+            true,
+        );
+    });
+
+    it('C2 - older global stamp: refreshed from the bundled copy', () => {
+        const bundled = makeBundledLegacyDir('a', 'd1');
+        // The marker rides in the bundled copy and must land in the cache.
+        actualFs.writeFileSync(join(bundled, 'marker.txt'), 'from bundled');
+        writeGlobalLegacyEntry('.pzstudio-templates.json', stamp('a', 'd0'));
+        writeGlobalLegacyEntry('stale-only.txt', 'old global content');
+
+        const status = templateManager.refreshLegacyTemplates(
+            undefined,
+            bundled,
+        );
+
+        expect(status).toBe('refreshed');
+        expect(logger.emitInfo).toHaveBeenCalledWith(
+            undefined,
+            'Legacy templates refreshed (a, d1).',
+        );
+        // Global content now equals the bundled copy: marker copied in,
+        // global-only file washed out, stamp matches the bundled one.
+        expect(actualFs.existsSync(join(globalLegacyDir(), 'marker.txt'))).toBe(
+            true,
+        );
+        expect(
+            actualFs.existsSync(join(globalLegacyDir(), 'stale-only.txt')),
+        ).toBe(false);
+        expect(
+            actualFs.existsSync(
+                join(globalLegacyDir(), '.template-project', 'x.txt'),
+            ),
+        ).toBe(true);
+        expect(
+            actualFs.readFileSync(stampPathIn(globalLegacyDir()), 'utf-8'),
+        ).toBe(stamp('a', 'd1'));
+    });
+
+    it('C3 - global without a stamp: refreshed, planted .git file removed', () => {
+        const bundled = makeBundledLegacyDir('a', 'd1');
+        // A pre-stamp cache can carry a stray .git gitfile; the wholesale
+        // replace must wash it out together with the missing stamp.
+        writeGlobalLegacyEntry('.git', 'gitdir: ../.git/modules/pzstudio');
+
+        const status = templateManager.refreshLegacyTemplates(
+            undefined,
+            bundled,
+        );
+
+        expect(status).toBe('refreshed');
+        expect(actualFs.existsSync(join(globalLegacyDir(), '.git'))).toBe(
+            false,
+        );
+        expect(actualFs.existsSync(stampPathIn(globalLegacyDir()))).toBe(true);
+        expect(
+            actualFs.existsSync(
+                join(globalLegacyDir(), '.template-project', 'x.txt'),
+            ),
+        ).toBe(true);
+    });
+
+    it('C4 - bundled copy without a stamp: skipped, global dir untouched', () => {
+        const bundled = makeBundledLegacyDir(); // no stamp file
+        writeGlobalLegacyEntry('marker.txt', 'untouched');
+
+        const status = templateManager.refreshLegacyTemplates(
+            undefined,
+            bundled,
+        );
+
+        expect(status).toBe('skipped');
+        expect(logger.emitVerbose).toHaveBeenCalledWith(
+            undefined,
+            expect.stringContaining('skip'),
+        );
+        expect(actualFs.existsSync(join(globalLegacyDir(), 'marker.txt'))).toBe(
+            true,
+        );
+        expect(actualFs.existsSync(stampPathIn(globalLegacyDir()))).toBe(false);
+    });
+
+    it('C5 - corrupt global stamp JSON: refreshed, not a crash', () => {
+        const bundled = makeBundledLegacyDir('a', 'd1');
+        writeGlobalLegacyEntry('.pzstudio-templates.json', '{oops');
+
+        const status = templateManager.refreshLegacyTemplates(
+            undefined,
+            bundled,
+        );
+
+        expect(status).toBe('refreshed');
+        expect(
+            actualFs.readFileSync(stampPathIn(globalLegacyDir()), 'utf-8'),
+        ).toBe(stamp('a', 'd1'));
+    });
+
+    it('C6 - nonexistent bundledDirOverride: skipped', () => {
+        const missing = join(tmpdir(), 'pzstudio-no-such-bundled');
+        actualFs.rmSync(missing, { recursive: true, force: true });
+
+        const status = templateManager.refreshLegacyTemplates(
+            undefined,
+            missing,
+        );
+
+        expect(status).toBe('skipped');
+        // A skip must not create or touch the global cache.
+        expect(actualFs.existsSync(globalLegacyDir())).toBe(false);
+    });
+});
