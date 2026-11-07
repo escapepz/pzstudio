@@ -1,5 +1,5 @@
 {
-    "displayName": "PZ Studio",
+    "displayName": "PZ Studio 42",
     "description": "以直观的结构，轻松创建和维护 Project Zomboid 的 Lua 模组。",
     "viewContainer.title": "PZ Studio",
     "view.projectExplorer.name": "PZ Project Explorer",
