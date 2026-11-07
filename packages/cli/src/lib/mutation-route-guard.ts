@@ -105,7 +105,7 @@ function isNoSuchEntryError(e: unknown): boolean {
  * there (everything below is fresh creation); any other listing failure
  * throws an explicit authorization error — never a swallowed skip.
  */
-export function listRouteDirectorySync(
+function listRouteDirectorySync(
     operation: string,
     targetPath: string,
     dir: string,
@@ -133,7 +133,7 @@ export function listRouteDirectorySync(
  * case-insensitive host; on a case-sensitive host the twin is a distinct
  * path and stays untouched).
  */
-export function lookupRouteEntrySync(
+function lookupRouteEntrySync(
     parentDir: string,
     entries: Dirent[],
     name: string,
