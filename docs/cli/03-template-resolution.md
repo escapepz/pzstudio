@@ -113,7 +113,7 @@ The `.template-legacy` submodule lives at the repo root. During development it i
 in published packages it is populated into `dist/` by the build script. Resolution reads
 `~/.pzstudio/.template-legacy/.template-<category>` afterwards.
 
-<!-- VERIFY: the probe-intent comment in templateManager.ts:214-217 says the first probe
+<!-- VERIFY: the probe-intent comment in templateManager.ts:231-239 says the first probe
      covers the repo root during development, but from the compiled lib directory 3 levels
      up lands at packages/ (repo root would be 4 levels up). In practice the dist copy
      (1 level up, where the build script populates it) and the cwd probe are what hit.
@@ -134,17 +134,29 @@ the stamp of the installed global cache and replaces it on mismatch:
 - **stamps equal** → info `Legacy templates up to date.` and no copy (a
   local, offline no-op — no network involved).
 - **mismatch**, including a global cache with no readable stamp → the global
-  dir is removed and re-copied wholesale from the bundled copy (the stamp file
-  rides along) → info `Legacy templates refreshed (<version>, <buildDate>).`
+  dir is removed and re-copied wholesale from the bundled copy, and the
+  bundled stamp is written into the fresh cache only **after** the copy
+  completes — an interrupted copy leaves a stamp-less cache, which the next
+  update refreshes instead of trusting (a stamp that rode the copy could
+  strand on a half-copied cache and pin it as "up to date" forever) → info
+  `Legacy templates refreshed (<version>, <buildDate>).`
   The wholesale replace is also what upgrades **pre-stamp installs** and drops
   stray `.git` metadata an old bootstrap may have carried.
-- **no bundled copy, or a bundled copy without a readable stamp** (unstamped
-  dev checkouts without submodules) → verbose note, skipped — never an error.
+- **no bundled copy, or a bundled copy without a readable stamp** → verbose
+  note, skipped — never an error. The skip is expected for any source-run
+  checkout (running the CLI outside its packaged `dist/`): only the `dist/`
+  copy the build script stamps ever carries a stamp, so a source checkout
+  offers at most the unstamped repo-root `.template-legacy` submodule and
+  there is nothing to compare against — the skip is normal, not a fault.
 
 The legacy step reports like one more refresh category: on throw it warns and
 marks the command failed (non-zero exit) without aborting the remote-cache
 loop. Only the global config dir is touched — a project-local
 `.template-legacy` (the user customization point) is never modified.
+
+If a legacy cache ever appears broken (missing categories), delete
+`~/.pzstudio/.template-legacy` and run `pzstudio update` (or any scaffolding
+command) to rebuild it.
 
 ## Scaffold operations
 
