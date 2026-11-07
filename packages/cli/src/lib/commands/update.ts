@@ -7,8 +7,9 @@ import {
     OperationOutcome,
     aggregateOutcomeSeverity,
 } from '../outcome';
-import { info, verbose, warn } from '../logger';
+import { engineIo, info, verbose, warn } from '../logger';
 import {
+    refreshLegacyTemplates,
     resolveTemplateDirForEngine,
     TemplateCategory,
 } from '../templateManager';
@@ -18,6 +19,7 @@ addHelp(
     `Update global template caches to the latest version.
     This command pulls the latest changes for all template categories (project, mod, workshop, language)
     and resets the local cache to match the remote source.
+    Bundled legacy fallback templates are refreshed into the global config dir when they differ from the installed copy.
 
     Usages:
         pzstudio update - Refresh all global template caches from their remote sources.
@@ -53,10 +55,31 @@ export async function updateCmd() {
         }
     }
 
+    // Same isolation for the bundled legacy fallback cache (CLI-6): the
+    // refresh owns its own lines for every status ('refreshed',
+    // 'up-to-date', 'skipped'); a failure warns here and flips the exit
+    // code below without masking the per-category messages. The engine
+    // scope keeps those helper emissions on their §12 ambient routing —
+    // the invocation logger under studio.run, raw legacy (byte-identical)
+    // for the standalone CLI.
+    let legacyFailed = false;
+    info('- Updating legacy fallback templates...');
+    try {
+        refreshLegacyTemplates(engineIo());
+    } catch (e: any) {
+        warn(`Failed to refresh legacy templates: ${e.message}`);
+        legacyFailed = true;
+    }
+
     const refreshed = outcomes.filter((o) => o.severity === 'success').length;
-    if (aggregateOutcomeSeverity(outcomes) === 'failure') {
+    const categoryFailure = aggregateOutcomeSeverity(outcomes) === 'failure';
+    if (categoryFailure || legacyFailed) {
+        // Category failures keep the existing aggregate message; a
+        // legacy-only failure gets its own actionable one.
         throw new CliError(
-            `Refreshed ${refreshed}/${categories.length} template caches — ${categories.length - refreshed} update(s) failed. Fix the reported causes and run 'pzstudio update' again.`,
+            categoryFailure
+                ? `Refreshed ${refreshed}/${categories.length} template caches — ${categories.length - refreshed} update(s) failed. Fix the reported causes and run 'pzstudio update' again.`
+                : `Refreshed ${refreshed}/${categories.length} template caches — the legacy template refresh failed. Fix the reported cause and run 'pzstudio update' again.`,
         );
     }
     info('\nAll template caches refreshed successfully!');
