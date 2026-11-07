@@ -264,7 +264,7 @@ export class DevSyncController implements vscode.Disposable {
         // per batch at verbose level — a per-event warning would spam every
         // engine output write the watcher reports.
         if (this.filteredEvents > 0) {
-            this.logger.verbose(
+            this.logger.verbose?.(
                 `Filtered ${this.filteredEvents} watcher event(s) below the output root or outside the project — not synced.`,
             );
             this.filteredEvents = 0;
