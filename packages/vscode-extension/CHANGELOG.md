@@ -2,79 +2,42 @@
 
 All notable changes to the **PZ Studio** VSCode extension will be documented in this file.
 
-## [2.242170.0-nightly-2] - 2026-04-24
+> **Archived history.** This changelog records `pzstudio42` in this
+> repository, starting at [0.42200.1] — the `0.<gameBuild>.<patch>` version
+> line. Everything before that belongs to the original **Project Zomboid
+> Studio** project: the `2.242131.x` alpha releases and the `2.242170.0`
+> nightly entries are archived — not carried in this codebase — at
+> [`project-zomboid-studio@42.17.0` · CHANGELOG.md](https://github.com/escapepz/project-zomboid-studio/blob/42.17.0/packages/vscode-extension/CHANGELOG.md).
 
-
-## [2.242170.0-nightly-1] - 2026-04-21
-
-
-## [2.242131.3-alpha] - 2026-03-02
-
-### Changed
-
-- Split templates into separate Git repositories for better modularity and maintenance.
-- Added `.template-legacy` for backwards compatibility.
-
-### Fixed
-
-- Fixed `new` command failing when modId parameter is empty string by using logical OR operator instead of nullish coalescing, allowing proper fallback to projectTitle.
-
-## [2.242131.2-alpha] - 2026-03-01
+## [0.42200.1] - 2026-11-07
 
 ### Added
 
-- Initial standalone release as a separate workspace package.
-- All CLI commands available as VS Code commands: build, clean, update, watch, new, add, delete, rename, lang.
+- **PZ Project Explorer**: tree view mirroring workspace projects and mods with inline Build/Clean (confirmation-gated via `pzstudio.confirmBeforeRun`), build-state badges (`included` / `dev builds only` / `excluded from build`), diagnostics finding counts with tooltip, and multi-root workspace resolution.
+- **Toggle Development Sync**: engine-driven incremental sync — saved files apply in order, `mod.info`/`.pzstudioignore` edits re-sync their mod, `project.json` edits trigger a full rebuild; startup failures surface and stop cleanly.
+- **Run Diagnostics** quick-pick with per-project diagnostics caching; new `pzstudio.gameBuild` setting enables the `pzBuildCompatibility` check.
+- **`pzstudio.openProjectJson`** — safe remediation for mods missing on disk (all destructive actions are hidden for missing mods).
+- **25-language UI** with localized progress titles; `pzstudio.language` applies live.
+- New settings: `pzstudio.verbose`, `pzstudio.offline`, `pzstudio.forceUpdate`, `pzstudio.build.target`, `pzstudio.gameBuild`, `pzstudio.confirmBeforeRun`.
 
 ### Changed
 
-- Decoupled from CLI branch — the extension is now versioned and released independently.
-- Extension imports CLI functionality via the `pzstudio` workspace package API.
-
-## [2.242131.1-alpha] - 2026-02-02
-
-### Added
-
-- **Standardized Logging System**: Integrated local timestamps (`YYYY-MM-DD HH:mm:ss`) and bracketed labels (`[INFO]`, `[WARN]`, `[ERROR]`) across both CLI and VS Code extension.
-- **Log Clearing**: Added automatic clearing of the VS Code output channel at the start of every command execution.
-- **Enhanced Build Feedback**: Added explicit log messages for directory cleaning tasks during the build process to verify removal of target workshop folders.
-- **Completion Messages**: Standardized "Command completed" messages for all CLI commands.
-
-### Changed
-
-- **CLI Readability**: Improved vertical line padding for better separation between consecutive command runs.
-- **Logger Architecture**: Standardized timestamp and label generation in the core logger to fix redundant prefixing in VS Code.
+- Development Sync pre-filters engine output events; filtered events are reported as one aggregate line at verbose level — never per-event warnings.
+- Task targets replace `pzstudio.build.target` instead of composing conflicting flags.
+- Errors are actionable: a localized notification with **Show Details** opens the PZ Studio output channel; verbose runs reveal the channel automatically.
+- `PZStudio: Update` refreshes templates without requiring a project.
+- Development Sync failures surface through the error notification; a rejected sync pass is reported instead of failing silently.
 
 ### Fixed
 
-- **VS Code Sync**: Resolved an issue where redundant log prefixes were shown in the VS Code output channel.
-- **Process Visibility**: Fixed missing "done" feedback for several CLI commands (e.g., `update`, `add`).
+- Cancelling a project picker no longer re-prompts or misreports — Build/Clean/Update abort cleanly.
+- Cancel in New Project leaves the disk untouched (the destination is recorded only after verified creation).
+- `--verbose` output reaches the OutputChannel (`[DEBUG]` lines).
+- Doctor diagnostics are cached per project fingerprint instead of running a full doctor pass on every rescan.
 
-## [2.242131.0-alpha] - 2026-02-01
+### Safety
 
-### Added
-
-- **Project Zomboid b42.13.1 MP** compatibility.
-- Integrated **VS Code Extension** support with dedicated commands for building, watching, and project management.
-- Dual-branch build system:
-    - **Main Branch**: Production-ready workshop structure.
-    - **Dev Branch**: Unlisted suffix-based workshop structure for safe multiplayer testing.
-- Automated documentation and guide installation (`.docs` and `.guides` submodules).
-- Unix-compatible mod ID formatting (automatically sanitizes spaces and special characters for cross-platform compatibility).
-- `AGENTS.md` for better developer onboarding and project architecture overview.
-- Support for `mod.info` deployment in version-specific folders (`{modId}/42.13.1/mod.info`).
-- JSON Schema for `project.json` to provide autocompletion and validation in VS Code.
-
-### Changed
-
-- Refactored build output to support the new Project Zomboid 42.13.1 folder structure.
-- Updated project configuration to move `buildDate` to a separate file, preventing unnecessary `package.json` churn.
-- Standardized file paths across CLI and VS Code extension to ensure reliable template copying.
-
-### Fixed
-
-- Resolved path resolution issues when running the bundled CLI from within the VS Code extension.
-- Improved error handling and logging consistency between CLI and VS Code output channels.
+- The bundled engine (`@pzstudio/cli` 0.42200.2) includes the E1 Stage-1 ownership guard (fail-closed destinations inside the mod source tree) and the F23-WRITE alias-route guard on build/clean — see the `@pzstudio/cli` 0.42200.2 release notes.
 
 ---
 
