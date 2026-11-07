@@ -640,4 +640,70 @@ describe('templateManager - refreshLegacyTemplates', () => {
         ).toBe(true);
         expect(actualFs.existsSync(stampPathIn(globalLegacyDir()))).toBe(false);
     });
+
+    it('C8 - failed bootstrap copy: warn fires, no throw escapes, no stamp stranded', () => {
+        // bootstrapLegacyTemplates has no bundledDirOverride seam: pin the
+        // bundled source through the cwd probe (the __dirname probes miss
+        // under vitest). The fixture must carry a stamp — an unstamped dev
+        // source could never strand one, so without it this test could not
+        // tell the two orderings apart.
+        const prevCwd = process.cwd();
+        const cwdRoot = actualFs.mkdtempSync(join(tmpdir(), 'pzstudio-cwd-'));
+        bundledDirs.push(cwdRoot);
+        const bundled = join(cwdRoot, '.template-legacy');
+        actualFs.mkdirSync(join(bundled, '.template-project'), {
+            recursive: true,
+        });
+        actualFs.writeFileSync(
+            join(bundled, '.template-project', 'x.txt'),
+            'template',
+        );
+        actualFs.writeFileSync(stampPathIn(bundled), stamp('a', 'd1'));
+
+        // Same simulate-a-part-way-copy shape as C7: real copy first (the
+        // implementation's own args, filter included), failure afterwards.
+        vi.mocked(fs.cpSync).mockImplementation(((
+            src: any,
+            dest: any,
+            opts: any,
+        ) => {
+            actualFs.cpSync(src, dest, opts);
+            throw new Error('simulated bootstrap cpSync failure');
+        }) as any);
+
+        try {
+            process.chdir(cwdRoot);
+
+            // The offline path keeps this off the network; the fresh fake
+            // home is cold, so the one-time bootstrap runs its copy first
+            // and its failure leaves nothing for the resolution to use.
+            expect(() => resolveTemplateDir('mod', true)).toThrow(
+                'No valid cached or legacy template found',
+            );
+
+            // Bootstrap started and took the warn path (it never throws).
+            expect(logger.emitInfo).toHaveBeenCalledWith(
+                undefined,
+                expect.stringContaining('Bootstrapping legacy templates'),
+            );
+            expect(logger.emitWarn).toHaveBeenCalledWith(
+                undefined,
+                expect.stringContaining('Failed to bootstrap legacy templates'),
+            );
+
+            // The copy really ran — but no stamp: a failed bootstrap copy
+            // can never strand a stamp that pins a partial cache as
+            // current (same invariant as C7, at the second site).
+            expect(
+                actualFs.existsSync(
+                    join(globalLegacyDir(), '.template-project', 'x.txt'),
+                ),
+            ).toBe(true);
+            expect(actualFs.existsSync(stampPathIn(globalLegacyDir()))).toBe(
+                false,
+            );
+        } finally {
+            process.chdir(prevCwd);
+        }
+    });
 });

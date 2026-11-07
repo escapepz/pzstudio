@@ -276,7 +276,24 @@ function bootstrapLegacyTemplates(io?: IoScope | undefined): void {
         );
         try {
             mkdirSync(dirname(globalLegacyDir), { recursive: true });
-            cpSync(bundledLegacyDir, globalLegacyDir, { recursive: true });
+            // Stamp-last (same invariant as refreshLegacyTemplates): the
+            // copy excludes the bundled stamp and the stamp is written
+            // only after the copy succeeds — an interrupted bootstrap must
+            // not strand a stamp that pins a partial cache as current. An
+            // unstamped dev source writes no stamp (readLegacyTemplateStamp
+            // returns undefined for it).
+            cpSync(bundledLegacyDir, globalLegacyDir, {
+                recursive: true,
+                filter: (src) => basename(src) !== LEGACY_STAMP_FILE,
+            });
+            const bundledStamp = readLegacyTemplateStamp(bundledLegacyDir);
+            if (bundledStamp) {
+                writeFileSync(
+                    join(globalLegacyDir, LEGACY_STAMP_FILE),
+                    JSON.stringify(bundledStamp, null, 4) + '\n',
+                    'utf8',
+                );
+            }
         } catch (e) {
             emitWarn(io, `Failed to bootstrap legacy templates: ${e}`);
         }
