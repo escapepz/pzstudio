@@ -1,6 +1,6 @@
 {
-    "displayName": "PZ Studio",
-    "description": "Effortlessly create and maintain Lua mods for Project Zomboid with intuitive structuring.",
+    "displayName": "PZ Studio 42",
+    "description": "Effortlessly create, build and sync Project Zomboid Lua mods in VS Code.",
     "viewContainer.title": "PZ Studio",
     "view.projectExplorer.name": "PZ Project Explorer",
     "configuration.title": "PZ Studio",

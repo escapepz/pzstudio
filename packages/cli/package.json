@@ -1,6 +1,6 @@
 {
     "name": "@pzstudio/cli",
-    "version": "0.42200.2",
+    "version": "0.42210.0",
     "pzBuildCompatibility": "42.x",
     "description": "Effortlessly create and maintain Lua mods for Project Zomboid with intuitive structuring.",
     "exports": {
@@ -27,10 +27,10 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/Konijima/project-zomboid-studio.git"
+        "url": "git+https://github.com/escapepz/pzstudio.git"
     },
     "bugs": {
-        "url": "https://github.com/Konijima/project-zomboid-studio/issues"
+        "url": "https://github.com/escapepz/pzstudio/issues"
     },
     "author": "Konijima",
     "contributors": [

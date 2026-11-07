@@ -9,6 +9,29 @@ All notable changes to the **PZ Studio** VSCode extension will be documented in 
 > nightly entries are archived — not carried in this codebase — at
 > [`project-zomboid-studio@42.17.0` · CHANGELOG.md](https://github.com/escapepz/project-zomboid-studio/blob/42.17.0/packages/vscode-extension/CHANGELOG.md).
 
+## [0.42210.0] - 2026-11-08
+
+### Added
+
+- **`PZStudio: Update` now refreshes the global legacy template cache** (`~/.pzstudio/.template-legacy`): when the bundled templates are newer (version/buildDate stamp), the shared cache is refreshed so new projects pick up current templates. The stamp is written only after the cache copy completes — an interrupted copy never poisons the cache.
+
+### Changed
+
+- Marketplace display name is now **PZ Studio 42** — the legacy `escapepz.pzstudio` listing keeps "PZ Studio"; display names must be unique within a publisher.
+- Project and mod template defaults target **PZ 42.21.0** (vendored `.template-project` / `.template-mod` pinned to tag 42.21.0).
+- Extension releases publish on the **pre-release channel** (packaged with `vsce --pre-release`).
+
+### Fixed
+
+- Development Sync: the flush path no longer breaks when the verbose logger sink is absent.
+- Shipped legacy template copies no longer contain `.git` gitfiles from the template checkouts.
+
+### Safety
+
+- The bundled engine (**`@pzstudio/cli` 0.42210.0**) adds the stamp-gated legacy template cache refresh — see the `@pzstudio/cli` 0.42210.0 release notes.
+
+---
+
 ## [0.42200.1] - 2026-11-07
 
 ### Added
