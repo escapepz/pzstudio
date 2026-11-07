@@ -21,7 +21,7 @@
         "@pzstudio/platform": "workspace:*"
     },
     "devDependencies": {
-        "@types/vscode": "^1.102.0",
-        "typescript": "^5.9.3"
+        "@types/vscode": "1.109.0",
+        "typescript": "5.9.3"
     }
 }

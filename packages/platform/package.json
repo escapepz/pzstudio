@@ -18,6 +18,6 @@
         "build": "pnpm run clean && tsc -p tsconfig.build.json"
     },
     "devDependencies": {
-        "typescript": "^5.9.3"
+        "typescript": "5.9.3"
     }
 }
