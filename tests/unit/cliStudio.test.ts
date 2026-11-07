@@ -65,7 +65,10 @@ import {
 } from '../../packages/cli/src/lib/interaction';
 import { getCommand } from '../../packages/cli/src/lib/registry';
 import { getActiveInvocationContext } from '../../packages/cli/src/lib/invocation';
-import { getConfigPath } from '../../packages/cli/src/lib/templateManager';
+import {
+    getConfigDir,
+    getConfigPath,
+} from '../../packages/cli/src/lib/templateManager';
 import * as helperModule from '../../packages/cli/src/lib/helper';
 import * as loggerModule from '../../packages/cli/src/lib/logger';
 import * as transportModule from '../../packages/cli/src/lib/transport';
@@ -149,6 +152,18 @@ function withCommandRun(
     };
 }
 
+/**
+ * Pre-seeds the usage recorder's .notice-shown marker. Tests that compare
+ * BOTH doors' captured output inside one fake HOME would otherwise see the
+ * one-time disclosure notice on the first door only; the notice's emission
+ * and routing are pinned in the usage suites and the lifecycle goldens.
+ */
+function preseedNoticeMarker(): void {
+    const dir = path.join(getConfigDir(), 'usage');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, '.notice-shown'), '', 'utf-8');
+}
+
 /** Namespace handles for spying on the raw legacy accessors (R0 proofs). */
 const helperNs = helperModule as unknown as Record<string, any>;
 const loggerNs = loggerModule as unknown as Record<string, any>;
@@ -191,6 +206,8 @@ describe('golden equivalence: runCLI ≡ studio.run (captured output)', () => {
     it('normal success: identical stdout/stderr sequences', async () => {
         const proj = makeProjectDir('Golden');
         const studio = createPzStudio();
+
+        preseedNoticeMarker();
 
         const legacy = captureIO();
         await runCLI('list', [], { flags: ['--project', proj] });
@@ -255,6 +272,8 @@ describe('golden equivalence: runCLI ≡ studio.run (captured output)', () => {
     it('throwing command: identical error report and same rejection kind', async () => {
         const emptyDir = makeTempDir();
         const studio = createPzStudio();
+
+        preseedNoticeMarker();
 
         const legacy = captureIO();
         await expect(
@@ -388,9 +407,15 @@ describe('R0 legacy-blindness (v2 never falls through to the facade)', () => {
 
         // Outputs and dependencies come exclusively from the instance.
         // (The swapped command body is empty: pre-command blank line,
-        // completion info, trailing blank line.)
+        // completion info, usage notice, trailing blank line — the notice
+        // routes through the context logger like every engine emission.)
         expect(L1.calls).toEqual([]);
-        expect(L2.calls.map((c) => c.method)).toEqual(['log', 'info', 'log']);
+        expect(L2.calls.map((c) => c.method)).toEqual([
+            'log',
+            'info',
+            'info',
+            'log',
+        ]);
         expect(provider).toHaveBeenCalledTimes(1);
         expect(provider).toHaveBeenCalledWith({ projectDir: projB });
         expect(spies.legacyLogger).not.toHaveBeenCalled();
@@ -855,9 +880,12 @@ describe('v2 lifecycle isolation', () => {
         await createPzStudio({ logger: success.logger }).run('list', [], {
             flags: ['--project', proj],
         });
+        // The usage notice is an engine emission too (span settle runs
+        // inside the lifecycle): instance logger, after the completion info.
         expect(success.calls.map((c) => c.method)).toEqual([
             'log',
             'log',
+            'info',
             'info',
             'log',
         ]);
@@ -867,6 +895,8 @@ describe('v2 lifecycle isolation', () => {
 
         const help = recordingLogger();
         await createPzStudio({ logger: help.logger }).run('help');
+        // The disclosure notice fired once on the success run above (one
+        // marker per fake HOME), so this run records without emitting.
         expect(help.calls.map((c) => c.method)).toEqual(['log', 'log']);
         expect(String(help.calls[0].message)).toContain('Available commands:');
 
