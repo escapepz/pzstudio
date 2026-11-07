@@ -10,6 +10,7 @@ import {
     summarizeApplyResult,
     WATCH_DEBOUNCE_MS,
 } from '@pzstudio/cli/api';
+import { t } from './l10n';
 
 /**
  * Desktop auto-sync: ONE core BuildSession driven by a workspace
@@ -25,6 +26,12 @@ import {
  * classifies full-rebuild, so a re-baseline attempt is immediately behind
  * it) and after every apply that reports a re-baseline. A failed
  * re-resolution retains the last good root — the same side the engine keeps.
+ *
+ * A filtered drop is never fully silent (DEC-9): drops are counted and
+ * reported as one aggregate line per batch at verbose level. Apply-phase
+ * failures reach the error surface (notification + Show Details, DEC-6),
+ * not only the channel, and a rejected flush is reported instead of dying
+ * as an unhandled rejection.
  *
  * Events are collected and flushed on a debounce so a burst of saves becomes
  * one sync pass; the session itself serializes and classifies the deltas.
@@ -69,6 +76,8 @@ export class DevSyncController implements vscode.Disposable {
     private pending: FileDelta[] = [];
     private timer: ReturnType<typeof setTimeout> | undefined;
     private starting = false;
+    /** Events dropped by the scope filter since the last reported batch. */
+    private filteredEvents = 0;
 
     constructor(studio: PzStudio, logger: PzStudioLogger) {
         this.studio = studio;
@@ -146,6 +155,7 @@ export class DevSyncController implements vscode.Disposable {
             this.timer = undefined;
         }
         this.pending = [];
+        this.filteredEvents = 0;
         watcher?.dispose();
         await session?.stop();
     }
@@ -184,6 +194,7 @@ export class DevSyncController implements vscode.Disposable {
             this.filterRoot !== undefined &&
             isWatchPathIgnored(this.projectDir, this.filterRoot, path)
         ) {
+            this.filteredEvents += 1;
             return;
         }
         this.pending.push({ type, path });
@@ -192,7 +203,14 @@ export class DevSyncController implements vscode.Disposable {
         }
         this.timer = setTimeout(() => {
             this.timer = undefined;
-            void this.flush();
+            this.flush().catch((e) => {
+                // A rejected flush must not die as an unhandled rejection
+                // (per-action failures travel in result.errors, so a
+                // rejection here means a host dependency threw): report
+                // through the error surface; the next watcher event starts
+                // the next flush and the session serializes behind it.
+                this.logger.error(e instanceof Error ? e : String(e));
+            });
         }, WATCH_DEBOUNCE_MS);
     }
 
@@ -230,6 +248,26 @@ export class DevSyncController implements vscode.Disposable {
         }
         for (const message of result.errors) {
             this.logger.warn(`- ${message}`);
+        }
+        if (result.errors.length > 0) {
+            // A failed batch must reach the user where they work (DEC-6):
+            // the per-error detail stays in the channel above; the error
+            // surface (notification + Show Details) carries the count.
+            this.logger.error(
+                t(
+                    'Development sync: {0} change(s) failed to apply. Show Details lists every failure.',
+                    result.errors.length,
+                ),
+            );
+        }
+        // A dropped event is never fully silent (DEC-9): one aggregate line
+        // per batch at verbose level — a per-event warning would spam every
+        // engine output write the watcher reports.
+        if (this.filteredEvents > 0) {
+            this.logger.verbose(
+                `Filtered ${this.filteredEvents} watcher event(s) below the output root or outside the project — not synced.`,
+            );
+            this.filteredEvents = 0;
         }
     }
 }
