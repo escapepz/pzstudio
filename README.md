@@ -1,5 +1,7 @@
 # PZ Studio
 
+![PZ Studio banner](.images/pzstudio-banner.png)
+
 > Project Zomboid Studio — create, validate, build and live-sync
 > Project Zomboid **Build 42** Lua mods from one engine.
 
