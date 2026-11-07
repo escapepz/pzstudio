@@ -89,6 +89,18 @@ if (templateLegacySource) {
     console.log(
         `Copied .template-legacy from ${templateLegacySource} to ${templateLegacyDest}`,
     );
+    // Stamp the bundled copy so `pzstudio update` can tell whether the
+    // installed global templates differ from the ones this build shipped.
+    const version = JSON.parse(fs.readFileSync(packagePath, 'utf8')).version;
+    const stampPath = path.join(templateLegacyDest, '.pzstudio-templates.json');
+    fs.writeFileSync(
+        stampPath,
+        JSON.stringify({ version, buildDate: today }, null, 4) + '\n',
+        'utf8',
+    );
+    console.log(
+        `Stamped legacy templates (${version}, ${today}) in ${stampPath}`,
+    );
 } else {
     console.warn(
         'No populated .template-legacy found (submodules not checked out?) — the built binary will not be able to bootstrap templates offline.',
