@@ -2,7 +2,7 @@
     "name": "pzstudio42",
     "displayName": "%displayName%",
     "publisher": "escapepz",
-    "version": "0.42200.1",
+    "version": "0.42210.0",
     "description": "%description%",
     "main": "./dist/extension.js",
     "type": "commonjs",
@@ -455,14 +455,14 @@
             }
         ]
     },
-    "homepage": "https://marketplace.visualstudio.com/items?itemName=escapepz.pzstudio",
+    "homepage": "https://github.com/escapepz/pzstudio",
     "repository": {
         "type": "git",
-        "url": "https://github.com/escapepz/project-zomboid-studio.git",
+        "url": "https://github.com/escapepz/pzstudio.git",
         "directory": "packages/vscode-extension"
     },
     "bugs": {
-        "url": "https://github.com/escapepz/project-zomboid-studio/issues"
+        "url": "https://github.com/escapepz/pzstudio/issues"
     },
     "author": "escapepz",
     "contributors": [
