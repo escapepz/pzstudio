@@ -58,7 +58,7 @@ These flags are handled by the CLI parser:
 ### Command completion
 
 - Most commands print `Command [<name>] completed.` when they finish successfully.
-- `build`, `clean`, `help`, and `modinfo` skip that generic completion message because they already produce their own output.
+- `build`, `clean`, `help`, `modinfo`, and `watch` skip that generic completion message because they already produce their own output.
 
 ## Common Project Rules
 
@@ -109,6 +109,34 @@ pzstudio <command> --help
 - With a known command, prints that command's registered help text.
 - With an unknown command, throws `Unknown command [<command>]`.
 
+## `pzstudio list`
+
+List the mods in your project with their build status.
+
+### Usage
+
+```bash
+pzstudio list
+pzstudio list --json
+```
+
+### Flags
+
+- `--json`
+  - Print the v1 JSON envelope (`schemaVersion`/`command`/`result`) instead of the human listing; the envelope is the command's only stdout content.
+
+### Preconditions
+
+- Must run inside a project directory.
+
+### Behavior
+
+- Human output lists each mod id with a status: `missing on disk`,
+  `on disk, excluded from workshop build`, `on disk, dev builds only`, or
+  `on disk, included`.
+- The JSON envelope carries the workshop title plus semantic booleans per
+  mod (`onDisk`, `excluded`, `devOnly`) — no prose status fields.
+
 ## `pzstudio new`
 
 Create a new project directory and scaffold the base files.
@@ -118,6 +146,7 @@ Create a new project directory and scaffold the base files.
 ```bash
 pzstudio new <projectTitle>
 pzstudio new <projectTitle> <modId>
+pzstudio new <projectTitle> --path <dir>
 ```
 
 ### Arguments
@@ -131,6 +160,8 @@ pzstudio new <projectTitle> <modId>
 
 ### Flags
 
+- `--path <destination>`
+  - Create the project in the given directory instead of the current one; the created path is printed on success.
 - `--offline`
   - Skip remote refresh and use cached or legacy template data.
 - `--force-update`
@@ -473,11 +504,14 @@ Generate `mod.info` files in the source tree.
 ```bash
 pzstudio modinfo generate
 pzstudio modinfo generate <modId>
+pzstudio modinfo generate --force
 pzstudio modinfo generate --verbose
 ```
 
 ### Flags
 
+- `--force`
+  - Overwrite existing `mod.info` files (default: skip files that already exist).
 - `--verbose`
   - Enable diagnostic output.
 
@@ -487,6 +521,7 @@ pzstudio modinfo generate --verbose
 - With no mod id, generates `mod.info` for all eligible mods.
 - With a mod id, generates `mod.info` only for that mod.
 - Skips mods whose `build.modInfo` value is `skip`.
+- `--force` (or `build.modInfo: auto`) overwrites existing files regardless of the skip-if-exists default.
 - Uses `resolveModInfoTargets()` to decide which mod folders are valid output targets.
 
 ### Output
@@ -558,12 +593,14 @@ Checks per module:
 ```bash
 pzstudio doctor                       # run every check
 pzstudio doctor --game-build 42.20.1  # also check pzBuildCompatibility
+pzstudio doctor --json                # machine-readable v1 envelope on stdout
 ```
 
 ### Behavior
 
 - Exits with code 1 when the report contains errors; warnings are advisory.
 - Warnings never block `pzstudio build`.
+- `--json` prints the v1 JSON envelope on stdout (schemaVersion/command/result).
 
 ### Status
 

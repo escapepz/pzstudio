@@ -14,12 +14,24 @@ implementation beyond the decisions named below; C11 remains frozen.**
 | DEC-2 | Stage-1 scope | **(c)** fail-closed only for destinations inside the mod source tree (incl. the case-6 nested layout); external output roots keep HEAD adoption behavior as a recorded deviation from B1-A until the full receipt ledger lands | Stage-1 landing commit + Doc 18 §10 item 15 note |
 | DEC-3 | DevSync variant-folder contract | **(a)** in-contract — DevSync may mutate variant folders through the guard | Stage-1 landing commit |
 | DEC-4 | B.5a stale baseline | **(a)** keep the engine-on-A behavior on plain deltas; residual documented, DX-9-reversal stays a separate change request | Doc 14 note |
-| DEC-5 | Release scope | single `0.42200.x` release: CLI `0.42200.1` + the extension | release preparation pending |
+| DEC-5 | Release scope | single `0.42200.x` release — vehicle resolved during preparation: `@pzstudio/cli` 0.42200.1 was already published (2026-10-05, dist-tags `latest`+`next`), so the release vehicle is **CLI 0.42200.2 + extension 0.42200.1** (versions immutable once published, per RELEASE.md) | release notes `docs/releases/0.42200.2.md` + version bumps prepared |
 | DEC-6 | `pzstudio clean` guard + DevSync error visibility | **(a)** both | `cleanOutputPath` guard in `packages/cli/src/lib/commands/clean.ts` (clean tier of the F23-WRITE P0 guard, parity with the build executor); extension `devsync.ts`: `result.errors` surface through the error notification (count + Show Details) while per-error detail stays in the channel, and a rejected `flush()` is reported instead of dying as an unhandled rejection |
 | DEC-7 | C-17 run-log retention | **(b)** deferred with disclosure — release notes must state that logs are retained indefinitely in this version; retention is not advertised; no manual-cleanup path may touch protected ownership evidence | release notes, pending |
 | DEC-8 | Frozen-API exceptions | **(a)** the exception list stays empty: no `resolveIdentity(uri)`, no `PlatformCapabilities.resolvedIdentity`, no rename/move capability (D8c), no planner ownership field | none needed; reopening requires the Doc 16/18 exception process |
 | DEC-9 | strict-S1 + drop observability | **(a)** strict-S1 unchanged — relaxing it requires a change request + Owner approval; filtered watcher events are reported as one aggregate line per batch at verbose level, never a per-event warning | extension `devsync.ts` filtered-event counter |
 | DEC-10 | Post-release workstreams | formally parked with their own gates, scope and Owners (below) | this register |
+
+### Marketplace migration note (DEC-5 release operations)
+
+Version **0.42200.1** is published to **both** marketplace listings: the old
+`escapepz.pzstudio` (which carries a migration notice pointing at the new
+listing) and the new `escapepz.pzstudio42`. The notice lives in
+`packages/vscode-extension/README.md` directly above `🚀 Features` (marked
+with an HTML comment for removal). Starting with the **next version after
+0.42200.1**: remove the notice from the README and stop updating the old
+listing — it becomes a frozen redirect page. Until then, every README
+change must be published to both listings or the two listings' rendered
+pages drift.
 
 ## Post-release workstreams (parked, DEC-10)
 
