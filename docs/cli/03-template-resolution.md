@@ -94,8 +94,9 @@ when the git binary is available, else `FetchTransport`
 
 When no cached or remote templates are available (first run, no network), the CLI falls
 back to `.template-legacy/` bundled with the binary. The first time a legacy template is
-needed, `bootstrapLegacyTemplates()` (`packages/cli/src/lib/templateManager.ts:208-242`)
-probes candidate locations relative to the compiled install layout and the working
+needed, `bootstrapLegacyTemplates()` (`packages/cli/src/lib/templateManager.ts:264-284`)
+probes candidate locations (via the shared `findBundledLegacyDir()`,
+`templateManager.ts:240-255`) relative to the compiled install layout and the working
 directory, and copies the first non-empty hit to `~/.pzstudio/.template-legacy`:
 
 ```mermaid
@@ -118,6 +119,32 @@ in published packages it is populated into `dist/` by the build script. Resoluti
      (1 level up, where the build script populates it) and the cwd probe are what hit.
      Docs describe the probes abstractly; consider fixing the code comment or the probe
      list in a later commit. -->
+
+### Refreshing the bundled cache via `pzstudio update`
+
+Bootstrap only fills a **missing or empty** global cache — an existing
+`~/.pzstudio/.template-legacy` is never overwritten there, so installs stay
+frozen on the templates that shipped when they first ran. `pzstudio update`
+closes that gap: after the four category refreshes, `refreshLegacyTemplates()`
+(`packages/cli/src/lib/templateManager.ts:369-408`) compares the bundled copy's
+build stamp — `.pzstudio-templates.json` (`{ version, buildDate }`, written
+into the bundled copy by `packages/cli/scripts/update-build-date.js`) — against
+the stamp of the installed global cache and replaces it on mismatch:
+
+- **stamps equal** → info `Legacy templates up to date.` and no copy (a
+  local, offline no-op — no network involved).
+- **mismatch**, including a global cache with no readable stamp → the global
+  dir is removed and re-copied wholesale from the bundled copy (the stamp file
+  rides along) → info `Legacy templates refreshed (<version>, <buildDate>).`
+  The wholesale replace is also what upgrades **pre-stamp installs** and drops
+  stray `.git` metadata an old bootstrap may have carried.
+- **no bundled copy, or a bundled copy without a readable stamp** (unstamped
+  dev checkouts without submodules) → verbose note, skipped — never an error.
+
+The legacy step reports like one more refresh category: on throw it warns and
+marks the command failed (non-zero exit) without aborting the remote-cache
+loop. Only the global config dir is touched — a project-local
+`.template-legacy` (the user customization point) is never modified.
 
 ## Scaffold operations
 
