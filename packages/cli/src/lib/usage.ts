@@ -6,7 +6,10 @@
  * explicit `false` is sticky-off. The recorder NEVER writes config.json
  * (that belongs to the `usage` command); it only ever reads it, and with
  * validation off so a corrupted config degrades to the default (enabled)
- * instead of breaking commands.
+ * instead of breaking commands. Span helpers (recordUsageSpan /
+ * recordApiSpan / recordApiSpanSync) sit on top of the recorder: they time
+ * a command body, map host/flags/errors onto exactly one event and rethrow
+ * the original error.
  */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-ignore - necessary because we can't reliably predict if typescript will resolve this outside src without structural errors in some configs
@@ -25,6 +28,7 @@ import {
 } from 'fs';
 import { join } from 'path';
 import type { UsageLogConfig } from '@pzstudio/core';
+import type { InteractionMode, InvocationContext } from './invocation';
 import { readGlobalConfig, getConfigDir } from './templateManager';
 import { emitInfo, engineIo } from './logger';
 
@@ -288,4 +292,159 @@ export function getUsageRecorder(): UsageRecorder {
         singleton = new UsageRecorder();
     }
     return singleton;
+}
+
+/* --------------------------------------------------------------------------
+ * Spans: timing + host/flag/error mapping around a command body
+ * ----------------------------------------------------------------------- */
+
+/** The embedded mode IS the api host; every CLI-facing mode is cli. */
+function spanHost(interactionMode: InteractionMode): UsageHost {
+    return interactionMode === 'embedded' ? 'api' : 'cli';
+}
+
+/** Flag NAMES only (never values — paths stay out of the log), sorted. */
+function spanFlags(
+    invocationOptions: InvocationContext['invocationOptions'],
+): string[] {
+    return Object.keys(invocationOptions)
+        .filter((name) => {
+            const value = invocationOptions[name];
+            return value !== undefined && value !== false;
+        })
+        .sort();
+}
+
+/**
+ * True when the config-gated singleton is on. The probe itself is guarded:
+ * an environment broken enough to throw here records nothing instead of
+ * turning telemetry into a host-facing crash.
+ */
+function spanEnabled(): boolean {
+    try {
+        return getUsageRecorder().isEnabled();
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Swallow-safe settle write: exactly one recordOp per span, never a throw.
+ * The error code is the thrown value's Error name ('Unknown' otherwise) and
+ * the where is always the op — message text never reaches the log.
+ */
+function recordSpanSettled(input: {
+    op: string;
+    host: UsageHost;
+    durMs: number;
+    status: 'ok' | 'error';
+    thrown?: unknown;
+    flags?: string[];
+    projectKey?: string;
+}): void {
+    try {
+        getUsageRecorder().recordOp({
+            op: input.op,
+            host: input.host,
+            durMs: input.durMs,
+            status: input.status,
+            err:
+                input.status === 'error'
+                    ? {
+                          code:
+                              input.thrown instanceof Error
+                                  ? input.thrown.name
+                                  : 'Unknown',
+                          where: input.op,
+                      }
+                    : undefined,
+            flags: input.flags,
+            projectKey: input.projectKey,
+        });
+    } catch {
+        // Swallow everything: usage logging must never break a command.
+    }
+}
+
+/** Lifecycle chokepoint: times body, records one event, rethrows. */
+export async function recordUsageSpan(
+    op: string,
+    ctx: Pick<
+        InvocationContext,
+        'interactionMode' | 'invocationOptions' | 'projectDir' | 'anchor'
+    >,
+    body: () => Promise<void>,
+): Promise<void> {
+    if (!spanEnabled()) return body();
+    const t0 = performance.now();
+    const settle = (status: 'ok' | 'error', thrown?: unknown): void =>
+        recordSpanSettled({
+            op,
+            host: spanHost(ctx.interactionMode),
+            durMs: Math.round(performance.now() - t0),
+            status,
+            thrown,
+            flags: spanFlags(ctx.invocationOptions),
+            projectKey: ctx.projectDir ?? ctx.anchor,
+        });
+    try {
+        await body();
+        settle('ok');
+    } catch (thrown) {
+        settle('error', thrown);
+        throw thrown;
+    }
+}
+
+/** Facade spans for operations outside the lifecycle. host is always 'api'. */
+export async function recordApiSpan<T>(
+    op: string,
+    projectKey: string,
+    body: () => Promise<T>,
+): Promise<T> {
+    if (!spanEnabled()) return body();
+    const t0 = performance.now();
+    const settle = (status: 'ok' | 'error', thrown?: unknown): void =>
+        recordSpanSettled({
+            op,
+            host: 'api',
+            durMs: Math.round(performance.now() - t0),
+            status,
+            thrown,
+            projectKey,
+        });
+    try {
+        const value = await body();
+        settle('ok');
+        return value;
+    } catch (thrown) {
+        settle('error', thrown);
+        throw thrown;
+    }
+}
+
+export function recordApiSpanSync<T>(
+    op: string,
+    projectKey: string,
+    body: () => T,
+): T {
+    if (!spanEnabled()) return body();
+    const t0 = performance.now();
+    const settle = (status: 'ok' | 'error', thrown?: unknown): void =>
+        recordSpanSettled({
+            op,
+            host: 'api',
+            durMs: Math.round(performance.now() - t0),
+            status,
+            thrown,
+            projectKey,
+        });
+    try {
+        const value = body();
+        settle('ok');
+        return value;
+    } catch (thrown) {
+        settle('error', thrown);
+        throw thrown;
+    }
 }
