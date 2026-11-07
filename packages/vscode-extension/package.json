@@ -213,7 +213,7 @@
                     "type": "string",
                     "description": "%config.templates.project.ref.description%",
                     "scope": "resource",
-                    "default": "42.17.0"
+                    "default": "42.21.0"
                 },
                 "pzstudio.templates.mod.url": {
                     "type": "string",
@@ -225,7 +225,7 @@
                     "type": "string",
                     "description": "%config.templates.mod.ref.description%",
                     "scope": "resource",
-                    "default": "42.17.0"
+                    "default": "42.21.0"
                 },
                 "pzstudio.templates.workshop.url": {
                     "type": "string",

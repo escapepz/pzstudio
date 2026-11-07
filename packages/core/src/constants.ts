@@ -25,11 +25,11 @@ export const BINARY_FILE_EXTENSIONS = new Set([
 export const DEFAULT_TEMPLATES: Record<TemplateCategory, ITemplateConfig> = {
     project: {
         url: 'https://github.com/escapepz/pzstudio-template-project.git',
-        ref: '42.17.0',
+        ref: '42.21.0',
     },
     mod: {
         url: 'https://github.com/escapepz/pzstudio-template-mod.git',
-        ref: '42.17.0',
+        ref: '42.21.0',
     },
     workshop: {
         url: 'https://github.com/escapepz/pzstudio-template-workshop.git',

@@ -83,7 +83,7 @@ Write contract:
 ```
 {
   "templates": {
-    "project":  { "url": "https://github.com/escapepz/...git", "ref": "42.17.0" },
+    "project":  { "url": "https://github.com/escapepz/...git", "ref": "42.21.0" },
     "mod":      { … }, "workshop": { … }, "language": { … }
   },
   "useSymlinks": true,

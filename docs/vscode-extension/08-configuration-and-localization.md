@@ -11,9 +11,9 @@ localization layers.
 | Key | Scope | Default | Consumed by | Path to the CLI |
 | :--- | :--- | :--- | :--- | :--- |
 | `pzstudio.templates.project.url` | resource | escapepz/pzstudio-template-project.git | CLI template resolution | `setVsCodeSettings` bridge → `getResolvedTemplates` (workspace wins per category, then user, then global config) |
-| `pzstudio.templates.project.ref` | resource | `42.17.0` | same | same |
+| `pzstudio.templates.project.ref` | resource | `42.21.0` | same | same |
 | `pzstudio.templates.mod.url` | resource | …template-mod.git | same | same |
-| `pzstudio.templates.mod.ref` | resource | `42.17.0` | same | same |
+| `pzstudio.templates.mod.ref` | resource | `42.21.0` | same | same |
 | `pzstudio.templates.workshop.url` | resource | …template-workshop.git | same | same |
 | `pzstudio.templates.workshop.ref` | resource | `42.0` | same | same |
 | `pzstudio.templates.language.url` | resource | …template-language.git | same | same |
