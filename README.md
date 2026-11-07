@@ -1,124 +1,120 @@
-# Project Zomboid Studio
+# PZ Studio
 
-[![Version](https://img.shields.io/badge/version-2.242170.0-blue.svg)](https://github.com/escapepz/project-zomboid-studio)
-[![Project Zomboid](https://img.shields.io/badge/Project%20Zomboid-42.17.0-orange.svg)](https://projectzomboid.com/)
-[![CodeQL](https://github.com/escapepz/project-zomboid-studio/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/escapepz/project-zomboid-studio/actions/workflows/github-code-scanning/codeql)
-[![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/escapepz/project-zomboid-studio)
-[![DeepWiki](https://img.shields.io/badge/DeepWiki-_.svg?style=flat&color=6a0dad&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI%2BPHBhdGggZD0iTTEyIDJMMiA3bDEwIDUgMTAtNS0xMC01eiIvPjxwYXRoIGQ9Ik0yIDE3bDEwIDUgMTAtNXBNMiAxMmwxMCA1IDEwLTUiLz48L3N2Zz4%3D&logoColor=ffffff)](https://deepwiki.com/escapepz/project-zomboid-studio)
+> Project Zomboid Studio — create, validate, build and live-sync
+> Project Zomboid **Build 42** Lua mods from one engine.
 
-Original project repository:
-**[Konijima/project-zomboid-studio](https://github.com/Konijima/project-zomboid-studio)**
+[![npm](https://img.shields.io/npm/v/@pzstudio/cli)](https://www.npmjs.com/package/@pzstudio/cli)
+[![Project Zomboid](https://img.shields.io/badge/Project%20Zomboid-42.x-orange.svg)](https://projectzomboid.com/)
+[![CI](https://github.com/escapepz/pzstudio/actions/workflows/ci.yml/badge.svg)](https://github.com/escapepz/pzstudio/actions/workflows/ci.yml)
 
-This is a CLI tool for creating and maintaining Lua mods for Project Zomboid with ease. Visit the link above for:
+**PZ Studio** ships two surfaces over one shared engine:
 
-- Project Zomboid Legacy support (Build 41)
+- **`pzstudio` CLI** (`@pzstudio/cli`) — scaffold, validate, build and watch
+  mod projects from any terminal. Node 20+, zero-install via `npx` /
+  `pnpm dlx`.
+- **VS Code extension** (`pzstudio42`) — PZ Project Explorer, one-click
+  Build/Clean, per-project diagnostics and Development Sync, driven by the
+  same engine.
 
-## Key Changes in This Branch
+Upstream: this branch targets Build 42; the original
+[Konijima/project-zomboid-studio](https://github.com/Konijima/project-zomboid-studio)
+repository carries Build 41 (Legacy) support.
 
-- **Compatibility in this branch: Project Zomboid Build 42 (`pzBuildCompatibility: "42.x"`)**
-- Added AGENTS.md with build commands, architecture overview, and code style guidelines
-- Updated mod ID formatting to be Unix-compatible (Windows and Linux):
-    - Spaces converted to underscores: "Teleportal Prototype" → `teleportal_prototype`
-    - Special characters removed: "My-Cool Mod!" → `my_cool_mod`
-    - Maintains camelCase without conversion: "TeleportalPrototype" → `teleportalprototype`
-- Reworked scaffolding to rely on cached templates with explicit refresh via `--force-update` or `pzstudio update`
-- Removed the legacy `installLibraries()` fallback from intended scaffolding behavior in favor of template-driven project creation
-- Added `.pzstudioignore` filtering for scaffold and build flows, with built-in maintenance exclusions such as `**/.gitkeep`
-- **Build 42 Layout Support (NEW)**:
-    - Added `pzstudio modinfo generate` command to author `mod.info` files directly in your source tree.
-    - Supports Build 42 nested layouts: generates into `common`, `42`, or version-specific branch folders containing `lua`.
-    - Automatically ignores root-level `mod.info` for projects using the new nested layout.
-    - Respects `build.modInfo` project configuration to skip or automate metadata generation.
-- Updated mod.info output path to respect branch-based layouts in both source and workshop builds.
-- Enhanced build command to create dual workshop outputs:
-    - **Main workshop**: `{projectTitle}` with standard mod IDs and configured visibility.
-    - **Dev branch workshop**: `{projectTitle} - dev_branch` with `_dev` suffix on mod IDs.
-    - Each mod in dev branch has its ID field prefixed in the generated metadata; existing `mod.info` files copied from the source tree get their `id=` field rewritten to the `_dev` id as well (regardless of `build.modInfo`).
-    - Dev branch workshop always sets visibility to `unlisted` regardless of project.json settings.
-    - Dev branch workshop title appends ` - dev_branch` suffix: `title={projectTitle} - dev_branch`.
-    - Dev branch workshop.txt has no `id=` field (excluded automatically).
-- **Robust I/O Validation & Migration**:
-    - Implemented runtime validation for `project.json` and `config.json` with descriptive Where-What-Why error reporting.
-    - Added `pzstudio migrate` command to safely upgrade legacy configuration files while preserving unknown fields.
-    - Expanded `IModConfig` with support for `pack`, `tiledef`, `url`, `versionMin`, and `versionMax`.
-    - Added `--verbose` mode for detailed diagnostic logging across all commands.
-    - Stubbed experimental `watch` command as "Not implemented yet!" to avoid instability.
-- Updated documentation to reference original project repository
+## Highlights
 
-### 4. Versioning
+- **Project scaffolding & maintenance** — `new`, `add`, `rename`, `delete`,
+  `modconfig`; `.pzstudioignore` filtering; template cache with explicit
+  refresh (`pzstudio update`, `--force-update`).
+- **Build 42 layouts** — `pzstudio modinfo generate` authors `mod.info`
+  into `common` / `42` / branch folders; `pzBuildCompatibility` declares
+  game compatibility per project and per package.
+- **Dual workshop outputs** — one build produces the main workshop output
+  plus an unlisted `dev_branch` output (`_dev` mod ids) for multiplayer
+  testing.
+- **Doctor diagnostics** — Problem/Cause/Try findings across project,
+  environment, filesystem, templates, mods and build target; machine
+  `--json` envelopes for `list` and `doctor`.
+- **Development Sync** — `pzstudio watch` (or the extension toggle) keeps
+  the workshop outputs synced as you save: files apply incrementally,
+  `mod.info`/`.pzstudioignore` edits re-sync their mod, `project.json`
+  edits trigger a full rebuild.
+- **Localized UI** — the extension ships in 25 languages; errors are
+  actionable (localized notification with **Show Details** opening the
+  output channel).
+- **Fail-closed safety** — destinations inside the mod source tree refuse
+  to adopt content the engine cannot prove it created; `build` and `clean`
+  refuse to mutate through symlink/junction routes below the configured
+  output root. Logs and engine records are retained indefinitely — no
+  automatic pruning.
 
-- Tool releases follow a semver-shaped scheme: `0.<gameBuild>.<patch>`, where the minor encodes the supported Project Zomboid build (e.g. build 42.20.0 → minor `42200`) and the patch is bumped for tool-only fixes.
-- Game build compatibility is declared separately in `pzBuildCompatibility` (e.g. `"42.x"`) — in `package.json` for the tool and extension, and as an optional field in `project.json` (validated and covered by the JSON schema).
+## Install
 
-### 5. Quality Workflows
+### CLI
 
-Maintain code quality using the following commands:
+Zero-install on any machine with Node 20+:
 
 ```bash
-# Run linting
-pnpm run lint
-
-# Run linting and fix auto-fixable issues
-pnpm run lint:fix
-
-# Run unit tests
-pnpm run test
-
-# Run tests in watch mode
-pnpm run test:watch
-
-# Run tests with coverage
-pnpm run test:coverage
+npx -y @pzstudio/cli@latest new "My First Mod"
+cd <path printed by the command>
+npx -y @pzstudio/cli@latest doctor      # verify the setup
+npx -y @pzstudio/cli@latest watch       # sync outputs while you edit
+npx -y @pzstudio/cli@latest build       # build once into the configured outdir
 ```
 
-The automated test suite includes unit tests for library logic (argument parsing, validation, shared helpers) and end-to-end tests covering every command. Coverage measurement spans the whole `src/` tree; see `tests/` for details. Manual verification remains required for real git-based template cloning and game-side integration.
+`new` downloads templates from GitHub on first use — add `--offline` to
+scaffold from bundled templates. pnpm users: `pnpm dlx @pzstudio/cli@latest …`
+(and once per project, `pnpm approve-builds @parcel/watcher` if the watcher
+needs its native build). Global and pinned installs, troubleshooting and
+embedding: [`packages/cli/README.md`](packages/cli/README.md).
 
----
+### VS Code extension
 
-## 🛠️ Building from Source
+Install from the
+[Marketplace](https://marketplace.visualstudio.com/items?itemName=escapepz.pzstudio42)
+or build a VSIX locally (`pnpm --filter pzstudio42 vsce:package`). Features,
+command list and every `pzstudio.*` setting:
+[`packages/vscode-extension/README.md`](packages/vscode-extension/README.md).
 
-This project is a TypeScript CLI tool. While it uses some workspace features, you can build it directly from the root.
+## Documentation
 
-### Prerequisites
+| Document                                            | Contents                                                                    |
+| :-------------------------------------------------- | :-------------------------------------------------------------------------- |
+| [`packages/cli/README.md`](packages/cli/README.md)  | CLI install (npm/pnpm), pnpm mental models, troubleshooting, embedding API  |
+| [`CLI.md`](CLI.md)                                  | Full `pzstudio` command reference (usage, flags, behavior per command)      |
+| [`packages/vscode-extension/README.md`](packages/vscode-extension/README.md) | Extension guide: Explorer, DevSync, all `pzstudio.*` settings |
+| [`CHANGELOG.md`](CHANGELOG.md)                      | Combined changelog for the monorepo (CLI + extension per release)           |
+| [`docs/releases/`](docs/releases/)                  | Per-version release notes and the [`RELEASE.md`](docs/releases/RELEASE.md) runbook |
+| [`docs/vscode-extension/`](docs/vscode-extension/)  | Behavioral spec and UI/UX audit of the extension, decision records          |
+| [`AGENTS.md`](AGENTS.md)                            | Repo instructions: commands, architecture and code style for contributors   |
 
-- [Node.js](https://nodejs.org/) (v20+)
-- [pnpm](https://pnpm.io/)
+## Development
 
-### 1. Install Dependencies
+pnpm monorepo (Node 20+, [pnpm](https://pnpm.io/)):
 
-From the project root, run:
+| Package                            | Role                                                                      |
+| :--------------------------------- | :------------------------------------------------------------------------ |
+| `@pzstudio/core`                   | Browser-safe domain logic — no Node builtins (enforced by architecture tests) |
+| `@pzstudio/platform` (+`-node`/`-web`) | Host-agnostic contracts (`ProjectFileSystem`, `PlatformCapabilities`, `TemplateTransport`) with Node and vscode.dev adapters |
+| `@pzstudio/cli`                    | The published CLI; embeddable surface at `@pzstudio/cli/api`              |
+| `pzstudio42`                       | The VS Code extension (esbuild-inlines the CLI api surface)                |
 
 ```bash
 pnpm install
+pnpm build            # all packages, dependency order
+pnpm lint             # eslint (pnpm lint:fix to auto-fix)
+pnpm format:check     # prettier
+pnpm test             # unit + in-process e2e (vitest)
+pnpm test:real-env    # spawns the built CLI binary
+pnpm test:coverage
 ```
 
-### 2. Build the CLI Tool
+CI runs the full matrix — lint, build, unit/e2e, real-env CLI and desktop
+extension tests — on Windows, Ubuntu and macOS (Vitest runs test files
+sequentially on Windows). Browser-safety gates fail the build if
+`@pzstudio/core` or `@pzstudio/platform` import Node builtins.
 
-```bash
-pnpm run build
-```
-
-### 3. Run Quality Checks
-
-```bash
-pnpm run lint
-pnpm run test
-```
-
-## Build the VS Code Extension
-
-After the CLI project is built, you can build the extension:
-
-```bash
-pnpm --filter pzstudio42 build
-```
-
-The extension bundle will be available at `packages/vscode-extension/dist/extension.js`.
-
-### Package for Marketplace
-
-To generate a `.vsix` file for local installation or publishing:
-
-```bash
-pnpm --filter pzstudio42 vsce:package
-```
+Releases follow the `0.<gameBuild>.<patch>` scheme with game compatibility
+declared separately in `pzBuildCompatibility` (e.g. `"42.x"`). See
+[`CHANGELOG.md`](CHANGELOG.md), the per-version notes in
+[`docs/releases/`](docs/releases/), and the publish runbook
+[`docs/releases/RELEASE.md`](docs/releases/RELEASE.md).
