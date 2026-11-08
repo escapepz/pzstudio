@@ -249,6 +249,18 @@ describe('pzstudio usage command', () => {
         expect(out).toContain('Skipped 1');
     });
 
+    it('6b. export with only unparseable lines: exports, warns no valid events were found', () => {
+        seedStore(['{ not json', 'garbage line']);
+        writeJsonConfig({ templates: {} });
+
+        runUsage(['export']);
+
+        const out = loggedData();
+        expect(out).toContain('Exported 0 event(s)');
+        expect(out).toContain('Skipped 2');
+        expect(out).toContain('no valid events');
+    });
+
     it('7. export --out: writes the bundle to the given path', () => {
         seedStore([eventLine('a'.repeat(32), '2026-11-08T10:00:00.000Z')]);
         writeJsonConfig({ templates: {} });
@@ -261,6 +273,25 @@ describe('pzstudio usage command', () => {
         expect(fs.existsSync(outPath)).toBe(true);
         const zipped = unzipSync(new Uint8Array(fs.readFileSync(outPath)));
         expect(Object.keys(zipped)).toContain('manifest.json');
+    });
+
+    it('7b. export --out to an unwritable destination: CliError naming the path', () => {
+        seedStore([eventLine('a'.repeat(32), '2026-11-08T10:00:00.000Z')]);
+        writeJsonConfig({ templates: {} });
+        const badOut = join(fakeHome(), 'no-such-dir', 'bundle.zip');
+
+        let caught: unknown;
+        try {
+            runUsage(['export'], { out: badOut });
+        } catch (e) {
+            caught = e;
+        }
+
+        expect(caught).toBeInstanceOf(CliError);
+        const cliError = caught as CliError;
+        expect(cliError.message).toContain(badOut);
+        expect(cliError.tryHint).toBeTruthy();
+        expect(fs.existsSync(badOut)).toBe(false);
     });
 
     it('8. export with empty store: CliError, message says there are no usage logs', () => {
