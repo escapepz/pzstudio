@@ -89,4 +89,25 @@ describe('notifyFirstBuildSuccess', () => {
             'escapepz.github.io/pzstudio/?utm_source=ext-popup',
         );
     });
+
+    it('never opens the URL when the popup is dismissed', async () => {
+        const context = fakeContext();
+        // Dismissed: the message resolves without a button choice.
+        asMock(vscode.window.showInformationMessage).mockResolvedValue(
+            undefined,
+        );
+
+        notifyFirstBuildSuccess(context, 'build');
+
+        // Let the popup's promise chain settle before judging side effects.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(asMock(vscode.env.openExternal)).not.toHaveBeenCalled();
+        // The one-time flag is set regardless of the dismissal: the popup
+        // never shows again even when the user closed it.
+        expect(asMock(context.globalState.update)).toHaveBeenCalledWith(
+            FIRST_SUCCESS_KEY,
+            true,
+        );
+    });
 });
