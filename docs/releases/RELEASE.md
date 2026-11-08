@@ -207,6 +207,7 @@ changelogs in the graduation prep commit (Graduation run).
 
 Before starting, verify:
 
+- [ ] Submodules are populated in this checkout (`git submodule update --init`) — a fresh worktree ships empty template stubs, and packing one carries an empty `dist/.template-legacy/`: the packlist check still passes (the stamp file is present) while offline `new` fails its smoke with "No valid cached or legacy template found".
 - [ ] `npm whoami` — you are logged into the target registry as the `@pzstudio` scope owner.
 - [ ] `@pzstudio` scope is writable (you have permission to publish).
 - [ ] Target registry is correct (`npm config get registry`).
