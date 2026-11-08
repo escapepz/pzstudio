@@ -124,7 +124,8 @@ blocks a graduation.
 1. Commit the bump of BOTH `packages/cli/package.json` and
    `packages/vscode-extension/package.json` to the graduation version —
    the bump is a COMMITTED release-prep commit (the new release identity),
-   unlike the next-channel stamp (Step 0).
+   unlike the next-channel stamp (Step 0) — together with the changelog
+   entries (see CHANGELOG (every release)).
 2. CLI Steps 1–4 unchanged (no Step 0 stamp: `package.json` already
    carries the bare version, so `build.json` and the legacy-template
    stamps embed it). Steps 3–4 (isolated smoke, golden) still run — the
@@ -164,6 +165,29 @@ PUB_VERSION="${VERSION}-next.${TS}"
 
 ---
 
+## CHANGELOG (every release)
+
+Every release-prep updates the changelog surfaces BEFORE building — the
+VSIX auto-includes `packages/vscode-extension/CHANGELOG.md` (vsce packs it
+unless `.vscodeignore` excludes it; the npm tgz carries no changelog — the
+npm `files` field stays unchanged):
+
+- **Root `CHANGELOG.md`** — one combined
+  `## [CLI <bare> / Extension <bare>] - <date>` entry at the top, linking
+  the per-version notes and the extension changelog.
+- **`packages/vscode-extension/CHANGELOG.md`** — for every extension
+  version, a `## [<EXT_VERSION>] - <date>` entry with `### Added` /
+  `### Changed` / `### Fixed` / `### Safety` subsections as needed.
+- **`docs/releases/<bare>.md`** — for every CLI version, the per-version
+  release notes (H1, summary line, `## What's changed`,
+  `## Compatibility`).
+
+The changelog edits are part of the release-prep commit — the same commit
+as the version bump. A graduation adds its own stable entry to both
+changelogs in the graduation prep commit (Graduation run).
+
+---
+
 ## Preflight
 
 Before starting, verify:
@@ -172,6 +196,9 @@ Before starting, verify:
 - [ ] `@pzstudio` scope is writable (you have permission to publish).
 - [ ] Target registry is correct (`npm config get registry`).
 - [ ] `@pzstudio/cli@<version>` does not already exist on the registry.
+- [ ] CHANGELOG entries for this version exist (root `CHANGELOG.md` +
+      `packages/vscode-extension/CHANGELOG.md` +
+      `docs/releases/<version>.md`) — see CHANGELOG (every release).
 
 ---
 
