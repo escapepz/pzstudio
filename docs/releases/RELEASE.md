@@ -19,6 +19,13 @@ first; the release branch is re-cut from dev (or cherry-picks the fix). A
 `release/*` branch carries ONLY minimal release-prep — the version bump,
 the release's changelog entries, and the tag. Nothing else.
 
+**Worktree layout (owner rule 2026-11-09):** release branches are operated
+from their own worktree, `../pzstudio.worktrees/release/<version>` (see
+AGENTS.md → Branching). Cut it from the hub checkout with
+`git worktree add ../pzstudio.worktrees/release/${VERSION} release/${VERSION}`
+and run the one-time setup (submodules, `pnpm install`, `pnpm build`)
+before Step 0.
+
 ---
 
 ## Version model
