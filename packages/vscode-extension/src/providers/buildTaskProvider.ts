@@ -30,6 +30,7 @@ class PZTaskTerminal implements vscode.Pseudoterminal {
     constructor(
         private readonly target: PZTaskTarget,
         private readonly studio: PzStudio,
+        private readonly onBuildSuccess?: () => void,
     ) {}
 
     open(): void {
@@ -70,6 +71,9 @@ class PZTaskTerminal implements vscode.Pseudoterminal {
                 flags,
                 projectDir: dir.fsPath,
             });
+            if (command === 'build') {
+                this.onBuildSuccess?.();
+            }
             this.writeLine(`pzstudio ${command} completed.`);
         } catch (e) {
             this.writeLine(
@@ -88,14 +92,17 @@ class PZTaskTerminal implements vscode.Pseudoterminal {
 }
 
 export class BuildTaskProvider implements vscode.TaskProvider {
-    constructor(private readonly studio: PzStudio) {}
+    constructor(
+        private readonly studio: PzStudio,
+        private readonly onBuildSuccess?: () => void,
+    ) {}
 
     provideTasks(): vscode.Task[] {
         return [
-            createTask('production', this.studio),
-            createTask('development', this.studio),
-            createTask('both', this.studio),
-            createTask('clean', this.studio),
+            createTask('production', this.studio, this.onBuildSuccess),
+            createTask('development', this.studio, this.onBuildSuccess),
+            createTask('both', this.studio, this.onBuildSuccess),
+            createTask('clean', this.studio, this.onBuildSuccess),
         ];
     }
 
@@ -108,13 +115,17 @@ export class BuildTaskProvider implements vscode.TaskProvider {
             target === 'both' ||
             target === 'clean'
         ) {
-            return createTask(target, this.studio);
+            return createTask(target, this.studio, this.onBuildSuccess);
         }
         return undefined;
     }
 }
 
-function createTask(target: PZTaskTarget, studio: PzStudio): vscode.Task {
+function createTask(
+    target: PZTaskTarget,
+    studio: PzStudio,
+    onBuildSuccess?: () => void,
+): vscode.Task {
     const definition: PZTaskDefinition = { type: PZ_TASK_TYPE, target };
     const name =
         target === 'clean' ? 'pzstudio: clean' : `pzstudio: build (${target})`;
@@ -124,7 +135,7 @@ function createTask(target: PZTaskTarget, studio: PzStudio): vscode.Task {
         name,
         PZ_TASK_TYPE,
         new vscode.CustomExecution(
-            async () => new PZTaskTerminal(target, studio),
+            async () => new PZTaskTerminal(target, studio, onBuildSuccess),
         ),
     );
 }
