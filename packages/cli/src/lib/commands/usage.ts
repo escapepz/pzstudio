@@ -144,7 +144,9 @@ function usageOff(purge: boolean): void {
     // delete the store; everywhere else the flag is silently ignored.
     if (purge) {
         rmSync(usageLogDir(), { recursive: true, force: true });
-        log('Usage logging is disabled. The usage log directory has been purged.');
+        log(
+            'Usage logging is disabled. The usage log directory has been purged.',
+        );
         return;
     }
     log(
@@ -171,6 +173,8 @@ function usageStatus(): void {
 function usageExport(options: CommandContext['options']): void {
     const out = options.out;
     expect('flag [--out]', out, 'string|undefined');
+    const outOverride =
+        typeof out === 'string' && out.length > 0 ? out : undefined;
     const dir = usageLogDir();
     if (eventFiles(dir).length === 0) {
         throw new CliError('No usage logs to export.', {
@@ -197,7 +201,7 @@ function usageExport(options: CommandContext['options']): void {
     for (const file of eventFiles(dir)) {
         bundle[basename(file)] = readFileSync(file);
     }
-    const outPath = out ? resolve(out) : defaultZipPath();
+    const outPath = outOverride ? resolve(outOverride) : defaultZipPath();
     writeFileSync(outPath, zipSync(bundle));
     log(
         `Exported ${summary.eventCount} event(s) across ${summary.sessionCount} session(s) from ${summary.fileCount} file(s) to ${outPath}`,
