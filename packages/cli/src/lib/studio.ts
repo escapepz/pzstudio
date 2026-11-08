@@ -27,6 +27,7 @@ import {
 import { runInvocationLifecycle, type LifecycleFacade } from './cli';
 import { createDevSyncCore, DevSyncOptions, BuildSession } from './devsync';
 import { runProjectDoctorCore, ProjectDoctorOptions } from './doctor';
+import { recordApiSpan, recordApiSpanSync } from './usage';
 import {
     resolveProjectConfigFor,
     resolveModInfoTargets as resolveModInfoTargetsIn,
@@ -245,34 +246,44 @@ export function createPzStudio(options?: PzStudioOptions): PzStudio {
             // Per-apply settings freshness (§10): the provider is invoked
             // on every plan input with the session's explicit project —
             // never an ambient and never the legacy slots.
-            return createDevSyncCore(
-                projectDir,
-                {
-                    settings: () =>
-                        settingsProvider
-                            ? settingsProvider({ projectDir })
-                            : undefined,
-                    logger: instanceLogger(),
-                    templateTransport:
-                        factory.templateTransport ??
-                        hostDefaultTransport({
-                            logger: instanceLogger(),
-                        }),
-                },
-                devOptions,
+            //
+            // Facade ops sit outside the lifecycle, so the creation is
+            // usage-spanned here (op 'devsync.create', host api) — the
+            // span returns/rethrows the core's outcome unchanged.
+            return recordApiSpanSync('devsync.create', projectDir, () =>
+                createDevSyncCore(
+                    projectDir,
+                    {
+                        settings: () =>
+                            settingsProvider
+                                ? settingsProvider({ projectDir })
+                                : undefined,
+                        logger: instanceLogger(),
+                        templateTransport:
+                            factory.templateTransport ??
+                            hostDefaultTransport({
+                                logger: instanceLogger(),
+                            }),
+                    },
+                    devOptions,
+                ),
             );
         },
 
         async runProjectDoctor(projectDir, doctorOptions) {
             // A doctor run is finite: settings resolve exactly once, with
-            // the operation's explicit project context (§13 doctor row).
-            return await runProjectDoctorCore(projectDir, {
-                settings: settingsProvider
-                    ? settingsProvider({ projectDir })
-                    : undefined,
-                logger: instanceLogger(),
-                gameBuild: doctorOptions?.gameBuild,
-            });
+            // the operation's explicit project context (§13 doctor row) —
+            // inside the usage span, so a failing provider is recorded as
+            // the run's error too (op 'doctor.api', host api).
+            return await recordApiSpan('doctor.api', projectDir, () =>
+                runProjectDoctorCore(projectDir, {
+                    settings: settingsProvider
+                        ? settingsProvider({ projectDir })
+                        : undefined,
+                    logger: instanceLogger(),
+                    gameBuild: doctorOptions?.gameBuild,
+                }),
+            );
         },
 
         resolveModInfoTargets(modId, projectDir) {

@@ -197,6 +197,43 @@ describe('createCommandRunner', () => {
         expect(asMock(output.show)).not.toHaveBeenCalled();
     });
 
+    it('invokes onSuccess with the command after studio.run resolves', async () => {
+        withSingleProject();
+        const onSuccess = vi.fn();
+        const output = vscode.window.createOutputChannel('test');
+        const studio = studioStub();
+        const runner = createCommandRunner(
+            studio as never,
+            output as never,
+            undefined,
+            onSuccess,
+        );
+
+        await runner('build');
+
+        expect(onSuccess).toHaveBeenCalledTimes(1);
+        expect(onSuccess).toHaveBeenCalledWith('build');
+    });
+
+    it('does not invoke onSuccess when studio.run rejects', async () => {
+        withSingleProject();
+        const onSuccess = vi.fn();
+        const output = vscode.window.createOutputChannel('test');
+        const studio = studioStub(async () => {
+            throw new Error('boom');
+        });
+        const runner = createCommandRunner(
+            studio as never,
+            output as never,
+            undefined,
+            onSuccess,
+        );
+
+        await expect(runner('build')).resolves.toBeUndefined();
+
+        expect(onSuccess).not.toHaveBeenCalled();
+    });
+
     it('guards against overlapping runs of the same command', async () => {
         withSingleProject();
         let release!: () => void;

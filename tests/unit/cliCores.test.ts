@@ -1657,8 +1657,13 @@ describe('commit 6 R1 mirror: v2 non-engine ops log to the instance with legacy 
             true,
         );
 
-        // The legacy logger received NOTHING — not even the gated verboses.
-        expect(L1.calls).toEqual([]);
+        // The legacy logger received NOTHING from the plan input — the only
+        // raw-legacy emission is the recorder's one-time disclosure notice
+        // (the devsync.create usage span runs outside any invocation
+        // context, so its R1 default routing is the raw legacy tier).
+        expect(L1.calls).toHaveLength(1);
+        expect(L1.calls[0].method).toBe('info');
+        expect(String(L1.calls[0].message)).toContain('saves local usage logs');
         // The legacy sticky transport was never consulted.
         expect(T1.isCacheValid).not.toHaveBeenCalled();
         expect(T1.download).not.toHaveBeenCalled();
@@ -1708,7 +1713,13 @@ describe('commit 6 R1 mirror: v2 non-engine ops log to the instance with legacy 
                     String(c.message).includes('Reading global config from:'),
             ),
         ).toBe(true);
-        expect(L1.calls).toEqual([]);
+        // The legacy logger received nothing from the doctor run itself —
+        // only the recorder's one-time disclosure notice (the doctor.api
+        // usage span runs outside any invocation context, so its R1
+        // default routing is the raw legacy tier).
+        expect(L1.calls).toHaveLength(1);
+        expect(L1.calls[0].method).toBe('info');
+        expect(String(L1.calls[0].message)).toContain('saves local usage logs');
     });
 
     it('studio.resolveModInfoTargets emits nothing and both sinks stay silent', () => {

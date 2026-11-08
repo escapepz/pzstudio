@@ -63,5 +63,7 @@
     "New Language": "新建语言",
     "Generate ModInfo": "生成 ModInfo",
     "Configure Mod": "编辑模组配置",
-    "Show Details": "显示详细信息"
+    "Show Details": "显示详细信息",
+    "First successful build with PZ Studio!": "使用 PZ Studio 首次构建成功！",
+    "See tips & updates": "查看提示与更新"
 }

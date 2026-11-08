@@ -506,6 +506,34 @@ export function validateExperimentalField(
 }
 
 /**
+ * Validates the optional usageLog section (config.json).
+ * @param usageLog The usageLog section object
+ * @param context The validation context to add errors to
+ */
+export function validateUsageLogField(
+    usageLog: any,
+    context: ValidationContext,
+    pathPrefix: string = 'usageLog',
+): void {
+    if (!guards.isObject(usageLog)) {
+        context.addError(
+            pathPrefix,
+            'Field "usageLog" must be an object',
+            'Use an object with an optional "enabled" key',
+        );
+        return;
+    }
+
+    if (usageLog.enabled !== undefined && !guards.isBoolean(usageLog.enabled)) {
+        context.addError(
+            `${pathPrefix}.enabled`,
+            'Field "usageLog.enabled" must be a boolean',
+            'Set it to false to disable the offline usage log (enabled by default)',
+        );
+    }
+}
+
+/**
  * Validates a config.json configuration.
  */
 export function validateConfig(config: any, context: ValidationContext): void {
@@ -550,6 +578,10 @@ export function validateConfig(config: any, context: ValidationContext): void {
 
     if (config.experimental !== undefined) {
         validateExperimentalField(config.experimental, context);
+    }
+
+    if (config.usageLog !== undefined) {
+        validateUsageLogField(config.usageLog, context);
     }
 }
 

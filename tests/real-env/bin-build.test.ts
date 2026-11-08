@@ -210,4 +210,32 @@ describe('real env: build and clean commands', () => {
             ),
         ).toBe(false);
     });
+
+    it('prints the first-build URL once on stderr with stdout untouched', async () => {
+        // Fresh HOME (a new workspace per test): the first successful build
+        // prints the landing URL — progress-class, so stderr only, and the
+        // stream contract (CLI-2) keeps stdout byte-clean.
+        const first = await workspace.run(['build']);
+        expect(first.exitCode).toBe(0);
+        expect(first.stderr).toContain('escapepz.github.io/pzstudio');
+        expect(first.stdout.trim()).toBe('');
+
+        // The marker pins the one-shot: second build with the SAME HOME
+        // never prints the URL again.
+        const second = await workspace.run(['build']);
+        expect(second.exitCode).toBe(0);
+        expect(second.stderr).not.toContain('escapepz.github.io/pzstudio');
+        expect(second.stdout.trim()).toBe('');
+
+        // The marker file landed in the fake home's config dir.
+        expect(
+            fs.existsSync(
+                path.join(
+                    workspace.home,
+                    '.pzstudio',
+                    '.first-build-url-shown',
+                ),
+            ),
+        ).toBe(true);
+    });
 });

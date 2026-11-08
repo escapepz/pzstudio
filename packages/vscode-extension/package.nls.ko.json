@@ -1,5 +1,5 @@
 {
-    "displayName": "PZ Studio",
+    "displayName": "PZ Studio 42",
     "description": "직관적인 구조로 Project Zomboid의 Lua 모드를 손쉽게 만들고 관리하세요.",
     "viewContainer.title": "PZ Studio",
     "view.projectExplorer.name": "PZ Project Explorer",

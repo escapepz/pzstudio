@@ -20,6 +20,7 @@ import './commands/watch';
 import './commands/migrate';
 import './commands/modconfig';
 import './commands/modinfo';
+import './commands/usage';
 import { helpCmd } from './commands/help';
 import { setInvocationOptions } from './args';
 import {
@@ -65,6 +66,7 @@ import {
     type InvocationContext,
     type InvocationInputs,
 } from './invocation';
+import { recordUsageSpan } from './usage';
 
 // Backward-compatible re-exports: flags used to live here and external
 // code (tests, templates) may import them from this module.
@@ -231,7 +233,14 @@ export async function runInvocationLifecycle(
         const valid = validateInvocation(invocation);
 
         // ---- Execute phase ----
-        await executeInvocation(valid, ctx, facade);
+        // Usage-log chokepoint: exactly one event per executed invocation,
+        // op = the registry command name (the no-command banner path has no
+        // command and records as 'help' — what it actually prints). The
+        // span only times and rethrows; parse/validate failures above stay
+        // unrecorded and the error reporting below is untouched.
+        await recordUsageSpan(valid.command?.name ?? 'help', ctx, () =>
+            executeInvocation(valid, ctx, facade),
+        );
     } catch (e) {
         if (e instanceof CliUsageError) {
             if (!e.alreadyReported) {
