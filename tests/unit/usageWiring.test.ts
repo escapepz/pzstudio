@@ -108,15 +108,14 @@ describe('usage wiring (lifecycle chokepoint + facade wraps)', () => {
         expect(Number.isInteger(event.dur_ms)).toBe(true);
     });
 
-    it('1b. banner path (no command) records as help, without breaking the run', async () => {
+    it('1b. banner path (no command) records nothing — pure invocations stay side-effect-free', async () => {
         // valid.command is undefined on the banner path (validateInvocation
-        // returns early); the chokepoint must not turn that into a crash.
+        // returns early); the chokepoint records only executed COMMANDS, so
+        // a help lookup never scaffolds ~/.pzstudio (pack-smoke contract:
+        // pure invocation leaves no ~/.pzstudio).
         await runCLI(undefined, undefined, { flags: [] });
 
-        const event = singleEvent();
-        expect(event.op).toBe('help');
-        expect(event.host).toBe('api');
-        expect(event.status).toBe('ok');
+        expect(parsedEvents()).toHaveLength(0);
     });
 
     it('3. facade devsync.create spans the call: api event + outcome propagated', () => {
