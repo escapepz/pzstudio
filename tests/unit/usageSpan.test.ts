@@ -10,9 +10,9 @@ import {
     recordUsageSpan,
 } from '../../packages/cli/src/lib/usage';
 
-// The one-time disclosure notice goes out through emitInfo before the first
-// event write; auto-mocking the logger keeps it out of the test output
-// (same idiom as usageRecorder.test.ts).
+// The one-time disclosure notice goes out through emitInfo right after the
+// first successful event write; auto-mocking the logger keeps it out of the
+// test output (same idiom as usageRecorder.test.ts).
 vi.mock('../../packages/cli/src/lib/logger');
 
 type SpanCtx = Pick<

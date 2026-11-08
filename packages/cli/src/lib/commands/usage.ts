@@ -202,12 +202,24 @@ function usageExport(options: CommandContext['options']): void {
         bundle[basename(file)] = readFileSync(file);
     }
     const outPath = outOverride ? resolve(outOverride) : defaultZipPath();
-    writeFileSync(outPath, zipSync(bundle));
+    try {
+        writeFileSync(outPath, zipSync(bundle));
+    } catch {
+        throw new CliError(`Failed to write the usage bundle to ${outPath}.`, {
+            tryHint:
+                'Check that the directory exists and that the path is writable.',
+        });
+    }
     log(
         `Exported ${summary.eventCount} event(s) across ${summary.sessionCount} session(s) from ${summary.fileCount} file(s) to ${outPath}`,
     );
     if (summary.skippedLines > 0) {
         log(`Skipped ${summary.skippedLines} unparseable line(s).`);
+    }
+    if (summary.eventCount === 0 && summary.skippedLines > 0) {
+        log(
+            'Warning: the store contained only unparseable lines — no valid events were exported.',
+        );
     }
     verbose(`Usage bundle written: ${outPath}`);
 }

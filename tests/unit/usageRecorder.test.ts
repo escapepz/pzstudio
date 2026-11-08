@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import fs from 'fs';
+import { createHash } from 'crypto';
 import { join } from 'path';
 import * as logger from '../../packages/cli/src/lib/logger';
 import {
@@ -35,8 +36,8 @@ vi.mock('fs', async () => {
     };
 });
 
-// The notice text pinned by the feature spec (emitted via emitInfo before
-// the first-ever event write).
+// The notice text pinned by the feature spec (emitted via emitInfo right
+// after the first successful event write).
 const NOTICE =
     "PZ Studio saves local usage logs (commands, durations, errors) to ~/.pzstudio/usage — nothing is ever uploaded. Inspect them any time; turn off with 'pzstudio usage off', share with 'pzstudio usage export'.";
 
@@ -172,6 +173,70 @@ describe('UsageRecorder', () => {
         expect(second.projectHash('/other/dir')).not.toBe(hash);
     });
 
+    it('4b. salt race: losing the exclusive create adopts the winner’s salt', () => {
+        fs.mkdirSync(usageDir(), { recursive: true });
+        const winnerSalt = 'f'.repeat(32);
+        fs.writeFileSync(saltPath(), winnerSalt, 'utf-8');
+        // Simulate a concurrent first run winning the race between our
+        // existsSync probe (misses) and our exclusive-create write (hits
+        // EEXIST with the winner's salt already on disk).
+        const realExistsSync = actualFs.existsSync as any;
+        const realWriteFileSync = actualFs.writeFileSync as any;
+        vi.mocked(fs.existsSync).mockImplementation(((target: unknown) =>
+            String(target) === saltPath()
+                ? false
+                : realExistsSync(target)) as any);
+        vi.mocked(fs.writeFileSync).mockImplementation((...args: any[]) => {
+            const [target, , options] = args;
+            if (
+                String(target) === saltPath() &&
+                options &&
+                typeof options === 'object' &&
+                options.flag === 'wx'
+            ) {
+                const err: NodeJS.ErrnoException = new Error(
+                    'EEXIST: file already exists',
+                );
+                err.code = 'EEXIST';
+                throw err;
+            }
+            return realWriteFileSync(...args);
+        });
+
+        const loser = new UsageRecorder();
+        const hash = loser.projectHash('/p');
+        const expected = createHash('sha256')
+            .update('/p' + winnerSalt)
+            .digest('hex')
+            .slice(0, 8);
+        // The winner's salt is adopted (the hash matches it) and the file
+        // was not overwritten by the loser's fresh salt.
+        expect(hash).toBe(expected);
+        expect(fs.readFileSync(saltPath(), 'utf-8')).toBe(winnerSalt);
+    });
+
+    it('4c. corrupt salt content is regenerated with a fresh valid salt', () => {
+        fs.mkdirSync(usageDir(), { recursive: true });
+        fs.writeFileSync(saltPath(), 'not-a-valid-salt', 'utf-8');
+
+        const recorder = new UsageRecorder();
+        const hash = recorder.projectHash('/p');
+        expect(hash).toMatch(/^[0-9a-f]{8}$/);
+        expect(fs.readFileSync(saltPath(), 'utf-8').trim()).toMatch(
+            /^[0-9a-f]{32}$/,
+        );
+        // A second instance adopts the regenerated salt.
+        expect(new UsageRecorder().projectHash('/p')).toBe(hash);
+    });
+
+    it('4d. salt unavailable → projectHash returns "" (never an unsalted hash)', () => {
+        vi.mocked(fs.writeFileSync).mockImplementation(() => {
+            throw new Error('EACCES: permission denied');
+        });
+        const recorder = new UsageRecorder();
+        expect(recorder.projectHash('/no/salt')).toBe('');
+    });
+
     it('5. notice emitted exactly once per .notice-shown marker lifetime', () => {
         const recorder = new UsageRecorder();
         recorder.recordOp({ op: 'build', host: 'cli', durMs: 1, status: 'ok' });
@@ -184,6 +249,31 @@ describe('UsageRecorder', () => {
         fs.unlinkSync(noticeMarker());
         recorder.recordOp({ op: 'build', host: 'cli', durMs: 1, status: 'ok' });
         expect(noticeEmissions()).toBe(2);
+    });
+
+    it('5b. failed append: no notice, no marker — disclosure only after a successful write', () => {
+        vi.mocked(fs.appendFileSync).mockImplementationOnce(() => {
+            throw new Error('ENOSPC: no space left on device');
+        });
+        const recorder = new UsageRecorder();
+        expect(() =>
+            recorder.recordOp({
+                op: 'build',
+                host: 'cli',
+                durMs: 1,
+                status: 'ok',
+            }),
+        ).not.toThrow();
+        // The append failed: nothing saved, so nothing disclosed or pinned.
+        expect(noticeEmissions()).toBe(0);
+        expect(fs.existsSync(noticeMarker())).toBe(false);
+        expect(fs.existsSync(eventsFile())).toBe(false);
+
+        // The next successful write appends the event, then discloses once.
+        recorder.recordOp({ op: 'build', host: 'cli', durMs: 1, status: 'ok' });
+        expect(noticeEmissions()).toBe(1);
+        expect(fs.existsSync(noticeMarker())).toBe(true);
+        expect(eventLines(eventsFile())).toHaveLength(1);
     });
 
     it('6. corrupted config never overwritten and never crashes', () => {

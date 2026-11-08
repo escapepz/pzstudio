@@ -116,9 +116,14 @@ export class UsageRecorder {
         return this.enabled;
     }
 
-    /** 8-hex project hash; the salt is loaded lazily from usage/.salt. */
+    /**
+     * 8-hex project hash; the salt is loaded lazily from usage/.salt.
+     * Returns '' when the salt is unavailable — never an unsalted hash
+     * (buildEvent guards the same way, so events carry pid_hash null).
+     */
     projectHash(projectKey: string): string {
-        return pidHashOf(projectKey, this.ensureSalt() ?? '');
+        const salt = this.ensureSalt();
+        return salt === undefined ? '' : pidHashOf(projectKey, salt);
     }
 
     recordOp(input: {
@@ -137,7 +142,6 @@ export class UsageRecorder {
             const dir = this.usageDir();
             mkdirSync(dir, { recursive: true });
             const salt = this.ensureSalt();
-            this.ensureNotice();
             this.pruneOnce();
 
             const event = this.buildEvent(input, salt);
@@ -147,6 +151,10 @@ export class UsageRecorder {
                 'utf-8',
             );
             this.writes += 1;
+            // The disclosure fires only after the append actually succeeded:
+            // a failed write (disk full, permissions) must not emit the
+            // notice or pin the marker while nothing was saved.
+            this.ensureNotice();
         } catch {
             // Swallow everything: usage logging must never break a command.
         }
@@ -187,8 +195,28 @@ export class UsageRecorder {
             }
             const fresh = randomBytes(16).toString('hex');
             mkdirSync(dir, { recursive: true });
-            writeFileSync(saltPath, fresh, 'utf-8');
-            this.salt = fresh;
+            try {
+                // Exclusive create ('wx'): concurrent first runs (CLI +
+                // extension) race here and only one fresh salt lands on
+                // disk — never last-writer-wins.
+                writeFileSync(saltPath, fresh, {
+                    encoding: 'utf-8',
+                    flag: 'wx',
+                });
+                this.salt = fresh;
+            } catch {
+                // Lost the create race (EEXIST): another first run already
+                // wrote its salt — adopt the winner's bytes so both
+                // processes hash identically. Corrupt content regenerates
+                // with our fresh salt instead.
+                const winner = readFileSync(saltPath, 'utf-8').trim();
+                if (SALT_PATTERN.test(winner)) {
+                    this.salt = winner;
+                } else {
+                    writeFileSync(saltPath, fresh, 'utf-8');
+                    this.salt = fresh;
+                }
+            }
             return this.salt;
         } catch {
             return undefined;
@@ -196,9 +224,10 @@ export class UsageRecorder {
     }
 
     /**
-     * One-time disclosure notice: emitted before the first-ever event write,
-     * then pinned by the .notice-shown marker. Best-effort — if the marker
-     * write fails, the notice may repeat next session (accepted).
+     * One-time disclosure notice: emitted right after the first successful
+     * event write (never for a failed append), then pinned by the
+     * .notice-shown marker. Best-effort — if the marker write fails, the
+     * notice may repeat next session (accepted).
      */
     private ensureNotice(): void {
         try {
