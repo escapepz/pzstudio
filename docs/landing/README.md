@@ -8,18 +8,11 @@ parameter needs no page code — GTM captures it from the URL automatically.
 
 ## Publish steps (owner)
 
-### 1. Replace the GTM container id
+### 1. GTM container id — done
 
-In `docs/landing/index.html`, find the snippet marked:
-
-```html
-<!-- OWNER: replace with the real container id before publishing -->
-```
-
-and replace the single `GTM-XXXXXXX` occurrence in the Google Tag Manager snippet
-with the real container id. Until replaced, the page still renders fine locally (the
-placeholder container request just fails — harmless); do not publish with the
-placeholder.
+The real container id `GTM-MFR8FN38` is set in `docs/landing/index.html`
+(no placeholder remains) and the debug `console.info` on CTA pushes was
+removed. Nothing left to do in this step.
 
 ### 2. Enable GitHub Pages
 
