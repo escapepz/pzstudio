@@ -11,6 +11,13 @@
 On Windows 10:
 - **Run any pnpm command:** `powershell -ExecutionPolicy Bypass -Command "pnpm ..."`
 
+## Publishing
+- **Never publish from an agent.** `npm publish`, `vsce publish`, and
+  marketplace web uploads are owner-manual operations — the owner runs them
+  by hand, with their own OTP/authenticator. Agents may build, pack, smoke,
+  package, tag, and verify with read-only registry checks, but must stop at
+  the artifact and hand the owner the exact publish commands.
+
 ## Architecture
 pnpm monorepo for PZ Studio. `pnpm-workspace.yaml` selects `packages/*`; the root package.json is a private workspace root (fan-out scripts + dev tooling only).
 

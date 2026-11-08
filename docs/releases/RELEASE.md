@@ -6,6 +6,13 @@ release (Steps E1–E3 below), plus the stable graduation flow (Graduate to
 stable, Graduation run). Every step is automated or documented; do not
 deviate unless the deviation is recorded here.
 
+**Publishes are owner-manual (owner rule 2026-11-08):** the owner runs
+`npm publish` (Steps 5 / Graduation run 3), `vsce publish` (E3) and
+marketplace web uploads BY HAND, with their own OTP — agents never run a
+publish step, with or without an OTP. Agents build, pack, smoke, package,
+tag, and verify with read-only registry checks, then hand the owner the
+exact commands.
+
 ---
 
 ## Version model
