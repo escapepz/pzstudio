@@ -1,6 +1,6 @@
 # PZ Studio (VS Code)
 
-![PZ Studio banner](resources/pzstudio-banner.png)
+![PZ Studio banner](https://github.com/escapepz/pzstudio/raw/HEAD/packages/vscode-extension/resources/pzstudio-banner.png)
 
 [![Version](https://vsmarketplacebadges.dev/version-short/escapepz.pzstudio42.svg?style=flat-square&color=007acc&labelColor=000000)](https://marketplace.visualstudio.com/items?itemName=escapepz.pzstudio42)
 [![Project Zomboid](https://img.shields.io/badge/Project%20Zomboid-42.x-orange.svg?style=flat-square&labelColor=000000)](https://projectzomboid.com/)
