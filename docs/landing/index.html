@@ -9,7 +9,6 @@
             content="Create, build and manage Project Zomboid Build 42 mods"
         />
         <!-- Google Tag Manager -->
-        <!-- OWNER: replace with the real container id before publishing -->
         <script>
             (function (w, d, s, l, i) {
                 w[l] = w[l] || [];
@@ -23,7 +22,7 @@
                 j.async = true;
                 j.src = 'https://www.googletagmanager.com/gtm.js?id=' + i + dl;
                 f.parentNode.insertBefore(j, f);
-            })(window, document, 'script', 'dataLayer', 'GTM-XXXXXXX');
+            })(window, document, 'script', 'dataLayer', 'GTM-MFR8FN38');
         </script>
         <!-- End Google Tag Manager -->
         <style>
@@ -192,9 +191,7 @@
 
                 function pushCta(cta) {
                     window.dataLayer = window.dataLayer || [];
-                    var payload = { event: 'cta_click', cta: cta };
-                    window.dataLayer.push(payload);
-                    console.info('[pzstudio] dataLayer push:', payload);
+                    window.dataLayer.push({ event: 'cta_click', cta: cta });
                 }
 
                 function fallbackCopy(text) {
