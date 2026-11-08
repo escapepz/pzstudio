@@ -41,6 +41,39 @@ nothing, and a broken upload that already landed is retried as a REAL patch
 bump. After a bare `<bare>` lands for latest, the next next-channel cycle
 starts from the following minor.
 
+## Graduate to stable after the owner's manual test
+
+Every release publishes **pre-release first**; graduating to stable is a
+separate, deliberate step — never both in one pass:
+
+1. **Publish pre-release.** npm: `${PUB_VERSION}` (`<bare>-next.<ts>`) to
+   the `next` tag (Steps 0–6). Marketplace: `${EXT_VERSION}` packaged with
+   `--pre-release` (Steps E1–E3). Pre-release is the default channel for
+   in-progress versions.
+2. **Owner's manual test.** The owner tests the pre-release build; this
+   test is the gate before every stable upload. One of its scripts is the
+   bridge × `pzstudio42` coexistence check
+   ([COEXISTENCE-CHECK.md](COEXISTENCE-CHECK.md)).
+3. **Graduate.** Rebuild at the **bare committed version** and upload
+   without the pre-release flag:
+   - npm: publish the bare `${VERSION}` as a deliberate latest-channel
+     build — it never participates in the routine `-next` flow. When the
+     bare version was deleted from npmjs and is burned (Step 7's accepted
+     promote case), graduation is the promote itself: `latest` keeps
+     pointing at the `-next.<ts>` build.
+   - Marketplace: package `${EXT_VERSION}` without `--pre-release` and
+     upload to the stable channel (Step E2's stable exception).
+
+Versions are immutable **per version string**: bare and `-next.<ts>` are
+distinct strings, so both can exist — on npm the promoted `-next.<ts>`
+build on `latest` and a bare stable build never collide. Marketplace
+versions are likewise immutable per version string (no unpublish): verify
+at graduation time that re-uploading `${EXT_VERSION}` without the flag
+moves the existing pre-release version to the stable channel; if the
+marketplace refuses the re-upload, graduate with a real patch bump instead
+(`0.42210.1` packaged without the flag) — the standard marketplace
+practice, consistent with the rollback rules.
+
 ## Version parameter
 
 Resolve the logical release version from the package once per run and use
@@ -205,6 +238,12 @@ This makes the verified `-next` build the default for
 `npm install @pzstudio/cli` without a tag. The bare `${VERSION}` is NOT
 published — `latest` intentionally points at the `-next.<ts>` build.
 
+Promoting the existing `-next.<ts>` artifact to `latest` **as-is** is
+allowed when the bare version was deleted from npmjs (concrete case:
+`0.42210.0`): the name is burned and can never return, so do not rebuild
+or republish under the bare version just to make `latest` show a clean
+string — the promoted `-next` build is the accepted `latest`.
+
 Known tradeoff (accepted): semver ranges like `^0.42210.0` never match a
 prerelease build; consumers pinning ranges only move when a future stable
 bare version (a new patch/minor — the burned name can never return)
@@ -286,17 +325,33 @@ typechecks and esbuild-bundles `dist/extension.js`, and syncs
 `.template-legacy/` plus the JSON schemas into the package. If this fails,
 fix the root cause before proceeding.
 
-### Step E2 — Package (always `--pre-release`)
+### Step E2 — Package
+
+Package the default pre-release build:
 
 ```bash
 pnpm --filter pzstudio42 vsce:package --pre-release
 ```
 
-`--pre-release` is **required for every release packaged from this runbook**:
-the version lands on the marketplace **pre-release channel**, and
-stable-channel users are never auto-updated into it. The artifact is
-`pzstudio42-${EXT_VERSION}.vsix` — assert it exists. No stamping, no
-manifest surgery: the marketplace accepts exactly what vsce produces.
+`--pre-release` remains the default channel for in-progress versions: the
+version lands on the marketplace **pre-release channel**, and
+stable-channel users are never auto-updated into it.
+
+Stable uploads are allowed as the deliberate exception: package the **bare
+committed version** (`${EXT_VERSION}` exactly as committed — no stamp)
+**without** the flag:
+
+```bash
+pnpm --filter pzstudio42 vsce:package
+```
+
+The **owner's manual test is the gate** before every stable upload — never
+package for, or upload to, the stable channel from a build the owner has
+not tested (see [Graduate to stable after the owner's manual test](#graduate-to-stable-after-the-owners-manual-test)).
+
+In both cases the artifact is `pzstudio42-${EXT_VERSION}.vsix` — assert it
+exists. No stamping, no manifest surgery: the marketplace accepts exactly
+what vsce produces.
 
 ### Step E3 — Publish
 
@@ -307,9 +362,12 @@ pnpm --filter pzstudio42 exec vsce publish --pre-release -p <PAT>
 ```
 
 or upload the vsix through
-<https://marketplace.visualstudio.com/manage> (publisher `escapepz`) — the
-vsix carries the pre-release flag. Verify the listing shows
-`${EXT_VERSION}` flagged **Pre-release**. A broken upload that already
+<https://marketplace.visualstudio.com/manage> (publisher `escapepz`). The
+vsix carries the channel chosen at Step E2: pre-release by default; for
+the stable exception publish without the flag (`vsce publish -p <PAT>`)
+and only after the owner's manual test. Verify the listing shows
+`${EXT_VERSION}` flagged **Pre-release** (default flow) or without the
+**Pre-release** flag (stable exception). A broken upload that already
 landed cannot be replaced — fix and bump the patch for the retry.
 
 ### Rollback
