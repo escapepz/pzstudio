@@ -2,10 +2,11 @@ name: CI
 
 on:
     push:
-        # main + 42.20.0 run after merges; 42.20.0-dev gives early feedback
-        # on development pushes. 42.20.0 is the verify branch every change
-        # passes through before it may merge into main.
-        branches: [main, 42.20.0-dev, 42.20.0]
+        # main runs after merges. <cycle>-dev gives early feedback on
+        # development pushes; <cycle> is the verify branch every change
+        # passes through before it may merge into main. Old-cycle branches
+        # (42.20.x) stay listed for hotfix pushes.
+        branches: [main, 42.20.0-dev, 42.20.0, 42.21.0-dev, 42.21.0]
     pull_request:
         branches: [main]
 
