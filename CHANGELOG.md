@@ -22,7 +22,8 @@ tool-only releases. Game compatibility is declared separately in
   `off [--purge]` / `export [--out <file>]`. Help/banner invocations
   record nothing — pure invocations stay side-effect-free.
 - The first successful `build` prints the project landing-page URL once
-  per machine on standalone runs.
+  per machine on standalone runs, as a closing note after the completion
+  line (`See tips & updates -> <url>`).
 - No changes to the JSON contract, the exit-code matrix, or the stream
   contract.
 
