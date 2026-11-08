@@ -11,6 +11,31 @@ Project Zomboid build (build 42.20 → `42200`), the patch bumps for
 tool-only releases. Game compatibility is declared separately in
 `pzBuildCompatibility` (e.g. `"42.x"`).
 
+## [CLI 0.42210.3 / Extension 0.42210.3] - 2026-11-09
+
+### CLI (@pzstudio/cli 0.42210.3) — notes: [`docs/releases/0.42210.3.md`](docs/releases/0.42210.3.md)
+
+- **Usage logging** (local-only, nothing is ever uploaded): one NDJSON
+  event per command (command name, duration, error code, flag names —
+  never paths or values) in `~/.pzstudio/usage/`, on by default and
+  announced by a one-time notice; manage with `pzstudio usage status` /
+  `off [--purge]` / `export [--out <file>]`. Help/banner invocations
+  record nothing — pure invocations stay side-effect-free.
+- The first successful `build` prints the project landing-page URL once
+  per machine on standalone runs.
+- No changes to the JSON contract, the exit-code matrix, or the stream
+  contract.
+
+### Extension (pzstudio42 0.42210.3) — changelog: [`packages/vscode-extension/CHANGELOG.md`](packages/vscode-extension/CHANGELOG.md)
+
+- **First-build success popup**: after the first successful `build`, a
+  one-time popup offers "See tips & updates" and opens the project landing
+  page; localised across all language bundles.
+- Bundles engine `@pzstudio/cli` 0.42210.3; `PZ Studio 42` display name
+  synced into every locale nls table; the banner loads from the repository
+  (VSIX ~497 KB smaller).
+- Release channel: **pre-release** (packaged with `--pre-release`).
+
 ## [CLI 0.42210.2 / Extension 0.42210.2] - 2026-11-08
 
 ### CLI (@pzstudio/cli 0.42210.2) — notes: [`docs/releases/0.42210.2.md`](docs/releases/0.42210.2.md)

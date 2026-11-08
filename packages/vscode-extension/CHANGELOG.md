@@ -9,6 +9,21 @@ All notable changes to the **PZ Studio** VSCode extension will be documented in 
 > nightly entries are archived — not carried in this codebase — at
 > [`project-zomboid-studio@42.17.0` · CHANGELOG.md](https://github.com/escapepz/project-zomboid-studio/blob/42.17.0/packages/vscode-extension/CHANGELOG.md).
 
+## [0.42210.3] - 2026-11-09
+
+### Added
+
+- **First-build success popup**: after the first successful `pzstudio build`, a one-time popup offers "See tips & updates" and opens the project landing page — once per machine, localised across all language bundles.
+
+### Changed
+
+- Bundles engine `@pzstudio/cli` 0.42210.3, which adds local usage logging (see the CLI release notes).
+- The README banner loads from the repository instead of being packed into the VSIX (~497 KB smaller download).
+
+### Fixed
+
+- The `PZ Studio 42` display name is synced into every locale nls table, so all locales resolve the same marketplace display name.
+
 ## [0.42210.2] - 2026-11-08
 
 ### Changed
