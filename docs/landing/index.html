@@ -137,6 +137,22 @@
             footer p {
                 margin: 0;
             }
+
+            #first-build {
+                border: 1px solid #6a9955;
+                border-radius: 8px;
+                padding: 12px 16px;
+                margin: 0 0 20px;
+            }
+
+            #first-build h2 {
+                margin: 0 0 8px;
+                font-size: 1.1rem;
+            }
+
+            #first-build p {
+                margin: 0;
+            }
         </style>
     </head>
     <body>
@@ -145,6 +161,15 @@
             <p class="pitch">
                 Create, build and manage Project Zomboid Build 42 mods
             </p>
+            <div id="first-build" hidden>
+                <h2>🎉 First build complete!</h2>
+                <p>
+                    Your mod built successfully with PZ Studio. Enable it in
+                    Project Zomboid's Mods menu to try it in game, or keep
+                    iterating &mdash; Development Sync watches your source while
+                    you edit.
+                </p>
+            </div>
             <div class="cta-row">
                 <a
                     id="cta-marketplace"
@@ -188,6 +213,16 @@
         <script>
             (function () {
                 'use strict';
+
+                // The extension popup's CTA lands here with its utm tag:
+                // greet the user's first success instead of the plain home.
+                if (
+                    new URLSearchParams(window.location.search).get(
+                        'utm_source',
+                    ) === 'ext-popup'
+                ) {
+                    document.getElementById('first-build').hidden = false;
+                }
 
                 function pushCta(cta) {
                     window.dataLayer = window.dataLayer || [];

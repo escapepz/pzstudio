@@ -58,7 +58,7 @@ describe('notifyFirstBuildSuccess', () => {
             asMock(vscode.window.showInformationMessage),
         ).toHaveBeenCalledWith(
             t('First successful build with PZ Studio!'),
-            'Open PZ Studio home',
+            'See tips & updates',
         );
     });
 
@@ -76,7 +76,7 @@ describe('notifyFirstBuildSuccess', () => {
     it('button click opens the landing URL', async () => {
         const context = fakeContext();
         asMock(vscode.window.showInformationMessage).mockResolvedValue(
-            'Open PZ Studio home',
+            'See tips & updates',
         );
 
         notifyFirstBuildSuccess(context, 'build');

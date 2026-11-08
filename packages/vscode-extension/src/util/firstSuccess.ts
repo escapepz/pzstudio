@@ -28,7 +28,7 @@ export function notifyFirstBuildSuccess(
     void context.globalState.update(FIRST_SUCCESS_KEY, true);
     // Same shape as the logger's actionable notification: resolve the choice
     // asynchronously and open the URL only for the explicit button click.
-    const open = t('Open PZ Studio home');
+    const open = t('See tips & updates');
     void Promise.resolve(
         vscode.window.showInformationMessage(
             t('First successful build with PZ Studio!'),
