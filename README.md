@@ -56,6 +56,23 @@ repository carries Build 41 (Legacy) support.
   output root. Logs and engine records are retained indefinitely — no
   automatic pruning.
 
+## Usage logging
+
+PZ Studio keeps local usage logs so you can inspect — and, if you choose,
+share — what the tool did on your machine: one NDJSON event per command
+(command name, duration, error code, flag names — never paths or flag
+values) in `~/.pzstudio/usage/`. Logging is **on by default**, announced by
+a one-time notice on first write, and **nothing is ever uploaded**.
+
+- Inspect: `pzstudio usage status`
+- Turn off: `pzstudio usage off` (add `--purge` to also delete the logs)
+- Share: `pzstudio usage export` bundles the logs into a zip you can attach
+  to an issue; `--out <file>` picks the destination
+- Deleting `~/.pzstudio/config.json` resets logging to the default (on)
+
+Note: a process that is already running (for example the VS Code extension)
+keeps logging until it is restarted after `pzstudio usage off`.
+
 ## Install
 
 ### CLI

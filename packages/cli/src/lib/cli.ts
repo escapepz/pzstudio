@@ -20,6 +20,7 @@ import './commands/watch';
 import './commands/migrate';
 import './commands/modconfig';
 import './commands/modinfo';
+import './commands/usage';
 import { helpCmd } from './commands/help';
 import { setInvocationOptions } from './args';
 import {
