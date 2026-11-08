@@ -294,6 +294,19 @@ export function getUsageRecorder(): UsageRecorder {
     return singleton;
 }
 
+/**
+ * Clears the memoized recorder singleton (binding ruling R1). The `usage`
+ * command calls this after every successful on/off config write so the very
+ * next getUsageRecorder() in the SAME process re-reads the config instead
+ * of acting on a stale memoized flag (extension-host scenario: an embedded
+ * runCLI('usage', ['off']) must take effect for subsequent spans without a
+ * restart). Cross-process staleness stays accepted: another already-running
+ * process keeps recording until it is restarted.
+ */
+export function resetUsageRecorder(): void {
+    singleton = undefined;
+}
+
 /* --------------------------------------------------------------------------
  * Spans: timing + host/flag/error mapping around a command body
  * ----------------------------------------------------------------------- */

@@ -96,6 +96,17 @@ You can configure PZ Studio directly through VS Code settings (`settings.json`).
 3. VS Code User Settings
 4. Global CLI Config (`~/.pzstudio/config.json`, lowest precedence)
 
+## 🔒 Usage logging
+
+The engine keeps local usage logs — one NDJSON event per command in
+`~/.pzstudio/usage/`, announced by a one-time notice on first write.
+**Nothing is ever uploaded.** Inspect with `pzstudio usage status`, turn it
+off with `pzstudio usage off` (add `--purge` to delete the logs), or share
+with `pzstudio usage export`. Deleting `~/.pzstudio/config.json` resets
+logging to the default (on). A process that is already running (such as
+this extension) keeps logging until it is restarted after turning logging
+off.
+
 ## 🌐 Language
 
 The extension UI (explorer tree, prompts, notifications) ships in 25 languages. By default it follows the VS Code display language; set `pzstudio.language` to a specific language code (e.g. `vi`, `ja`, `zh-cn`) to override it independently of VS Code. The setting applies live — no window reload needed.
