@@ -233,14 +233,19 @@ export async function runInvocationLifecycle(
         const valid = validateInvocation(invocation);
 
         // ---- Execute phase ----
-        // Usage-log chokepoint: exactly one event per executed invocation,
-        // op = the registry command name (the no-command banner path has no
-        // command and records as 'help' — what it actually prints). The
-        // span only times and rethrows; parse/validate failures above stay
-        // unrecorded and the error reporting below is untouched.
-        await recordUsageSpan(valid.command?.name ?? 'help', ctx, () =>
-            executeInvocation(valid, ctx, facade),
-        );
+        // Usage-log chokepoint: exactly one event per executed COMMAND.
+        // The no-command banner path (--help flag and the bare banner)
+        // records nothing — pure invocations stay side-effect-free and
+        // never scaffold ~/.pzstudio. The span only times and rethrows;
+        // parse/validate failures above stay unrecorded and the error
+        // reporting below is untouched.
+        if (valid.command) {
+            await recordUsageSpan(valid.command.name, ctx, () =>
+                executeInvocation(valid, ctx, facade),
+            );
+        } else {
+            await executeInvocation(valid, ctx, facade);
+        }
     } catch (e) {
         if (e instanceof CliUsageError) {
             if (!e.alreadyReported) {
