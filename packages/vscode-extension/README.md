@@ -1,6 +1,6 @@
 # PZ Studio (VS Code)
 
-![PZ Studio banner](resources/pzstudio-banner.png)
+![PZ Studio banner](https://github.com/escapepz/pzstudio/raw/HEAD/packages/vscode-extension/resources/pzstudio-banner.png)
 
 [![Version](https://vsmarketplacebadges.dev/version-short/escapepz.pzstudio42.svg?style=flat-square&color=007acc&labelColor=000000)](https://marketplace.visualstudio.com/items?itemName=escapepz.pzstudio42)
 [![Project Zomboid](https://img.shields.io/badge/Project%20Zomboid-42.x-orange.svg?style=flat-square&labelColor=000000)](https://projectzomboid.com/)
@@ -95,6 +95,17 @@ You can configure PZ Studio directly through VS Code settings (`settings.json`).
 2. VS Code Workspace Settings (`.vscode/settings.json`)
 3. VS Code User Settings
 4. Global CLI Config (`~/.pzstudio/config.json`, lowest precedence)
+
+## 🔒 Usage logging
+
+The engine keeps local usage logs — one NDJSON event per command in
+`~/.pzstudio/usage/`, announced by a one-time notice on first write.
+**Nothing is ever uploaded.** Inspect with `pzstudio usage status`, turn it
+off with `pzstudio usage off` (add `--purge` to delete the logs), or share
+with `pzstudio usage export`. Deleting `~/.pzstudio/config.json` resets
+logging to the default (on). A process that is already running (such as
+this extension) keeps logging until it is restarted after turning logging
+off.
 
 ## 🌐 Language
 

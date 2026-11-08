@@ -331,8 +331,19 @@ describe('constants and manifest', () => {
         expect(MOD_BRANCH_ICON_FILE).toBe('icon.png');
     });
 
-    it('displayName is PZ Studio (resolved through NLS)', () => {
-        expect(nls(PKG.displayName)).toBe('PZ Studio');
+    it('displayName is PZ Studio 42 in every nls table (resolved through NLS)', () => {
+        expect(nls(PKG.displayName)).toBe('PZ Studio 42');
+        // The display name is a brand string, not a translation: the
+        // marketplace listing name must stay identical across locales.
+        const nlsFiles = fs
+            .readdirSync(EXT_ROOT)
+            .filter((f) => /^package\.nls(\..+)?\.json$/.test(f));
+        for (const file of nlsFiles) {
+            const parsed = JSON.parse(
+                fs.readFileSync(path.join(EXT_ROOT, file), 'utf8'),
+            );
+            expect(parsed.displayName, file).toBe('PZ Studio 42');
+        }
     });
 
     it('declares the optional gameBuild setting exactly as approved (UX-11)', () => {

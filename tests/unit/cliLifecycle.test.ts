@@ -165,10 +165,14 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI(undefined, undefined, { flags: [] });
 
         const methods = calls.map((c) => c.method);
-        expect(methods).toEqual(['log', 'log', 'log']);
+        // The usage recorder's one-time disclosure notice fires with the
+        // run's single event, after the help text and before the trailing
+        // blank line.
+        expect(methods).toEqual(['log', 'log', 'info', 'log']);
         expect(String(calls[0].message)).toContain('Project Zomboid Studio v');
         expect(String(calls[1].message)).toContain('Available commands:');
-        expect(calls[2].message).toBe('\n');
+        expect(String(calls[2].message)).toContain('saves local usage logs');
+        expect(calls[3].message).toBe('\n');
     });
 
     it('help command path: help text then exactly one trailing blank line', async () => {
@@ -178,9 +182,11 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI('help');
 
         const methods = calls.map((c) => c.method);
-        expect(methods).toEqual(['log', 'log']);
+        // One-time usage disclosure notice, after the help text.
+        expect(methods).toEqual(['log', 'info', 'log']);
         expect(String(calls[0].message)).toContain('Available commands:');
-        expect(calls[1].message).toBe('\n');
+        expect(String(calls[1].message)).toContain('saves local usage logs');
+        expect(calls[2].message).toBe('\n');
     });
 
     it('--help flag path: per-command help text then trailing blank line', async () => {
@@ -190,9 +196,11 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI('list', [], { flags: ['--help'] });
 
         const methods = calls.map((c) => c.method);
-        expect(methods).toEqual(['log', 'log']);
+        // One-time usage disclosure notice, after the help text.
+        expect(methods).toEqual(['log', 'info', 'log']);
         expect(String(calls[0].message)).toContain('pzstudio list');
-        expect(calls[1].message).toBe('\n');
+        expect(String(calls[1].message)).toContain('saves local usage logs');
+        expect(calls[2].message).toBe('\n');
     });
 
     it('normal command path: pre-command blank line, command output, completion info, trailing blank line', async () => {
@@ -203,13 +211,16 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI('list', [], { flags: ['--project', projA] });
 
         const methods = calls.map((c) => c.method);
-        expect(methods).toEqual(['log', 'log', 'info', 'log']);
+        // One-time usage disclosure notice: the span settles after the
+        // command output, before the trailing blank line.
+        expect(methods).toEqual(['log', 'log', 'info', 'info', 'log']);
         expect(calls[0].message).toBe('\n');
         expect(String(calls[1].message)).toContain(
             "No mods in project 'Test'.",
         );
         expect(String(calls[2].message)).toContain('Command [list] completed.');
-        expect(calls[3].message).toBe('\n');
+        expect(String(calls[3].message)).toContain('saves local usage logs');
+        expect(calls[4].message).toBe('\n');
     });
 
     it('usage-error path: one error report, rethrown, no trailing blank line', async () => {
@@ -237,9 +248,12 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         ).rejects.toBeInstanceOf(CliError);
 
         const methods = calls.map((c) => c.method);
-        expect(methods).toEqual(['log', 'error']);
+        // The error span settles (emitting the one-time usage notice)
+        // before the lifecycle's error report.
+        expect(methods).toEqual(['log', 'info', 'error']);
         expect(calls[0].message).toBe('\n');
-        expect(String(calls[1].message)).toContain(
+        expect(String(calls[1].message)).toContain('saves local usage logs');
+        expect(String(calls[2].message)).toContain(
             'No pzstudio project found.',
         );
     });

@@ -11,6 +11,43 @@ Project Zomboid build (build 42.20 → `42200`), the patch bumps for
 tool-only releases. Game compatibility is declared separately in
 `pzBuildCompatibility` (e.g. `"42.x"`).
 
+## [CLI 0.42210.2 / Extension 0.42210.2] - 2026-11-08
+
+### CLI (@pzstudio/cli 0.42210.2) — notes: [`docs/releases/0.42210.2.md`](docs/releases/0.42210.2.md)
+
+- **Stable graduation of the `0.42210.x` line** (channel parity: even patch
+  = stable): identical engine content to 0.42210.0, shipped as the first
+  bare version on npm `latest` — semver ranges like `^0.42210.0` resolve
+  again.
+- No changes to the JSON contract, the exit-code matrix, or the stream
+  contract.
+
+### Extension (pzstudio42 0.42210.2) — changelog: [`packages/vscode-extension/CHANGELOG.md`](packages/vscode-extension/CHANGELOG.md)
+
+- First **stable-channel** release (packaged without `--pre-release`);
+  stable-channel users auto-update onto `0.42210.2` from `0.42200.1`.
+- Bundles engine `@pzstudio/cli` 0.42210.2 — identical content to the
+  0.42210.0 pre-release.
+
+## [CLI 0.42210.1 / Extension 0.42210.1] - 2026-11-08
+
+### CLI (@pzstudio/cli 0.42210.1) — notes: [`docs/releases/0.42210.1.md`](docs/releases/0.42210.1.md)
+
+- **Pre-release re-stamp** of the `0.42210.0` content (channel parity: odd
+  patch = pre-release), rebuilt from tag `0.42210.0` on
+  `release/0.42210.1` after the marketplace burned the bare `0.42210.0`
+  name on its pre-release channel. Published bare (no `-next` stamp) to
+  npm `latest`.
+- No code changes; no changes to the JSON contract, the exit-code matrix,
+  or the stream contract.
+
+### Extension (pzstudio42 0.42210.1) — changelog: [`packages/vscode-extension/CHANGELOG.md`](packages/vscode-extension/CHANGELOG.md)
+
+- Pre-release channel re-stamp of `0.42210.0` (packaged with
+  `--pre-release`); pre-release users auto-update onto `0.42210.1`.
+- Bundles engine `@pzstudio/cli` 0.42210.1 — identical content to
+  0.42210.0.
+
 ## [CLI 0.42210.0 / Extension 0.42210.0] - 2026-11-08
 
 ### CLI (@pzstudio/cli 0.42210.0) — notes: [`docs/releases/0.42210.0.md`](docs/releases/0.42210.0.md)

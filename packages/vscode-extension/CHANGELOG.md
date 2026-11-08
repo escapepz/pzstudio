@@ -9,6 +9,20 @@ All notable changes to the **PZ Studio** VSCode extension will be documented in 
 > nightly entries are archived — not carried in this codebase — at
 > [`project-zomboid-studio@42.17.0` · CHANGELOG.md](https://github.com/escapepz/project-zomboid-studio/blob/42.17.0/packages/vscode-extension/CHANGELOG.md).
 
+## [0.42210.2] - 2026-11-08
+
+### Changed
+
+- **First stable-channel release** — packaged without `--pre-release`; stable-channel users auto-update onto `0.42210.2` from `0.42200.1`, and pre-release users follow it until the next pre-release lands.
+- Bundles engine `@pzstudio/cli` 0.42210.2 — identical content to the `0.42210.0` pre-release (stable graduation of the `0.42210.x` line).
+
+## [0.42210.1] - 2026-11-08
+
+### Changed
+
+- **Pre-release channel re-stamp** of `0.42210.0` per the channel-parity convention (odd patch = pre-release) — the marketplace never re-uses a version number across channels; identical content to `0.42210.0`.
+- Bundles engine `@pzstudio/cli` 0.42210.1 — identical content to `0.42210.0`.
+
 ## [0.42210.0] - 2026-11-08
 
 ### Added

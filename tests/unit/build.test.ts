@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'fs';
+import { join } from 'path';
 import * as logger from '../../packages/cli/src/lib/logger';
 import { buildCmd } from '../../packages/cli/src/lib/commands/build';
 import {
@@ -478,5 +479,39 @@ describe('buildCmd', () => {
             expect.stringMatching(/dev_branch\/workshop\.txt$/),
             expect.anything(),
         );
+    });
+
+    it('does not print the first-build URL when not standalone', async () => {
+        // markStandaloneBin() fires only in the bin entry (index.ts), so an
+        // in-process buildCmd() run (tests, API hosts, the extension) keeps
+        // the standalone gate OFF: the first-build URL print must neither
+        // run nor consume the marker file.
+        await buildCmd();
+
+        const infoLines = vi
+            .mocked(logger.info)
+            .mock.calls.map((call) => String(call[0]))
+            .join('\n');
+        expect(infoLines).not.toContain('escapepz.github.io');
+
+        // No marker write may even be attempted through fs, and the fake
+        // home's real disk (vitest.setup.ts) holds no marker either —
+        // fs is module-mocked here, so the disk check goes through the
+        // actual fs.
+        expect(
+            vi
+                .mocked(fs.writeFileSync)
+                .mock.calls.some((call) =>
+                    String(call[0]).endsWith('.first-build-url-shown'),
+                ),
+        ).toBe(false);
+
+        const actualFs = await vi.importActual<typeof import('fs')>('fs');
+        const fakeHome = (globalThis as any).__PZSTUDIO_FAKE_HOME as string;
+        expect(
+            actualFs.existsSync(
+                join(fakeHome, '.pzstudio', '.first-build-url-shown'),
+            ),
+        ).toBe(false);
     });
 });

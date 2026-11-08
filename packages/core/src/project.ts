@@ -112,6 +112,16 @@ export interface GlobalConfig {
     experimental?: {
         integration?: boolean;
     };
+
+    /**
+     * Offline usage-log settings. Absent means enabled; an explicit
+     * enabled: false is sticky across versions and hosts.
+     */
+    usageLog?: UsageLogConfig;
+}
+
+export interface UsageLogConfig {
+    enabled?: boolean;
 }
 
 export interface IVsCodeSettings {
