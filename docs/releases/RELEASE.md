@@ -13,6 +13,12 @@ publish step, with or without an OTP. Agents build, pack, smoke, package,
 tag, and verify with read-only registry checks, then hand the owner the
 exact commands.
 
+**Branch policy (owner rule 2026-11-09):** every change STARTS on
+`42.21.0-dev`. A fix needed for a release is committed on the dev branch
+first; the release branch is re-cut from dev (or cherry-picks the fix). A
+`release/*` branch carries ONLY minimal release-prep — the version bump,
+the release's changelog entries, and the tag. Nothing else.
+
 ---
 
 ## Version model

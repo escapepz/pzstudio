@@ -18,6 +18,13 @@ On Windows 10:
   package, tag, and verify with read-only registry checks, but must stop at
   the artifact and hand the owner the exact publish commands.
 
+## Branching
+- **All changes start on `42.21.0-dev`.** A fix needed for a release is
+  committed on the dev branch first — the release branch is then re-cut
+  from dev (or cherry-picks the fix). A `release/*` branch carries ONLY
+  minimal release-prep: the version bump, the release's changelog entries,
+  and the tag.
+
 ## Architecture
 pnpm monorepo for PZ Studio. `pnpm-workspace.yaml` selects `packages/*`; the root package.json is a private workspace root (fan-out scripts + dev tooling only).
 
