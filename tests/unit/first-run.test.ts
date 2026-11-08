@@ -78,6 +78,8 @@ describe('maybePrintFirstBuildUrl', () => {
         expect(lines[0]).toContain(
             'escapepz.github.io/pzstudio/?utm_source=cli-print',
         );
+        // The CTA line reads as the closing note of a successful build.
+        expect(lines[0].startsWith('See tips & updates -> ')).toBe(true);
         expect(fs.existsSync(markerPath())).toBe(true);
     });
 
