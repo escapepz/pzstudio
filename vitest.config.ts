@@ -35,6 +35,12 @@ export default defineConfig({
     test: {
         globals: true,
         environment: 'node',
+        // Windows runs files strictly one-by-one (matches the CI Windows
+        // job): parallel workers oversubscribe the CPU and starve the
+        // timing-sensitive DevSync/e2e suites, and concurrent template
+        // clones trip GitHub rate limits — both observed as load flakes
+        // that pass in isolation. POSIX keeps the parallel default.
+        fileParallelism: process.platform === 'win32' ? false : true,
         // Unit + in-process e2e only. The real-env suite (spawning the built
         // CLI binary) runs through vitest.real-env.config.ts after a build.
         include: ['tests/unit/**/*.test.ts', 'tests/e2e/**/*.test.ts'],
