@@ -59,6 +59,7 @@ export function createCommandRunner(
     studio: PzStudio,
     outputChannel: vscode.OutputChannel,
     onFinished?: () => void,
+    onSuccess?: (command: string) => void,
 ): ExecutePZCommand {
     // One command of the same name at a time: a second trigger warns instead
     // of queueing (unchanged UX). Cross-command overlap is serialized by the
@@ -121,6 +122,9 @@ export function createCommandRunner(
                             runOptions.projectDir = projectDir;
                         }
                         await studio.run(command, args, runOptions);
+                        // The only point success is knowable (execute
+                        // swallows engine errors below): the run resolved.
+                        onSuccess?.(command);
                     } catch (e) {
                         // Already surfaced by logger.error
                     }

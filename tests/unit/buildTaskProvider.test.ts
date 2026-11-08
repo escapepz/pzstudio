@@ -128,8 +128,12 @@ describe('BuildTaskProvider', () => {
     });
 
     /** Opens the terminal for one task and starts capturing its writes. */
-    async function startTask(target: string, studio: StudioStub) {
-        const provider = new BuildTaskProvider(studio as never);
+    async function startTask(
+        target: string,
+        studio: StudioStub,
+        onBuildSuccess?: () => void,
+    ) {
+        const provider = new BuildTaskProvider(studio as never, onBuildSuccess);
         provider.provideTasks();
         // createTask is internal — go through resolveTask to reach it.
         const task = new TaskCtor(
@@ -164,8 +168,16 @@ describe('BuildTaskProvider', () => {
         return { writes, done };
     }
 
-    async function runTask(target: string, studio: StudioStub) {
-        const { writes, done } = await startTask(target, studio);
+    async function runTask(
+        target: string,
+        studio: StudioStub,
+        onBuildSuccess?: () => void,
+    ) {
+        const { writes, done } = await startTask(
+            target,
+            studio,
+            onBuildSuccess,
+        );
         await done;
         return writes;
     }
@@ -324,6 +336,24 @@ describe('BuildTaskProvider', () => {
         });
         const writes = await runTask('production', studio);
         expect(writes.join('')).toContain('pzstudio build failed: boom');
+    });
+
+    it('notifies onBuildSuccess once after a successful build task', async () => {
+        const studio = studioStub();
+        const onBuildSuccess = vi.fn();
+        const writes = await runTask('production', studio, onBuildSuccess);
+
+        expect(onBuildSuccess).toHaveBeenCalledTimes(1);
+        expect(writes.join('')).toContain('pzstudio build completed.');
+    });
+
+    it('does not notify onBuildSuccess for a clean task', async () => {
+        const studio = studioStub();
+        const onBuildSuccess = vi.fn();
+        const writes = await runTask('clean', studio, onBuildSuccess);
+
+        expect(onBuildSuccess).not.toHaveBeenCalled();
+        expect(writes.join('')).toContain('pzstudio clean completed.');
     });
 
     // UX-05: the task resolves its flags for the resolved project's folder

@@ -172,6 +172,12 @@ export function createVscodeMock() {
         static file(fsPath: string): MockUri {
             return new MockUri(fsPath.split(/[\\/]/));
         }
+        // Parse keeps the input verbatim: toString() round-trips the parsed
+        // string (real Uri.toString() re-encodes; tests only need the URL
+        // they parsed back).
+        static parse(value: string): { toString(): string } {
+            return { toString: () => value };
+        }
         toString(): string {
             return this.path;
         }
@@ -266,6 +272,9 @@ export function createVscodeMock() {
         commands: {
             registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
             executeCommand: vi.fn(async () => {}),
+        },
+        env: {
+            openExternal: vi.fn(async () => true),
         },
         workspace: {
             fs: {
