@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const { copyDirRecursive } = require('./template-copy');
+
 const packagePath = path.join(__dirname, '../package.json');
 const distPath = path.join(__dirname, '../dist');
 const buildPath = path.join(distPath, 'build.json');
@@ -63,29 +65,15 @@ const templateLegacySource = templateLegacyCandidates.find(
 );
 const templateLegacyDest = path.join(distPath, '.template-legacy');
 
-function copyDirRecursive(src, dest) {
-    if (!fs.existsSync(src)) return;
-    if (!fs.existsSync(dest)) {
-        fs.mkdirSync(dest, { recursive: true });
-    }
-    const entries = fs.readdirSync(src, { withFileTypes: true });
-    for (const entry of entries) {
-        // The submodule checkouts' .git gitfiles are runtime state, not
-        // template content — never ship them (tracked .gitignore and
-        // .gitmodules inside the templates ARE content and stay).
-        if (entry.name === '.git') continue;
-        const srcPath = path.join(src, entry.name);
-        const destPath = path.join(dest, entry.name);
-        if (entry.isDirectory()) {
-            copyDirRecursive(srcPath, destPath);
-        } else {
-            fs.copyFileSync(srcPath, destPath);
-        }
-    }
-}
-
 if (templateLegacySource) {
-    copyDirRecursive(templateLegacySource, templateLegacyDest);
+    // The submodule checkouts' .git gitfiles are runtime state and the
+    // templates' .github/ CI workflows are repo metadata — never ship
+    // either (tracked .gitignore and .gitmodules inside the templates
+    // ARE content and stay).
+    copyDirRecursive(templateLegacySource, templateLegacyDest, [
+        '.git',
+        '.github',
+    ]);
     console.log(
         `Copied .template-legacy from ${templateLegacySource} to ${templateLegacyDest}`,
     );
