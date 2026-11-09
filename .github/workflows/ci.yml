@@ -2,13 +2,15 @@ name: CI
 
 on:
     push:
-        # main runs after merges. <cycle>-dev gives early feedback on
-        # development pushes; <cycle> is the verify branch every change
-        # passes through before it may merge into main. Old-cycle branches
-        # (42.20.x) stay listed for hotfix pushes.
-        branches: [main, 42.20.0-dev, 42.20.0, 42.21.0-dev, 42.21.0]
+        # CI runs on development pushes only: <cycle>-dev branches catch
+        # breakage early. The merge-only branches (main and the <cycle>
+        # verify branches) are verified by the pull_request trigger
+        # instead. Old-cycle branches (42.20.x) stay listed for hotfix
+        # pushes.
+        branches: [42.20.0-dev, 42.21.0-dev, 42.22.0-dev]
     pull_request:
-        branches: [main]
+        # Merge-only targets: merging into any of these is what runs CI.
+        branches: [main, 42.20.0, 42.21.0]
 
 jobs:
     test:
