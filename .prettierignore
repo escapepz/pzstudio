@@ -10,3 +10,4 @@ pnpm-lock.yaml
 .idea/
 *.log
 .env*
+.template-legacy/
