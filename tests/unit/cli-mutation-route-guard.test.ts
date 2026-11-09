@@ -1506,9 +1506,9 @@ describe('clean output path guard (DEC-6)', () => {
             await junction(path.join(variant, 'linked'), victim);
             expect(() => cleanOutputPath(OUT(), variant)).not.toThrow();
             expect(fs.existsSync(variant)).toBe(false);
-            expect(
-                fs.readFileSync(path.join(victim, 'keep.txt'), 'utf8'),
-            ).toBe('keep');
+            expect(fs.readFileSync(path.join(victim, 'keep.txt'), 'utf8')).toBe(
+                'keep',
+            );
         },
     );
 });
