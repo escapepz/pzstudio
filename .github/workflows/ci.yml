@@ -10,7 +10,7 @@ on:
         branches: [42.20.0-dev, 42.21.0-dev, 42.22.0-dev]
     pull_request:
         # Merge-only targets: merging into any of these is what runs CI.
-        branches: [main, 42.20.0, 42.21.0]
+        branches: [main, 42.20.0, 42.21.0, 42.22.0]
 
 jobs:
     test:
