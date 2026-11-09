@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 
 // resolve to repo-root scripts via relative path
 const nodeRequire = createRequire(import.meta.url);
@@ -122,13 +123,20 @@ interface FakeGitOptions {
     lsRemoteByUrl?: Record<string, string>;
     lsTree?: string;
     updateIndexStatus?: number;
+    /** `git -C <dir> --git-dir=.git rev-parse HEAD` answer per submodule dir. */
+    revParseByDir?: Record<string, { status?: number; stdout?: string }>;
+    /** stdout for `git -C <dir> for-each-ref` (the update-ref --stdin feed). */
+    forEachRefOut?: string;
+    submoduleUpdateStatus?: number;
 }
 
-/** Fake GitRunner: answers ls-remote/ls-tree from canned maps, records calls. */
+/** Fake GitRunner: answers git calls from canned maps, records calls+opts. */
 function makeFakeGit(options: FakeGitOptions = {}) {
     const calls: string[][] = [];
-    const runner = (args: string[]) => {
+    const runOpts: ({ input?: string } | undefined)[] = [];
+    const runner = (args: string[], opts?: { input?: string }) => {
         calls.push(args);
+        runOpts.push(opts);
         if (args[0] === 'ls-remote') {
             return {
                 status: 0,
@@ -146,9 +154,34 @@ function makeFakeGit(options: FakeGitOptions = {}) {
                 stderr: options.updateIndexStatus ? 'update-index failed' : '',
             };
         }
+        if (args[0] === '-C' && args[2] === '--git-dir=.git') {
+            const answer = options.revParseByDir?.[args[1]] ?? {};
+            return {
+                status: answer.status ?? 0,
+                stdout: answer.stdout ?? '',
+                stderr: '',
+            };
+        }
+        if (args[0] === '-C' && args[2] === 'for-each-ref') {
+            return {
+                status: 0,
+                stdout: options.forEachRefOut ?? '',
+                stderr: '',
+            };
+        }
+        if (args[0] === 'submodule') {
+            return {
+                status: options.submoduleUpdateStatus ?? 0,
+                stdout: '',
+                stderr: options.submoduleUpdateStatus
+                    ? 'submodule update failed'
+                    : '',
+            };
+        }
+        // fetch, reset, update-ref, reflog expire, gc
         return { status: 0, stdout: '', stderr: '' };
     };
-    return { runner, calls };
+    return { runner, calls, runOpts };
 }
 
 /** Collect console.log lines emitted by fn, restoring the real log after. */
@@ -165,6 +198,22 @@ function captureLogs(fn: () => void): string[] {
         spy.mockRestore();
     }
     return logs;
+}
+
+/** Capture lines written via the given console method (warn/error) during fn. */
+function captureStream(method: 'warn' | 'error', fn: () => void): string[] {
+    const lines: string[] = [];
+    const spy = vi
+        .spyOn(console, method)
+        .mockImplementation((...args: any[]) => {
+            lines.push(args.join(' '));
+        });
+    try {
+        fn();
+    } finally {
+        spy.mockRestore();
+    }
+    return lines;
 }
 
 describe('readCurrentPins', () => {
@@ -313,9 +362,236 @@ describe('main', () => {
     it('unknown flag prints usage and exits 2 without running git', () => {
         const fake = makeFakeGit();
         const logs = captureLogs(() => {
-            expect(pin.main(['--sync'], fake.runner)).toBe(2);
+            expect(pin.main(['--bogus'], fake.runner)).toBe(2);
         });
         expect(fake.calls).toEqual([]);
         expect(logs.some((line) => line.includes('Usage:'))).toBe(true);
+    });
+
+    it('--sync materializes pinned checkouts and prints a line per move', () => {
+        const fake = makeFakeGit({
+            lsRemoteByUrl: {
+                [URL_BY_NAME['.template-project']]:
+                    `${NEWER_PROJECT_SHA}\trefs/tags/42.22.0-20261109-1902\n`,
+                [URL_BY_NAME['.template-mod']]:
+                    `${MOD_SHA}\trefs/tags/42.21.0\n`,
+                [URL_BY_NAME['.template-workshop']]: `${WORKSHOP_SHA}\tHEAD\n`,
+                [URL_BY_NAME['.template-language']]: `${LANG_SHA}\tHEAD\n`,
+            },
+            forEachRefOut: FOR_EACH_REF_OUT,
+        });
+        const logs = captureLogs(() => {
+            expect(pin.main(['--sync'], fake.runner)).toBe(0);
+        });
+        expect(
+            logs.filter((line) => line.startsWith('- Synced ')),
+        ).toHaveLength(4);
+        expect(logs).toContain(
+            `- Synced .template-project (${NEWER_PROJECT_SHA})`,
+        );
+        expect(fake.calls).toContainEqual([
+            '-C',
+            '.template-legacy/.template-project',
+            '-c',
+            'protocol.version=2',
+            'fetch',
+            '--depth',
+            '1',
+            '--no-tags',
+            'origin',
+            NEWER_PROJECT_SHA,
+        ]);
+    });
+
+    it('prints the error and exits 2 when git fails (error boundary)', () => {
+        const runner = (args: string[]) => {
+            if (args[0] === 'ls-remote') throw new Error('network down');
+            return { status: 0, stdout: LS_TREE_OUTPUT, stderr: '' };
+        };
+        const errs = captureStream('error', () => {
+            expect(pin.main([], runner)).toBe(2);
+        });
+        expect(errs.some((line) => line.includes('network down'))).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// --sync: depth-1 pinned checkout materialization
+// ---------------------------------------------------------------------------
+
+const PIN_SHA = 'dddddddddddddddddddddddddddddddddddddddd';
+const OLD_SHA = 'cccccccccccccccccccccccccccccccccccccccc';
+const LANG_SHA = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const FOR_EACH_REF_OUT = 'delete refs/remotes/origin/main\n';
+
+const SYNC_CONFIG = [
+    {
+        name: '.template-project',
+        url: 'https://example.com/project',
+        mode: 'tag',
+    },
+];
+
+const SYNC_DIR = '.template-legacy/.template-project';
+
+function fakeForPin(revParse: { status?: number; stdout?: string }) {
+    return makeFakeGit({
+        lsRemoteByUrl: {
+            'https://example.com/project': `${PIN_SHA}\trefs/tags/42.22.0-20261109-1902\n`,
+        },
+        revParseByDir: { [SYNC_DIR]: revParse },
+        forEachRefOut: FOR_EACH_REF_OUT,
+    });
+}
+
+describe('syncSubmodules', () => {
+    it('initializes a missing submodule at depth 1, moves it to the pin, purges', () => {
+        const fake = fakeForPin({ status: 128 });
+        const logs = captureLogs(() => {
+            expect(pin.syncSubmodules(fake.runner, SYNC_CONFIG)).toBe(1);
+        });
+        expect(logs).toContain(`- Synced .template-project (${PIN_SHA})`);
+        expect(fake.calls).toEqual([
+            ['ls-remote', 'https://example.com/project'],
+            ['-C', SYNC_DIR, '--git-dir=.git', 'rev-parse', 'HEAD'],
+            ['submodule', 'update', '--init', '--depth', '1', '--', SYNC_DIR],
+            [
+                '-C',
+                SYNC_DIR,
+                '-c',
+                'protocol.version=2',
+                'fetch',
+                '--depth',
+                '1',
+                '--no-tags',
+                'origin',
+                PIN_SHA,
+            ],
+            ['-C', SYNC_DIR, 'reset', '--hard', PIN_SHA],
+            [
+                '-C',
+                SYNC_DIR,
+                'for-each-ref',
+                '--format=delete %(refname)',
+                'refs/remotes',
+                'refs/tags',
+            ],
+            ['-C', SYNC_DIR, 'update-ref', '--stdin', '--no-deref'],
+            ['-C', SYNC_DIR, 'reflog', 'expire', '--expire=now', '--all'],
+            ['-C', SYNC_DIR, 'gc', '--prune=now', '--quiet'],
+        ]);
+    });
+
+    it('only purges when the checkout already sits at the pinned sha', () => {
+        const fake = fakeForPin({ status: 0, stdout: `${PIN_SHA}\n` });
+        const logs = captureLogs(() => {
+            expect(pin.syncSubmodules(fake.runner, SYNC_CONFIG)).toBe(0);
+        });
+        expect(logs).toEqual([]);
+        expect(fake.calls).toEqual([
+            ['ls-remote', 'https://example.com/project'],
+            ['-C', SYNC_DIR, '--git-dir=.git', 'rev-parse', 'HEAD'],
+            [
+                '-C',
+                SYNC_DIR,
+                'for-each-ref',
+                '--format=delete %(refname)',
+                'refs/remotes',
+                'refs/tags',
+            ],
+            ['-C', SYNC_DIR, 'update-ref', '--stdin', '--no-deref'],
+            ['-C', SYNC_DIR, 'reflog', 'expire', '--expire=now', '--all'],
+            ['-C', SYNC_DIR, 'gc', '--prune=now', '--quiet'],
+        ]);
+    });
+
+    it('fetches the pinned sha at depth 1 and resets when behind, then purges', () => {
+        const fake = fakeForPin({ status: 0, stdout: `${OLD_SHA}\n` });
+        const logs = captureLogs(() => {
+            expect(pin.syncSubmodules(fake.runner, SYNC_CONFIG)).toBe(1);
+        });
+        expect(logs).toContain(`- Synced .template-project (${PIN_SHA})`);
+        expect(fake.calls).toEqual([
+            ['ls-remote', 'https://example.com/project'],
+            ['-C', SYNC_DIR, '--git-dir=.git', 'rev-parse', 'HEAD'],
+            [
+                '-C',
+                SYNC_DIR,
+                '-c',
+                'protocol.version=2',
+                'fetch',
+                '--depth',
+                '1',
+                '--no-tags',
+                'origin',
+                PIN_SHA,
+            ],
+            ['-C', SYNC_DIR, 'reset', '--hard', PIN_SHA],
+            [
+                '-C',
+                SYNC_DIR,
+                'for-each-ref',
+                '--format=delete %(refname)',
+                'refs/remotes',
+                'refs/tags',
+            ],
+            ['-C', SYNC_DIR, 'update-ref', '--stdin', '--no-deref'],
+            ['-C', SYNC_DIR, 'reflog', 'expire', '--expire=now', '--all'],
+            ['-C', SYNC_DIR, 'gc', '--prune=now', '--quiet'],
+        ]);
+    });
+
+    it('pipes the for-each-ref delete list into update-ref --stdin', () => {
+        const fake = fakeForPin({ status: 0, stdout: `${OLD_SHA}\n` });
+        captureLogs(() => {
+            pin.syncSubmodules(fake.runner, SYNC_CONFIG);
+        });
+        const index = fake.calls.findIndex((args) => args[2] === 'update-ref');
+        expect(index).toBeGreaterThan(-1);
+        expect(fake.calls[index]).toEqual([
+            '-C',
+            SYNC_DIR,
+            'update-ref',
+            '--stdin',
+            '--no-deref',
+        ]);
+        expect(fake.runOpts[index]).toEqual({ input: FOR_EACH_REF_OUT });
+    });
+
+    it('skips a repo whose pin cannot be resolved, with a warning', () => {
+        const fake = makeFakeGit({
+            lsRemoteByUrl: {
+                'https://example.com/project': 'aaaa\trefs/tags/default\n',
+            },
+        });
+        const warns = captureStream('warn', () => {
+            expect(pin.syncSubmodules(fake.runner, SYNC_CONFIG)).toBe(0);
+        });
+        expect(fake.calls).toEqual([
+            ['ls-remote', 'https://example.com/project'],
+        ]);
+        expect(warns.some((line) => line.includes('.template-project'))).toBe(
+            true,
+        );
+    });
+});
+
+describe('defaultRunner', () => {
+    // The purge feeds `update-ref --stdin` through the runner's `input` opt;
+    // with stdio[0] ignored spawnSync silently drops the input, so pin the
+    // stdin plumbing with real git (offline: plain hash-object, no repo).
+    it('feeds the input option into git stdin', () => {
+        const content = 'hello\n';
+        const res = pin.defaultRunner(['hash-object', '--stdin'], {
+            input: content,
+        });
+        expect(res.status).toBe(0);
+        // git prints the blob object id: sha1("blob <len>\0" + content)
+        expect(res.stdout.trim()).toBe(
+            createHash('sha1')
+                .update(`blob ${Buffer.byteLength(content)}\0`)
+                .update(content)
+                .digest('hex'),
+        );
     });
 });

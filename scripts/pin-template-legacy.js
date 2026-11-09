@@ -260,43 +260,194 @@ function applyUpdates(runner, updates) {
     return applied;
 }
 
+/**
+ * Purge everything but the single checked-out commit from a depth-1
+ * submodule checkout: remote-tracking refs and tags are deleted by piping
+ * `for-each-ref` output into `update-ref --stdin`, then reflogs are expired
+ * and unreachable objects pruned so `rev-list --count HEAD` stays at 1.
+ * @param {GitRunner} runner
+ * @param {string} dir checkout path relative to the repo root
+ */
+function purgeSubmoduleRefs(runner, dir) {
+    const refs = runner([
+        '-C',
+        dir,
+        'for-each-ref',
+        '--format=delete %(refname)',
+        'refs/remotes',
+        'refs/tags',
+    ]);
+    if (refs.status !== 0) {
+        throw new Error(
+            `git for-each-ref ${dir} failed (${refs.status}): ${refs.stderr.trim()}`,
+        );
+    }
+    // --no-deref: origin/HEAD is a symref to origin/main; deleting both in
+    // one transaction is rejected as "multiple updates" unless the symref
+    // itself is the update target.
+    const del = runner(['-C', dir, 'update-ref', '--stdin', '--no-deref'], {
+        input: refs.stdout,
+    });
+    if (del.status !== 0) {
+        throw new Error(
+            `git update-ref ${dir} failed (${del.status}): ${del.stderr.trim()}`,
+        );
+    }
+    const reflog = runner([
+        '-C',
+        dir,
+        'reflog',
+        'expire',
+        '--expire=now',
+        '--all',
+    ]);
+    if (reflog.status !== 0) {
+        throw new Error(
+            `git reflog expire ${dir} failed (${reflog.status}): ${reflog.stderr.trim()}`,
+        );
+    }
+    const gc = runner(['-C', dir, 'gc', '--prune=now', '--quiet']);
+    if (gc.status !== 0) {
+        throw new Error(
+            `git gc ${dir} failed (${gc.status}): ${gc.stderr.trim()}`,
+        );
+    }
+}
+
+/**
+ * Materialize depth-1 pinned checkouts under .template-legacy/. Per config
+ * entry the pin is resolved from `git ls-remote`; a repo whose pin cannot
+ * be resolved is skipped with a warning. A missing checkout is initialized
+ * via `submodule update --init --depth 1`; a checkout not at the pin is
+ * moved there with a depth-1 fetch + `reset --hard`. Every visited checkout
+ * is purged of extra refs/reflogs/objects afterwards. Flat rule: no
+ * --recursive anywhere, so nested submodule content (e.g. .libraries) is
+ * never pulled. Prints a `- Synced <name> (<sha>)` line per move.
+ * @param {GitRunner} runner
+ * @param {PinConfig[]} config
+ * @returns {number} number of submodules moved to their pin
+ */
+function syncSubmodules(runner, config) {
+    let moved = 0;
+    for (const entry of config) {
+        const res = runner(['ls-remote', entry.url]);
+        if (res.status !== 0) {
+            throw new Error(
+                `git ls-remote ${entry.url} failed (${res.status}): ${res.stderr.trim()}`,
+            );
+        }
+        const resolved = resolvePin(parseLsRemoteTags(res.stdout), entry.mode);
+        if (!resolved) {
+            console.warn(`- ${entry.name}: pin unresolved, skipped`);
+            continue;
+        }
+        const dir = `.template-legacy/${entry.name}`;
+        // --git-dir=.git pins discovery to the submodule's own .git: a plain
+        // `rev-parse` would walk up and silently answer with the
+        // superproject's HEAD when the submodule is not initialized.
+        const head = runner(['-C', dir, '--git-dir=.git', 'rev-parse', 'HEAD']);
+        if (head.status === 0 && head.stdout.trim() === resolved.sha) {
+            purgeSubmoduleRefs(runner, dir);
+            continue;
+        }
+        if (head.status !== 0) {
+            const init = runner([
+                'submodule',
+                'update',
+                '--init',
+                '--depth',
+                '1',
+                '--',
+                dir,
+            ]);
+            if (init.status !== 0) {
+                throw new Error(
+                    `git submodule update ${dir} failed (${init.status}): ${init.stderr.trim()}`,
+                );
+            }
+        }
+        const fetch = runner([
+            '-C',
+            dir,
+            '-c',
+            'protocol.version=2',
+            'fetch',
+            '--depth',
+            '1',
+            '--no-tags',
+            'origin',
+            resolved.sha,
+        ]);
+        if (fetch.status !== 0) {
+            throw new Error(
+                `git fetch ${dir} failed (${fetch.status}): ${fetch.stderr.trim()}`,
+            );
+        }
+        const reset = runner(['-C', dir, 'reset', '--hard', resolved.sha]);
+        if (reset.status !== 0) {
+            throw new Error(
+                `git reset ${dir} failed (${reset.status}): ${reset.stderr.trim()}`,
+            );
+        }
+        purgeSubmoduleRefs(runner, dir);
+        moved++;
+        console.log(`- Synced ${entry.name} (${resolved.sha})`);
+    }
+    return moved;
+}
+
 const USAGE = [
-    'Usage: node scripts/pin-template-legacy.js [--check]',
+    'Usage: node scripts/pin-template-legacy.js [--check | --sync]',
     '',
     '  --check   print pending pin updates; exit 1 when any exist, 0 otherwise',
+    '  --sync    materialize depth-1 pinned checkouts under .template-legacy/',
     '  (default) apply pending pin updates via git update-index and print a summary',
 ].join('\n');
 
 /**
  * CLI entry: `--check` reports pending updates (exit 1 when any exist);
- * the default mode applies them and prints a summary.
+ * `--sync` materializes depth-1 pinned checkouts; the default mode applies
+ * the pin updates and prints a summary. Git failures print to stderr and
+ * exit 2.
  * @param {string[]} argv command-line arguments (no node/script prefix)
  * @param {GitRunner} [runner] git runner; defaults to spawning real git
  * @returns {number} process exit code
  */
 function main(argv, runner = defaultRunner) {
     let check = false;
+    let sync = false;
     for (const arg of argv) {
         if (arg === '--check') {
             check = true;
+        } else if (arg === '--sync') {
+            sync = true;
         } else {
             console.log(USAGE);
             return 2;
         }
     }
-    const config = loadConfig();
-    if (check) {
-        const updates = computeUpdates(runner, config);
-        for (const update of updates) {
-            console.log(
-                `- ${update.name}: ${update.from ?? '(none)'} → ${update.to} (${update.source})`,
-            );
+    try {
+        const config = loadConfig();
+        if (check) {
+            const updates = computeUpdates(runner, config);
+            for (const update of updates) {
+                console.log(
+                    `- ${update.name}: ${update.from ?? '(none)'} → ${update.to} (${update.source})`,
+                );
+            }
+            return updates.length ? 1 : 0;
         }
-        return updates.length ? 1 : 0;
+        if (sync) {
+            syncSubmodules(runner, config);
+            return 0;
+        }
+        const applied = applyUpdates(runner, computeUpdates(runner, config));
+        console.log(`Pinned ${applied} template(s)`);
+        return 0;
+    } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        return 2;
     }
-    const applied = applyUpdates(runner, computeUpdates(runner, config));
-    console.log(`Pinned ${applied} template(s)`);
-    return 0;
 }
 
 /**
@@ -308,7 +459,13 @@ function main(argv, runner = defaultRunner) {
  */
 function defaultRunner(args, opts) {
     const res = spawnSync('git', args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
+        // `input` needs a piped stdin: with stdio[0] ignored, spawnSync
+        // silently drops the input (update-ref --stdin would read EOF).
+        stdio: [
+            opts && opts.input !== undefined ? 'pipe' : 'ignore',
+            'pipe',
+            'pipe',
+        ],
         encoding: 'utf8',
         timeout: 120_000,
         ...opts,
@@ -327,6 +484,7 @@ module.exports = {
     readCurrentPins,
     computeUpdates,
     applyUpdates,
+    syncSubmodules,
     main,
     defaultRunner,
 };
