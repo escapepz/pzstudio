@@ -1,0 +1,22 @@
+[
+    {
+        "name": ".template-project",
+        "url": "https://github.com/escapepz/pzstudio-template-project",
+        "mode": "tag"
+    },
+    {
+        "name": ".template-mod",
+        "url": "https://github.com/escapepz/pzstudio-template-mod",
+        "mode": "tag"
+    },
+    {
+        "name": ".template-workshop",
+        "url": "https://github.com/escapepz/pzstudio-template-workshop",
+        "mode": "branch"
+    },
+    {
+        "name": ".template-language",
+        "url": "https://github.com/escapepz/pzstudio-template-language",
+        "mode": "branch"
+    }
+]
