@@ -34,9 +34,17 @@ export function notifyFirstBuildSuccess(
             t('First successful build with PZ Studio!'),
             open,
         ),
-    ).then((choice) => {
-        if (choice === open) {
-            void vscode.env.openExternal(vscode.Uri.parse(LANDING_URL_EXT));
+    ).then(async (choice) => {
+        if (choice !== open) {
+            return;
+        }
+        const uri = vscode.Uri.parse(LANDING_URL_EXT);
+        try {
+            // Inside VS Code when the built-in Simple Browser is available;
+            // the system browser otherwise (command absent or disabled).
+            await vscode.commands.executeCommand('simpleBrowser.api.open', uri);
+        } catch {
+            await vscode.env.openExternal(uri);
         }
     });
 }
