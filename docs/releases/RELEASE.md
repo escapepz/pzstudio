@@ -13,8 +13,8 @@ publish step, with or without an OTP. Agents build, pack, smoke, package,
 tag, and verify with read-only registry checks, then hand the owner the
 exact commands.
 
-**Branch policy (owner rule 2026-11-09):** every change STARTS on
-`42.21.0-dev`. A fix needed for a release is committed on the dev branch
+**Branch policy (owner rule 2026-11-09; dev line renamed 2026-11-10):** every change STARTS on
+`42.22.0-dev`. A fix needed for a release is committed on the dev branch
 first; the release branch is re-cut from dev (or cherry-picks the fix). A
 `release/*` branch carries ONLY minimal release-prep — the version bump,
 the release's changelog entries, and the tag. Nothing else.
@@ -24,7 +24,7 @@ from their own worktree, `../pzstudio.worktrees/release/<version>` (see
 AGENTS.md → Branching). Resolve `${VERSION}` from the DEV worktree's
 `packages/cli/package.json` — the hub's `main` may lag the release being
 cut — then cut branch and worktree in one step from the hub checkout:
-`git worktree add -b release/${VERSION} ../pzstudio.worktrees/release/${VERSION} 42.21.0-dev`
+`git worktree add -b release/${VERSION} ../pzstudio.worktrees/release/${VERSION} 42.22.0-dev`
 and run the one-time setup (submodules, `pnpm install`, `pnpm build`)
 before Step 0.
 
