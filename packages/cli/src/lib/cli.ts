@@ -234,17 +234,24 @@ export async function runInvocationLifecycle(
 
         // ---- Execute phase ----
         // Usage-log chokepoint: exactly one event per executed COMMAND.
-        // The no-command banner path (--help flag and the bare banner)
-        // records nothing — pure invocations stay side-effect-free and
-        // never scaffold ~/.pzstudio. The span only times and rethrows;
-        // parse/validate failures above stay unrecorded and the error
-        // reporting below is untouched.
-        if (valid.command) {
+        // Pure invocations record nothing — the same display-only set
+        // executeInvocation() short-circuits: the no-command banner
+        // (valid.command undefined), the --help flag on any command, and
+        // the `help` command itself. Help output never runs business
+        // logic, so these paths stay side-effect-free and never scaffold
+        // ~/.pzstudio (real-env contract: clean stderr, no store creation).
+        // The span only times and rethrows; parse/validate failures above
+        // stay unrecorded and the error reporting below is untouched.
+        const helpOnly =
+            !valid.command ||
+            valid.options['help'] === true ||
+            valid.command.name === 'help';
+        if (helpOnly) {
+            await executeInvocation(valid, ctx, facade);
+        } else {
             await recordUsageSpan(valid.command.name, ctx, () =>
                 executeInvocation(valid, ctx, facade),
             );
-        } else {
-            await executeInvocation(valid, ctx, facade);
         }
     } catch (e) {
         if (e instanceof CliUsageError) {

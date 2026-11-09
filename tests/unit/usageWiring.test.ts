@@ -98,11 +98,11 @@ afterEach(() => {
 });
 
 describe('usage wiring (lifecycle chokepoint + facade wraps)', () => {
-    it('1. embedded runCLI records one event: op help, host api, status ok', async () => {
-        await runCLI('help', [], { flags: [] });
+    it('1. embedded runCLI records one event: op migrate, host api, status ok', async () => {
+        await runCLI('migrate', [], { flags: [] });
 
         const event = singleEvent();
-        expect(event.op).toBe('help');
+        expect(event.op).toBe('migrate');
         expect(event.host).toBe('api');
         expect(event.status).toBe('ok');
         expect(Number.isInteger(event.dur_ms)).toBe(true);
@@ -114,6 +114,17 @@ describe('usage wiring (lifecycle chokepoint + facade wraps)', () => {
         // a help lookup never scaffolds ~/.pzstudio (pack-smoke contract:
         // pure invocation leaves no ~/.pzstudio).
         await runCLI(undefined, undefined, { flags: [] });
+
+        expect(parsedEvents()).toHaveLength(0);
+    });
+
+    it('1c. help command and per-command --help record nothing (pure invocations)', async () => {
+        // Same display-only set executeInvocation() short-circuits: the
+        // `help` command and the --help flag on any command render help and
+        // never run business logic — the chokepoint must not scaffold
+        // ~/.pzstudio for them (real-env contract: clean stderr, no store).
+        await runCLI('help', [], { flags: [] });
+        await runCLI('list', [], { flags: ['--help'] });
 
         expect(parsedEvents()).toHaveLength(0);
     });
@@ -181,13 +192,13 @@ describe('usage wiring (lifecycle chokepoint + facade wraps)', () => {
     it('5. studio.run records through the shared lifecycle exactly once', async () => {
         const studio = createPzStudio();
 
-        await studio.run('help', [], {});
+        await studio.run('migrate', [], {});
 
         // Exactly ONE event for the run: the lifecycle chokepoint records
         // it; run itself is deliberately not facade-wrapped (no duplicate).
         const all = parsedEvents();
         expect(all).toHaveLength(1);
-        expect(all[0].op).toBe('help');
+        expect(all[0].op).toBe('migrate');
         expect(all[0].host).toBe('api');
         expect(all[0].status).toBe('ok');
     });
