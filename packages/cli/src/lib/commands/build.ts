@@ -26,6 +26,8 @@ import {
     type CliMutationRouteOptions,
 } from '../mutation-route-guard';
 import { info, verbose, warn } from '../logger';
+import { isStandaloneBin } from '../runtime-context';
+import { maybePrintFirstBuildUrl } from '../first-run';
 import {
     resolveTemplateDirForEngine,
     scaffoldProject,
@@ -244,6 +246,16 @@ export async function buildCmd() {
 
     const endTime = performance.now();
     info(`Build complete in ${((endTime - startTime) / 1000).toFixed(2)}s!`);
+
+    // First-success URL print (one-time per machine, marker-file pinned):
+    // only a standalone bin run prints or consumes the marker — an
+    // extension-hosted in-process build must never print nor pin it, so
+    // the terminal CLI still gets its first print. Progress-class info():
+    // stderr, --quiet-suppressible, stdout untouched. Printed after the
+    // completion line so the CTA reads as the closing note of the build.
+    if (isStandaloneBin()) {
+        maybePrintFirstBuildUrl((line) => info(line));
+    }
 }
 
 registerCommand({

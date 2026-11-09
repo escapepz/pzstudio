@@ -2,8 +2,31 @@
 
 This runbook defines the exact steps to produce, smoke-test, and publish a
 new `@pzstudio/cli` release (Steps 0–8) and the matching VS Code extension
-release (Steps E1–E3 below). Every step is automated or documented; do not
+release (Steps E1–E3 below), plus the stable graduation flow (Graduate to
+stable, Graduation run). Every step is automated or documented; do not
 deviate unless the deviation is recorded here.
+
+**Publishes are owner-manual (owner rule 2026-11-08):** the owner runs
+`npm publish` (Steps 5 / Graduation run 3), `vsce publish` (E3) and
+marketplace web uploads BY HAND, with their own OTP — agents never run a
+publish step, with or without an OTP. Agents build, pack, smoke, package,
+tag, and verify with read-only registry checks, then hand the owner the
+exact commands.
+
+**Branch policy (owner rule 2026-11-09):** every change STARTS on
+`42.21.0-dev`. A fix needed for a release is committed on the dev branch
+first; the release branch is re-cut from dev (or cherry-picks the fix). A
+`release/*` branch carries ONLY minimal release-prep — the version bump,
+the release's changelog entries, and the tag. Nothing else.
+
+**Worktree layout (owner rule 2026-11-09):** release branches are operated
+from their own worktree, `../pzstudio.worktrees/release/<version>` (see
+AGENTS.md → Branching). Resolve `${VERSION}` from the DEV worktree's
+`packages/cli/package.json` — the hub's `main` may lag the release being
+cut — then cut branch and worktree in one step from the hub checkout:
+`git worktree add -b release/${VERSION} ../pzstudio.worktrees/release/${VERSION} 42.21.0-dev`
+and run the one-time setup (submodules, `pnpm install`, `pnpm build`)
+before Step 0.
 
 ---
 
@@ -27,19 +50,117 @@ Two version shapes exist and must not be confused:
     2026-11-08: `0.42210.0-next.<ts>`, `0.42210.0-<ts>` AND the 4-part
     `0.42210.0.<ts>` were ALL rejected — no stamp of any kind fits in a
     marketplace version. The `--pre-release` flag is what puts the upload
-    on the pre-release channel. Marketplace versions are consumed only by
-    **successful** uploads — rejected attempts burn nothing — so a broken
-    upload that already landed is retried as a REAL patch bump
-    (`0.42210.1`, ...), the standard marketplace practice.
+on the pre-release channel. Marketplace versions are consumed only by
+**successful** uploads — rejected attempts burn nothing — so a broken
+upload that already landed is retried as a REAL bump on the next free
+patch of the same parity (Channel parity below), the standard marketplace
+practice.
 
 Promotion to `latest` happens by dist-tagging the **verified `-next` build**
 (Step 7). Publishing the bare version is a deliberate latest-channel build,
 not part of the routine flow.
 
 Marketplace versions are immutable (no unpublish): rejected uploads burn
-nothing, and a broken upload that already landed is retried as a REAL patch
-bump. After a bare `<bare>` lands for latest, the next next-channel cycle
-starts from the following minor.
+nothing, and a broken upload that already landed is retried as a REAL bump
+that preserves channel parity. After a stable graduation lands, the next
+next-channel cycle starts at the next free odd patch.
+
+### Channel parity (odd/even patch — adapted from the VS Code convention)
+
+The official VS Code convention (odd minor = pre-release, even minor =
+release) cannot be applied verbatim: the minor segment encodes the PZ game
+build and moves only when the game build moves. The convention is therefore
+applied to the **patch segment**:
+
+- **Even patch** (`0.42210.2`, `0.42210.4`, ...) — stable/latest channel:
+  bare versions published to npm `latest`, marketplace uploads WITHOUT
+  `--pre-release`.
+- **Odd patch** (`0.42210.1`, `0.42210.3`, ...) — pre-release/next channel:
+  marketplace uploads WITH `--pre-release`; the matching npm builds are
+  `<bare>-next.<ts>` (the odd bare version itself is never published to npm —
+  bare is stable-only).
+
+Versions only increase, and every successful landing burns its number
+forever, so the next cycle starts at the next free odd patch after the last
+stable. Multiple pre-releases before one graduation skip even numbers
+(`.1`, `.3`, then stable `.4`); gaps are normal and intentional. A broken
+landed upload retries on the next free patch of ITS OWN parity.
+
+Grandfathered exception: `0.42210.0` landed on the marketplace as a
+pre-release before this convention existed (even patch on the pre-release
+channel). It stays as-is; parity applies from `0.42210.1` onward.
+
+Transition exception (owner decision 2026-11-08): `0.42210.1` is published
+to npm as a BARE build without the `-next` suffix — the clean re-stamp of
+the `0.42210.0` content, built from tag `0.42210.0` on branch
+`release/0.42210.1`, so the npm `latest` string and the marketplace
+pre-release share one version. Strict bare-is-stable-only parity resumes
+with the `0.42210.2` graduation.
+
+## Graduate to stable after the owner's manual test
+
+Every release publishes **pre-release first**; graduating to stable is a
+separate, deliberate step — never both in one pass:
+
+1. **Publish pre-release.** npm: `${PUB_VERSION}` (`<bare>-next.<ts>`) to
+   the `next` tag (Steps 0–6). Marketplace: `${EXT_VERSION}` packaged with
+   `--pre-release` (Steps E1–E3). Pre-release is the default channel for
+   in-progress versions.
+2. **Owner's manual test.** The owner tests the pre-release build; this
+   test is the gate before every stable upload. One of its scripts is the
+   bridge × `pzstudio42` coexistence check
+   ([COEXISTENCE-CHECK.md](COEXISTENCE-CHECK.md)).
+3. **Graduate.** Rebuild at the graduation version — the next free EVEN
+   patch (Channel parity below) — and upload without the pre-release flag:
+   - npm: publish the bare graduation version as a deliberate
+     latest-channel build with an explicit `--tag latest` override
+     (`publishConfig.tag` is `next`; see Graduation run) — it never
+     participates in the routine `-next` flow. When the bare version was
+     deleted from npmjs and is burned (Step 7's accepted promote case, e.g.
+     `0.42210.0`), graduation cannot reuse that name — it moves to the
+     next even patch instead.
+   - Marketplace: package the graduation version without `--pre-release`
+     and upload to the stable channel (Step E2's stable exception).
+
+Versions are immutable **per version string**: bare and `-next.<ts>` are
+distinct strings, so both can exist — on npm the promoted `-next.<ts>`
+build on `latest` and a bare stable build never collide. Marketplace
+versions are likewise immutable per version string AND per version number
+ACROSS channels: confirmed empirically on 2026-11-08, re-uploading a
+version that already landed as a marketplace pre-release WITHOUT the flag
+does NOT move it to the stable channel — the upload is refused, so a
+pre-release burn blocks that version from ever becoming stable. Graduation
+therefore always lands on its own (even) version; Channel parity is what
+keeps pre-release and stable numbers disjoint so a pre-release burn never
+blocks a graduation.
+
+### Graduation run (concrete sequence)
+
+1. Commit the bump of BOTH `packages/cli/package.json` and
+   `packages/vscode-extension/package.json` to the graduation version —
+   the bump is a COMMITTED release-prep commit (the new release identity),
+   unlike the next-channel stamp (Step 0) — together with the changelog
+   entries (see CHANGELOG (every release)).
+2. CLI Steps 1–4 unchanged (no Step 0 stamp: `package.json` already
+   carries the bare version, so `build.json` and the legacy-template
+   stamps embed it). Steps 3–4 (isolated smoke, golden) still run — the
+   artifact is new. Step 8 does not apply: the tree is supposed to change.
+3. Publish the exact tgz with an explicit tag override
+   (`publishConfig.tag` is `next`; a bare build must land on latest):
+   ```bash
+   npm publish "<exact-tgz>" --ignore-scripts --access public --tag latest
+   ```
+4. Registry smoke: `npx -y @pzstudio/cli@latest --version` prints the bare
+   version, and `npm view "@pzstudio/cli@^<previous-bare>" version`
+   resolves to it (this finally satisfies `^`-range consumers — the
+   tradeoff noted in Step 7).
+5. Extension: Step E1 build, Step E2 package WITHOUT `--pre-release`,
+   Step E3 publish without the flag; verify the listing shows the
+   graduation version NOT flagged Pre-release.
+6. Tag the release-prep commit with the bare graduation version; the
+   GitHub release is marked **Latest** (the cycle's pre-release GitHub
+   release stays marked **Pre-release**). Optionally `npm deprecate` the
+   cycle's `-next` builds with a pointer at the graduation version.
 
 ## Version parameter
 
@@ -59,18 +180,49 @@ PUB_VERSION="${VERSION}-next.${TS}"
 
 ---
 
+## CHANGELOG (every release)
+
+Every release-prep updates the changelog surfaces BEFORE building — the
+VSIX auto-includes `packages/vscode-extension/CHANGELOG.md` (vsce packs it
+unless `.vscodeignore` excludes it; the npm tgz carries no changelog — the
+npm `files` field stays unchanged):
+
+- **Root `CHANGELOG.md`** — one combined
+  `## [CLI <bare> / Extension <bare>] - <date>` entry at the top, linking
+  the per-version notes and the extension changelog.
+- **`packages/vscode-extension/CHANGELOG.md`** — for every extension
+  version, a `## [<EXT_VERSION>] - <date>` entry with `### Added` /
+  `### Changed` / `### Fixed` / `### Safety` subsections as needed.
+- **`docs/releases/<bare>.md`** — for every CLI version, the per-version
+  release notes (H1, summary line, `## What's changed`,
+  `## Compatibility`).
+
+The changelog edits are part of the release-prep commit — the same commit
+as the version bump. A graduation adds its own stable entry to both
+changelogs in the graduation prep commit (Graduation run).
+
+---
+
 ## Preflight
 
 Before starting, verify:
 
+- [ ] Submodules are populated in this checkout (`git submodule update --init`) — a fresh worktree ships empty template stubs, and packing one carries an empty `dist/.template-legacy/`: the packlist check still passes (the stamp file is present) while offline `new` fails its smoke with "No valid cached or legacy template found".
 - [ ] `npm whoami` — you are logged into the target registry as the `@pzstudio` scope owner.
 - [ ] `@pzstudio` scope is writable (you have permission to publish).
 - [ ] Target registry is correct (`npm config get registry`).
 - [ ] `@pzstudio/cli@<version>` does not already exist on the registry.
+- [ ] CHANGELOG entries for this version exist (root `CHANGELOG.md` +
+      `packages/vscode-extension/CHANGELOG.md` +
+      `docs/releases/<version>.md`) — see CHANGELOG (every release).
 
 ---
 
 ## Step 0 — Stamp the publish version (next channel)
+
+Next-channel (odd-patch) cycles only — a graduation run skips Steps 0, 5
+and 7 and publishes the committed bare version instead (see Graduation
+run).
 
 Bump the package to `${PUB_VERSION}` BEFORE building — `build.json` and the
 bundled legacy-template stamps embed the version, so everything in the
@@ -161,6 +313,9 @@ If any check fails, diagnose, fix, rebuild (Step 1), pack (Step 2), re-smoke (St
 
 ## Step 5 — Publish to `next`
 
+Next-channel (odd-patch) cycles only. A graduation run publishes the bare
+tgz with `--tag latest` instead — see Graduation run.
+
 ```bash
 npm publish "<exact-tgz>" --ignore-scripts --access public --tag next
 ```
@@ -205,10 +360,16 @@ This makes the verified `-next` build the default for
 `npm install @pzstudio/cli` without a tag. The bare `${VERSION}` is NOT
 published — `latest` intentionally points at the `-next.<ts>` build.
 
-Known tradeoff (accepted): semver ranges like `^0.42210.0` never match a
-prerelease build; consumers pinning ranges only move when a future stable
-bare version (a new patch/minor — the burned name can never return)
-publishes through this same flow.
+Promoting the existing `-next.<ts>` artifact to `latest` **as-is** is
+allowed when the bare version was deleted from npmjs (concrete case:
+`0.42210.0`): the name is burned and can never return, so do not rebuild
+or republish under the bare version just to make `latest` show a clean
+string — the promoted `-next` build is the accepted `latest`.
+
+Known tradeoff (accepted, next-channel cycles only): semver ranges like
+`^0.42210.0` never match a prerelease build; range consumers move again
+when the graduation publishes the next even-patch bare version (Graduation
+run, step 4).
 
 ## Step 8 — Restore the logical version
 
@@ -239,6 +400,11 @@ the **logical (bare) version** and reflects WHAT the release contains:
 - Extension-only release (if it ever happens): `ext-<version>` —
   e.g. `ext-0.42215.1`.
 
+Each channel landing gets its own tag: the pre-release cycle tags its odd
+bare version (GitHub release marked **Pre-release**), the graduation tags
+the even bare version (GitHub release marked **Latest**). Published tags
+are never moved or deleted.
+
 ## Extension release runbook (`pzstudio42`)
 
 The extension release is coupled to the CLI release: the extension bundles
@@ -260,7 +426,10 @@ EXT_VERSION="$(node -p "require('./packages/vscode-extension/package.json').vers
       Manage** scope, or web-upload access at
       <https://marketplace.visualstudio.com/manage>.
 - [ ] `escapepz.pzstudio42@<EXT_VERSION>` does not already exist on the
-      marketplace (published versions are immutable).
+      marketplace (published versions are immutable), is strictly higher
+      than the listing's current maximum, and matches Channel parity: an
+      ODD patch for a `--pre-release` upload, an EVEN patch for a stable
+      upload.
 - [ ] **Display-name uniqueness**: the `displayName` resolved from
       `package.nls.json` must be unique within the publisher. The
       marketplace **rejects** an upload whose display name is taken by the
@@ -286,17 +455,34 @@ typechecks and esbuild-bundles `dist/extension.js`, and syncs
 `.template-legacy/` plus the JSON schemas into the package. If this fails,
 fix the root cause before proceeding.
 
-### Step E2 — Package (always `--pre-release`)
+### Step E2 — Package
+
+Package the default pre-release build:
 
 ```bash
 pnpm --filter pzstudio42 vsce:package --pre-release
 ```
 
-`--pre-release` is **required for every release packaged from this runbook**:
-the version lands on the marketplace **pre-release channel**, and
-stable-channel users are never auto-updated into it. The artifact is
-`pzstudio42-${EXT_VERSION}.vsix` — assert it exists. No stamping, no
-manifest surgery: the marketplace accepts exactly what vsce produces.
+`--pre-release` remains the default channel for in-progress versions: the
+version lands on the marketplace **pre-release channel**, and
+stable-channel users are never auto-updated into it.
+
+Stable uploads are allowed as the deliberate exception: package the **bare
+committed version** (`${EXT_VERSION}` exactly as committed — no stamp)
+**without** the flag — an EVEN patch strictly higher than the listing's
+current maximum (Channel parity):
+
+```bash
+pnpm --filter pzstudio42 vsce:package
+```
+
+The **owner's manual test is the gate** before every stable upload — never
+package for, or upload to, the stable channel from a build the owner has
+not tested (see [Graduate to stable after the owner's manual test](#graduate-to-stable-after-the-owners-manual-test)).
+
+In both cases the artifact is `pzstudio42-${EXT_VERSION}.vsix` — assert it
+exists. No stamping, no manifest surgery: the marketplace accepts exactly
+what vsce produces.
 
 ### Step E3 — Publish
 
@@ -307,16 +493,20 @@ pnpm --filter pzstudio42 exec vsce publish --pre-release -p <PAT>
 ```
 
 or upload the vsix through
-<https://marketplace.visualstudio.com/manage> (publisher `escapepz`) — the
-vsix carries the pre-release flag. Verify the listing shows
-`${EXT_VERSION}` flagged **Pre-release**. A broken upload that already
-landed cannot be replaced — fix and bump the patch for the retry.
+<https://marketplace.visualstudio.com/manage> (publisher `escapepz`). The
+vsix carries the channel chosen at Step E2: pre-release by default; for
+the stable exception publish without the flag (`vsce publish -p <PAT>`)
+and only after the owner's manual test. Verify the listing shows
+`${EXT_VERSION}` flagged **Pre-release** (default flow) or without the
+**Pre-release** flag (stable exception). A broken upload that already
+landed cannot be replaced — fix and retry on the next free patch of the
+same parity (Channel parity).
 
 ### Rollback
 
 Marketplace versions cannot be replaced or unpublished. Fix the issue, bump
-the patch version in `packages/vscode-extension/package.json`, and rerun
-E1 → E3.
+to the next free patch of the same parity (Channel parity) in
+`packages/vscode-extension/package.json`, and rerun E1 → E3.
 
 ### Legacy-listing bridge (one-off, `escapepz.pzstudio`)
 

@@ -20,6 +20,7 @@ import './commands/watch';
 import './commands/migrate';
 import './commands/modconfig';
 import './commands/modinfo';
+import './commands/usage';
 import { helpCmd } from './commands/help';
 import { setInvocationOptions } from './args';
 import {
@@ -65,6 +66,7 @@ import {
     type InvocationContext,
     type InvocationInputs,
 } from './invocation';
+import { recordUsageSpan } from './usage';
 
 // Backward-compatible re-exports: flags used to live here and external
 // code (tests, templates) may import them from this module.
@@ -231,7 +233,26 @@ export async function runInvocationLifecycle(
         const valid = validateInvocation(invocation);
 
         // ---- Execute phase ----
-        await executeInvocation(valid, ctx, facade);
+        // Usage-log chokepoint: exactly one event per executed COMMAND.
+        // Pure invocations record nothing — the same display-only set
+        // executeInvocation() short-circuits: the no-command banner
+        // (valid.command undefined), the --help flag on any command, and
+        // the `help` command itself. Help output never runs business
+        // logic, so these paths stay side-effect-free and never scaffold
+        // ~/.pzstudio (real-env contract: clean stderr, no store creation).
+        // The span only times and rethrows; parse/validate failures above
+        // stay unrecorded and the error reporting below is untouched.
+        const helpOnly =
+            !valid.command ||
+            valid.options['help'] === true ||
+            valid.command.name === 'help';
+        if (helpOnly) {
+            await executeInvocation(valid, ctx, facade);
+        } else {
+            await recordUsageSpan(valid.command.name, ctx, () =>
+                executeInvocation(valid, ctx, facade),
+            );
+        }
     } catch (e) {
         if (e instanceof CliUsageError) {
             if (!e.alreadyReported) {

@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>PZ Studio &mdash; Project Zomboid Build 42 modding</title>
+        <meta
+            name="description"
+            content="Create, build and manage Project Zomboid Build 42 mods"
+        />
+        <!-- Google Tag Manager -->
+        <script>
+            (function (w, d, s, l, i) {
+                w[l] = w[l] || [];
+                w[l].push({
+                    'gtm.start': new Date().getTime(),
+                    event: 'gtm.js',
+                });
+                var f = d.getElementsByTagName(s)[0],
+                    j = d.createElement(s),
+                    dl = l != 'dataLayer' ? '&l=' + l : '';
+                j.async = true;
+                j.src = 'https://www.googletagmanager.com/gtm.js?id=' + i + dl;
+                f.parentNode.insertBefore(j, f);
+            })(window, document, 'script', 'dataLayer', 'GTM-MFR8FN38');
+        </script>
+        <!-- End Google Tag Manager -->
+        <style>
+            * {
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                font-family:
+                    system-ui,
+                    -apple-system,
+                    'Segoe UI',
+                    sans-serif;
+                background: #f6f7f9;
+                color: #1c2430;
+                text-align: center;
+            }
+
+            main {
+                padding: 3rem 1.5rem;
+                max-width: 40rem;
+            }
+
+            h1 {
+                font-size: 2.25rem;
+                letter-spacing: -0.02em;
+                margin: 0 0 0.5rem;
+            }
+
+            .pitch {
+                font-size: 1.25rem;
+                color: #46536a;
+                margin: 0 0 2.5rem;
+            }
+
+            .cta-row {
+                display: flex;
+                flex-direction: column;
+                gap: 1rem;
+                align-items: center;
+            }
+
+            a.cta {
+                display: inline-block;
+                padding: 0.75rem 1.5rem;
+                border-radius: 0.5rem;
+                background: #2563eb;
+                color: #ffffff;
+                font-size: 1rem;
+                font-weight: 600;
+                text-decoration: none;
+            }
+
+            a.cta:hover,
+            a.cta:focus-visible {
+                background: #1d4ed8;
+            }
+
+            .cmd-row {
+                display: flex;
+                gap: 0.5rem;
+                align-items: center;
+                justify-content: center;
+                flex-wrap: wrap;
+                margin: 0;
+            }
+
+            code {
+                font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+                background: #e7eaf0;
+                color: #1c2430;
+                padding: 0.5rem 0.75rem;
+                border-radius: 0.375rem;
+                font-size: 0.95rem;
+            }
+
+            button.copy {
+                padding: 0.5rem 0.9rem;
+                border-radius: 0.375rem;
+                border: 1px solid #b9c1cf;
+                background: #ffffff;
+                color: #1c2430;
+                font-size: 0.9rem;
+                cursor: pointer;
+                min-width: 5.5rem;
+            }
+
+            button.copy:hover,
+            button.copy:focus-visible {
+                border-color: #2563eb;
+                color: #2563eb;
+            }
+
+            .hint {
+                color: #64748b;
+                font-size: 0.9rem;
+                margin: 0.5rem 0 0;
+            }
+
+            footer {
+                padding: 1.5rem;
+                color: #64748b;
+                font-size: 0.85rem;
+            }
+
+            footer p {
+                margin: 0;
+            }
+
+            #first-build {
+                border: 1px solid #6a9955;
+                border-radius: 8px;
+                padding: 12px 16px;
+                margin: 0 0 20px;
+            }
+
+            #first-build h2 {
+                margin: 0 0 8px;
+                font-size: 1.1rem;
+            }
+
+            #first-build p {
+                margin: 0;
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <h1>PZ Studio</h1>
+            <p class="pitch">
+                Create, build and manage Project Zomboid Build 42 mods
+            </p>
+            <div id="first-build" hidden>
+                <h2>🎉 First build complete!</h2>
+                <p>
+                    Your mod built successfully with PZ Studio. Enable it in
+                    Project Zomboid's Mods menu to try it in game, or keep
+                    iterating &mdash; Development Sync watches your source while
+                    you edit.
+                </p>
+            </div>
+            <div class="cta-row">
+                <a
+                    id="cta-marketplace"
+                    class="cta"
+                    href="https://marketplace.visualstudio.com/items?itemName=escapepz.pzstudio42"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >Install from the VS Code Marketplace</a
+                >
+                <p class="cmd-row">
+                    <code>npm i @pzstudio/cli</code>
+                    <button
+                        id="cta-npm"
+                        class="copy"
+                        type="button"
+                        aria-label="Copy the npm install command"
+                    >
+                        Copy
+                    </button>
+                </p>
+                <p class="cmd-row">
+                    <code>npx @pzstudio/cli --help</code>
+                    <button
+                        id="cta-npx"
+                        class="copy"
+                        type="button"
+                        aria-label="Copy the npx preview command"
+                    >
+                        Copy
+                    </button>
+                </p>
+                <p class="hint">
+                    The VS Code extension includes the CLI &mdash; one install
+                    is enough.
+                </p>
+            </div>
+        </main>
+        <footer>
+            <p>Requires Project Zomboid Build 42.</p>
+        </footer>
+        <script>
+            (function () {
+                'use strict';
+
+                // The popup's and the CLI's first-success CTAs land here with
+                // their utm tag: greet the user's first success instead of
+                // the plain home.
+                var utmSource = new URLSearchParams(window.location.search).get(
+                    'utm_source',
+                );
+                if (utmSource === 'ext-popup' || utmSource === 'cli-print') {
+                    document.getElementById('first-build').hidden = false;
+                }
+
+                function pushCta(cta) {
+                    window.dataLayer = window.dataLayer || [];
+                    window.dataLayer.push({ event: 'cta_click', cta: cta });
+                }
+
+                function fallbackCopy(text) {
+                    var area = document.createElement('textarea');
+                    area.value = text;
+                    area.setAttribute('readonly', '');
+                    area.style.position = 'fixed';
+                    area.style.opacity = '0';
+                    document.body.appendChild(area);
+                    area.select();
+                    try {
+                        document.execCommand('copy');
+                    } catch (err) {
+                        /* clipboard unavailable - the command stays selectable */
+                    }
+                    document.body.removeChild(area);
+                }
+
+                function copyText(text, button) {
+                    if (button._copyTimer) {
+                        window.clearTimeout(button._copyTimer);
+                    }
+                    button.textContent = 'Copied!';
+                    button._copyTimer = window.setTimeout(function () {
+                        button.textContent = 'Copy';
+                        button._copyTimer = null;
+                    }, 1500);
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(text).catch(function () {
+                            fallbackCopy(text);
+                        });
+                    } else {
+                        fallbackCopy(text);
+                    }
+                }
+
+                document
+                    .getElementById('cta-marketplace')
+                    .addEventListener('click', function () {
+                        pushCta('marketplace');
+                    });
+                document
+                    .getElementById('cta-npm')
+                    .addEventListener('click', function () {
+                        copyText('npm i @pzstudio/cli', this);
+                        pushCta('npm');
+                    });
+                document
+                    .getElementById('cta-npx')
+                    .addEventListener('click', function () {
+                        copyText('npx @pzstudio/cli --help', this);
+                        pushCta('npm');
+                    });
+            })();
+        </script>
+    </body>
+</html>

@@ -165,6 +165,10 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI(undefined, undefined, { flags: [] });
 
         const methods = calls.map((c) => c.method);
+        // The banner path records NO usage event (pure invocations stay
+        // side-effect-free and never scaffold ~/.pzstudio), so the one-time
+        // disclosure notice does not fire here — it fires with the first
+        // real command's event instead.
         expect(methods).toEqual(['log', 'log', 'log']);
         expect(String(calls[0].message)).toContain('Project Zomboid Studio v');
         expect(String(calls[1].message)).toContain('Available commands:');
@@ -178,6 +182,8 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI('help');
 
         const methods = calls.map((c) => c.method);
+        // The help command is display-only (pure invocation): it records no
+        // usage event, so the one-time disclosure notice does not fire here.
         expect(methods).toEqual(['log', 'log']);
         expect(String(calls[0].message)).toContain('Available commands:');
         expect(calls[1].message).toBe('\n');
@@ -190,6 +196,8 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI('list', [], { flags: ['--help'] });
 
         const methods = calls.map((c) => c.method);
+        // --help short-circuits before execution (pure invocation): no usage
+        // event, so the one-time disclosure notice does not fire here.
         expect(methods).toEqual(['log', 'log']);
         expect(String(calls[0].message)).toContain('pzstudio list');
         expect(calls[1].message).toBe('\n');
@@ -203,13 +211,16 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI('list', [], { flags: ['--project', projA] });
 
         const methods = calls.map((c) => c.method);
-        expect(methods).toEqual(['log', 'log', 'info', 'log']);
+        // One-time usage disclosure notice: the span settles after the
+        // command output, before the trailing blank line.
+        expect(methods).toEqual(['log', 'log', 'info', 'info', 'log']);
         expect(calls[0].message).toBe('\n');
         expect(String(calls[1].message)).toContain(
             "No mods in project 'Test'.",
         );
         expect(String(calls[2].message)).toContain('Command [list] completed.');
-        expect(calls[3].message).toBe('\n');
+        expect(String(calls[3].message)).toContain('saves local usage logs');
+        expect(calls[4].message).toBe('\n');
     });
 
     it('usage-error path: one error report, rethrown, no trailing blank line', async () => {
@@ -237,9 +248,12 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         ).rejects.toBeInstanceOf(CliError);
 
         const methods = calls.map((c) => c.method);
-        expect(methods).toEqual(['log', 'error']);
+        // The error span settles (emitting the one-time usage notice)
+        // before the lifecycle's error report.
+        expect(methods).toEqual(['log', 'info', 'error']);
         expect(calls[0].message).toBe('\n');
-        expect(String(calls[1].message)).toContain(
+        expect(String(calls[1].message)).toContain('saves local usage logs');
+        expect(String(calls[2].message)).toContain(
             'No pzstudio project found.',
         );
     });

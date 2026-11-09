@@ -58,10 +58,30 @@ function recordingLogger() {
         log: (m: any) => calls.push({ method: 'log', message: m }),
         info: (m: any) => calls.push({ method: 'info', message: m }),
         warn: (m: any) => calls.push({ method: 'warn', message: m }),
-        error: (e: any) => calls.push({ method: 'error', message: e }),
+        error: (m: any) => calls.push({ method: 'error', message: m }),
         verbose: (m: any) => calls.push({ method: 'verbose', message: m }),
     };
     return { calls, logger };
+}
+
+/**
+ * The one-time usage disclosure (offline usage-log feature) routes R1
+ * raw-legacy for api-host recordings: with no ambient invocation context
+ * it lands in the logger the host installed via setLogger — which the
+ * legacy-sink isolation pins below hold. It is NOT a legacy-slot
+ * consumption by the v2 session; filter it out before the exact-empty
+ * assertions.
+ */
+function withoutUsageNotice(
+    calls: Array<{ method: string; message: any }>,
+): Array<{ method: string; message: any }> {
+    return calls.filter(
+        (c) =>
+            !(
+                c.method === 'info' &&
+                String(c.message).startsWith('PZ Studio saves local usage logs')
+            ),
+    );
 }
 
 /** Captures the watcher registrations so tests can fire file events. */
@@ -497,9 +517,9 @@ describe('DevSyncController pre-filtering (UX-09)', () => {
         // The counter resets: the next drop-free batch reports nothing more.
         handlers.change.forEach((fn) => fn({ fsPath: sourceFile }));
         await flushOnce();
-        expect(
-            logger.calls.filter((c) => c.method === 'verbose'),
-        ).toHaveLength(1);
+        expect(logger.calls.filter((c) => c.method === 'verbose')).toHaveLength(
+            1,
+        );
         await controller.dispose();
     });
 
@@ -1362,7 +1382,7 @@ describe('DevSyncController over the real v2 instance (commit 9 routing pins)', 
         }
         // The conflicting legacy sinks never received anything.
         expect(fs.readdirSync(legacyOut)).toEqual([]);
-        expect(L1.calls).toEqual([]);
+        expect(withoutUsageNotice(L1.calls)).toEqual([]);
         expect(sentinel.isCacheValid).not.toHaveBeenCalled();
 
         await controller.dispose();
@@ -1427,7 +1447,7 @@ describe('DevSyncController over the real v2 instance (commit 9 routing pins)', 
 
         // The legacy logger slot (the target of the published raw log/warn
         // exports) received NOTHING — the v2 path never touches it.
-        expect(L1.calls).toEqual([]);
+        expect(withoutUsageNotice(L1.calls)).toEqual([]);
         // Settings fingerprint: the instance's workspace layer decided; the
         // legacy outdir slot is untouched.
         expect(fs.existsSync(path.join(v2Out, 'Routed Sync'))).toBe(true);
@@ -1587,7 +1607,7 @@ describe('DevSyncController pre-filtering over the real engine (UX-09)', () => {
 
         // The filtering root came from the instance provider, not the
         // legacy slots: the legacy logger and legacy outdir stayed cold.
-        expect(L1.calls).toEqual([]);
+        expect(withoutUsageNotice(L1.calls)).toEqual([]);
         expect(fs.readdirSync(legacyOut)).toEqual([]);
         expect(sentinel.isCacheValid).not.toHaveBeenCalled();
 

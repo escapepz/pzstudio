@@ -4,6 +4,7 @@ import { createPZLogger } from './util/logger';
 import { initExtensionL10n } from './util/l10n';
 import { readPzStudioHostSettings } from './util/settings';
 import { createCommandRunner } from './util/execute';
+import { notifyFirstBuildSuccess } from './util/firstSuccess';
 import { DevSyncController } from './util/devsync';
 import { createProjectDiagnostics } from './util/doctor';
 import { registerAllCommands } from './commands';
@@ -61,8 +62,11 @@ export async function activate(context: vscode.ExtensionContext) {
     projectJsonWatcher.onDidCreate(() => projectExplorer.requestRefresh());
     projectJsonWatcher.onDidDelete(() => projectExplorer.requestRefresh());
 
-    const executePZCommand = createCommandRunner(studio, outputChannel, () =>
-        projectExplorer.requestRefresh(),
+    const executePZCommand = createCommandRunner(
+        studio,
+        outputChannel,
+        () => projectExplorer.requestRefresh(),
+        (cmd) => notifyFirstBuildSuccess(context, cmd),
     );
 
     // Development Sync Engine: one controller shared by the palette toggle.
@@ -89,7 +93,9 @@ export async function activate(context: vscode.ExtensionContext) {
         ...registerExplorerCommands(projectExplorer),
         vscode.tasks.registerTaskProvider(
             PZ_TASK_TYPE,
-            new BuildTaskProvider(studio),
+            new BuildTaskProvider(studio, () =>
+                notifyFirstBuildSuccess(context, 'build'),
+            ),
         ),
         // Re-read pzstudio.language and repaint the tree when it changes;
         // UX-11: pzstudio.gameBuild is invisible to the project.json

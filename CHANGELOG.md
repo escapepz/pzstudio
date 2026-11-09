@@ -11,6 +11,69 @@ Project Zomboid build (build 42.20 → `42200`), the patch bumps for
 tool-only releases. Game compatibility is declared separately in
 `pzBuildCompatibility` (e.g. `"42.x"`).
 
+## [CLI 0.42210.3 / Extension 0.42210.3] - 2026-11-09
+
+### CLI (@pzstudio/cli 0.42210.3) — notes: [`docs/releases/0.42210.3.md`](docs/releases/0.42210.3.md)
+
+- **Usage logging** (local-only, nothing is ever uploaded): one NDJSON
+  event per command (command name, duration, error code, flag names —
+  never paths or values) in `~/.pzstudio/usage/`, on by default and
+  announced by a one-time notice; manage with `pzstudio usage status` /
+  `off [--purge]` / `export [--out <file>]`. Help/banner invocations
+  record nothing — pure invocations stay side-effect-free.
+- The first successful `build` prints the project landing-page URL once
+  per machine on standalone runs, as a closing note after the completion
+  line (`See tips & updates -> <url>`).
+- No changes to the JSON contract, the exit-code matrix, or the stream
+  contract.
+
+### Extension (pzstudio42 0.42210.3) — changelog: [`packages/vscode-extension/CHANGELOG.md`](packages/vscode-extension/CHANGELOG.md)
+
+- **First-build success popup**: after the first successful `build`, a
+  one-time popup offers "See tips & updates" and opens the project landing
+  page; localised across all language bundles.
+- Bundles engine `@pzstudio/cli` 0.42210.3; `PZ Studio 42` display name
+  synced into every locale nls table; the banner loads from the repository
+  (VSIX ~497 KB smaller).
+- Release channel: **pre-release** (packaged with `--pre-release`).
+
+## [CLI 0.42210.2 / Extension 0.42210.2] - 2026-11-08
+
+### CLI (@pzstudio/cli 0.42210.2) — notes: [`docs/releases/0.42210.2.md`](docs/releases/0.42210.2.md)
+
+- **Stable graduation of the `0.42210.x` line** (channel parity: even patch
+  = stable): identical engine content to 0.42210.0, shipped as the first
+  bare version on npm `latest` — semver ranges like `^0.42210.0` resolve
+  again.
+- No changes to the JSON contract, the exit-code matrix, or the stream
+  contract.
+
+### Extension (pzstudio42 0.42210.2) — changelog: [`packages/vscode-extension/CHANGELOG.md`](packages/vscode-extension/CHANGELOG.md)
+
+- First **stable-channel** release (packaged without `--pre-release`);
+  stable-channel users auto-update onto `0.42210.2` from `0.42200.1`.
+- Bundles engine `@pzstudio/cli` 0.42210.2 — identical content to the
+  0.42210.0 pre-release.
+
+## [CLI 0.42210.1 / Extension 0.42210.1] - 2026-11-08
+
+### CLI (@pzstudio/cli 0.42210.1) — notes: [`docs/releases/0.42210.1.md`](docs/releases/0.42210.1.md)
+
+- **Pre-release re-stamp** of the `0.42210.0` content (channel parity: odd
+  patch = pre-release), rebuilt from tag `0.42210.0` on
+  `release/0.42210.1` after the marketplace burned the bare `0.42210.0`
+  name on its pre-release channel. Published bare (no `-next` stamp) to
+  npm `latest`.
+- No code changes; no changes to the JSON contract, the exit-code matrix,
+  or the stream contract.
+
+### Extension (pzstudio42 0.42210.1) — changelog: [`packages/vscode-extension/CHANGELOG.md`](packages/vscode-extension/CHANGELOG.md)
+
+- Pre-release channel re-stamp of `0.42210.0` (packaged with
+  `--pre-release`); pre-release users auto-update onto `0.42210.1`.
+- Bundles engine `@pzstudio/cli` 0.42210.1 — identical content to
+  0.42210.0.
+
 ## [CLI 0.42210.0 / Extension 0.42210.0] - 2026-11-08
 
 ### CLI (@pzstudio/cli 0.42210.0) — notes: [`docs/releases/0.42210.0.md`](docs/releases/0.42210.0.md)

@@ -11,6 +11,28 @@
 On Windows 10:
 - **Run any pnpm command:** `powershell -ExecutionPolicy Bypass -Command "pnpm ..."`
 
+## Publishing
+- **Never publish from an agent.** `npm publish`, `vsce publish`, and
+  marketplace web uploads are owner-manual operations — the owner runs them
+  by hand, with their own OTP/authenticator. Agents may build, pack, smoke,
+  package, tag, and verify with read-only registry checks, but must stop at
+  the artifact and hand the owner the exact publish commands.
+
+## Branching
+- **All changes start on `42.21.0-dev`.** A fix needed for a release is
+  committed on the dev branch first — the release branch is then re-cut
+  from dev (or cherry-picks the fix). A `release/*` branch carries ONLY
+  minimal release-prep: the version bump, the release's changelog entries,
+  and the tag.
+- **Worktrees mirror branch names.** The main checkout stays on `main` as
+  the hub; per-branch working trees live under `../pzstudio.worktrees/`
+  with the branch name as the path (e.g. `../pzstudio.worktrees/42.21.0-dev`,
+  `../pzstudio.worktrees/release/0.42210.4`). Each worktree needs a
+  one-time setup — `git submodule update --init --recursive`, then
+  `pnpm install`, then `pnpm build` (tests pin `pzstudio-cli` to
+  `packages/cli/dist`). A release worktree is cut when a release hotfix
+  needs one and kept for the branch's lifetime.
+
 ## Architecture
 pnpm monorepo for PZ Studio. `pnpm-workspace.yaml` selects `packages/*`; the root package.json is a private workspace root (fan-out scripts + dev tooling only).
 
