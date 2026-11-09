@@ -20,6 +20,7 @@ name: Template pin (.template-legacy)
 on:
     schedule:
         # Weekly, Monday 03:17 UTC — off the hour to dodge cron traffic jams.
+        # Scheduled runs fire only once this workflow reaches the default branch (main); use workflow_dispatch until then.
         - cron: '17 3 * * 1'
     workflow_dispatch:
         inputs:
@@ -48,6 +49,11 @@ jobs:
         env:
             # gh (pr list / label create / pr create) authenticates via GH_TOKEN.
             GH_TOKEN: ${{ github.token }}
+            # The dispatch input reaches bash only through this env var —
+            # never interpolated straight into a run block, where a crafted
+            # value could break out of the quoting. (Scheduled runs have no
+            # inputs at all and fall through to the dev-line default.)
+            BASE: ${{ inputs.base || '42.22.0-dev' }}
         steps:
             - name: Check out the base branch (shallow, no submodule checkouts)
               uses: actions/checkout@v4
@@ -62,10 +68,10 @@ jobs:
             - name: Check for outdated pins
               id: check
               # continue-on-error keeps the run alive so the gate below can
-              # decide; the step outcome is 'failure' exactly when the script
-              # exited nonzero. The move list is captured for the commit
-              # message and PR body, then the script's exit code is re-raised
-              # as the step outcome.
+              # decide; the script's exit code is captured into outputs so
+              # the gates can tell "outdated" (1) from "internal error" (2),
+              # then re-raised as the step outcome. The move list is captured
+              # for the commit message and PR body.
               continue-on-error: true
               run: |
                   set +e
@@ -77,11 +83,23 @@ jobs:
                       echo "$report"
                       echo "PIN_REPORT_EOF"
                   } >> "$GITHUB_OUTPUT"
+                  echo "code=$code" >> "$GITHUB_OUTPUT"
                   exit "$code"
+
+            - name: Fail loudly on script internal errors
+              if: steps.check.outputs.code == '2'
+              # exit 2 is the script's "internal error" (repo renamed/404,
+              # ls-remote blocked, ...). continue-on-error swallowed the check
+              # step's outcome, so only this step can fail the run: exit 2
+              # must never fall through to the gate below, which would end
+              # the run GREEN while pinning silently stalls.
+              run: |
+                  echo "::error::pin-template-legacy.js --check failed with an internal error (exit 2); pinning is stalled and needs attention."
+                  exit 1
 
             - name: Skip when a template-pin PR is already open
               id: gate
-              if: steps.check.outcome == 'failure'
+              if: steps.check.outputs.code == '1'
               # --json/--jq gives a deterministic count (gh versions differ on
               # whether an empty plain-text list prints a message).
               run: |
@@ -93,7 +111,7 @@ jobs:
 
             - name: Reset the PR branch onto the base
               if: >-
-                  steps.check.outcome == 'failure' &&
+                  steps.check.outputs.code == '1' &&
                   steps.gate.outputs.skip != 'true'
               # HEAD is the base tip (see checkout), so -B creates or resets
               # the local PR branch there.
@@ -101,13 +119,13 @@ jobs:
 
             - name: Apply pin updates (stages gitlinks in the index)
               if: >-
-                  steps.check.outcome == 'failure' &&
+                  steps.check.outputs.code == '1' &&
                   steps.gate.outputs.skip != 'true'
               run: node scripts/pin-template-legacy.js
 
             - name: Commit the staged gitlinks
               if: >-
-                  steps.check.outcome == 'failure' &&
+                  steps.check.outputs.code == '1' &&
                   steps.gate.outputs.skip != 'true'
               env:
                   REPORT: ${{ steps.check.outputs.report }}
@@ -125,7 +143,7 @@ jobs:
 
             - name: Force-push the PR branch
               if: >-
-                  steps.check.outcome == 'failure' &&
+                  steps.check.outputs.code == '1' &&
                   steps.gate.outputs.skip != 'true'
               # The only ref this workflow ever writes. --force is intended:
               # the branch is reset onto base at the start of every run, so a
@@ -134,7 +152,7 @@ jobs:
 
             - name: Ensure the template-pin label exists
               if: >-
-                  steps.check.outcome == 'failure' &&
+                  steps.check.outputs.code == '1' &&
                   steps.gate.outputs.skip != 'true'
               # Idempotent: a no-op once the label exists ("already exists"
               # errors are swallowed). If label creation were impossible, the
@@ -147,7 +165,7 @@ jobs:
 
             - name: Open the PR
               if: >-
-                  steps.check.outcome == 'failure' &&
+                  steps.check.outputs.code == '1' &&
                   steps.gate.outputs.skip != 'true'
               env:
                   REPORT: ${{ steps.check.outputs.report }}
@@ -159,10 +177,10 @@ jobs:
                       printf '%s\n' "$REPORT"
                       echo '```'
                       echo
-                      echo "Resolved against base: ${{ inputs.base || '42.22.0-dev' }}"
+                      echo "Resolved against base: $BASE"
                   } > pr-body.md
                   gh pr create \
-                      --base "${{ inputs.base || '42.22.0-dev' }}" \
+                      --base "$BASE" \
                       --head chore/template-pin \
                       --label template-pin \
                       --title 'chore(templates): pin .template-legacy' \

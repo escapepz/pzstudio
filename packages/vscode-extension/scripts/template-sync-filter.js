@@ -1,5 +1,3 @@
-const path = require('path');
-
 const SKIP_NAMES = ['.git', '.github'];
 
 /**

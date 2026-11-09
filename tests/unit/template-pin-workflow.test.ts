@@ -28,6 +28,17 @@ describe('template-pin workflow invariants', () => {
         expect(yaml).toContain("inputs.base || '42.22.0-dev'");
     });
 
+    it('gates on the script exit code and loud-fails on internal errors', () => {
+        // The gate keys off the script's captured exit code, not the step
+        // outcome: exit 1 = outdated (gate may open a PR), exit 2 = internal
+        // error — and exit 2 must fail the run loudly, never be conflated
+        // with "outdated" and skipped green when a pin PR is already open.
+        expect(yaml).toContain("steps.check.outputs.code == '1'");
+        expect(yaml).toContain("steps.check.outputs.code == '2'");
+        // The old outcome-based condition conflated exit 1 with exit 2.
+        expect(yaml).not.toContain("steps.check.outcome == 'failure'");
+    });
+
     it('never touches protected refs, never sweeps the worktree, never merges', () => {
         // Single sanctioned ref write: the force-push of the PR branch,
         // which is reset onto base at the start of each run. *-dev, main
