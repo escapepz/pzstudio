@@ -12,7 +12,7 @@ import { join } from 'path';
 import { getConfigDir } from './templateManager';
 
 export const LANDING_URL_CLI =
-    'https://escapepz.github.io/pzstudio/?utm_source=cli-print';
+    'https://escapepz.github.io/pzstudio/landing/?utm_source=cli-print';
 
 const FIRST_BUILD_MARKER = '.first-build-url-shown';
 
