@@ -1,15 +1,16 @@
 'use strict';
 
 /**
- * Template pin config + git ref resolution core for the .template-legacy
- * pinning script (config: scripts/template-pin.json).
+ * Template pinning script for .template-legacy: config + git ref resolution
+ * (config: scripts/template-pin.json), pin diff vs HEAD, gitlink staging
+ * and the CLI entry (--check / apply).
  *
- * CommonJS on purpose: loaded directly by tests and the later pin/apply
- * tasks without a build step.
+ * CommonJS on purpose: loaded directly by tests without a build step.
  */
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const DEFAULT_CONFIG_PATH = path.join(__dirname, 'template-pin.json');
 const VALID_MODES = ['tag', 'branch'];
@@ -154,8 +155,182 @@ function resolvePin(entries, mode) {
     };
 }
 
+/**
+ * Runs a git command and returns its result.
+ * @typedef {(args: string[], opts?: { cwd?: string; input?: string }) =>
+ *     { status: number; stdout: string; stderr: string }} GitRunner
+ */
+
+/**
+ * A pending pin change: the gitlink `name` moves from the currently pinned
+ * `from` sha (undefined when the template is not in the index yet) to `to`,
+ * resolved from `source`.
+ * @typedef {Object} Update
+ * @property {string} name
+ * @property {string | undefined} from
+ * @property {string} to
+ * @property {string} source
+ */
+
+/**
+ * Read the gitlink shas currently pinned under .template-legacy/ in HEAD's
+ * tree (`git ls-tree HEAD .template-legacy/`). Only `160000 commit` entries
+ * are kept, keyed by their name below .template-legacy/.
+ * @param {GitRunner} runner
+ * @returns {Map<string, string>} gitlink name -> pinned sha
+ */
+function readCurrentPins(runner) {
+    const res = runner(['ls-tree', 'HEAD', '.template-legacy/']);
+    if (res.status !== 0) {
+        throw new Error(
+            `git ls-tree HEAD .template-legacy/ failed (${res.status}): ${res.stderr.trim()}`,
+        );
+    }
+    const pins = new Map();
+    for (const line of res.stdout.split(/\r?\n/)) {
+        const sep = line.indexOf('\t');
+        if (sep <= 0) continue;
+        const meta = line.slice(0, sep).trim().split(/\s+/);
+        const filePath = line.slice(sep + 1).trim();
+        const [mode, kind, sha] = meta;
+        if (mode !== '160000' || kind !== 'commit' || !sha) continue;
+        const prefix = '.template-legacy/';
+        if (!filePath.startsWith(prefix)) continue;
+        const name = filePath.slice(prefix.length);
+        if (name !== '') pins.set(name, sha);
+    }
+    return pins;
+}
+
+/**
+ * Compare every config entry's newest remote ref against the currently
+ * pinned sha. Repos whose pin cannot be resolved (e.g. no numeric tag) are
+ * skipped; otherwise an update is emitted whenever the remote sha differs
+ * from the pinned one (including templates not pinned at all yet).
+ * @param {GitRunner} runner
+ * @param {PinConfig[]} config
+ * @returns {Update[]}
+ */
+function computeUpdates(runner, config) {
+    const current = readCurrentPins(runner);
+    const updates = [];
+    for (const entry of config) {
+        const res = runner(['ls-remote', entry.url]);
+        if (res.status !== 0) {
+            throw new Error(
+                `git ls-remote ${entry.url} failed (${res.status}): ${res.stderr.trim()}`,
+            );
+        }
+        const resolved = resolvePin(parseLsRemoteTags(res.stdout), entry.mode);
+        if (!resolved) continue;
+        if (current.get(entry.name) === resolved.sha) continue;
+        updates.push({
+            name: entry.name,
+            from: current.get(entry.name),
+            to: resolved.sha,
+            source: resolved.source,
+        });
+    }
+    return updates;
+}
+
+/**
+ * Stage the new gitlink shas in the index (`git update-index --cacheinfo`).
+ * Index-only staging keeps the worktree untouched; the resulting commit
+ * updates the tree without a dirty status.
+ * @param {GitRunner} runner
+ * @param {Update[]} updates
+ * @returns {number} number of gitlinks staged
+ */
+function applyUpdates(runner, updates) {
+    let applied = 0;
+    for (const update of updates) {
+        const res = runner([
+            'update-index',
+            '--cacheinfo',
+            `160000,${update.to},.template-legacy/${update.name}`,
+        ]);
+        if (res.status !== 0) {
+            throw new Error(
+                `git update-index .template-legacy/${update.name} failed (${res.status}): ${res.stderr.trim()}`,
+            );
+        }
+        applied++;
+    }
+    return applied;
+}
+
+const USAGE = [
+    'Usage: node scripts/pin-template-legacy.js [--check]',
+    '',
+    '  --check   print pending pin updates; exit 1 when any exist, 0 otherwise',
+    '  (default) apply pending pin updates via git update-index and print a summary',
+].join('\n');
+
+/**
+ * CLI entry: `--check` reports pending updates (exit 1 when any exist);
+ * the default mode applies them and prints a summary.
+ * @param {string[]} argv command-line arguments (no node/script prefix)
+ * @param {GitRunner} [runner] git runner; defaults to spawning real git
+ * @returns {number} process exit code
+ */
+function main(argv, runner = defaultRunner) {
+    let check = false;
+    for (const arg of argv) {
+        if (arg === '--check') {
+            check = true;
+        } else {
+            console.log(USAGE);
+            return 2;
+        }
+    }
+    const config = loadConfig();
+    if (check) {
+        const updates = computeUpdates(runner, config);
+        for (const update of updates) {
+            console.log(
+                `- ${update.name}: ${update.from ?? '(none)'} → ${update.to} (${update.source})`,
+            );
+        }
+        return updates.length ? 1 : 0;
+    }
+    const applied = applyUpdates(runner, computeUpdates(runner, config));
+    console.log(`Pinned ${applied} template(s)`);
+    return 0;
+}
+
+/**
+ * Real GitRunner: spawns `git` with piped stdout/stderr. `opts` is forwarded
+ * to spawnSync (e.g. cwd, input).
+ * @param {string[]} args
+ * @param {{ cwd?: string; input?: string }} [opts]
+ * @returns {{ status: number; stdout: string; stderr: string }}
+ */
+function defaultRunner(args, opts) {
+    const res = spawnSync('git', args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        encoding: 'utf8',
+        timeout: 120_000,
+        ...opts,
+    });
+    return {
+        status: res.status ?? -1,
+        stdout: res.stdout ?? '',
+        stderr: res.stderr ?? '',
+    };
+}
+
 module.exports = {
     loadConfig,
     parseLsRemoteTags,
     resolvePin,
+    readCurrentPins,
+    computeUpdates,
+    applyUpdates,
+    main,
+    defaultRunner,
 };
+
+if (require.main === module) {
+    process.exit(main(process.argv.slice(2)));
+}
