@@ -217,7 +217,9 @@ describe('real env: build and clean commands', () => {
         // stream contract (CLI-2) keeps stdout byte-clean.
         const first = await workspace.run(['build']);
         expect(first.exitCode).toBe(0);
-        expect(first.stderr).toContain('escapepz.github.io/pzstudio');
+        expect(first.stderr).toContain(
+            'escapepz.github.io/pzstudio/landing/?utm_source=cli-print',
+        );
         // The CTA reads as the closing note: it prints after "Build complete".
         expect(first.stderr.indexOf('Build complete in')).toBeLessThan(
             first.stderr.indexOf('See tips & updates'),
