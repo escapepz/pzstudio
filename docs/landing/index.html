@@ -214,13 +214,13 @@
             (function () {
                 'use strict';
 
-                // The extension popup's CTA lands here with its utm tag:
-                // greet the user's first success instead of the plain home.
-                if (
-                    new URLSearchParams(window.location.search).get(
-                        'utm_source',
-                    ) === 'ext-popup'
-                ) {
+                // The popup's and the CLI's first-success CTAs land here with
+                // their utm tag: greet the user's first success instead of
+                // the plain home.
+                var utmSource = new URLSearchParams(window.location.search).get(
+                    'utm_source',
+                );
+                if (utmSource === 'ext-popup' || utmSource === 'cli-print') {
                     document.getElementById('first-build').hidden = false;
                 }
 

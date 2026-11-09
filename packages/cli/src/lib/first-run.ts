@@ -30,9 +30,7 @@ export function maybePrintFirstBuildUrl(
     const dir = dirOverride ?? getConfigDir();
     const marker = join(dir, FIRST_BUILD_MARKER);
     if (existsSync(marker)) return false;
-    print(
-        `First successful build with PZ Studio! Tips & updates: ${LANDING_URL_CLI}`,
-    );
+    print(`See tips & updates -> ${LANDING_URL_CLI}`);
     try {
         mkdirSync(dir, { recursive: true });
         writeFileSync(marker, '', 'utf-8');

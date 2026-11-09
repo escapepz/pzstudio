@@ -165,14 +165,14 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI(undefined, undefined, { flags: [] });
 
         const methods = calls.map((c) => c.method);
-        // The usage recorder's one-time disclosure notice fires with the
-        // run's single event, after the help text and before the trailing
-        // blank line.
-        expect(methods).toEqual(['log', 'log', 'info', 'log']);
+        // The banner path records NO usage event (pure invocations stay
+        // side-effect-free and never scaffold ~/.pzstudio), so the one-time
+        // disclosure notice does not fire here — it fires with the first
+        // real command's event instead.
+        expect(methods).toEqual(['log', 'log', 'log']);
         expect(String(calls[0].message)).toContain('Project Zomboid Studio v');
         expect(String(calls[1].message)).toContain('Available commands:');
-        expect(String(calls[2].message)).toContain('saves local usage logs');
-        expect(calls[3].message).toBe('\n');
+        expect(calls[2].message).toBe('\n');
     });
 
     it('help command path: help text then exactly one trailing blank line', async () => {
@@ -182,11 +182,11 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI('help');
 
         const methods = calls.map((c) => c.method);
-        // One-time usage disclosure notice, after the help text.
-        expect(methods).toEqual(['log', 'info', 'log']);
+        // The help command is display-only (pure invocation): it records no
+        // usage event, so the one-time disclosure notice does not fire here.
+        expect(methods).toEqual(['log', 'log']);
         expect(String(calls[0].message)).toContain('Available commands:');
-        expect(String(calls[1].message)).toContain('saves local usage logs');
-        expect(calls[2].message).toBe('\n');
+        expect(calls[1].message).toBe('\n');
     });
 
     it('--help flag path: per-command help text then trailing blank line', async () => {
@@ -196,11 +196,11 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI('list', [], { flags: ['--help'] });
 
         const methods = calls.map((c) => c.method);
-        // One-time usage disclosure notice, after the help text.
-        expect(methods).toEqual(['log', 'info', 'log']);
+        // --help short-circuits before execution (pure invocation): no usage
+        // event, so the one-time disclosure notice does not fire here.
+        expect(methods).toEqual(['log', 'log']);
         expect(String(calls[0].message)).toContain('pzstudio list');
-        expect(String(calls[1].message)).toContain('saves local usage logs');
-        expect(calls[2].message).toBe('\n');
+        expect(calls[1].message).toBe('\n');
     });
 
     it('normal command path: pre-command blank line, command output, completion info, trailing blank line', async () => {

@@ -218,6 +218,10 @@ describe('real env: build and clean commands', () => {
         const first = await workspace.run(['build']);
         expect(first.exitCode).toBe(0);
         expect(first.stderr).toContain('escapepz.github.io/pzstudio');
+        // The CTA reads as the closing note: it prints after "Build complete".
+        expect(first.stderr.indexOf('Build complete in')).toBeLessThan(
+            first.stderr.indexOf('See tips & updates'),
+        );
         expect(first.stdout.trim()).toBe('');
 
         // The marker pins the one-shot: second build with the SAME HOME

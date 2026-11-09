@@ -73,10 +73,37 @@ describe('notifyFirstBuildSuccess', () => {
         ).not.toHaveBeenCalled();
     });
 
-    it('button click opens the landing URL', async () => {
+    it('button click opens the landing in the Simple Browser tab', async () => {
         const context = fakeContext();
         asMock(vscode.window.showInformationMessage).mockResolvedValue(
             'See tips & updates',
+        );
+
+        notifyFirstBuildSuccess(context, 'build');
+
+        await vi.waitFor(() => {
+            expect(
+                asMock(vscode.commands.executeCommand),
+            ).toHaveBeenCalledTimes(1);
+        });
+        const [command, target] = asMock(vscode.commands.executeCommand).mock
+            .calls[0];
+        expect(command).toBe('simpleBrowser.api.open');
+        expect(String(target)).toContain(
+            'escapepz.github.io/pzstudio/?utm_source=ext-popup',
+        );
+        // The system browser is only the fallback, never the default path.
+        expect(asMock(vscode.env.openExternal)).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the system browser without Simple Browser', async () => {
+        const context = fakeContext();
+        asMock(vscode.window.showInformationMessage).mockResolvedValue(
+            'See tips & updates',
+        );
+        // Built-in disabled / environment without the command.
+        asMock(vscode.commands.executeCommand).mockRejectedValueOnce(
+            new Error('command not found'),
         );
 
         notifyFirstBuildSuccess(context, 'build');
@@ -103,6 +130,8 @@ describe('notifyFirstBuildSuccess', () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         expect(asMock(vscode.env.openExternal)).not.toHaveBeenCalled();
+        // Neither opening path may fire on dismissal.
+        expect(asMock(vscode.commands.executeCommand)).not.toHaveBeenCalled();
         // The one-time flag is set regardless of the dismissal: the popup
         // never shows again even when the user closed it.
         expect(asMock(context.globalState.update)).toHaveBeenCalledWith(
