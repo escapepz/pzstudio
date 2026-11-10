@@ -1,0 +1,187 @@
+name: Template pin (.template-legacy)
+
+# Weekly + manual: keep the .template-legacy gitlinks pinned to their
+# configured refs (scripts/template-pin.json). The pin script is the whole
+# brain of this workflow:
+#   - `--check` decides whether anything is stale (exit 1 = outdated with a
+#     "- <name>: <from> → <to> (<source>)" move list, 0 = current, 2 =
+#     internal error),
+#   - apply mode (no flag) stages the new gitlinks in the index via
+#     `git update-index --cacheinfo`, so the pin commit is a plain commit of
+#     the index: the worktree is never swept in, and no submodule content is
+#     ever checked out or needed.
+#
+# At most one PR is ever in flight: the gate skips the run when an open
+# template-pin PR exists, the concurrency group serializes runs, and every
+# run resets the chore/template-pin branch onto the base before applying.
+# Merging stays a human decision — nothing here merges, and the only ref any
+# step writes is chore/template-pin (never a *-dev / main / release/* ref).
+
+on:
+    schedule:
+        # Weekly, Monday 03:17 UTC — off the hour to dodge cron traffic jams.
+        # Scheduled runs fire only once this workflow reaches the default branch (main); use workflow_dispatch until then.
+        - cron: '17 3 * * 1'
+    workflow_dispatch:
+        inputs:
+            base:
+                description: Base branch to pin against (also the PR target)
+                required: false
+                default: 42.22.0-dev
+                type: string
+
+permissions:
+    contents: write # force-push the chore/template-pin branch
+    pull-requests: write # open the pin PR
+    issues: write # create the template-pin label when missing (labels API)
+
+concurrency:
+    group: template-pin
+    # Never cancel an in-flight pin: a cancelled run could leave a reset
+    # chore/template-pin branch behind without its PR.
+    cancel-in-progress: false
+
+jobs:
+    template-pin:
+        name: Pin .template-legacy and open a PR
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        env:
+            # gh (pr list / label create / pr create) authenticates via GH_TOKEN.
+            GH_TOKEN: ${{ github.token }}
+            # The dispatch input reaches bash only through this env var —
+            # never interpolated straight into a run block, where a crafted
+            # value could break out of the quoting. (Scheduled runs have no
+            # inputs at all and fall through to the dev-line default.)
+            BASE: ${{ inputs.base || '42.22.0-dev' }}
+        steps:
+            - name: Check out the base branch (shallow, no submodule checkouts)
+              uses: actions/checkout@v4
+              with:
+                  # Scheduled runs have no inputs at all, so they fall through
+                  # to the default dev line; dispatch runs may override it.
+                  ref: ${{ inputs.base || '42.22.0-dev' }}
+                  # The script resolves pins via `git ls-remote` and stages
+                  # gitlinks in the index; it never reads submodule content.
+                  fetch-depth: 1
+
+            - name: Check for outdated pins
+              id: check
+              # continue-on-error keeps the run alive so the gate below can
+              # decide; the script's exit code is captured into outputs so
+              # the gates can tell "outdated" (1) from "internal error" (2),
+              # then re-raised as the step outcome. The move list is captured
+              # for the commit message and PR body.
+              continue-on-error: true
+              run: |
+                  set +e
+                  report=$(node scripts/pin-template-legacy.js --check)
+                  code=$?
+                  set -e
+                  {
+                      echo "report<<PIN_REPORT_EOF"
+                      echo "$report"
+                      echo "PIN_REPORT_EOF"
+                  } >> "$GITHUB_OUTPUT"
+                  echo "code=$code" >> "$GITHUB_OUTPUT"
+                  exit "$code"
+
+            - name: Fail loudly on script internal errors
+              if: steps.check.outputs.code == '2'
+              # exit 2 is the script's "internal error" (repo renamed/404,
+              # ls-remote blocked, ...). continue-on-error swallowed the check
+              # step's outcome, so only this step can fail the run: exit 2
+              # must never fall through to the gate below, which would end
+              # the run GREEN while pinning silently stalls.
+              run: |
+                  echo "::error::pin-template-legacy.js --check failed with an internal error (exit 2); pinning is stalled and needs attention."
+                  exit 1
+
+            - name: Skip when a template-pin PR is already open
+              id: gate
+              if: steps.check.outputs.code == '1'
+              # --json/--jq gives a deterministic count (gh versions differ on
+              # whether an empty plain-text list prints a message).
+              run: |
+                  open_prs=$(gh pr list --label template-pin --state open --json number --jq length)
+                  if [ "$open_prs" -gt 0 ]; then
+                      echo "An open template-pin PR already exists; nothing to do."
+                      echo "skip=true" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Reset the PR branch onto the base
+              if: >-
+                  steps.check.outputs.code == '1' &&
+                  steps.gate.outputs.skip != 'true'
+              # HEAD is the base tip (see checkout), so -B creates or resets
+              # the local PR branch there.
+              run: git checkout -B chore/template-pin
+
+            - name: Apply pin updates (stages gitlinks in the index)
+              if: >-
+                  steps.check.outputs.code == '1' &&
+                  steps.gate.outputs.skip != 'true'
+              run: node scripts/pin-template-legacy.js
+
+            - name: Commit the staged gitlinks
+              if: >-
+                  steps.check.outputs.code == '1' &&
+                  steps.gate.outputs.skip != 'true'
+              env:
+                  REPORT: ${{ steps.check.outputs.report }}
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  # Sources are the trailing "(<ref>)" parts of the report.
+                  sources=$(printf '%s\n' "$REPORT" \
+                      | sed -nE 's/.*\((.*)\)$/\1/p' \
+                      | paste -sd ',' - \
+                      | sed 's/,/, /g')
+                  # The index is already staged by update-index; a plain
+                  # commit is enough and no worktree changes may sneak in.
+                  git commit -m "chore(templates): pin .template-legacy ($sources)"
+
+            - name: Force-push the PR branch
+              if: >-
+                  steps.check.outputs.code == '1' &&
+                  steps.gate.outputs.skip != 'true'
+              # The only ref this workflow ever writes. --force is intended:
+              # the branch is reset onto base at the start of every run, so a
+              # stale remote copy must be overwritten.
+              run: git push --force origin chore/template-pin
+
+            - name: Ensure the template-pin label exists
+              if: >-
+                  steps.check.outputs.code == '1' &&
+                  steps.gate.outputs.skip != 'true'
+              # Idempotent: a no-op once the label exists ("already exists"
+              # errors are swallowed). If label creation were impossible, the
+              # PR step below still fails loudly instead of silently opening
+              # an unlabeled PR the gate could never find.
+              run: |
+                  gh label create template-pin \
+                      --color d4c5f9 \
+                      --description "Automated .template-legacy pin updates" || true
+
+            - name: Open the PR
+              if: >-
+                  steps.check.outputs.code == '1' &&
+                  steps.gate.outputs.skip != 'true'
+              env:
+                  REPORT: ${{ steps.check.outputs.report }}
+              run: |
+                  {
+                      echo 'Automated template pin update for .template-legacy.'
+                      echo
+                      echo '```'
+                      printf '%s\n' "$REPORT"
+                      echo '```'
+                      echo
+                      echo "Resolved against base: $BASE"
+                  } > pr-body.md
+                  gh pr create \
+                      --base "$BASE" \
+                      --head chore/template-pin \
+                      --label template-pin \
+                      --title 'chore(templates): pin .template-legacy' \
+                      --body-file pr-body.md

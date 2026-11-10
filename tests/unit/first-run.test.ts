@@ -67,7 +67,7 @@ describe('maybePrintFirstBuildUrl', () => {
     it('prints the URL once and writes the marker', () => {
         // The exported landing URL is pinned verbatim (spec constant).
         expect(LANDING_URL_CLI).toBe(
-            'https://escapepz.github.io/pzstudio/?utm_source=cli-print',
+            'https://escapepz.github.io/pzstudio/landing/?utm_source=cli-print',
         );
         expect(fs.existsSync(markerPath())).toBe(false);
 
@@ -76,7 +76,7 @@ describe('maybePrintFirstBuildUrl', () => {
         expect(printed).toBe(true);
         expect(lines).toHaveLength(1);
         expect(lines[0]).toContain(
-            'escapepz.github.io/pzstudio/?utm_source=cli-print',
+            'escapepz.github.io/pzstudio/landing/?utm_source=cli-print',
         );
         // The CTA line reads as the closing note of a successful build.
         expect(lines[0].startsWith('See tips & updates -> ')).toBe(true);
@@ -112,7 +112,7 @@ describe('maybePrintFirstBuildUrl', () => {
         expect(printed).toBe(true);
         expect(lines).toHaveLength(1);
         expect(lines[0]).toContain(
-            'escapepz.github.io/pzstudio/?utm_source=cli-print',
+            'escapepz.github.io/pzstudio/landing/?utm_source=cli-print',
         );
         // The write really failed: no marker may be stranded behind it.
         expect(fs.existsSync(markerPath())).toBe(false);

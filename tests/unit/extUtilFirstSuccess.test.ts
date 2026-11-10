@@ -90,7 +90,7 @@ describe('notifyFirstBuildSuccess', () => {
             .calls[0];
         expect(command).toBe('simpleBrowser.api.open');
         expect(String(target)).toContain(
-            'escapepz.github.io/pzstudio/?utm_source=ext-popup',
+            'escapepz.github.io/pzstudio/landing/?utm_source=ext-popup',
         );
         // The system browser is only the fallback, never the default path.
         expect(asMock(vscode.env.openExternal)).not.toHaveBeenCalled();
@@ -113,7 +113,7 @@ describe('notifyFirstBuildSuccess', () => {
         });
         const opened = asMock(vscode.env.openExternal).mock.calls[0][0];
         expect(String(opened)).toContain(
-            'escapepz.github.io/pzstudio/?utm_source=ext-popup',
+            'escapepz.github.io/pzstudio/landing/?utm_source=ext-popup',
         );
     });
 

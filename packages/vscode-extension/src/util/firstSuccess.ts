@@ -6,7 +6,7 @@ export const FIRST_SUCCESS_KEY = 'pzstudio.firstBuildSuccessShown';
 
 /** Landing page the popup's button opens (UTM-tagged extension popup hit). */
 export const LANDING_URL_EXT =
-    'https://escapepz.github.io/pzstudio/?utm_source=ext-popup';
+    'https://escapepz.github.io/pzstudio/landing/?utm_source=ext-popup';
 
 /**
  * One-time celebration for the first successful `build`: an informational

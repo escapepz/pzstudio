@@ -2,6 +2,8 @@ const esbuild = require('esbuild');
 const fs = require('fs');
 const path = require('path');
 
+const { templateSyncFilter } = require('./template-sync-filter');
+
 const isWatch = process.argv.includes('--watch');
 
 async function run() {
@@ -53,14 +55,16 @@ async function run() {
                 if (fs.existsSync(from)) {
                     console.log(`Syncing ${template}...`);
                     // dereference: follow symlinks instead of writing the
-                    // link target as a plain text file. The filter drops the
-                    // submodule checkout's .git gitfile — dead metadata in
-                    // the shipped package (tracked .gitignore/.gitmodules
-                    // are template content and must survive).
+                    // link target as a plain text file. The filter drops
+                    // the submodule checkout's .git gitfile and the
+                    // templates' .github/ CI (the CI of the template repos
+                    // must never ship) — dead metadata in the shipped
+                    // package (tracked .gitignore/.gitmodules are template
+                    // content and must survive).
                     fs.cpSync(from, to, {
                         recursive: true,
                         dereference: true,
-                        filter: (src) => path.basename(src) !== '.git',
+                        filter: templateSyncFilter,
                     });
                 }
             }
