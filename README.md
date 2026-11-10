@@ -5,9 +5,6 @@
 > PZ Studio — create, validate, build and live-sync
 > Project Zomboid **Build 42** Lua mods from one engine.
 
-<!-- The escapepz.pzstudio42 Marketplace listing and the escapepz/pzstudio42
-     Open VSX extension must be published before the two version badges
-     resolve; until then they render "unknown" / "extension not found". -->
 [![VS Marketplace Version](https://vsmarketplacebadges.dev/version-short/escapepz.pzstudio42.svg?style=flat-square&color=007acc&labelColor=000000)](https://marketplace.visualstudio.com/items?itemName=escapepz.pzstudio42)
 [![Open VSX Version](https://img.shields.io/open-vsx/v/escapepz/pzstudio42?style=flat-square&color=007acc&labelColor=000000)](https://open-vsx.org/extension/escapepz/pzstudio42)
 [![npm](https://img.shields.io/npm/v/@pzstudio/cli?style=flat-square&labelColor=000000)](https://www.npmjs.com/package/@pzstudio/cli)
