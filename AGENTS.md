@@ -19,28 +19,29 @@ On Windows 10:
   the artifact and hand the owner the exact publish commands.
 
 ## Branching
-- **All changes start on `42.22.0-dev`.** A fix needed for a release is
-  committed on the dev branch first — the release branch is then re-cut
-  from dev (or cherry-picks the fix). A `release/*` branch carries ONLY
-  minimal release-prep: the version bump, the release's changelog entries,
-  and the tag.
+- **Two branches: `42.22.0-dev` and `main`.** Every change starts on the dev
+  line — strictly linear (no merge nodes), direct pushes allowed; the
+  `only-merge` ruleset covers `main` alone. A graduation is ONE PR
+  `42.22.0-dev` → `main` merged with **Create a merge commit** (one merge
+  node per cycle on `main`; never squash — and Rebase-and-merge is disabled
+  repo-wide after it silently no-opped on a re-anchor-shaped PR).
+  Per-cycle stable and `release/*` branches are retired; old `*-dev` lines
+  are frozen records and must not be deleted.
+- **Tags:** the bare graduation version tag anchors on `main`'s post-merge
+  tip (npm `latest` + marketplace publish from `main@tag`);
+  `-next.<timestamp>` staging tags live on the dev line mid-cycle.
 - **Worktrees mirror branch names.** The main checkout stays on `main` as
-  the hub; per-branch working trees live under `../pzstudio.worktrees/`
-  with the branch name as the path (e.g. `../pzstudio.worktrees/42.22.0-dev`,
-  `../pzstudio.worktrees/release/0.42210.4`). Each worktree needs a
-  one-time setup — `git submodule update --init --depth 1`, then
+  the hub; the dev worktree lives at `../pzstudio.worktrees/42.22.0-dev`.
+  One-time setup — `node scripts/pin-template-legacy.js --sync`, then
   `pnpm install`, then `pnpm build` (tests pin `pzstudio-cli` to
   `packages/cli/dist`). Never `--recursive` — flat rule: `.libraries`
   inside `.template-project` must not be pulled in this repo (the
   submodules are shallow, `shallow = true` in `.gitmodules`). After
-  merging a `template-pin` PR run
-  `node scripts/pin-template-legacy.js --sync` to re-pin the submodules;
-  plain `git submodule update` deepens history — do not use it. An
-  existing full-history checkout converts once:
+  merging a `template-pin` PR run the sync again; plain
+  `git submodule update` deepens history — do not use it. An existing
+  full-history checkout converts once:
   `git submodule deinit -f .template-legacy`, delete
-  `.git/modules/template-legacy*`, then run the sync once. A release
-  worktree is cut when a release hotfix needs one and kept for the
-  branch's lifetime.
+  `.git/modules/template-legacy*`, then run the sync once.
 
 ## Architecture
 pnpm monorepo for PZ Studio. `pnpm-workspace.yaml` selects `packages/*`; the root package.json is a private workspace root (fan-out scripts + dev tooling only).
