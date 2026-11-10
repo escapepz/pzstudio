@@ -116,5 +116,5 @@ Contrast: `#F8F8F6` on `#090A0B` is **19.4:1** and `#AEB4BB` on `#090A0B` is
   diagnostics are functional, not brand accents.
 - **GitHub org** — social preview banner (`pz-studio-github-social-1280x640.svg`).
 
-Legacy assets under `.images/` are unreferenced historical uploads kept for
-provenance; they do not follow this specification.
+The retired zombie-era `.images/` uploads (banner, poster, minimal icon) were
+removed from the repository; this monochrome kit is the only brand source.
