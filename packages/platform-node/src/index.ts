@@ -6,10 +6,13 @@ export { NODE_CAPABILITIES } from './node-capabilities';
 export {
     normalizeLinkTarget,
     inspectWorkshopLink,
+    attachWorkshopLink,
+    detachWorkshopLink,
     ERR_WORKSHOP_PATH_NOT_DIRECTORY,
     ERR_FOREIGN_WORKSHOP_LINK,
     ERR_LINK_IDENTITY_MISMATCH,
     ERR_UNOWNED_DIST_TARGET,
+    ERR_WORKSHOP_DIR_EXISTS_REAL,
 } from './link/linkManager';
 export type {
     LinkPlatform,
@@ -18,4 +21,9 @@ export type {
     LinkState,
     WorkshopLinkInspection,
     InspectWorkshopLinkOptions,
+    RealFs,
+    AttachWorkshopLinkOptions,
+    DetachWorkshopLinkOptions,
+    AttachResult,
+    DetachResult,
 } from './link/linkManager';
