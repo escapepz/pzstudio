@@ -75,9 +75,52 @@
                 text-align: center;
             }
 
+            /* Cockpit frame: structural 1px hairline panel over the
+               construction grid, with white crosshair corner ticks
+               (docs/brand/studio.html corner-ticks motif) */
             main {
-                padding: 3rem 1.5rem;
+                position: relative;
+                width: 100%;
                 max-width: 40rem;
+                margin: 0 1rem;
+                padding: 3rem 2rem;
+                background: var(--pz-color-near-black);
+                border: 1px solid var(--pz-color-border);
+            }
+
+            .corner-tick {
+                position: absolute;
+                width: 10px;
+                height: 10px;
+                pointer-events: none;
+            }
+
+            .tick-tl {
+                top: -1px;
+                left: -1px;
+                border-top: 2px solid var(--pz-color-primary-white);
+                border-left: 2px solid var(--pz-color-primary-white);
+            }
+
+            .tick-tr {
+                top: -1px;
+                right: -1px;
+                border-top: 2px solid var(--pz-color-primary-white);
+                border-right: 2px solid var(--pz-color-primary-white);
+            }
+
+            .tick-bl {
+                bottom: -1px;
+                left: -1px;
+                border-bottom: 2px solid var(--pz-color-primary-white);
+                border-left: 2px solid var(--pz-color-primary-white);
+            }
+
+            .tick-br {
+                bottom: -1px;
+                right: -1px;
+                border-bottom: 2px solid var(--pz-color-primary-white);
+                border-right: 2px solid var(--pz-color-primary-white);
             }
 
             .brand-mark {
@@ -220,6 +263,10 @@
     </head>
     <body>
         <main>
+            <span class="corner-tick tick-tl" aria-hidden="true"></span>
+            <span class="corner-tick tick-tr" aria-hidden="true"></span>
+            <span class="corner-tick tick-bl" aria-hidden="true"></span>
+            <span class="corner-tick tick-br" aria-hidden="true"></span>
             <!-- PZ geometric monogram (docs/brand/pz-monogram-raw.svg, inline to stay dependency-free) -->
             <svg
                 class="brand-mark"
