@@ -26,7 +26,7 @@ verbatim (Variant 01 — Chamfer Interlock, stroke weight S = 28 on the
 | `pz-icon-standalone-dark.svg` | Squircle app icon, dark (256×256, rx = 22%) |
 | `pz-icon-standalone-light.svg` | Squircle app icon, light (256×256, rx = 22%) |
 | `pz-wordmark-horizontal.svg` | Horizontal wordmark + `DEV_TOOLS // ENGINE` descriptor (780×200) |
-| `pz-studio-github-social-1280x640.svg` | GitHub org social preview (1280×640) |
+| `pz-studio-github-social-1280x640.svg` | GitHub repo-card social preview (1280×640, 64px safe border) |
 | `pz-monogram-raw.svg` | Transparent 256×256 monogram symbol (favicon/avatar source) |
 | `tokens.css` / `tokens.json` / `tailwind-brand.config.js` | Design token exports (CSS variables, W3C design tokens, Tailwind theme) |
 | `packages/vscode-extension/icon.png` | 128×128 marketplace icon (rasterized from the squircle icon) |
@@ -114,7 +114,11 @@ Contrast: `#F8F8F6` on `#090A0B` is **19.4:1** and `#AEB4BB` on `#090A0B` is
 - **CLI** — monochrome operational voice: `[INFO]` / `[WARN]` / `[ERROR]` /
   `[OK]` stream labels in the mono/secondary token colors; severity colors in
   diagnostics are functional, not brand accents.
-- **GitHub org** — social preview banner (`pz-studio-github-social-1280x640.svg`).
+- **GitHub repo social preview** — `pz-studio-github-social-1280x640.svg`,
+  following GitHub's repo-card template: every brand element sits inside a
+  64px safe border (≥ the recommended 40pt) so embed crops never clip it.
+  Upload the rasterized `resources/pzstudio-banner.png` in repo Settings →
+  General → Social preview (GitHub does not accept SVG there).
 
 The retired zombie-era `.images/` uploads (banner, poster, minimal icon) were
 removed from the repository; this monochrome kit is the only brand source.

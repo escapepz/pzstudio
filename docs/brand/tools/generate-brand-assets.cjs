@@ -449,10 +449,10 @@ function generateDeliverableSVG(type) {
             `  <g stroke="${COLORS.border}" stroke-width="1" opacity="0.35">`,
             `    ${gridLines.join('\n    ')}`,
             `  </g>`,
-            `  <!-- Outer Structural Frame -->`,
-            `  <rect x="48" y="48" width="1184" height="544" fill="none" stroke="${COLORS.border}" stroke-width="2" />`,
+            `  <!-- Outer Structural Frame (64px inset: grid-aligned, inside GitHub's 40pt repo-card safe border) -->`,
+            `  <rect x="64" y="64" width="1152" height="512" fill="none" stroke="${COLORS.border}" stroke-width="2" />`,
             `  <!-- Corner Crosshairs -->`,
-            `  <path d="M 40 48 H 56 M 48 40 V 56 M 1224 48 H 1240 M 1232 40 V 56 M 40 592 H 56 M 48 584 V 600 M 1224 592 H 1240 M 1232 584 V 600" stroke="${COLORS.primaryWhite}" stroke-width="2" />`,
+            `  <path d="M 56 64 H 72 M 64 56 V 72 M 1208 64 H 1224 M 1216 56 V 72 M 56 576 H 72 M 64 568 V 584 M 1208 576 H 1224 M 1216 568 V 584" stroke="${COLORS.primaryWhite}" stroke-width="2" />`,
             `  <!-- Left Elevated Squircle Monogram Module -->`,
             `  <rect x="112" y="168" width="304" height="304" rx="64" fill="${COLORS.darkSurface}" stroke="${COLORS.border}" stroke-width="2" />`,
             `  <g transform="translate(136, 192)" fill="${COLORS.primaryWhite}" fill-rule="evenodd">`,
@@ -823,31 +823,32 @@ function renderBannerPNG() {
         drawLayer(canvas, [rectangleRing(0, y, 1280, 1)], gridColor, ss);
     }
 
-    // Outer structural frame (2px stroke via nested rects).
+    // Outer structural frame (2px stroke via nested rects, 64px inset —
+    // GitHub repo-card safe border).
     drawLayer(
         canvas,
-        [rectangleRing(48, 48, 1184, 544)],
+        [rectangleRing(64, 64, 1152, 512)],
         hexToRgb(COLORS.border),
         ss,
     );
     drawLayer(
         canvas,
-        [rectangleRing(50, 50, 1180, 540)],
+        [rectangleRing(66, 66, 1148, 508)],
         hexToRgb(COLORS.nearBlack),
         ss,
     );
 
-    // Corner crosshairs (2px white strokes).
+    // Corner crosshairs (2px white strokes, centered on the frame corners).
     const white = hexToRgb(COLORS.primaryWhite);
     const crosshairBars = [
-        [40, 47, 16, 2],
-        [47, 40, 2, 16],
-        [1224, 47, 16, 2],
-        [1231, 40, 2, 16],
-        [40, 591, 16, 2],
-        [47, 584, 2, 16],
-        [1224, 591, 16, 2],
-        [1231, 584, 2, 16],
+        [56, 63, 16, 2],
+        [63, 56, 2, 16],
+        [1208, 63, 16, 2],
+        [1215, 56, 2, 16],
+        [56, 575, 16, 2],
+        [63, 568, 2, 16],
+        [1208, 575, 16, 2],
+        [1215, 568, 2, 16],
     ];
     for (const [x, y, w, h] of crosshairBars) {
         drawLayer(canvas, [rectangleRing(x, y, w, h)], white, ss);
