@@ -505,7 +505,7 @@
         "@vscode/test-cli": "0.0.15",
         "@vscode/test-electron": "3.1.0",
         "@vscode/vsce": "4.0.0",
-        "esbuild": "0.27.3"
+        "esbuild": "0.28.2"
     },
     "dependencies": {
         "@pzstudio/cli": "workspace:*"

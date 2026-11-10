@@ -67,7 +67,7 @@
     "devDependencies": {
         "@types/node": "20.19.39",
         "typescript": "5.9.3",
-        "esbuild": "0.27.3",
+        "esbuild": "0.28.2",
         "@pzstudio/core": "workspace:*",
         "@pzstudio/platform": "workspace:*",
         "@pzstudio/platform-node": "workspace:*",

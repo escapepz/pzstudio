@@ -5,6 +5,7 @@ overrides:
     picomatch: 2.3.2
     undici: 7.24.0
     lodash: 4.17.24
+    esbuild: 0.28.2
 
 # Exact pins are the manifest policy; make future `pnpm add` follow it.
 saveExact: true
