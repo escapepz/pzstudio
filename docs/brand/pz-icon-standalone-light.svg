@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none">
+  <title>PZ Studio — Standalone App Icon (Light)</title>
+  <rect x="4" y="4" width="248" height="248" rx="56" fill="#F8F8F6" stroke="#090A0B" stroke-width="4" />
+  <g fill="#090A0B" fill-rule="evenodd">
+    <path id="pz-icon-p" d="M 28 44 L 112 44 L 138 70 L 138 122 L 112 148 L 56 148 L 56 212 L 28 212 Z M 56 72 L 56 120 L 106 120 L 110 108 L 110 84 L 106 72 Z" />
+    <path id="pz-icon-z" d="M 144 44 L 228 44 L 228 72 L 134 184 L 228 184 L 228 212 L 104 212 L 104 184 L 198 72 L 144 72 Z" />
+  </g>
+</svg>

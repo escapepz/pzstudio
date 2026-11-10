@@ -133,4 +133,12 @@ module.exports = tseslint.config(
             'no-undef': 'off',
         },
     },
+    {
+        // Standalone Node scripts (CommonJS by design), e.g. the brand asset
+        // generator under docs/brand/tools/.
+        files: ['docs/**/*.cjs'],
+        rules: {
+            '@typescript-eslint/no-require-imports': 'off',
+        },
+    },
 );

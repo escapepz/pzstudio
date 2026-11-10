@@ -11,3 +11,11 @@ pnpm-lock.yaml
 *.log
 .env*
 .template-legacy/
+
+# Brand: vendored studio + generated artifacts (regenerate via
+# docs/brand/tools/generate-brand-assets.cjs; do not hand-format)
+docs/brand/studio.html
+docs/brand/*.svg
+docs/brand/tokens.css
+docs/brand/tokens.json
+docs/brand/tailwind-brand.config.js

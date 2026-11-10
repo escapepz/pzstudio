@@ -108,6 +108,7 @@ command list and every `pzstudio.*` setting:
 | [`CHANGELOG.md`](CHANGELOG.md)                      | Combined changelog for the monorepo (CLI + extension per release)           |
 | [`docs/releases/`](docs/releases/)                  | Per-version release notes and the [`RELEASE.md`](docs/releases/RELEASE.md) runbook |
 | [`docs/vscode-extension/`](docs/vscode-extension/)  | Behavioral spec and UI/UX audit of the extension, decision records          |
+| [`docs/brand/`](docs/brand/)                        | Monochrome brand identity: logo/wordmark SVGs, design tokens, guidelines, asset generator |
 | [`AGENTS.md`](AGENTS.md)                            | Repo instructions: commands, architecture and code style for contributors   |
 
 ## Development
