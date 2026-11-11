@@ -10,12 +10,15 @@ import { existsSync, readFileSync } from 'fs';
 import {
     NodeFileSystem,
     NODE_CAPABILITIES,
-    inspectWorkshopLink,
+    inspectMaterializeSlot,
 } from '@pzstudio/platform-node';
 import {
     runDoctor,
     DoctorReport,
     resolveBuildOutputPath,
+    computeProjectId,
+    copyMarkerPath,
+    readCopySlotMarker,
     type IProjectConfig,
     type WorkshopLinkCheckInput,
 } from '@pzstudio/core';
@@ -29,7 +32,13 @@ import {
 import { probeTemplateCacheDir, getConfigPath } from './templateManager';
 import { legacyLogger, engineIo } from './logger';
 import type { PzStudioHostSettings, PzStudioLogger } from './invocation';
-import { nodeLinkFs, resolveDistModel, workshopReadMarker } from './linkStep';
+import {
+    nodeLinkFs,
+    promisesFileSystem,
+    resolveMaterialization,
+    workshopReadMarker,
+    type MaterializationResolution,
+} from './linkStep';
 
 export interface ProjectDoctorOptions {
     /**
@@ -93,7 +102,6 @@ export async function runProjectDoctorCore(
             workshop = await resolveDoctorWorkshopInputs(
                 projectPath,
                 config,
-                readWorkshopRootFromGlobalConfig(),
                 outDir,
             );
         }
@@ -122,91 +130,110 @@ export async function runProjectDoctorCore(
         capabilities: NODE_CAPABILITIES,
         gameBuild: deps.gameBuild,
         workshopLinks: workshop?.workshopLinks,
-        distModel: workshop?.distModel,
-        workshopRootNonLocal: workshop?.workshopRootNonLocal,
+        materialization: workshop?.materialization,
     });
 }
 
 /**
- * Reads `workshopRoot` straight from the global config file, SILENTLY.
- * `readGlobalConfig()` emits a verbose through the raw legacy sink, which
- * would pollute the R1 mirror contract (exactly one emission per op on
- * threaded paths — caught by cliCores). A corrupt/unreadable config
- * degrades to undefined (factory-default workshop root), the same
- * fail-soft the usage recorder applies to its config read.
- */
-function readWorkshopRootFromGlobalConfig(): string | undefined {
-    try {
-        const raw = readFileSync(getConfigPath(), 'utf-8');
-        const parsed = JSON.parse(raw) as { workshopRoot?: string };
-        return parsed.workshopRoot;
-    } catch {
-        return undefined;
-    }
-}
-
-/**
- * Host-side dist-model inputs for the doctor: the dist-model decision, the
- * per-item workshop-link states (pure reads via the platform-node link
- * manager — the doctor never attaches), the non-local workshop-root flag,
- * and each item's absolute workshop VDF path for the copyable steamcmd
- * hint. Only item dirs that EXIST get a link check; a missing variant has
- * no built item to report on.
+ * Host-side materialize inputs for the doctor (dist-always amendment §9):
+ * the materialize decision, and the per-item deployment-slot states (pure
+ * reads via the platform-node materialize inspector — the doctor never
+ * attaches). Only item dirs that EXIST in dist get a slot check; a missing
+ * variant has no built item to report on. The machine-level `materialize`
+ * key is read SILENTLY from the global config (readGlobalConfig() emits a
+ * verbose through the raw legacy sink, which would pollute the R1 mirror
+ * contract); a corrupt/unreadable config degrades to undefined.
  */
 export async function resolveDoctorWorkshopInputs(
     projectPath: string,
     config: IProjectConfig,
-    workshopRoot?: string,
-    outDirOverride?: string,
+    effectiveOutdir?: string,
 ): Promise<{
-    distModel: ReturnType<typeof resolveDistModel>;
+    materialization: MaterializationResolution;
     workshopLinks?: WorkshopLinkCheckInput[];
-    workshopRootNonLocal?: boolean;
 }> {
-    const dm = resolveDistModel(resolve(projectPath), {
-        // The MERGED effective outdir (what the build actually consumes via
-        // getOutDir) — deciding from the raw project.json field would split
-        // the doctor's verdict from the build's (fix wave #2).
-        outdir: outDirOverride ?? config.outdir,
-        workshopRoot,
+    const root = resolve(projectPath);
+    const materialization = resolveMaterialization({
+        projectRoot: root,
+        effectiveOutdir,
+        projectMaterialize: config.build?.materialize,
+        globalMaterialize: readMaterializeFromGlobalConfig(),
     });
-    const workshopRootNonLocal =
-        dm.workshopRoot.startsWith('\\\\') || dm.workshopRoot.startsWith('//');
-    if (dm.mode !== 'dist') {
-        return { distModel: dm, workshopRootNonLocal };
+    if (materialization.action !== 'materialize') {
+        return { materialization };
     }
+
     const platform =
         process.platform === 'win32' ? ('win32' as const) : ('posix' as const);
-    const readMarker = workshopReadMarker(resolve(projectPath));
+    const readMarker = workshopReadMarker(root);
+    const projectId = await computeProjectId(root);
+    const distRoot = materialization.distRoot;
+    const targetNonLocal =
+        materialization.mode === 'symlink' &&
+        (materialization.outDir!.startsWith('\\\\') ||
+            materialization.outDir!.startsWith('//'));
+
     const items = (['main', 'development'] as const)
-        .map((variant) => resolveBuildOutputPath(config, variant))
+        .map((variant) =>
+            resolveBuildOutputPath({ ...config, outdir: distRoot }, variant),
+        )
         .filter((dir) => existsSync(dir))
         .map((dir) => ({ name: basename(dir) }));
     const workshopLinks: WorkshopLinkCheckInput[] = await Promise.all(
         items.map(async ({ name }) => {
-            const inspection = await inspectWorkshopLink(
+            const inspection = await inspectMaterializeSlot(
                 nodeLinkFs,
-                join(dm.workshopRoot, name),
-                join(dm.outDir, name),
-                { platform, readMarker },
+                join(materialization.outDir!, name),
+                join(distRoot, name),
+                {
+                    platform,
+                    readMarker,
+                    readCopyMarker: (slotDir) =>
+                        readCopySlotMarker(
+                            promisesFileSystem,
+                            copyMarkerPath(slotDir),
+                        ),
+                    copyIdentity: { projectId, itemId: name },
+                },
             );
             return {
                 item: name,
-                // Doctor vocabulary: the cascade's ATTACHABLE (no slot at
-                // W) reads as a missing link; its OK_LINK reads as
+                // Doctor vocabulary: the inspector's ABSENT (no slot at W)
+                // reads as a missing deployment; OK_LINK reads as
                 // attached-ok.
                 state:
-                    inspection.state === 'ATTACHABLE'
+                    inspection.state === 'ABSENT'
                         ? 'MISSING_LINK'
                         : inspection.state === 'OK_LINK'
                           ? 'ATTACHED_OK'
                           : inspection.state,
                 detail: inspection.detail,
-                vdfPath: join(dm.outDir, `${name}.workshop.vdf`),
+                vdfPath: join(distRoot, `${name}.workshop.vdf`),
             };
         }),
     );
-    return { distModel: dm, workshopLinks, workshopRootNonLocal };
+    return {
+        materialization: { ...materialization, targetNonLocal },
+        workshopLinks,
+    };
+}
+
+/**
+ * Reads the flat machine-level `materialize` key straight from the global
+ * config file, SILENTLY (R1 mirror contract — `readGlobalConfig()` emits a
+ * verbose through the raw legacy sink). A corrupt/unreadable config
+ * degrades to undefined (the hard default 'symlink' applies).
+ */
+function readMaterializeFromGlobalConfig(): 'symlink' | 'copy' | undefined {
+    try {
+        const raw = readFileSync(getConfigPath(), 'utf-8');
+        const parsed = JSON.parse(raw) as {
+            materialize?: 'symlink' | 'copy';
+        };
+        return parsed.materialize;
+    } catch {
+        return undefined;
+    }
 }
 
 /**

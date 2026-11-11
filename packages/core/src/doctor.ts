@@ -71,14 +71,19 @@ export interface DoctorInput {
      * `state: 'UNSUPPORTED_HOST'` entries or omits the field entirely.
      */
     workshopLinks?: WorkshopLinkCheckInput[];
-    /** The host's dist-model decision; legacy renders MIGRATE_TO_DIST_MODEL. */
-    distModel?: {
-        mode: 'dist' | 'legacy';
-        outDir: string;
-        workshopRoot: string;
+    /**
+     * The host's materialize decision (dist-always amendment §3). When
+     * absent (browser hosts, or the config read failed) no deployment
+     * diagnostic renders at all.
+     */
+    materialization?: {
+        action: 'skip' | 'materialize';
+        mode: 'symlink' | 'copy';
+        /** The expanded deployment root; set iff action === 'materialize'. */
+        outDir?: string;
+        /** Symlink mode only: the target is a UNC/network volume. */
+        targetNonLocal?: boolean;
     };
-    /** True when the workshop root is a non-local volume (UNC/WSL). */
-    workshopRootNonLocal?: boolean;
 }
 
 /** One host-computed workshop-link fact for the doctor to render. */
@@ -86,8 +91,9 @@ export interface WorkshopLinkCheckInput {
     /** Item (workshop slot) name the state belongs to. */
     item: string;
     /**
-     * A platform-node LinkState, or 'UNSUPPORTED_HOST' when the host
-     * cannot maintain junctions at all.
+     * A platform-node copy-slot state (the link cascade's states plus the
+     * copy materializer's COPY_SLOT / HAND_MADE_DIR), or
+     * 'UNSUPPORTED_HOST' when the host cannot maintain junctions at all.
      */
     state: string;
     /** Detail text from the cascade (errno / raw target), when present. */
@@ -593,8 +599,8 @@ export async function runDoctor(
         );
     }
     diagnostics.push(...workshopLinkDiagnostics(input.workshopLinks ?? []));
-    diagnostics.push(...distModelDiagnostics(input.distModel));
-    if (input.workshopRootNonLocal) {
+    diagnostics.push(...materializationDiagnostics(input.materialization));
+    if (input.materialization?.targetNonLocal) {
         diagnostics.push(
             workshopLinkDiagnostics([
                 { item: '*', state: 'NON_LOCAL_TARGET' },
@@ -620,6 +626,8 @@ export function workshopLinkDiagnostics(
     const codes: Record<string, string> = {
         ATTACHED_OK: 'workshop-link.attached',
         MISSING_LINK: 'workshop-link.missing',
+        COPY_SLOT: 'workshop-link.copy-slot',
+        HAND_MADE_DIR: 'workshop-link.hand-made-dir',
         CONFLICT_REAL_DIR: 'workshop-link.conflict-real-dir',
         FOREIGN_LINK: 'workshop-link.foreign',
         DANGLING_LINK: 'workshop-link.dangling',
@@ -650,11 +658,25 @@ export function workshopLinkDiagnostics(
                     severity: 'info',
                     hint: steamcmdHint,
                 };
+            case 'COPY_SLOT':
+                // A healthy engine-owned copy slot: reconciled on every
+                // build; drift heals with the next one.
+                return {
+                    ...base,
+                    severity: 'info',
+                    hint: steamcmdHint,
+                };
+            case 'HAND_MADE_DIR':
+                return {
+                    ...base,
+                    severity: 'warning',
+                    hint: 'A real directory without a copy marker occupies the slot — hand-made content is never adopted. Move or rename it by hand, or run build with --backup-existing-workshop.',
+                };
             case 'MISSING_LINK':
                 return {
                     ...base,
                     severity: 'warning',
-                    hint: 'Run pzstudio build to create the workshop link.',
+                    hint: 'Run pzstudio build to deploy the item.',
                 };
             case 'CONFLICT_REAL_DIR':
                 return {
@@ -684,7 +706,7 @@ export function workshopLinkDiagnostics(
                 return {
                     ...base,
                     severity: 'warning',
-                    hint: 'Point workshopRoot at a local disk — junctions cannot target network volumes.',
+                    hint: 'Point the deployment root at a local disk — junctions cannot target network volumes.',
                 };
             case 'UNSUPPORTED_HOST':
                 return {
@@ -697,22 +719,27 @@ export function workshopLinkDiagnostics(
     });
 }
 
-/** Renders the dist-model decision: legacy gets exactly one migration hint. */
-function distModelDiagnostics(
-    distModel: DoctorInput['distModel'],
+/**
+ * Renders the materialize decision: an unset target is a legitimate pure
+ * build state (CI/headless) — one INFO diagnostic, never a warning
+ * (dist-always amendment §9). The MIGRATE_TO_DIST_MODEL diagnostic of the
+ * 2026-11-11 design is gone: there is no legacy mode left to migrate.
+ */
+function materializationDiagnostics(
+    materialization: DoctorInput['materialization'],
 ): Diagnostic[] {
-    if (!distModel || distModel.mode !== 'legacy') return [];
-    return [
-        {
-            module: 'workshop-link',
-            code: 'MIGRATE_TO_DIST_MODEL',
-            severity: 'warning',
-            message:
-                `The output root sits outside the project (legacy in-place builds). ` +
-                `Dist model: set project.json "outdir" to the project-local dist directory ` +
-                `and record the current output root as the machine-level "workshopRoot" ` +
-                `(${distModel.workshopRoot}).`,
-            hint: 'Then rebuild — the workshop link step attaches the junctions and this diagnostic disappears.',
-        },
-    ];
+    if (!materialization) return [];
+    if (materialization.action === 'skip') {
+        return [
+            {
+                module: 'workshop-link',
+                code: 'OUTDIR_UNSET',
+                severity: 'info',
+                message:
+                    'Deployment disabled — no outdir configured; the build wrote dist/ only.',
+                hint: 'Set project.json "outdir" (pzstudio new writes "~/Zomboid/Workshop") or run pzstudio outdir to expose built items to the game.',
+            },
+        ];
+    }
+    return [];
 }

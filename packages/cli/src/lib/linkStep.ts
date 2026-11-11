@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Dist-model build surface (CLI): the per-item ownership-marker write for
  * the standalone build path and the post-build workshop link step.
  *
@@ -148,6 +148,12 @@ export interface MaterializationResolution {
     outDir?: string;
     /** The canonical build output root `<projectRoot>/dist`. */
     distRoot: string;
+    /**
+     * Symlink mode only: the deployment root is a UNC/network volume —
+     * junctions fail-closed there (doctor renders NON_LOCAL_TARGET). Set
+     * by the doctor's host computation; the build path never consults it.
+     */
+    targetNonLocal?: boolean;
 }
 
 export interface ResolveMaterializationInput {
@@ -232,7 +238,7 @@ function toObjectType(stats: {
     return 'unknown';
 }
 
-const promisesFileSystem: ProjectFileSystem = {
+export const promisesFileSystem: ProjectFileSystem = {
     async read(uri: string): Promise<Uint8Array> {
         const buffer = await fsp.readFile(toFsPath(uri));
         return new Uint8Array(

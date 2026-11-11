@@ -19,7 +19,7 @@ import {
 import { writeOutputMarker, resolveBuildOutputPath } from '@pzstudio/core';
 import {
     attachBuiltItems,
-    resolveDistModel,
+    workshopReadMarker,
 } from '../../packages/cli/src/lib/linkStep';
 import { resolveDoctorWorkshopInputs } from '../../packages/cli/src/lib/doctor';
 
@@ -47,6 +47,13 @@ describe('workshopLinkDiagnostics (core mapping)', () => {
                 'workshop-link.missing',
                 'warning',
                 'pzstudio build',
+            ],
+            ['COPY_SLOT', 'workshop-link.copy-slot', 'info', undefined],
+            [
+                'HAND_MADE_DIR',
+                'workshop-link.hand-made-dir',
+                'warning',
+                '--backup-existing-workshop',
             ],
             [
                 'CONFLICT_REAL_DIR',
@@ -124,7 +131,7 @@ describe('workshopLinkDiagnostics (core mapping)', () => {
     });
 });
 
-describe('runDoctor dist-model inputs (core rendering)', () => {
+describe('runDoctor materialization inputs (core rendering)', () => {
     let root: string;
     beforeEach(() => {
         root = mkdtempSync(join(tmpdir(), 'pz-doc-core-'));
@@ -135,7 +142,7 @@ describe('runDoctor dist-model inputs (core rendering)', () => {
             JSON.stringify({
                 schemaVersion: 2,
                 title: 'Item',
-                outdir: join(root, 'dist'),
+                outdir: join(root, 'deploy'),
                 workshop: { title: 'Item' },
                 mods: { my_mod: {} },
             }),
@@ -151,37 +158,35 @@ describe('runDoctor dist-model inputs (core rendering)', () => {
         ...extra,
     });
 
-    it('legacy mode renders exactly one MIGRATE_TO_DIST_MODEL diagnostic with the concrete edit', async () => {
+    it('a skipped deployment renders exactly one OUTDIR_UNSET info (CI-legitimate)', async () => {
         const report = await runDoctor(
             new NodeFileSystem(),
             baseInput({
-                distModel: {
-                    mode: 'legacy',
-                    outDir: 'E:/workshop',
-                    workshopRoot: 'C:/Users/u/Zomboid/Workshop',
-                },
+                materialization: { action: 'skip', mode: 'symlink' },
             }),
         );
-        const migrates = report.diagnostics.filter(
-            (d) => d.code === 'MIGRATE_TO_DIST_MODEL',
+        const unset = report.diagnostics.filter(
+            (d) => d.code === 'OUTDIR_UNSET',
         );
-        expect(migrates).toHaveLength(1);
-        expect(migrates[0].severity).toBe('warning');
-        expect(migrates[0].message).toContain('"outdir"');
-        expect(migrates[0].message).toContain('C:/Users/u/Zomboid/Workshop');
+        expect(unset).toHaveLength(1);
+        expect(unset[0].severity).toBe('info');
+        expect(unset[0].message).toContain('dist/ only');
     });
 
-    it('dist mode renders no MIGRATE diagnostic', async () => {
+    it('an active materialization renders no OUTDIR_UNSET diagnostic', async () => {
         const report = await runDoctor(
             new NodeFileSystem(),
             baseInput({
-                distModel: {
-                    mode: 'dist',
-                    outDir: 'E:/proj/dist',
-                    workshopRoot: 'C:/Users/u/Zomboid/Workshop',
+                materialization: {
+                    action: 'materialize',
+                    mode: 'symlink',
+                    outDir: 'C:/Users/u/Zomboid/Workshop',
                 },
             }),
         );
+        expect(
+            report.diagnostics.filter((d) => d.code === 'OUTDIR_UNSET'),
+        ).toHaveLength(0);
         expect(
             report.diagnostics.filter(
                 (d) => d.code === 'MIGRATE_TO_DIST_MODEL',
@@ -189,16 +194,16 @@ describe('runDoctor dist-model inputs (core rendering)', () => {
         ).toHaveLength(0);
     });
 
-    it('non-local workshop root renders the fail-closed NON_LOCAL_TARGET diagnostic', async () => {
+    it('a non-local symlink target renders the fail-closed NON_LOCAL_TARGET diagnostic', async () => {
         const report = await runDoctor(
             new NodeFileSystem(),
             baseInput({
-                distModel: {
-                    mode: 'dist',
-                    outDir: 'E:/proj/dist',
-                    workshopRoot: '\\\\server\\share\\Workshop',
+                materialization: {
+                    action: 'materialize',
+                    mode: 'symlink',
+                    outDir: '\\\\server\\share\\Workshop',
+                    targetNonLocal: true,
                 },
-                workshopRootNonLocal: true,
             }),
         );
         const nonLocal = report.diagnostics.filter(
@@ -226,7 +231,7 @@ describe('resolveDoctorWorkshopInputs (CLI host computation)', () => {
         rmSync(root, { recursive: true, force: true });
     });
 
-    async function seedAttachedMain(): Promise<string> {
+    async function seedBuiltMain(): Promise<string> {
         const config = makeConfig(dist) as Parameters<
             typeof resolveBuildOutputPath
         >[0];
@@ -242,6 +247,11 @@ describe('resolveDoctorWorkshopInputs (CLI host computation)', () => {
             engineVersion: 'test',
             outputRoot: dist,
         });
+        return itemDir;
+    }
+
+    it('symlink mode: computes the real slot state per existing item dir', async () => {
+        const itemDir = await seedBuiltMain();
         await attachBuiltItems({
             projectRoot: root,
             outDir: dist,
@@ -250,18 +260,14 @@ describe('resolveDoctorWorkshopInputs (CLI host computation)', () => {
             usage: { recordOp: vi.fn() },
             onSurface: () => {},
         });
-        return itemDir;
-    }
-
-    it('dist mode: computes the real link state per existing item dir', async () => {
-        const itemDir = await seedAttachedMain();
         const config = makeConfig(dist);
         const inputs = await resolveDoctorWorkshopInputs(
             root,
             config as never,
             workshop,
         );
-        expect(inputs.distModel?.mode).toBe('dist');
+        expect(inputs.materialization.action).toBe('materialize');
+        expect(inputs.materialization.mode).toBe('symlink');
         const main = inputs.workshopLinks?.find(
             (w) => w.item === basename(itemDir),
         );
@@ -271,21 +277,10 @@ describe('resolveDoctorWorkshopInputs (CLI host computation)', () => {
         );
     });
 
-    it('missing slot reports MISSING_LINK; a real dir reports CONFLICT_REAL_DIR', async () => {
+    it('missing slot reports MISSING_LINK; a hand-made real dir reports HAND_MADE_DIR', async () => {
         const config = makeConfig(dist);
-        const itemDir = resolveBuildOutputPath(config, 'main');
-        await fsp.mkdir(join(itemDir, 'Contents', 'mods', 'my_mod'), {
-            recursive: true,
-        });
-        writeFileSync(join(itemDir, 'workshop.txt'), 'title=Item\n');
-        await writeOutputMarker(new NodeFileSystem(), {
-            config,
-            variant: 'main',
-            projectDir: root,
-            engineVersion: 'test',
-            outputRoot: dist,
-        });
-        // No junction: MISSING_LINK.
+        const itemDir = await seedBuiltMain();
+        // No slot at all: MISSING_LINK.
         const missing = await resolveDoctorWorkshopInputs(
             root,
             config as never,
@@ -293,59 +288,90 @@ describe('resolveDoctorWorkshopInputs (CLI host computation)', () => {
         );
         expect(missing.workshopLinks?.[0]?.state).toBe('MISSING_LINK');
 
-        // A real non-empty dir occupies the slot: CONFLICT_REAL_DIR.
+        // A real non-empty dir without a copy marker: HAND_MADE_DIR.
         const slot = join(workshop, basename(itemDir));
         await fsp.mkdir(slot, { recursive: true });
         writeFileSync(join(slot, 'handmade.txt'), 'x');
-        const conflict = await resolveDoctorWorkshopInputs(
+        const handmade = await resolveDoctorWorkshopInputs(
             root,
             config as never,
             workshop,
         );
-        expect(conflict.workshopLinks?.[0]?.state).toBe('CONFLICT_REAL_DIR');
+        expect(handmade.workshopLinks?.[0]?.state).toBe('HAND_MADE_DIR');
     });
 
-    it('legacy mode: no per-item links, one distModel legacy entry', async () => {
-        const outside = mkdtempSync(join(tmpdir(), 'pz-doc-out-'));
-        try {
-            const config = makeConfig(join(outside, 'out'));
-            const inputs = await resolveDoctorWorkshopInputs(
-                root,
-                config as never,
-                workshop,
-            );
-            expect(inputs.distModel?.mode).toBe('legacy');
-            expect(inputs.workshopLinks ?? []).toHaveLength(0);
-        } finally {
-            rmSync(outside, { recursive: true, force: true });
-        }
+    it('a marker-owned copy slot reports COPY_SLOT', async () => {
+        const config = makeConfig(dist) as Parameters<
+            typeof resolveBuildOutputPath
+        >[0];
+        const itemDir = await seedBuiltMain();
+        // A real directory with a matching copy marker: the copy
+        // materializer's healthy state.
+        const slot = join(workshop, basename(itemDir));
+        await fsp.mkdir(slot, { recursive: true });
+        writeFileSync(join(slot, 'workshop.txt'), 'title=Item\n');
+        const { writeCopySlotMarker } = await import('@pzstudio/core');
+        await writeCopySlotMarker(new NodeFileSystem(), {
+            projectDir: root,
+            itemId: basename(itemDir),
+            slotDir: slot,
+        });
+        const inputs = await resolveDoctorWorkshopInputs(
+            root,
+            config as never,
+            workshop,
+        );
+        expect(inputs.workshopLinks?.[0]?.state).toBe('COPY_SLOT');
     });
 
-    it('non-local workshop root is detected fail-closed', async () => {
+    it('no target configured: the decision is skip and no slot checks run', async () => {
+        const config = makeConfig(dist);
+        const inputs = await resolveDoctorWorkshopInputs(
+            root,
+            config as never,
+            undefined,
+        );
+        expect(inputs.materialization.action).toBe('skip');
+        expect(inputs.workshopLinks).toBeUndefined();
+    });
+
+    it('a non-local symlink target is detected fail-closed', async () => {
         const config = makeConfig(dist);
         const inputs = await resolveDoctorWorkshopInputs(
             root,
             config as never,
             '\\\\server\\share\\Workshop',
         );
-        expect(inputs.workshopRootNonLocal).toBe(true);
+        expect(inputs.materialization.targetNonLocal).toBe(true);
     });
 
-    it('honors the merged outDir override: a project without project.json outdir stays legacy (fix wave #2)', async () => {
-        // Build resolves the effective outdir through getOutDir (settings +
-        // global config merge; the factory default is the Zomboid workshop
-        // folder — OUTSIDE the project). The doctor must make its dist
-        // decision from the SAME merged value, or MIGRATE_TO_DIST_MODEL
-        // never fires for exactly the users it targets.
-        const config = makeConfig(undefined as never); // outdir unset
-        const mergedOutDir = join(root, '..', 'Zomboid-Workshop'); // outside root
+    it('the machine-level flat materialize key wins over the symlink default (copy mode)', async () => {
+        // The doctor reads the global config SILENTLY (R1) — this only
+        // proves the value flows; the hard 'symlink' default applies when
+        // the key is absent.
+        const config = makeConfig(dist) as never as Parameters<
+            typeof resolveBuildOutputPath
+        >[0];
+        const itemDir = await seedBuiltMain();
+        const { writeCopySlotMarker } = await import('@pzstudio/core');
+        // A copy-mode doctor sees a marker-owned slot where symlink mode
+        // would see nothing: seed the slot as a copy slot.
+        const slot = join(workshop, basename(itemDir));
+        await fsp.mkdir(slot, { recursive: true });
+        writeFileSync(join(slot, 'workshop.txt'), 'title=Item\n');
+        await writeCopySlotMarker(new NodeFileSystem(), {
+            projectDir: root,
+            itemId: basename(itemDir),
+            slotDir: slot,
+        });
         const inputs = await resolveDoctorWorkshopInputs(
             root,
-            config as never,
+            { ...(config as never), build: { materialize: 'copy' } } as never,
             workshop,
-            mergedOutDir,
         );
-        expect(inputs.distModel?.mode).toBe('legacy');
-        expect(inputs.workshopLinks ?? []).toHaveLength(0);
+        expect(inputs.materialization.mode).toBe('copy');
+        expect(inputs.workshopLinks?.[0]?.state).toBe('COPY_SLOT');
+        // Sanity: the read marker helper stays shared with the build path.
+        expect(workshopReadMarker).toBeTypeOf('function');
     });
 });
