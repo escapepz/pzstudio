@@ -69,7 +69,7 @@ Write contract:
 
 ```
 ~/.pzstudio/
-  config.json             ← global defaults (templates, outdir, useSymlinks, experimental)
+  config.json             ← global defaults (templates, outdir, workshopRoot, useSymlinks, experimental)
   .pzstudio.bak           ← legacy pre-v0.3 content (only as outdir fallback)
   templates/
     <user>/<repo>/        ← one cache per template source
@@ -88,11 +88,17 @@ Write contract:
   },
   "useSymlinks": true,
   "outdir": "C:\\Users\\…\\Zomboid\\Workshop",
+  "workshopRoot": "C:\\Users\\…\\Zomboid\\Workshop",
   "experimental": { "integration": false }
 }
 ```
 
 Behavior notes:
+- `workshopRoot` is the machine-level root for the dist model's per-item junctions
+  (`<workshopRoot>/<Item>` → `<project>/dist/<Item>`); absent → factory default
+  `%USERPROFILE%\Zomboid\Workshop`; the `PZSTUDIO_WORKSHOP_ROOT` env var wins over this
+  field. It is never a mutation target — the engine only ever writes the project-local
+  dist output root.
 - Created with all defaults on the first *real* command (pure invocations like
   `--help`/`--version` create nothing — CLI-1 contract).
 - Migrated automatically at startup when the legacy shape is detected (two reporting

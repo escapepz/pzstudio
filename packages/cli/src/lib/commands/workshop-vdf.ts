@@ -8,8 +8,10 @@ import { info } from '../logger';
 import { extractFlag } from '../args';
 import { resolveProjectConfig } from '../helper';
 import { resolveBuildOutputPath, type IProjectConfig } from '@pzstudio/core';
-// @ts-ignore - JSON module import (same pattern as the package.json version import)
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-ignore - necessary because we can't reliably predict if typescript will resolve this outside src without structural errors in some configs
 import workshopVdfSchema from '../../../assets/workshop.vdf.schema.json';
+/* eslint-enable @typescript-eslint/ban-ts-comment */
 
 /**
  * `pzstudio workshop-vdf` — builds a SteamCMD workshop.vdf from a built

@@ -90,6 +90,9 @@ The envelope does not change the exit matrix — it only changes stdout. Full co
 | Doctor blocking issues | doctor | `Doctor found N blocking issues. See the report above.` | report + `✗` verdict already on stdout |
 | Update partial failure | update | `Refreshed X/4 template caches — N update(s) failed. Fix the reported causes and run 'pzstudio update' again.` | all 4 categories still attempted |
 | Aggregate variant failure | build | collected variant errors joined (via `throwOnOutcomeFailures`) | no more `Unexpected error:` wrapper |
+| Workshop link refuse | build link step / doctor | per-item states with stable codes: `workshop-link.attached` (info) / `.missing` / `.conflict-real-dir` (→ `--backup-existing-workshop`) / `.foreign` (→ `--relink`) / `.dangling` / `.unowned` / `.non-local` (fail-closed, no copy fallback) / `.unsupported-host` (info) | link failures NEVER flip the build exit code |
+| Dist model migration | doctor | `MIGRATE_TO_DIST_MODEL`: outdir outside the project (legacy) — concrete `project.json` edit + `workshopRoot` in the message | warning, advisory |
+| workshop-vdf refusal | workshop-vdf | `... previews must be < 1 MB` / `no title: pass --title or add title= to workshop.txt` / `the VDF must be written outside contentfolder (...)` / schema error list | generates + PRINTS the steamcmd command; never launches a process |
 | Not implemented | lang | `Not implemented yet!` (rendered through the unexpected wrapper) | hidden stub |
 
 ## Warning (non-fatal) situations

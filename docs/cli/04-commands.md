@@ -194,6 +194,28 @@ timing) prints to stderr — stdout stays empty on a successful build (CLI-2).
 The workshop template resolution can touch the network (clone) when the cache is missing
 or invalid — see `08-mechanics.md` → Template resolution during build/watch.
 
+### Dist model (workshop links) — `--relink` / `--force-link` / `--backup-existing-workshop`
+
+When the resolved `outdir` sits **inside the project root** (unset `outdir` defaults to
+`<projectRoot>/dist`), the build runs the dist model: after each successful variant the
+item gets an ownership marker (`<outdir>/<Item>/.pzstudio-output.json`) and a pzstudio-managed
+junction `<workshopRoot>/<Item>` → `<outdir>/<Item>` is attached (machine-level
+`workshopRoot` in `~/.pzstudio/config.json`, factory default `%USERPROFILE%\Zomboid\Workshop`,
+env override `PZSTUDIO_WORKSHOP_ROOT`). Link failures NEVER flip the exit code — every
+refusal/failure is recorded and surfaced as a warning; `pzstudio doctor` reports the full
+state per item.
+
+- A real non-empty folder occupying the workshop slot is refused
+  (`CONFLICT_REAL_DIR`); `--backup-existing-workshop` moves it aside atomically first
+  (`<slot>.backup-<ISO-timestamp>`).
+- A foreign link in the slot is refused (`FOREIGN_LINK`); `--relink` / `--force-link`
+  replaces it after the cascade verified the identity.
+- An `outdir` outside the project root keeps today's in-place behavior (legacy mode —
+  zero link activity); `pzstudio doctor` prints the `MIGRATE_TO_DIST_MODEL` diagnostic.
+
+The junction is outward-facing only: the engine always mutates `dist/` directly, never
+through the link.
+
 ---
 
 ## pzstudio watch
@@ -566,6 +588,32 @@ Checks performed by the engine (severity in parentheses):
   orphan excludes entries (warning); zero mods (info)
 - **buildTarget**: no production output possible (info); no development output possible (info);
   pzBuildCompatibility mismatch with `--game-build` (warning, never blocks)
+- **workshop-link** (dist model): per-item link state from the platform-node link manager —
+  attached (info, hint carries the copyable `steamcmd` command with the absolute VDF path),
+  missing (warning), real-dir conflict (warning → `--backup-existing-workshop`), foreign link
+  (warning → `--relink`), dangling (warning), unowned dist (warning), non-local workshop root
+  (warning, fail-closed — no copy fallback), unsupported host (info). Legacy outdir renders one
+  `MIGRATE_TO_DIST_MODEL` diagnostic with the concrete `project.json` edit + `workshopRoot`.
+
+---
+
+## pzstudio workshop-vdf
+
+Generates a SteamCMD `workshop.vdf` for a built workshop item and **prints** the exact
+upload command — pzstudio never launches steamcmd or any third-party tool; running the
+upload is the user's step.
+
+- Default item: the built main item (`<outdir>/<Item>`); `--item <dir>` overrides.
+- Default output: `<outdir>/<Item>.workshop.vdf` — always OUTSIDE the item's `Contents/`
+  folder (SteamCMD uploads everything under `contentfolder`); `--out <file>` overrides.
+- `contentfolder` is always an **absolute** path, resolved at generation time
+  (SteamCMD rejects relative paths).
+- The VDF is schema-validated (`packages/cli/assets/workshop.vdf.schema.json`); the PZ
+  footer (`Workshop ID:` empty until the first upload returns the real id, one
+  `Mod ID:` line per mod) is appended to the description.
+- `--id <n>` sets `publishedfileid`; without it an existing out-file's id is reused,
+  else `0` (new item). `--login <user>` personalizes the printed command;
+  `--title/--visibility/--appid/--changenote` override metadata.
 
 ---
 

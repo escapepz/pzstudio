@@ -176,9 +176,9 @@ export async function resolveDoctorWorkshopInputs(
     const items = (['main', 'development'] as const)
         .map((variant) => resolveBuildOutputPath(config, variant))
         .filter((dir) => existsSync(dir))
-        .map((dir) => ({ name: basename(dir), dir }));
+        .map((dir) => ({ name: basename(dir) }));
     const workshopLinks: WorkshopLinkCheckInput[] = await Promise.all(
-        items.map(async ({ name, dir }) => {
+        items.map(async ({ name }) => {
             const inspection = await inspectWorkshopLink(
                 nodeLinkFs,
                 join(dm.workshopRoot, name),
