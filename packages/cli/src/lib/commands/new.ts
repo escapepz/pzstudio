@@ -203,6 +203,13 @@ export async function newCmd(projectTitle: string, modId?: string) {
             name: projectTitle,
             description: '',
         };
+        // Dist-always amendment (§4): fresh projects carry the PORTABLE
+        // tilde token as their deployment target — game-ready immediately
+        // after init + build (mode 'symlink' is the hard default). The
+        // token expands at materialize time, so a cloned repo never bakes
+        // one machine's absolute path into version control. Existing
+        // projects are never rewritten by pzstudio.
+        newProjectConfig.outdir = '~/Zomboid/Workshop';
         updateProjectConfig(newProjectConfigPath, newProjectConfig);
 
         // COMMIT: atomic same-volume rename — the destination only starts

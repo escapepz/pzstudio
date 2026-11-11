@@ -6,7 +6,7 @@ import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { info } from '../logger';
 import { extractFlag } from '../args';
-import { resolveProjectConfig } from '../helper';
+import { distRootOf, projectDir, resolveProjectConfig } from '../helper';
 import { resolveBuildOutputPath, type IProjectConfig } from '@pzstudio/core';
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-ignore - necessary because we can't reliably predict if typescript will resolve this outside src without structural errors in some configs
@@ -22,9 +22,9 @@ import workshopVdfSchema from '../../../assets/workshop.vdf.schema.json';
  * any third-party binary. The upload is the user's manual step.
  *
  * Ported 1:1 from the owner's zero-dependency prototype
- * (pzstudio-notes/workshop-vdf.mjs), with the dist-model defaults: the item
- * defaults to the built main item (`<outDir>/<Item>`), the VDF defaults to
- * `<outDir>/<Item>.workshop.vdf` — always OUTSIDE the item's `Contents/`
+ * (pzstudio-notes/workshop-vdf.mjs), with the dist-always defaults: the item
+ * defaults to the built main item (`dist/<Item>`), the VDF defaults to
+ * `dist/<Item>.workshop.vdf` — always OUTSIDE the item's `Contents/`
  * folder, which is what SteamCMD uploads — and the `contentfolder` is
  * always an ABSOLUTE path (SteamCMD rejects relative ones).
  */
@@ -344,16 +344,21 @@ export async function workshopVdfCmd(): Promise<void> {
     }
     const config = projectConfig as IProjectConfig;
 
-    // Item defaults to the built main item; the VDF defaults to a sibling
-    // of the item dir (outside Contents/ — see generateWorkshopVdf).
+    // Dist-always: the item lives in the project's canonical dist root and
+    // the VDF is a sibling of the item dir there — a machine-local build
+    // artifact (absolute paths inside), never committed. The user's outdir
+    // (deployment target) is irrelevant to SteamCMD: the VDF's absolute
+    // contentfolder points at dist/<Item>/Contents.
+    const distRoot = distRootOf(projectDir());
+    const anchoredConfig = { ...config, outdir: distRoot };
     const itemFlag = extractFlag('item');
     const itemDir = itemFlag
         ? resolve(itemFlag)
-        : resolveBuildOutputPath(config, 'main');
+        : resolveBuildOutputPath(anchoredConfig, 'main');
     const outFlag = extractFlag('out');
     const outPath = outFlag
         ? resolve(outFlag)
-        : join(config.outdir!, `${basename(itemDir)}.workshop.vdf`);
+        : join(distRoot, `${basename(itemDir)}.workshop.vdf`);
 
     const result = await generateWorkshopVdf({
         itemDir,
@@ -389,7 +394,7 @@ addHelp(
 
     Flags:
         --item <dir>                 - Workshop item folder (default: the built main item).
-        --out <file>                 - Output .vdf path (default: <outdir>/<Item>.workshop.vdf).
+        --out <file>                 - Output .vdf path (default: dist/<Item>.workshop.vdf).
         --login <user>               - Steam login name for the printed command.
         --id <n>                     - publishedfileid ("0" = new item).
         --appid <n>                  - Game app id (default: 108600).
