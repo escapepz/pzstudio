@@ -490,14 +490,16 @@ describe('two instances: resolveOutDir isolation (doc 13 §10-A row 5)', () => {
         });
 
         // Interleaved resolves across both instances and both projects.
-        expect(studioA.resolveOutDir(projA)).toBe(path.resolve(outA));
-        expect(studioB.resolveOutDir(projB)).toBe(path.resolve(outB));
+        // Dist-always: the value is each project's canonical dist root;
+        // the providers still run (isolation is about the plumbing).
+        expect(studioA.resolveOutDir(projA)).toBe(path.join(projA, 'dist'));
+        expect(studioB.resolveOutDir(projB)).toBe(path.join(projB, 'dist'));
         // Resolving the OTHER instance's project still goes through the
         // calling instance's own provider: A never receives B's settings
         // and B never receives A's.
-        expect(studioA.resolveOutDir(projB)).toBe(path.resolve(outA));
-        expect(studioB.resolveOutDir(projA)).toBe(path.resolve(outB));
-        expect(studioA.resolveOutDir(projA)).toBe(path.resolve(outA));
+        expect(studioA.resolveOutDir(projB)).toBe(path.join(projB, 'dist'));
+        expect(studioB.resolveOutDir(projA)).toBe(path.join(projA, 'dist'));
+        expect(studioA.resolveOutDir(projA)).toBe(path.join(projA, 'dist'));
 
         // Each provider received exactly the requested explicit projectDir,
         // once per resolve, never the other instance's context.
@@ -522,16 +524,14 @@ describe('two instances: resolveOutDir isolation (doc 13 §10-A row 5)', () => {
         expect(configReads(loggerB)).toHaveLength(2);
 
         // Freshness under interleave: B's provider return changes → B's
-        // next resolve observes it (same project, new root) while A's
-        // result is untouched.
+        // next resolve re-consults its provider (same project, no layers)
+        // while A's result is untouched. Dist-always: the VALUE is each
+        // project's dist root either way — the provider re-read is the
+        // freshness observable.
+        const bReadsBefore = providerB.mock.calls.length;
         layersB = undefined;
-        expect(studioB.resolveOutDir(projB)).toBe(
-            path.join(
-                (globalThis as any).__PZSTUDIO_FAKE_HOME,
-                'Zomboid',
-                'Workshop',
-            ),
-        );
-        expect(studioA.resolveOutDir(projA)).toBe(path.resolve(outA));
+        expect(studioB.resolveOutDir(projB)).toBe(path.join(projB, 'dist'));
+        expect(providerB.mock.calls.length).toBe(bReadsBefore + 1);
+        expect(studioA.resolveOutDir(projA)).toBe(path.join(projA, 'dist'));
     });
 });

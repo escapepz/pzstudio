@@ -270,10 +270,11 @@ describe('createDevSync (Node host integration)', () => {
         });
         await session.start(['main']);
 
+        // Dist-always: the session writes the project's canonical dist
+        // root; the configured outdir is a deployment target, untouched.
         const outFile = path.join(
             projectDir,
-            '..',
-            'out',
+            'dist',
             'Watch Project',
             'Contents',
             'mods',
@@ -308,8 +309,7 @@ describe('createDevSync (Node host integration)', () => {
 
         const mainOut = path.join(
             projectDir,
-            '..',
-            'out',
+            'dist',
             'Watch Project',
             'Contents',
             'mods',
@@ -320,8 +320,7 @@ describe('createDevSync (Node host integration)', () => {
         );
         const devOut = path.join(
             projectDir,
-            '..',
-            'out',
+            'dist',
             'Watch Project - dev_branch',
             'Contents',
             'mods',

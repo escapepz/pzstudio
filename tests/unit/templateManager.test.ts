@@ -214,12 +214,14 @@ describe('templateManager - config and resolution', () => {
     });
 
     describe('readGlobalConfig', () => {
-        it('should return defaults if config does not exist', () => {
+        it('should return defaults if config does not exist (no factory outdir — dist-always)', () => {
             vi.spyOn(fs, 'existsSync').mockReturnValue(false);
             const config = readGlobalConfig();
             expect(config.templates).toBeDefined();
             expect(config.useSymlinks).toBe(true);
-            expect(config.outdir).toBeDefined();
+            // The factory-default outdir tier is removed: an unconfigured
+            // global config carries no outdir (pure build mode).
+            expect(config.outdir).toBeUndefined();
         });
 
         it('should normalize empty templates to defaults', () => {
@@ -378,9 +380,12 @@ describe('templateManager - config and resolution', () => {
             });
             vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
                 if (String(p).includes('config.json'))
+                    // A genuine v1 shape: useSymlinks missing (the migration
+                    // trigger). Dist-always: a missing outdir is NOT a
+                    // migration trigger anymore — but a migrating config
+                    // still receives the backup/default outdir stamp.
                     return JSON.stringify({
                         templates: { project: { url: 'old' } },
-                        useSymlinks: false,
                     });
                 return 'backup-outdir';
             });
@@ -392,9 +397,10 @@ describe('templateManager - config and resolution', () => {
             const lastCall =
                 writeSpy.mock.calls[writeSpy.mock.calls.length - 1];
             const written = JSON.parse(lastCall[1] as string);
-            expect(written.useSymlinks).toBe(false);
+            expect(written.useSymlinks).toBe(true); // Filled default
             expect(written.templates.project.url).toBe('old');
             expect(written.templates.mod).toBeDefined(); // Filled default
+            expect(written.outdir).toBe('backup-outdir'); // Migration stamp
         });
     });
 });

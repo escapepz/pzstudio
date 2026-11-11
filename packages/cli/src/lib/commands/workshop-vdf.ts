@@ -1,4 +1,4 @@
-import { existsSync } from 'fs';
+import { existsSync, type Dirent } from 'fs';
 import fsp from 'node:fs/promises';
 import { basename, join, relative, resolve } from 'path';
 import { CliError } from '../errors';
@@ -78,9 +78,21 @@ export interface WorkshopVdfResult {
 /**
  * Validates the subset of JSON Schema draft-07 the workshop schema uses:
  * type, required, properties, pattern, enum, additionalProperties: false.
+ * The vendored JSON's inferred type is far narrower than the validator's
+ * walk needs, so the parameter is the structural subset instead of
+ * `typeof workshopVdfSchema`.
  */
+interface JsonSchemaSubset {
+    type?: string;
+    required?: string[];
+    properties?: Record<string, JsonSchemaSubset>;
+    pattern?: string;
+    enum?: string[];
+    additionalProperties?: boolean;
+}
+
 function validateSchema(
-    schema: typeof workshopVdfSchema,
+    schema: JsonSchemaSubset,
     value: unknown,
     at = '$',
     errors: string[] = [],
@@ -168,7 +180,9 @@ async function findPreview(dir: string): Promise<string | null> {
 async function findModIds(itemDir: string): Promise<string[]> {
     const modsDir = join(itemDir, 'Contents', 'mods');
     const ids: string[] = [];
-    let entries: Awaited<ReturnType<typeof fsp.readdir>>;
+    // The explicit Dirent<string> annotation sidesteps the @types/node
+    // overload that reads the no-encoding opts object as a Buffer request.
+    let entries: Array<Dirent<string>>;
     try {
         entries = await fsp.readdir(modsDir, { withFileTypes: true });
     } catch {

@@ -1345,9 +1345,13 @@ describe('DevSyncController over the real v2 instance (commit 9 routing pins)', 
         const controller = new DevSyncController(studio, V2.logger);
         await controller.start(projectDir);
 
-        // First plan input observed S1: the initial build landed in out1,
-        // not in the pushed legacy slot.
-        expect(fs.existsSync(path.join(out1, 'Fresh Sync'))).toBe(true);
+        // Dist-always: the initial build landed in the project's canonical
+        // dist root; the settings outdir slots (S1/out1, S2/out2, legacy)
+        // are deployment targets — none ever receives a session write.
+        expect(fs.existsSync(path.join(projectDir, 'dist', 'Fresh Sync'))).toBe(
+            true,
+        );
+        expect(fs.existsSync(path.join(out1, 'Fresh Sync'))).toBe(false);
         expect(fs.existsSync(path.join(out2, 'Fresh Sync'))).toBe(false);
         expect(fs.readdirSync(legacyOut)).toEqual([]);
         expect(provider.mock.calls.length).toBeGreaterThan(0);
@@ -1357,6 +1361,10 @@ describe('DevSyncController over the real v2 instance (commit 9 routing pins)', 
 
         // S2 becomes provider-visible; a later plan input (structural
         // change → full rebuild) must observe it WITHOUT a new session.
+        // Dist-always: the settings switch no longer moves the engine's
+        // write root — the observable is the per-apply settings re-read
+        // (the provider), not an output location change.
+        const providerReadsAfterStart = provider.mock.calls.length;
         layers = {
             workspace: {
                 outdir: out2,
@@ -1369,7 +1377,9 @@ describe('DevSyncController over the real v2 instance (commit 9 routing pins)', 
         );
         await vi.waitFor(
             () =>
-                expect(fs.existsSync(path.join(out2, 'Fresh Sync'))).toBe(true),
+                expect(provider.mock.calls.length).toBeGreaterThan(
+                    providerReadsAfterStart,
+                ),
             { timeout: 5000 },
         );
 
@@ -1448,9 +1458,12 @@ describe('DevSyncController over the real v2 instance (commit 9 routing pins)', 
         // The legacy logger slot (the target of the published raw log/warn
         // exports) received NOTHING — the v2 path never touches it.
         expect(withoutUsageNotice(L1.calls)).toEqual([]);
-        // Settings fingerprint: the instance's workspace layer decided; the
-        // legacy outdir slot is untouched.
-        expect(fs.existsSync(path.join(v2Out, 'Routed Sync'))).toBe(true);
+        // Dist-always settings fingerprint: the instance's session wrote
+        // the project's canonical dist root; the legacy outdir slot (and
+        // the instance's own workspace slot) never receive writes.
+        expect(
+            fs.existsSync(path.join(projectDir, 'dist', 'Routed Sync')),
+        ).toBe(true);
         expect(fs.readdirSync(legacyOut)).toEqual([]);
     });
 });
@@ -1564,9 +1577,11 @@ describe('DevSyncController pre-filtering over the real engine (UX-09)', () => {
         const controller = new DevSyncController(studio, V2.logger);
         await controller.start(projectDir);
 
-        // The initial build wrote into the inside-mod output root.
+        // The initial build wrote into the project's canonical dist root
+        // (dist-always): the inside-mod settings outdir is a deployment
+        // target, never an engine write target.
         const builtOut = mainOut(
-            outA,
+            path.join(projectDir, 'dist'),
             'Filtered Sync',
             'media',
             'lua',
@@ -1630,9 +1645,19 @@ describe('DevSyncController pre-filtering over the real engine (UX-09)', () => {
         const resolveSpy = vi.spyOn(studio, 'resolveOutDir');
         const controller = new DevSyncController(studio, V2.logger);
         await controller.start(projectDir);
+        // Dist-always: the engine's write root is the project's canonical
+        // dist root and NEVER moves — the A→B settings transition below
+        // cannot relocate it.
+        const distRoot = path.join(projectDir, 'dist');
         expect(
             fs.readFileSync(
-                mainOut(outA, 'Transition Gate', 'media', 'lua', 'hello.lua'),
+                mainOut(
+                    distRoot,
+                    'Transition Gate',
+                    'media',
+                    'lua',
+                    'hello.lua',
+                ),
                 'utf8',
             ),
         ).toBe('print("v1")');
@@ -1643,28 +1668,15 @@ describe('DevSyncController pre-filtering over the real engine (UX-09)', () => {
 
         // Settings move A → B, then the root project.json event triggers the
         // full rebuild that re-baselines the engine. The schedule-time
-        // switch resolves synchronously at event time; the rebuild lands in
-        // B; the post-apply correction follows the reported re-baseline.
+        // switch still resolves synchronously at event time (the filter
+        // policy is unchanged), but the rebuild lands in the SAME dist
+        // root — settings relocate the deployment target, never the
+        // engine's writes.
         layers = makeLayers(outB);
         handlers.change.forEach((fn) =>
             fn({ fsPath: path.join(projectDir, 'project.json') }),
         );
         expect(resolveSpy.mock.calls.length).toBe(startupReads + 1);
-        await vi.waitFor(
-            () =>
-                expect(
-                    fs.existsSync(
-                        mainOut(
-                            outB,
-                            'Transition Gate',
-                            'media',
-                            'lua',
-                            'hello.lua',
-                        ),
-                    ),
-                ).toBe(true),
-            { timeout: 5000 },
-        );
         await vi.waitFor(
             () => expect(resolveSpy.mock.calls.length).toBe(startupReads + 2),
             { timeout: 5000 },
@@ -1673,10 +1685,22 @@ describe('DevSyncController pre-filtering over the real engine (UX-09)', () => {
         expect(applySpy.mock.calls[0]![0]).toEqual([
             { type: 'change', path: path.join(projectDir, 'project.json') },
         ]);
+        expect(
+            fs.existsSync(
+                mainOut(
+                    distRoot,
+                    'Transition Gate',
+                    'media',
+                    'lua',
+                    'hello.lua',
+                ),
+            ),
+        ).toBe(true);
+        expect(fs.existsSync(mainOut(outB, 'Transition Gate'))).toBe(false);
 
         // A file under the previously filtered A is legitimate source now:
         // the stale filter must NOT discard it (the §3.2 loss this policy
-        // closes), and the engine must deliver it into the NEW output root.
+        // closes), and the engine must deliver it into the dist root.
         const revived = path.join(
             projectDir,
             'my_mod',
@@ -1695,7 +1719,7 @@ describe('DevSyncController pre-filtering over the real engine (UX-09)', () => {
             { type: 'create', path: revived },
         ]);
         const revivedOut = mainOut(
-            outB,
+            distRoot,
             'Transition Gate',
             'generated-A',
             'media',
@@ -1731,9 +1755,10 @@ describe('DevSyncController pre-filtering over the real engine (UX-09)', () => {
         const startupReads = resolveSpy.mock.calls.length;
 
         // Settings move to B, but ONLY a plain mod-file event arrives: the
-        // engine reuses its baseline and keeps writing A. The test documents
-        // that the filter did not re-resolve BY POLICY (no switch point on a
-        // plain delta), not that the roots happened to agree.
+        // engine reuses its baseline and keeps writing the SAME dist root.
+        // The test documents that the filter did not re-resolve BY POLICY
+        // (no switch point on a plain delta), and that under dist-always
+        // the write root is dist regardless of the settings move.
         layers = makeLayers(outB);
         const source = path.join(
             projectDir,
@@ -1749,7 +1774,7 @@ describe('DevSyncController pre-filtering over the real engine (UX-09)', () => {
                 expect(
                     fs.readFileSync(
                         mainOut(
-                            outA,
+                            path.join(projectDir, 'dist'),
                             'Plain Delta Sync',
                             'media',
                             'lua',
@@ -1762,7 +1787,6 @@ describe('DevSyncController pre-filtering over the real engine (UX-09)', () => {
         );
         expect(resolveSpy.mock.calls.length).toBe(startupReads);
         expect(fs.existsSync(mainOut(outB, 'Plain Delta Sync'))).toBe(false);
-
         await controller.dispose();
     });
 
@@ -1789,26 +1813,16 @@ describe('DevSyncController pre-filtering over the real engine (UX-09)', () => {
 
         // Settings move A → B; a mod.info edit re-baselines the session via
         // a SCOPED rebuild (no schedule-time switch fires for it — its
-        // re-baseline is conditional). The post-apply correction adopts B.
+        // re-baseline is conditional). Dist-always: the scoped rebuild
+        // writes the SAME canonical dist root; the settings move relocates
+        // the deployment target, never the engine's writes.
         layers = makeLayers(outB);
         handlers.change.forEach((fn) =>
             fn({ fsPath: path.join(projectDir, 'my_mod', 'mod.info') }),
         );
-        await vi.waitFor(
-            () =>
-                expect(
-                    fs.existsSync(
-                        mainOut(
-                            outB,
-                            'Scoped Move',
-                            'media',
-                            'lua',
-                            'hello.lua',
-                        ),
-                    ),
-                ).toBe(true),
-            { timeout: 5000 },
-        );
+        await vi.waitFor(() => expect(applySpy).toHaveBeenCalledTimes(1), {
+            timeout: 5000,
+        });
         await vi.waitFor(
             () => expect(resolveSpy.mock.calls.length).toBe(startupReads + 1),
             { timeout: 5000 },
@@ -1818,6 +1832,18 @@ describe('DevSyncController pre-filtering over the real engine (UX-09)', () => {
         expect(firstResult.scoped).toEqual([
             { modId: 'my_mod', variants: ['main', 'development'] },
         ]);
+        expect(
+            fs.existsSync(
+                mainOut(
+                    path.join(projectDir, 'dist'),
+                    'Scoped Move',
+                    'media',
+                    'lua',
+                    'hello.lua',
+                ),
+            ),
+        ).toBe(true);
+        expect(fs.existsSync(mainOut(outB, 'Scoped Move'))).toBe(false);
 
         // Post-flush: source under the old root A is delivered (the
         // correction adopted B; the during-apply window residual named in
@@ -1840,7 +1866,7 @@ describe('DevSyncController pre-filtering over the real engine (UX-09)', () => {
             { type: 'create', path: revived },
         ]);
         const revivedOut = mainOut(
-            outB,
+            path.join(projectDir, 'dist'),
             'Scoped Move',
             'generated-A',
             'media',
@@ -1953,8 +1979,13 @@ describe('DevSyncController resource-scoped settings (UX-05)', () => {
         const controller = new DevSyncController(studio, V2.logger);
 
         // Session A: every plan input resolves settings FOR project A.
+        // Dist-always: the writes land in each project's canonical dist
+        // root; the folder-scoped outdir slots stay write-free.
         await controller.start(projectA);
-        expect(fs.existsSync(path.join(outA, 'Folder A Sync'))).toBe(true);
+        expect(
+            fs.existsSync(path.join(projectA, 'dist', 'Folder A Sync')),
+        ).toBe(true);
+        expect(fs.existsSync(path.join(outA, 'Folder A Sync'))).toBe(false);
         expect(fs.existsSync(path.join(outB, 'Folder A Sync'))).toBe(false);
         await controller.dispose();
 
@@ -1967,7 +1998,10 @@ describe('DevSyncController resource-scoped settings (UX-05)', () => {
         // A's outdir or templates, provider freshness preserved.
         contexts.length = 0;
         await controller.start(projectB);
-        expect(fs.existsSync(path.join(outB, 'Folder B Sync'))).toBe(true);
+        expect(
+            fs.existsSync(path.join(projectB, 'dist', 'Folder B Sync')),
+        ).toBe(true);
+        expect(fs.existsSync(path.join(outB, 'Folder B Sync'))).toBe(false);
         expect(fs.existsSync(path.join(outA, 'Folder B Sync'))).toBe(false);
         await controller.dispose();
 

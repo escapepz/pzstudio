@@ -1,4 +1,4 @@
-import path from 'path';
+﻿import path from 'path';
 import fs from 'fs';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createE2EWorkspace, E2ETestWorkspace } from '../helpers/e2e-fixtures';
@@ -27,7 +27,7 @@ describe('clean command e2e', () => {
             }),
         );
 
-        const outPath = path.join(workspace.dir, 'out', title);
+        const outPath = path.join(workspace.dir, 'dist', title);
         fs.mkdirSync(outPath, { recursive: true });
         fs.writeFileSync(path.join(outPath, 'built_file.txt'), 'content');
 
@@ -76,10 +76,10 @@ describe('clean command e2e', () => {
             }),
         );
 
-        const mainOutPath = path.join(workspace.dir, 'out', title);
+        const mainOutPath = path.join(workspace.dir, 'dist', title);
         const devOutPath = path.join(
             workspace.dir,
-            'out',
+            'dist',
             `${title} - dev_branch`,
         );
 
@@ -91,6 +91,8 @@ describe('clean command e2e', () => {
 
         expect(fs.existsSync(mainOutPath)).toBe(false);
         expect(fs.existsSync(devOutPath)).toBe(false);
+        // The deployment outdir is never a clean target.
+        expect(fs.existsSync(path.join(workspace.dir, 'out'))).toBe(false);
     });
 
     it('should succeed if only development output directory exists', async () => {
@@ -107,7 +109,7 @@ describe('clean command e2e', () => {
 
         const devOutPath = path.join(
             workspace.dir,
-            'out',
+            'dist',
             `${title} - dev_branch`,
         );
         fs.mkdirSync(devOutPath, { recursive: true });

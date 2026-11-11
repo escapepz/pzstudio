@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Dist-model build surface (CLI): the per-item ownership-marker write for
  * the standalone build path and the post-build workshop link step.
  *
@@ -8,10 +8,10 @@
  * exposed to the game through a pzstudio-managed junction
  * `<workshopRoot>/<Item>` -> `<outDir>/<Item>` maintained by the
  * platform-node link manager (Tasks 1-2). The engine never mutates through
- * the link â€” the junction is outward-facing only.
+ * the link — the junction is outward-facing only.
  *
  * Mode gate: the link step (and the build-path marker write) run ONLY when
- * the resolved `outdir` sits inside the project root â€” the dist model. An
+ * the resolved `outdir` sits inside the project root — the dist model. An
  * outdir outside the project root is legacy mode: today's in-place behavior
  * unchanged, zero link activity (doctor surfaces the migration diagnostic).
  *
@@ -33,7 +33,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join as pathJoin, relative, resolve } from 'node:path';
 import {
     attachWorkshopLink,
+    materializeCopySlot,
     type AttachResult,
+    type CopyFs,
     type LinkFs,
     type RealFs,
 } from '@pzstudio/platform-node';
@@ -45,13 +47,22 @@ import type {
 } from '@pzstudio/platform';
 import {
     computeProjectId,
+    copyMarkerPath,
     markerPath,
+    readCopySlotMarker,
     readOutputMarker,
+    writeCopySlotMarker,
     writeOutputMarker,
     type IProjectConfig,
+    type MaterializeMode,
 } from '@pzstudio/core';
+import { expandOutdirToken, distRootOf } from './helper';
 import { getUsageRecorder } from './usage';
-import { USAGE_OP_LINK_ATTACH, USAGE_OP_LINK_BACKUP } from './usage';
+import {
+    USAGE_OP_LINK_ATTACH,
+    USAGE_OP_LINK_BACKUP,
+    USAGE_OP_MATERIALIZE_COPY,
+} from './usage';
 import type { UsageRecorder } from './usage';
 
 /** Machine-level workshop root when neither config nor env provides one.
@@ -111,12 +122,89 @@ export function resolveDistModel(
     return { mode, outDir, workshopRoot };
 }
 
+// ---------------------------------------------------------------------------
+// Dist-always + materialization (2026-11-12 amendment): the canonical build
+// root is ALWAYS `<projectRoot>/dist` (anchored in gatherPlanInput); the
+// user's `outdir` is the DEPLOYMENT target and the materialize step bridges
+// the two — mode 'symlink' junctions each item into the target, mode 'copy'
+// maintains a verified, reconciled real copy there.
+// ---------------------------------------------------------------------------
+
+/** The materialize decision for one build/sync invocation. */
+export interface MaterializationResolution {
+    /**
+     * 'skip' — no deployment this invocation: no target configured
+     * (pure build mode, the amendment's esbuild story) or the caller
+     * passed --no-materialize. There is deliberately no 'none'/'skip'
+     * config value — this state is only ever RESOLVED, never stored.
+     */
+    action: 'skip' | 'materialize';
+    /** The resolved mode (meaningful even when skipping, for doctor UX). */
+    mode: MaterializeMode;
+    /**
+     * The expanded absolute deployment root; set iff
+     * action === 'materialize'.
+     */
+    outDir?: string;
+    /** The canonical build output root `<projectRoot>/dist`. */
+    distRoot: string;
+}
+
+export interface ResolveMaterializationInput {
+    /** The RESOLVED absolute project root. */
+    projectRoot: string;
+    /**
+     * The EFFECTIVE outdir — the getOutDir cascade result (project.json >
+     * host settings > global config, tilde-expanded, absolute) or
+     * undefined when no tier configures one.
+     */
+    effectiveOutdir?: string;
+    /** `project.json` `build.materialize`. */
+    projectMaterialize?: MaterializeMode;
+    /** Machine-level flat `materialize` from `~/.pzstudio/config.json`. */
+    globalMaterialize?: MaterializeMode;
+    /** `--materialize=<symlink|copy>` — wins over both config layers. */
+    flagMaterialize?: MaterializeMode;
+    /** `--no-materialize` — skip deployment for this invocation. */
+    noMaterialize?: boolean;
+}
+
+/**
+ * Resolves the materialize decision (amendment §3 cascade): CLI flag >
+ * project.json `build.materialize` > global flat `materialize` > hard
+ * default 'symlink'; the action is 'skip' when no target exists or
+ * --no-materialize was passed. Mode without a target is inert (the mode
+ * still resolves for doctor's UX).
+ */
+export function resolveMaterialization(
+    input: ResolveMaterializationInput,
+): MaterializationResolution {
+    const mode =
+        input.flagMaterialize ??
+        input.projectMaterialize ??
+        input.globalMaterialize ??
+        'symlink';
+    if (input.noMaterialize || !input.effectiveOutdir) {
+        return {
+            action: 'skip',
+            mode,
+            distRoot: distRootOf(input.projectRoot),
+        };
+    }
+    return {
+        action: 'materialize',
+        mode,
+        outDir: expandOutdirToken(input.effectiveOutdir),
+        distRoot: distRootOf(input.projectRoot),
+    };
+}
+
 /**
  * A node:fs/promises-backed ProjectFileSystem that mirrors NodeFileSystem's
  * URI scheme and stat/list semantics verbatim (plain absolute paths and
  * file:// URIs both accepted; list reports symbolicLink entries; stat
  * follows links like fs.stat). Deliberately NOT an import of
- * `NodeFileSystem` â€” that class sources from `'fs'`, which build.test.ts
+ * `NodeFileSystem` — that class sources from `'fs'`, which build.test.ts
  * auto-mocks wholesale; this mirror rides `'node:fs/promises'`, a different
  * module id, so the standalone build command stays testable under that mock.
  * `writeOutputMarker` consumes read/write/delete/stat/list (its
@@ -189,6 +277,28 @@ export const nodeLinkFs: LinkFs = {
     readdir: (p) => fsp.readdir(p),
 };
 
+/**
+ * The copy materializer's seam over the same real fs (structurally exact):
+ * the reconcile pass walks, copies (mtime-preserving), prunes and gates —
+ * its full fs surface rides `node:fs/promises`, the same module id as
+ * `nodeLinkFs`, so tests mock one module to cover both.
+ */
+export const nodeCopyFs: CopyFs = {
+    lstat: (p) => fsp.lstat(p),
+    stat: (p) => fsp.stat(p),
+    readdirEntries: (p) => fsp.readdir(p, { withFileTypes: true }),
+    readFile: (p) => fsp.readFile(p),
+    writeFile: (p, data) => fsp.writeFile(p, data),
+    mkdir: async (p) => {
+        // fsp.mkdir (recursive) resolves to the first created path — the
+        // seam's contract is void.
+        await fsp.mkdir(p, { recursive: true });
+    },
+    unlink: (p) => fsp.unlink(p),
+    rmdir: (p) => fsp.rmdir(p),
+    utimes: (p, atime, mtime) => fsp.utimes(p, atime, mtime),
+};
+
 /** The mutation seam is fs.promises itself (RealFs is its exact slice). */
 const nodeRealFs = fsp as unknown as RealFs;
 
@@ -197,7 +307,7 @@ const nodeRealFs = fsp as unknown as RealFs;
  * on the standalone build path. The session path (watch/devsync) writes
  * its own markers through `BuildSession`; the assembly is shared
  * (`buildOutputMarker`), so marker content is identical on both paths.
- * Dist mode only â€” legacy outdirs have no junction cascade to prove
+ * Dist mode only — legacy outdirs have no junction cascade to prove
  * ownership to.
  */
 export async function writeBuiltItemMarker(
@@ -368,6 +478,9 @@ export async function attachBuiltItems(
  * The build command's link-step gate: dist mode attaches one junction per
  * built item; legacy mode is a hard no-op — nothing is created, nothing is
  * attempted (Review Focus 6). Empty item lists are a no-op in both modes.
+ *
+ * Superseded by `maybeMaterializeBuiltItems` (the dist-always amendment);
+ * kept until the doctor retarget removes its last caller.
  */
 export async function maybeLinkBuiltItems(
     distModel: DistModel,
@@ -381,6 +494,231 @@ export async function maybeLinkBuiltItems(
         ...rest,
         outDir: distModel.outDir,
         workshopRoot: distModel.workshopRoot,
+        itemNames,
+    });
+}
+
+/** Input for the per-item materialize step (both modes). */
+export interface MaterializeBuiltItemsInput {
+    /** The RESOLVED absolute project root (hashed into the identity). */
+    projectRoot: string;
+    /** The expanded absolute deployment root (slots live under it). */
+    outDir: string;
+    /** The canonical build output root `<projectRoot>/dist`. */
+    distRoot: string;
+    /** Item directory names to materialize (one per built variant). */
+    itemNames: string[];
+    /** Symlink mode: rename a conflicting real dir aside before attaching. */
+    backupExisting?: boolean;
+    /** Symlink mode: replace a foreign link slot. */
+    forceLink?: boolean;
+    /**
+     * Symlink mode: the GENERATED workshop.txt content per item name (what
+     * the build just wrote into dist) — feeds the refuse-path
+     * duplicate-publish diagnosis.
+     */
+    sourceWorkshopTxtByItem?: Record<string, string>;
+    /** Test seams; default to the real fs. */
+    linkFs?: LinkFs;
+    realFs?: RealFs;
+    copyFs?: CopyFs;
+    markerFs?: ProjectFileSystem;
+    /** Defaults to the host platform (caller's privilege, never the module's). */
+    platform?: 'win32' | 'posix';
+    /** Usage recorder slice; defaults to the process recorder. */
+    usage?: Pick<UsageRecorder, 'recordOp'>;
+    /** Console surface (info for successes, warn for refusals/failures). */
+    onSurface?: (line: string, level: 'info' | 'warn') => void;
+}
+
+export type MaterializeOutcome = {
+    itemName: string;
+    error?: string;
+} & {
+    ok: boolean;
+    state?: string;
+    detail?: string;
+    filesCopied?: number;
+    filesPruned?: number;
+};
+
+/**
+ * The copy-mode materialize pass: one verified, reconciled real copy per
+ * built item, through the platform-node copy materializer's 4-step gate.
+ * NON-FATAL by contract (the same rule as the link step): every refusal,
+ * gate violation, or fs failure is recorded and surfaced; the remaining
+ * items still materialize. The deployment root itself is created if
+ * missing (a fresh `~/Zomboid/Workshop`). One `materialize.copy` usage op
+ * per item; the one-line optimization hint prints once per invocation.
+ */
+async function copyMaterializeBuiltItems(
+    input: MaterializeBuiltItemsInput,
+): Promise<MaterializeOutcome[]> {
+    const platform =
+        input.platform ?? (process.platform === 'win32' ? 'win32' : 'posix');
+    const linkFs = input.linkFs ?? nodeLinkFs;
+    const realFs = input.realFs ?? nodeRealFs;
+    const copyFs = input.copyFs ?? nodeCopyFs;
+    const markerFs = input.markerFs ?? promisesFileSystem;
+    const usage = input.usage ?? getUsageRecorder();
+    const surface = input.onSurface ?? defaultSurface;
+    const outDir = resolve(input.outDir);
+    const distRoot = resolve(input.distRoot);
+    const projectId = await computeProjectId(resolve(input.projectRoot));
+
+    try {
+        // A fresh deployment root (init wrote the tilde token, but the
+        // folder itself may not exist until the first game install).
+        await fsp.mkdir(outDir, { recursive: true });
+    } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        const failed: MaterializeOutcome[] = input.itemNames.map(
+            (itemName) => ({
+                itemName,
+                ok: false,
+                state: 'DEPLOY_ROOT_UNAVAILABLE',
+                detail: `deployment root ${outDir} could not be created: ${message}`,
+            }),
+        );
+        for (const outcome of failed) {
+            usage.recordOp({
+                op: USAGE_OP_MATERIALIZE_COPY,
+                host: 'cli',
+                durMs: 0,
+                status: 'error',
+                err: { code: outcome.state!, where: USAGE_OP_MATERIALIZE_COPY },
+            });
+            surface(
+                `Deployment failed for '${outcome.itemName}': ${outcome.detail}`,
+                'warn',
+            );
+        }
+        return failed;
+    }
+
+    const results: MaterializeOutcome[] = [];
+    let anyOk = false;
+    for (const itemName of input.itemNames) {
+        const W = pathJoin(outDir, itemName);
+        const D = pathJoin(distRoot, itemName);
+        let outcome: MaterializeOutcome;
+        try {
+            const result = await materializeCopySlot(
+                copyFs,
+                linkFs,
+                realFs,
+                W,
+                D,
+                {
+                    platform,
+                    readMarker: workshopReadMarker(input.projectRoot, markerFs),
+                    readCopyMarker: (slotDir) =>
+                        readCopySlotMarker(markerFs, copyMarkerPath(slotDir)),
+                    writeCopyMarker: async (slotDir) => {
+                        await writeCopySlotMarker(markerFs, {
+                            projectDir: resolve(input.projectRoot),
+                            itemId: itemName,
+                            slotDir,
+                        });
+                    },
+                    copyIdentity: { projectId, itemId: itemName },
+                },
+            );
+            outcome = { ...result, itemName };
+        } catch (e) {
+            outcome = {
+                itemName,
+                ok: false,
+                error: e instanceof Error ? e.message : String(e),
+            };
+        }
+        results.push(outcome);
+        if (outcome.ok) anyOk = true;
+
+        usage.recordOp({
+            op: USAGE_OP_MATERIALIZE_COPY,
+            host: 'cli',
+            durMs: 0,
+            status: outcome.ok ? 'ok' : 'error',
+            err: outcome.ok
+                ? undefined
+                : {
+                      code: outcome.state ?? 'MATERIALIZE_COPY_FAILED',
+                      where: USAGE_OP_MATERIALIZE_COPY,
+                  },
+        });
+
+        if (outcome.ok) {
+            surface(
+                `Deployed (copy): '${itemName}' -> ${outDir}` +
+                    (outcome.filesCopied || outcome.filesPruned
+                        ? ` (${outcome.filesCopied ?? 0} copied, ${outcome.filesPruned ?? 0} pruned)`
+                        : ''),
+                'info',
+            );
+        } else if (outcome.state === 'HAND_MADE_DIR') {
+            surface(
+                `Copy deployment refused for '${itemName}' [${outcome.state}]: ${outcome.detail ?? outcome.error ?? ''}` +
+                    ` Move or rename the folder by hand, or run build with --backup-existing-workshop.`,
+                'warn',
+            );
+        } else if (outcome.error) {
+            surface(
+                `Copy deployment failed for '${itemName}': ${outcome.error}`,
+                'warn',
+            );
+        } else {
+            surface(
+                `Copy deployment refused for '${itemName}' [${outcome.state}]: ${outcome.detail ?? ''}`,
+                'warn',
+            );
+        }
+    }
+
+    if (anyOk) {
+        // Owner requirement: copying gets an optimization hint — the
+        // default 'symlink' mode exposes dist/ with zero copy cost.
+        surface(
+            `Tip: materialize mode "symlink" (the default) exposes dist/ to the game with zero copy cost under watch — copy mode re-copies changed files on every build.`,
+            'info',
+        );
+    }
+    return results;
+}
+
+/**
+ * The materialize step gate: skip / empty item lists are no-ops; symlink
+ * mode delegates to the junction attach (the 2026-11-11 link step, W =
+ * `<target>/<Item>`, D = `dist/<Item>`); copy mode runs the reconciling
+ * copy pass. Non-fatal either way — outcomes are recorded and surfaced.
+ */
+export async function maybeMaterializeBuiltItems(
+    materialization: MaterializationResolution,
+    itemNames: string[],
+    rest: Omit<MaterializeBuiltItemsInput, 'outDir' | 'distRoot' | 'itemNames'>,
+): Promise<MaterializeOutcome[]> {
+    if (materialization.action !== 'materialize' || itemNames.length === 0) {
+        return [];
+    }
+    if (materialization.mode === 'copy') {
+        return copyMaterializeBuiltItems({
+            ...rest,
+            outDir: materialization.outDir!,
+            distRoot: materialization.distRoot,
+            itemNames,
+        });
+    }
+    // Best-effort deploy-root creation for the junction path too: a fresh
+    // machine has no `~/Zomboid/Workshop` yet, and symlink(2) fails ENOENT
+    // on a missing parent. A failure here surfaces per item through the
+    // attach outcomes (non-fatal), never aborts the build.
+    await fsp
+        .mkdir(materialization.outDir!, { recursive: true })
+        .catch(() => {});
+    return attachBuiltItems({
+        ...rest,
+        outDir: materialization.distRoot,
+        workshopRoot: materialization.outDir!,
         itemNames,
     });
 }

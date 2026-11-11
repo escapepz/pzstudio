@@ -1,4 +1,5 @@
 import { existsSync } from 'fs';
+import { resolve } from 'path';
 import { resolveBuildOutputPath } from '@pzstudio/core';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
@@ -9,7 +10,12 @@ import {
     throwOnOutcomeFailures,
     OperationOutcome,
 } from '../outcome';
-import { removeDirRecursive, resolveProjectConfig } from '../helper';
+import {
+    distRootOf,
+    projectDir,
+    removeDirRecursive,
+    resolveProjectConfig,
+} from '../helper';
 import { assertNoAliasRouteSync } from '../mutation-route-guard';
 import { info, log, verbose } from '../logger';
 
@@ -56,9 +62,15 @@ export function cleanCmd() {
 
     const startTime = performance.now();
 
-    const outDir = projectConfig.outdir!;
-    const mainOutPath = resolveBuildOutputPath(projectConfig, 'main');
-    const devOutPath = resolveBuildOutputPath(projectConfig, 'development');
+    // Dist-always: clean removes the canonical dist output items; the
+    // deployment target never has artifacts deleted from it (a dangling
+    // junction or stale copy slot heals on the next build's materialize
+    // step).
+    const projectPath = resolve(projectDir());
+    const outDir = distRootOf(projectPath);
+    const cleanConfig = { ...projectConfig, outdir: outDir };
+    const mainOutPath = resolveBuildOutputPath(cleanConfig, 'main');
+    const devOutPath = resolveBuildOutputPath(cleanConfig, 'development');
 
     let cleaned = false;
     const outcomes: OperationOutcome[] = [];

@@ -108,6 +108,8 @@ export type CopySlotState =
     | 'UNOWNED_TARGET'
     | 'COPY_SLOT'
     | 'HAND_MADE_DIR'
+    /** Race-swap: the cascade re-lstat saw a real dir appear mid-inspection. */
+    | 'CONFLICT_REAL_DIR'
     | 'NOT_DIRECTORY';
 
 /** The identity a copy slot must prove to count as engine-managed. */
@@ -211,11 +213,16 @@ export async function inspectMaterializeSlot(
 
     if (entry.isSymbolicLink()) {
         // Delegate the full link cascade — target, identity, ownership.
+        // (A cascade re-lstat losing the race with a delete reports
+        // ATTACHABLE — from this caller's view the slot is simply absent
+        // again.)
         const link = await inspectWorkshopLink(fs, W, pathResolve(D), {
             platform: opts.platform,
             readMarker: opts.readMarker,
         });
-        return { state: link.state, detail: link.detail };
+        const state: CopySlotState =
+            link.state === 'ATTACHABLE' ? 'ABSENT' : link.state;
+        return { state, detail: link.detail };
     }
 
     if (entry.isDirectory()) {

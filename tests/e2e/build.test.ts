@@ -56,10 +56,12 @@ describe('build command e2e', () => {
         workspace.assertSuccess(buildResult);
 
         try {
+            // Dist-always: no outdir configured anywhere → pure build mode.
+            // The artifacts land in the project's canonical dist root and
+            // nothing is deployed.
             const expectedOutDir = path.join(
-                workspace.fakeHome,
-                'Zomboid',
-                'Workshop',
+                workspace.dir,
+                'dist',
                 projectTitle,
             );
             expect(fs.existsSync(expectedOutDir)).toBe(true);
@@ -80,6 +82,16 @@ describe('build command e2e', () => {
                     ),
                 ),
             ).toBe(true);
+            expect(
+                fs.existsSync(
+                    path.join(
+                        workspace.fakeHome,
+                        'Zomboid',
+                        'Workshop',
+                        projectTitle,
+                    ),
+                ),
+            ).toBe(false);
         } catch (e) {
             console.log('STDOUT:', buildResult.stdout.join('\n'));
             console.log('STDERR:', buildResult.stderr.join('\n'));
@@ -87,7 +99,7 @@ describe('build command e2e', () => {
         }
     }, 60000);
 
-    it('should build with custom outdir', async () => {
+    it('should build with custom outdir (dist + junction deployment)', async () => {
         const projectTitle = 'Custom OutDir';
         const modId = 'custom_mod';
         const customOutDirName = 'custom_output';
@@ -119,14 +131,19 @@ describe('build command e2e', () => {
         const buildResult = await workspace.run('build');
         workspace.assertSuccess(buildResult);
 
-        const expectedOutDir = path.join(customOutDirPath, projectTitle);
-        expect(fs.existsSync(expectedOutDir)).toBe(true);
-        expect(fs.existsSync(path.join(expectedOutDir, 'workshop.txt'))).toBe(
-            true,
-        );
+        // Dist-always: artifacts land in dist; the configured outdir
+        // receives the per-item junction (mode 'symlink', the default).
+        const distItem = path.join(workspace.dir, 'dist', projectTitle);
+        expect(fs.existsSync(distItem)).toBe(true);
+        expect(fs.existsSync(path.join(distItem, 'workshop.txt'))).toBe(true);
+        expect(
+            fs
+                .lstatSync(path.join(customOutDirPath, projectTitle))
+                .isSymbolicLink(),
+        ).toBe(true);
     });
 
-    it('should fail cleanly when outdir is invalid or missing', async () => {
+    it('should build dist cleanly and surface the deployment failure when outdir is invalid', async () => {
         workspace.write(
             'project.json',
             JSON.stringify({
@@ -145,9 +162,15 @@ describe('build command e2e', () => {
         workspace.write(path.join('mod', 'poster.png'), 'fake image');
 
         const buildResult = await workspace.run('build');
-        workspace.assertFailure(buildResult);
+        // Dist-always: the artifacts are complete in dist; the outdir is a
+        // deployment target — an unusable one is a surfaced, non-fatal
+        // materialize failure, never a build failure.
+        workspace.assertSuccess(buildResult);
+        expect(
+            fs.existsSync(path.join(workspace.dir, 'dist', 'Invalid OutDir')),
+        ).toBe(true);
         expect(buildResult.stderr.join('\n')).toMatch(
-            /no such file or directory|error|invalid/i,
+            /workshop link failed|enoent|refused/i,
         );
     });
 
@@ -155,7 +178,6 @@ describe('build command e2e', () => {
         const projectTitle = 'Stale Output';
         const modId = 'stale_mod';
         const customOutDirName = 'stale_output';
-        const customOutDirPath = path.join(workspace.dir, customOutDirName);
 
         workspace.write(
             'project.json',
@@ -171,9 +193,10 @@ describe('build command e2e', () => {
         );
         workspace.write(path.join(modId, 'poster.png'), 'fake image');
 
-        // Create a stale file in the expected output directory
+        // Create a stale file in the canonical dist output directory
         const outModPath = path.join(
-            customOutDirPath,
+            workspace.dir,
+            'dist',
             projectTitle,
             'Contents',
             'mods',
@@ -221,9 +244,8 @@ describe('build command e2e', () => {
         workspace.assertSuccess(buildResult);
 
         const outModPath = path.join(
-            workspace.fakeHome,
-            'Zomboid',
-            'Workshop',
+            workspace.dir,
+            'dist',
             projectTitle,
             'Contents',
             'mods',

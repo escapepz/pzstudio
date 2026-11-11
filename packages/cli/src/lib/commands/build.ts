@@ -3,7 +3,7 @@ import { basename, resolve } from 'path';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { CliError } from '../errors';
-import { hasFlag } from '../args';
+import { extractFlag, hasFlag } from '../args';
 import {
     OUTCOME_FAILURE,
     OUTCOME_SUCCESS,
@@ -17,8 +17,10 @@ import {
     planBuild,
     resolveBuildOutputPath,
     workshopTextForVariant,
+    type MaterializeMode,
 } from '@pzstudio/core';
 import {
+    distRootOf,
     gatherPlanInput,
     projectDir,
     removeDirRecursive,
@@ -37,14 +39,20 @@ import {
     scaffoldProject,
 } from '../templateManager';
 import {
-    maybeLinkBuiltItems,
-    resolveDistModel,
+    maybeMaterializeBuiltItems,
+    resolveMaterialization,
     writeBuiltItemMarker,
+    type MaterializationResolution,
 } from '../linkStep';
 
 addHelp(
     'build',
     `Build your project and package it for the workshop.
+
+    Builds always write the canonical dist/ output inside the project. When
+    an outdir is configured (project.json or 'pzstudio outdir'), each built
+    item is deployed there: a junction by default ('symlink'), or a verified
+    copy ('copy').
 
     NOTE: This command is for packaging only. To generate mod.info files in your source tree,
     use 'pzstudio modinfo generate'.
@@ -54,6 +62,8 @@ addHelp(
         pzstudio build --production  - Builds only the main workshop output.
         pzstudio build --development - Builds only the dev_branch workshop output.
         pzstudio build --both        - Builds both the main and dev_branch workshop outputs.
+        pzstudio build --no-materialize        - Build dist/ only; skip deployment this run.
+        pzstudio build --materialize=copy      - Force copy-mode deployment this run.
         pzstudio build --verbose     - Enable diagnostic output.`,
 );
 
@@ -142,19 +152,48 @@ export async function buildCmd() {
 
     const startTime = performance.now();
 
-    // Resolved once: the marker identity (projectId hash) and the plan input
-    // must share the project root's canonical spelling, or the ownership
-    // check never matches (Task 3 review carry-forward).
+    // Dist-always amendment (2026-11-12): the canonical build root is
+    // ALWAYS `<projectRoot>/dist` (anchored in gatherPlanInput); the
+    // user's outdir (any tier) is the DEPLOYMENT target. `projectRoot`
+    // resolved once: the marker identity (projectId hash) and the plan
+    // input must share the project root's canonical spelling, or the
+    // ownership check never matches (Task 3 review carry-forward).
     const projectPath = resolve(projectDir());
-    const distModel = resolveDistModel(projectPath, {
-        outdir: projectConfig.outdir,
-        workshopRoot: readGlobalConfig()?.workshopRoot,
+    const distRoot = distRootOf(projectPath);
+    const flagMaterializeRaw = extractFlag('materialize');
+    if (
+        flagMaterializeRaw !== undefined &&
+        flagMaterializeRaw !== 'symlink' &&
+        flagMaterializeRaw !== 'copy'
+    ) {
+        throw new CliError(
+            `Invalid --materialize value "${flagMaterializeRaw}".`,
+            {
+                tryHint:
+                    'Use --materialize=symlink (junction, default) or --materialize=copy (reconciled real copy).',
+            },
+        );
+    }
+    const materialization: MaterializationResolution = resolveMaterialization({
+        projectRoot: projectPath,
+        effectiveOutdir: projectConfig.outdir,
+        projectMaterialize: projectConfig.build?.materialize,
+        globalMaterialize: readGlobalConfig()?.materialize,
+        flagMaterialize: flagMaterializeRaw as MaterializeMode | undefined,
+        noMaterialize: hasFlag('no-materialize'),
     });
-    const outDir = distModel.outDir;
     verbose(`Project root: ${projectPath}`);
-    verbose(`Output root: ${outDir}`);
+    verbose(`Output root: ${distRoot}`);
     verbose(
-        `Dist model: ${distModel.mode}; workshop root: ${distModel.workshopRoot}`,
+        `Deployment: ${
+            materialization.action === 'materialize'
+                ? materialization.outDir
+                : 'disabled (no outdir configured or --no-materialize)'
+        }; materialize: ${
+            materialization.action === 'materialize'
+                ? materialization.mode
+                : 'skip'
+        }`,
     );
 
     const isProduction = hasFlag('production');
@@ -229,34 +268,36 @@ export async function buildCmd() {
                 }
                 info(`\nBuilding main workshop...`);
                 executeBuildPlan(planBuild({ ...planInput, variant: 'main' }), {
-                    outputRoot: outDir,
+                    outputRoot: distRoot,
                 });
                 variantOutcomes.push(OUTCOME_SUCCESS);
                 builtItems.push({
+                    // The ANCHORED plan config carries the dist output root
+                    // (the raw project config's outdir is the deployment
+                    // target and may be unset — pure build mode).
                     name: basename(
-                        resolveBuildOutputPath(projectConfig, 'main'),
+                        resolveBuildOutputPath(planInput.config, 'main'),
                     ),
                     variant: 'main',
                 });
-                // Dist model only: the marker proves ownership to the
-                // junction cascade. Legacy outdirs have no cascade. A
-                // failure never fails the variant — fail-closed downstream
-                // (a missing marker surfaces as UNOWNED_TARGET).
-                if (distModel.mode === 'dist') {
-                    try {
-                        await writeBuiltItemMarker(
-                            projectConfig,
-                            'main',
-                            projectPath,
-                            outDir,
-                        );
-                    } catch (e) {
-                        warn(
-                            `Output ownership marker for the main item failed: ${
-                                e instanceof Error ? e.message : String(e)
-                            }`,
-                        );
-                    }
+                // The dist-side ownership marker is written on EVERY
+                // successful variant build (dist-always: there is no
+                // legacy mode left to gate it). A failure never fails the
+                // variant — fail-closed downstream (a missing marker
+                // surfaces as UNOWNED_TARGET).
+                try {
+                    await writeBuiltItemMarker(
+                        projectConfig,
+                        'main',
+                        projectPath,
+                        distRoot,
+                    );
+                } catch (e) {
+                    warn(
+                        `Output ownership marker for the main item failed: ${
+                            e instanceof Error ? e.message : String(e)
+                        }`,
+                    );
                 }
             }
         } catch (e) {
@@ -281,30 +322,28 @@ export async function buildCmd() {
                 info(`\nBuilding dev_branch workshop...`);
                 executeBuildPlan(
                     planBuild({ ...planInput, variant: 'development' }),
-                    { outputRoot: outDir },
+                    { outputRoot: distRoot },
                 );
                 variantOutcomes.push(OUTCOME_SUCCESS);
                 builtItems.push({
                     name: basename(
-                        resolveBuildOutputPath(projectConfig, 'development'),
+                        resolveBuildOutputPath(planInput.config, 'development'),
                     ),
                     variant: 'development',
                 });
-                if (distModel.mode === 'dist') {
-                    try {
-                        await writeBuiltItemMarker(
-                            projectConfig,
-                            'development',
-                            projectPath,
-                            outDir,
-                        );
-                    } catch (e) {
-                        warn(
-                            `Output ownership marker for the dev_branch item failed: ${
-                                e instanceof Error ? e.message : String(e)
-                            }`,
-                        );
-                    }
+                try {
+                    await writeBuiltItemMarker(
+                        projectConfig,
+                        'development',
+                        projectPath,
+                        distRoot,
+                    );
+                } catch (e) {
+                    warn(
+                        `Output ownership marker for the dev_branch item failed: ${
+                            e instanceof Error ? e.message : String(e)
+                        }`,
+                    );
                 }
             }
         } catch (e) {
@@ -313,12 +352,13 @@ export async function buildCmd() {
         }
     }
 
-    // Dist-model link step: one junction per successfully built item.
-    // NON-FATAL by contract (Review Focus 4) — attachBuiltItems records and
-    // surfaces every refusal/failure. Runs BEFORE the failure throw: a
-    // failed variant must not orphan the junction of a variant that DID
-    // build (final review fix wave #4). Legacy mode: hard no-op inside the
-    // gate.
+    // Materialize step: expose each successfully built item to the game —
+    // a junction per item (mode 'symlink', the default) or a verified,
+    // reconciled copy (mode 'copy'), into the configured deployment root.
+    // NON-FATAL by contract (Review Focus 4) — every refusal/failure is
+    // recorded and surfaced. Runs BEFORE the failure throw: a failed
+    // variant must not orphan the deployment of a variant that DID build
+    // (final review fix wave #4). No target / --no-materialize: hard no-op.
     const sourceTexts: Record<string, string> = {};
     for (const built of builtItems) {
         sourceTexts[built.name] = workshopTextForVariant(
@@ -326,8 +366,8 @@ export async function buildCmd() {
             built.variant,
         );
     }
-    await maybeLinkBuiltItems(
-        distModel,
+    await maybeMaterializeBuiltItems(
+        materialization,
         builtItems.map((built) => built.name),
         {
             projectRoot: projectPath,
@@ -366,6 +406,8 @@ registerCommand({
         { name: 'relink' },
         { name: 'force-link' },
         { name: 'backup-existing-workshop' },
+        { name: 'materialize', takesValue: true },
+        { name: 'no-materialize' },
     ],
     run: () => buildCmd(),
 });

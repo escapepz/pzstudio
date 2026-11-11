@@ -5,7 +5,7 @@ import { CliError } from '../errors';
 import { hasFlag } from '../args';
 import type { FileDelta } from '@pzstudio/core';
 import { summarizeApplyResult } from '@pzstudio/core';
-import { projectDir, resolveProjectConfig } from '../helper';
+import { projectDir, distRootOf, resolveProjectConfig } from '../helper';
 import { info, verbose, warn } from '../logger';
 import { createDevSyncForEngine } from '../devsync';
 import { isWatchPathIgnored, resolveWatchVariants } from '../watch-shared';
@@ -54,7 +54,10 @@ export async function watchCmd() {
     });
 
     const projectPath = projectDir();
-    const outDir = projectConfig.outdir!;
+    // Dist-always: the watcher ignores the canonical dist output tree (the
+    // engine's only write target); the deployment target is never a
+    // watcher concern.
+    const outDir = distRootOf(projectPath);
     verbose(`Project root: ${projectPath}`);
     verbose(`Output root: ${outDir}`);
     // Compact single-line banner (CLI-7): what is syncing and how to stop.
