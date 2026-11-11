@@ -1,0 +1,57 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "SteamCMD Workshop Item Configuration",
+    "type": "object",
+    "required": ["workshopitem"],
+    "properties": {
+        "workshopitem": {
+            "type": "object",
+            "required": [
+                "appid",
+                "publishedfileid",
+                "contentfolder",
+                "previewfile",
+                "title"
+            ],
+            "properties": {
+                "appid": {
+                    "type": "string",
+                    "description": "Steam App ID of the game (Project Zomboid is '108600').",
+                    "pattern": "^[0-9]+$"
+                },
+                "publishedfileid": {
+                    "type": "string",
+                    "description": "Workshop item ID. Set to '0' for the first upload. SteamCMD writes the new ID back into the file after a successful upload.",
+                    "pattern": "^[0-9]+$"
+                },
+                "contentfolder": {
+                    "type": "string",
+                    "description": "Absolute path to the folder containing the mod content (use double backslashes '\\\\' on Windows)."
+                },
+                "previewfile": {
+                    "type": "string",
+                    "description": "Absolute path to the preview image (preview.gif or preview.png, must be < 1MB)."
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Public display name of the mod on Steam Workshop. ASCII only, max 128 bytes.",
+                    "pattern": "^[\\x20-\\x7E]{1,128}$"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Detailed description of your mod."
+                },
+                "changenote": {
+                    "type": "string",
+                    "description": "Note describing changes in this update (e.g., 'First release')."
+                },
+                "visibility": {
+                    "type": "string",
+                    "description": "Visibility of the mod: '0' = Public, '1' = Friends Only, '2' = Private, '3' = Unlisted.",
+                    "enum": ["0", "1", "2", "3"]
+                }
+            },
+            "additionalProperties": false
+        }
+    }
+}
