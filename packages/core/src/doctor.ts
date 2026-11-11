@@ -38,7 +38,8 @@ export type DiagnosticModule =
     | 'filesystem'
     | 'templates'
     | 'mods'
-    | 'buildTarget';
+    | 'buildTarget'
+    | 'workshop-link';
 
 export interface Diagnostic {
     severity: DiagnosticSeverity;
@@ -62,6 +63,37 @@ export interface DoctorInput {
     capabilities: PlatformCapabilities;
     /** The running game build (e.g. "42.2.0") to check pzBuildCompatibility against. */
     gameBuild?: string;
+    /**
+     * Dist-model workshop-link checks, computed by the HOST (they need
+     * link-aware fs reads — lstat/readlink/realpath — that the browser-safe
+     * contract does not carry). Core only renders. Node hosts compute via
+     * the platform-node link manager; a browser host passes
+     * `state: 'UNSUPPORTED_HOST'` entries or omits the field entirely.
+     */
+    workshopLinks?: WorkshopLinkCheckInput[];
+    /** The host's dist-model decision; legacy renders MIGRATE_TO_DIST_MODEL. */
+    distModel?: {
+        mode: 'dist' | 'legacy';
+        outDir: string;
+        workshopRoot: string;
+    };
+    /** True when the workshop root is a non-local volume (UNC/WSL). */
+    workshopRootNonLocal?: boolean;
+}
+
+/** One host-computed workshop-link fact for the doctor to render. */
+export interface WorkshopLinkCheckInput {
+    /** Item (workshop slot) name the state belongs to. */
+    item: string;
+    /**
+     * A platform-node LinkState, or 'UNSUPPORTED_HOST' when the host
+     * cannot maintain junctions at all.
+     */
+    state: string;
+    /** Detail text from the cascade (errno / raw target), when present. */
+    detail?: string;
+    /** Absolute path of the item's workshop VDF, when the host knows it. */
+    vdfPath?: string;
 }
 
 export interface DoctorReport {
@@ -560,8 +592,127 @@ export async function runDoctor(
             ...buildTargetDiagnostics(project.config, input.gameBuild),
         );
     }
+    diagnostics.push(...workshopLinkDiagnostics(input.workshopLinks ?? []));
+    diagnostics.push(...distModelDiagnostics(input.distModel));
+    if (input.workshopRootNonLocal) {
+        diagnostics.push(
+            workshopLinkDiagnostics([
+                { item: '*', state: 'NON_LOCAL_TARGET' },
+            ])[0],
+        );
+    }
 
     return project
         ? { projectDir: input.projectDir, project, diagnostics }
         : { projectDir: input.projectDir, diagnostics };
+}
+
+/**
+ * Renders host-computed workshop-link facts into doctor diagnostics. Pure
+ * mapping — every state gets a stable code, a severity, and an actionable
+ * hint. NON_LOCAL_TARGET's wording is fail-closed: junctions cannot target
+ * non-local volumes and pzstudio offers no copy fallback (owner decision,
+ * 2026-11-11 — real-world failures are triaged via issues).
+ */
+export function workshopLinkDiagnostics(
+    entries: WorkshopLinkCheckInput[],
+): Diagnostic[] {
+    const codes: Record<string, string> = {
+        ATTACHED_OK: 'workshop-link.attached',
+        MISSING_LINK: 'workshop-link.missing',
+        CONFLICT_REAL_DIR: 'workshop-link.conflict-real-dir',
+        FOREIGN_LINK: 'workshop-link.foreign',
+        DANGLING_LINK: 'workshop-link.dangling',
+        UNOWNED_TARGET: 'workshop-link.unowned',
+        NOT_DIRECTORY: 'workshop-link.not-directory',
+        IDENTITY_MISMATCH: 'workshop-link.identity-mismatch',
+        NON_LOCAL_TARGET: 'workshop-link.non-local',
+        UNSUPPORTED_HOST: 'workshop-link.unsupported-host',
+    };
+    return entries.map((entryState): Diagnostic => {
+        const state = entryState.state;
+        const base = {
+            module: 'workshop-link' as const,
+            code:
+                codes[state] ??
+                `workshop-link.${state.toLowerCase().replace(/_/g, '-')}`,
+            message: `Workshop link for '${entryState.item}': ${state}${
+                entryState.detail ? ` (${entryState.detail})` : ''
+            }.`,
+        };
+        const steamcmdHint = entryState.vdfPath
+            ? `Upload with: steamcmd +login <user> +workshop_build_item "${entryState.vdfPath}" +quit`
+            : undefined;
+        switch (state) {
+            case 'ATTACHED_OK':
+                return {
+                    ...base,
+                    severity: 'info',
+                    hint: steamcmdHint,
+                };
+            case 'MISSING_LINK':
+                return {
+                    ...base,
+                    severity: 'warning',
+                    hint: 'Run pzstudio build to create the workshop link.',
+                };
+            case 'CONFLICT_REAL_DIR':
+                return {
+                    ...base,
+                    severity: 'warning',
+                    hint: 'Run with --backup-existing-workshop to move the existing folder aside and attach the link.',
+                };
+            case 'FOREIGN_LINK':
+                return {
+                    ...base,
+                    severity: 'warning',
+                    hint: 'Pass --relink (or --force-link) to replace the foreign link after checking where it points.',
+                };
+            case 'DANGLING_LINK':
+                return {
+                    ...base,
+                    severity: 'warning',
+                    hint: 'Rebuild to recreate the dist directory and re-attach the link.',
+                };
+            case 'UNOWNED_TARGET':
+                return {
+                    ...base,
+                    severity: 'warning',
+                    hint: 'The dist directory carries no ownership marker for this project — rebuild to write it. If the slot belongs to another project, do not relink.',
+                };
+            case 'NON_LOCAL_TARGET':
+                return {
+                    ...base,
+                    severity: 'warning',
+                    hint: 'Point workshopRoot at a local disk — junctions cannot target network volumes.',
+                };
+            case 'UNSUPPORTED_HOST':
+                return {
+                    ...base,
+                    severity: 'info',
+                };
+            default:
+                return { ...base, severity: 'warning' };
+        }
+    });
+}
+
+/** Renders the dist-model decision: legacy gets exactly one migration hint. */
+function distModelDiagnostics(
+    distModel: DoctorInput['distModel'],
+): Diagnostic[] {
+    if (!distModel || distModel.mode !== 'legacy') return [];
+    return [
+        {
+            module: 'workshop-link',
+            code: 'MIGRATE_TO_DIST_MODEL',
+            severity: 'warning',
+            message:
+                `The output root sits outside the project (legacy in-place builds). ` +
+                `Dist model: set project.json "outdir" to the project-local dist directory ` +
+                `and record the current output root as the machine-level "workshopRoot" ` +
+                `(${distModel.workshopRoot}).`,
+            hint: 'Then rebuild — the workshop link step attaches the junctions and this diagnostic disappears.',
+        },
+    ];
 }

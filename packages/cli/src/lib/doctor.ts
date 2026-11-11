@@ -5,9 +5,20 @@
  * template cache location — then hands over to the host-blind engine in
  * @pzstudio/core. Diagnostics themselves never live here.
  */
-import { join } from 'path';
-import { NodeFileSystem, NODE_CAPABILITIES } from '@pzstudio/platform-node';
-import { runDoctor, DoctorReport } from '@pzstudio/core';
+import { basename, join, resolve } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import {
+    NodeFileSystem,
+    NODE_CAPABILITIES,
+    inspectWorkshopLink,
+} from '@pzstudio/platform-node';
+import {
+    runDoctor,
+    DoctorReport,
+    resolveBuildOutputPath,
+    type IProjectConfig,
+    type WorkshopLinkCheckInput,
+} from '@pzstudio/core';
 import {
     getExternalProjectDir,
     getOutDir,
@@ -15,9 +26,10 @@ import {
     readProjectConfig,
     setProjectDir,
 } from './helper';
-import { probeTemplateCacheDir } from './templateManager';
+import { probeTemplateCacheDir, getConfigPath } from './templateManager';
 import { legacyLogger, engineIo } from './logger';
 import type { PzStudioHostSettings, PzStudioLogger } from './invocation';
+import { nodeLinkFs, resolveDistModel, workshopReadMarker } from './linkStep';
 
 export interface ProjectDoctorOptions {
     /**
@@ -63,6 +75,9 @@ export async function runProjectDoctorCore(
     const io = { logger: deps.logger };
 
     let outDir: string | undefined;
+    let workshop:
+        | Awaited<ReturnType<typeof resolveDoctorWorkshopInputs>>
+        | undefined;
     try {
         const config = readProjectConfig(
             join(projectPath, 'project.json'),
@@ -75,6 +90,11 @@ export async function runProjectDoctorCore(
                 settings,
                 logger: deps.logger,
             });
+            workshop = await resolveDoctorWorkshopInputs(
+                projectPath,
+                config,
+                readWorkshopRootFromGlobalConfig(),
+            );
         }
     } catch {
         // An invalid project.json is itself a doctor finding (reported
@@ -100,7 +120,88 @@ export async function runProjectDoctorCore(
         templateName: template?.name,
         capabilities: NODE_CAPABILITIES,
         gameBuild: deps.gameBuild,
+        workshopLinks: workshop?.workshopLinks,
+        distModel: workshop?.distModel,
+        workshopRootNonLocal: workshop?.workshopRootNonLocal,
     });
+}
+
+/**
+ * Reads `workshopRoot` straight from the global config file, SILENTLY.
+ * `readGlobalConfig()` emits a verbose through the raw legacy sink, which
+ * would pollute the R1 mirror contract (exactly one emission per op on
+ * threaded paths — caught by cliCores). A corrupt/unreadable config
+ * degrades to undefined (factory-default workshop root), the same
+ * fail-soft the usage recorder applies to its config read.
+ */
+function readWorkshopRootFromGlobalConfig(): string | undefined {
+    try {
+        const raw = readFileSync(getConfigPath(), 'utf-8');
+        const parsed = JSON.parse(raw) as { workshopRoot?: string };
+        return parsed.workshopRoot;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Host-side dist-model inputs for the doctor: the dist-model decision, the
+ * per-item workshop-link states (pure reads via the platform-node link
+ * manager — the doctor never attaches), the non-local workshop-root flag,
+ * and each item's absolute workshop VDF path for the copyable steamcmd
+ * hint. Only item dirs that EXIST get a link check; a missing variant has
+ * no built item to report on.
+ */
+export async function resolveDoctorWorkshopInputs(
+    projectPath: string,
+    config: IProjectConfig,
+    workshopRoot?: string,
+): Promise<{
+    distModel: ReturnType<typeof resolveDistModel>;
+    workshopLinks?: WorkshopLinkCheckInput[];
+    workshopRootNonLocal?: boolean;
+}> {
+    const dm = resolveDistModel(resolve(projectPath), {
+        outdir: config.outdir,
+        workshopRoot,
+    });
+    const workshopRootNonLocal =
+        dm.workshopRoot.startsWith('\\\\') || dm.workshopRoot.startsWith('//');
+    if (dm.mode !== 'dist') {
+        return { distModel: dm, workshopRootNonLocal };
+    }
+    const platform =
+        process.platform === 'win32' ? ('win32' as const) : ('posix' as const);
+    const readMarker = workshopReadMarker(resolve(projectPath));
+    const items = (['main', 'development'] as const)
+        .map((variant) => resolveBuildOutputPath(config, variant))
+        .filter((dir) => existsSync(dir))
+        .map((dir) => ({ name: basename(dir), dir }));
+    const workshopLinks: WorkshopLinkCheckInput[] = await Promise.all(
+        items.map(async ({ name, dir }) => {
+            const inspection = await inspectWorkshopLink(
+                nodeLinkFs,
+                join(dm.workshopRoot, name),
+                join(dm.outDir, name),
+                { platform, readMarker },
+            );
+            return {
+                item: name,
+                // Doctor vocabulary: the cascade's ATTACHABLE (no slot at
+                // W) reads as a missing link; its OK_LINK reads as
+                // attached-ok.
+                state:
+                    inspection.state === 'ATTACHABLE'
+                        ? 'MISSING_LINK'
+                        : inspection.state === 'OK_LINK'
+                          ? 'ATTACHED_OK'
+                          : inspection.state,
+                detail: inspection.detail,
+                vdfPath: join(dm.outDir, `${name}.workshop.vdf`),
+            };
+        }),
+    );
+    return { distModel: dm, workshopLinks, workshopRootNonLocal };
 }
 
 /**

@@ -180,7 +180,7 @@ const promisesFileSystem: ProjectFileSystem = {
 };
 
 /** The cascade's read seam over the same real fs (structurally exact). */
-const nodeLinkFs: LinkFs = {
+export const nodeLinkFs: LinkFs = {
     lstat: (p) => fsp.lstat(p),
     readlink: (p) => fsp.readlink(p),
     stat: (p, opts) => fsp.stat(p, opts),
@@ -245,8 +245,25 @@ export type AttachOutcome = {
     };
 
 /**
+ * The ownership readMarker the cascade consumes: parses the item marker via
+ * the dist directory and matches it against THIS project's identity hash
+ * (strict compare — the reader does not validate fields). Shared by the
+ * build's link step and the doctor's host-side link checks.
+ */
+export function workshopReadMarker(
+    projectRoot: string,
+    markerFs: ProjectFileSystem = promisesFileSystem,
+): (distDir: string) => Promise<unknown> {
+    return async (distDir) => {
+        const expected = await computeProjectId(resolve(projectRoot));
+        const marker = await readOutputMarker(markerFs, markerPath(distDir));
+        return marker && marker.projectId === expected ? marker : undefined;
+    };
+}
+
+/**
  * Attaches one workshop junction per built item. NON-FATAL by contract:
- * a refusal, a thrown fs error, or a foreign slot never propagates â€” every
+ * a refusal, a thrown fs error, or a foreign slot never propagates — every
  * outcome is recorded, surfaced with its error code, and the remaining
  * items still attach. Usage events carry no paths or item names.
  */
@@ -259,9 +276,6 @@ export async function attachBuiltItems(
     const realFs = input.realFs ?? nodeRealFs;
     const markerFs = input.markerFs ?? promisesFileSystem;
     const usage = input.usage ?? getUsageRecorder();
-    const expectedProjectId = await computeProjectId(
-        resolve(input.projectRoot),
-    );
     const flags: string[] = [];
     if (input.backupExisting) flags.push('backup-existing-workshop');
     if (input.forceLink) flags.push('relink');
@@ -276,16 +290,7 @@ export async function attachBuiltItems(
                 platform,
                 backupExisting: input.backupExisting,
                 forceLink: input.forceLink,
-                readMarker: async (distDir) => {
-                    const marker = await readOutputMarker(
-                        markerFs,
-                        markerPath(distDir),
-                    );
-                    if (!marker || marker.projectId !== expectedProjectId) {
-                        return undefined;
-                    }
-                    return marker;
-                },
+                readMarker: workshopReadMarker(input.projectRoot, markerFs),
             });
             outcome = { ...result, itemName };
         } catch (e) {
