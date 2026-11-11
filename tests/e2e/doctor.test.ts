@@ -33,6 +33,9 @@ describe('doctor command (E2E)', () => {
                     visibility: 'public',
                     tags: ['Build 42'],
                 },
+                // Dist-model healthy shape: the output root lives inside
+                // the project (no MIGRATE_TO_DIST_MODEL diagnostic).
+                outdir: path.join(workspace.dir, 'dist'),
                 mods: { my_mod: { name: 'My Mod', description: 'A mod.' } },
                 excludes: [],
                 schemaVersion: 2,
@@ -79,6 +82,9 @@ describe('doctor command (E2E)', () => {
             'project.json',
             JSON.stringify({
                 workshop: { title: 'P', visibility: 'public', tags: [] },
+                // Dist-model shape keeps the game-build warning the only
+                // warning in the expected count.
+                outdir: path.join(workspace.dir, 'dist'),
                 mods: { my_mod: { name: 'My Mod', description: 'A mod.' } },
                 excludes: [],
                 pzBuildCompatibility: '42.x',
@@ -104,6 +110,8 @@ describe('doctor command (E2E)', () => {
             'project.json',
             JSON.stringify({
                 workshop: { title: 'P', visibility: 'public', tags: [] },
+                // Dist-model shape: no MIGRATE warning, status stays ok.
+                outdir: path.join(workspace.dir, 'dist'),
                 mods: { my_mod: { name: 'My Mod', description: 'A mod.' } },
                 excludes: [],
                 schemaVersion: 2,

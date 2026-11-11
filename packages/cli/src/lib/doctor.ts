@@ -94,6 +94,7 @@ export async function runProjectDoctorCore(
                 projectPath,
                 config,
                 readWorkshopRootFromGlobalConfig(),
+                outDir,
             );
         }
     } catch {
@@ -156,13 +157,17 @@ export async function resolveDoctorWorkshopInputs(
     projectPath: string,
     config: IProjectConfig,
     workshopRoot?: string,
+    outDirOverride?: string,
 ): Promise<{
     distModel: ReturnType<typeof resolveDistModel>;
     workshopLinks?: WorkshopLinkCheckInput[];
     workshopRootNonLocal?: boolean;
 }> {
     const dm = resolveDistModel(resolve(projectPath), {
-        outdir: config.outdir,
+        // The MERGED effective outdir (what the build actually consumes via
+        // getOutDir) — deciding from the raw project.json field would split
+        // the doctor's verdict from the build's (fix wave #2).
+        outdir: outDirOverride ?? config.outdir,
         workshopRoot,
     });
     const workshopRootNonLocal =

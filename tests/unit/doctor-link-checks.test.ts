@@ -330,4 +330,22 @@ describe('resolveDoctorWorkshopInputs (CLI host computation)', () => {
         );
         expect(inputs.workshopRootNonLocal).toBe(true);
     });
+
+    it('honors the merged outDir override: a project without project.json outdir stays legacy (fix wave #2)', async () => {
+        // Build resolves the effective outdir through getOutDir (settings +
+        // global config merge; the factory default is the Zomboid workshop
+        // folder — OUTSIDE the project). The doctor must make its dist
+        // decision from the SAME merged value, or MIGRATE_TO_DIST_MODEL
+        // never fires for exactly the users it targets.
+        const config = makeConfig(undefined as never); // outdir unset
+        const mergedOutDir = join(root, '..', 'Zomboid-Workshop'); // outside root
+        const inputs = await resolveDoctorWorkshopInputs(
+            root,
+            config as never,
+            workshop,
+            mergedOutDir,
+        );
+        expect(inputs.distModel?.mode).toBe('legacy');
+        expect(inputs.workshopLinks ?? []).toHaveLength(0);
+    });
 });

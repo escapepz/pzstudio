@@ -121,17 +121,21 @@ describe('resolveDistModel', () => {
         expect(outside.mode).toBe('legacy');
     });
 
-    it('workshopRoot: explicit config wins over env, env wins over factory default', () => {
+    it('workshopRoot: env wins over explicit config, config wins over factory default', () => {
+        // Env-first is the documented precedence (docs/cli/07 + the
+        // GlobalConfig field comment): the env override must beat config.
+        process.env.PZSTUDIO_WORKSHOP_ROOT = join(root, 'ws-env');
+        const both = resolveDistModel(root, {
+            workshopRoot: join(root, 'ws'),
+        });
+        expect(both.workshopRoot).toBe(resolve(join(root, 'ws-env')));
+
+        delete process.env.PZSTUDIO_WORKSHOP_ROOT;
         const explicit = resolveDistModel(root, {
             workshopRoot: join(root, 'ws'),
         });
         expect(explicit.workshopRoot).toBe(resolve(join(root, 'ws')));
 
-        process.env.PZSTUDIO_WORKSHOP_ROOT = join(root, 'ws-env');
-        const viaEnv = resolveDistModel(root, {});
-        expect(viaEnv.workshopRoot).toBe(resolve(join(root, 'ws-env')));
-
-        delete process.env.PZSTUDIO_WORKSHOP_ROOT;
         const factory = resolveDistModel(root, {});
         expect(factory.workshopRoot).toBe(
             resolve(join(homedir(), 'Zomboid', 'Workshop')),
@@ -361,6 +365,50 @@ describe('attachBuiltItems', () => {
         const ops = usage.recordOp.mock.calls.map((c) => c[0].op);
         expect(ops).toContain('link.backup');
         expect(ops).toContain('link.attach');
+    });
+
+    it('refuse diagnosis fires hasUnsyncedWorkshopId from the PROVIDED source text (fix wave #5)', async () => {
+        const config = makeConfig(dist);
+        await seedBuiltItem(config, 'main');
+        const itemName = basename(resolveBuildOutputPath(config, 'main'));
+        // A real folder holding a published id that the generated source
+        // workshop.txt does not carry — the duplicate-publish hazard.
+        const slot = join(workshop, itemName);
+        await fsp.mkdir(slot, { recursive: true });
+        writeFileSync(
+            join(slot, 'workshop.txt'),
+            'title=hand made\nid=987654\n',
+        );
+
+        const surfaces: Array<{ line: string; level: string }> = [];
+        const withoutSource = await attachBuiltItems({
+            projectRoot: root,
+            outDir: dist,
+            workshopRoot: workshop,
+            itemNames: [itemName],
+            usage: { recordOp: vi.fn() },
+            onSurface: (line, level) => surfaces.push({ line, level }),
+        });
+        expect(withoutSource[0].hasUnsyncedWorkshopId).toBeUndefined();
+
+        const withSource = await attachBuiltItems({
+            projectRoot: root,
+            outDir: dist,
+            workshopRoot: workshop,
+            itemNames: [itemName],
+            sourceWorkshopTxtByItem: { [itemName]: 'title=Item\n' },
+            usage: { recordOp: vi.fn() },
+            onSurface: (line, level) => surfaces.push({ line, level }),
+        });
+        expect(withSource[0].hasUnsyncedWorkshopId).toBe(true);
+        // The withSource warn is the LAST 'Item' line: both calls surface.
+        const warnLine = surfaces
+            .filter((s) => s.level === 'warn' && s.line.includes(itemName))
+            .pop();
+        expect(warnLine).toBeDefined();
+        // The duplicate-publish hazard is named on the surface (spec §4:
+        // whether W's workshop.txt carries an id missing from source).
+        expect(warnLine!.line).toContain('duplicate-publish');
     });
 
     it('usage events carry no paths or item names (privacy rule)', async () => {

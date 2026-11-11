@@ -16,6 +16,7 @@ import {
     collectIncludedModIds,
     planBuild,
     resolveBuildOutputPath,
+    workshopTextForVariant,
 } from '@pzstudio/core';
 import {
     gatherPlanInput,
@@ -201,7 +202,10 @@ export async function buildCmd() {
     // fails the command after every variant got its chance.
     const variantOutcomes: OperationOutcome[] = [];
     const variantErrors: string[] = [];
-    const builtItemNames: string[] = [];
+    const builtItems: Array<{
+        name: string;
+        variant: 'main' | 'development';
+    }> = [];
 
     // Build main workshop (Default/project.json target or explicit --production)
     if (buildMain) {
@@ -228,9 +232,12 @@ export async function buildCmd() {
                     outputRoot: outDir,
                 });
                 variantOutcomes.push(OUTCOME_SUCCESS);
-                builtItemNames.push(
-                    basename(resolveBuildOutputPath(projectConfig, 'main')),
-                );
+                builtItems.push({
+                    name: basename(
+                        resolveBuildOutputPath(projectConfig, 'main'),
+                    ),
+                    variant: 'main',
+                });
                 // Dist model only: the marker proves ownership to the
                 // junction cascade. Legacy outdirs have no cascade. A
                 // failure never fails the variant — fail-closed downstream
@@ -277,11 +284,12 @@ export async function buildCmd() {
                     { outputRoot: outDir },
                 );
                 variantOutcomes.push(OUTCOME_SUCCESS);
-                builtItemNames.push(
-                    basename(
+                builtItems.push({
+                    name: basename(
                         resolveBuildOutputPath(projectConfig, 'development'),
                     ),
-                );
+                    variant: 'development',
+                });
                 if (distModel.mode === 'dist') {
                     try {
                         await writeBuiltItemMarker(
@@ -305,19 +313,33 @@ export async function buildCmd() {
         }
     }
 
-    throwOnOutcomeFailures(variantOutcomes, variantErrors.join('\n'));
-
     // Dist-model link step: one junction per successfully built item.
     // NON-FATAL by contract (Review Focus 4) — attachBuiltItems records and
-    // surfaces every refusal/failure; the exit code is already decided.
-    // Legacy mode: hard no-op inside the gate.
-    await maybeLinkBuiltItems(distModel, builtItemNames, {
-        projectRoot: projectPath,
-        backupExisting: hasFlag('backup-existing-workshop'),
-        forceLink: hasFlag('relink') || hasFlag('force-link'),
-        onSurface: (line, level) =>
-            level === 'warn' ? warn(line) : info(line),
-    });
+    // surfaces every refusal/failure. Runs BEFORE the failure throw: a
+    // failed variant must not orphan the junction of a variant that DID
+    // build (final review fix wave #4). Legacy mode: hard no-op inside the
+    // gate.
+    const sourceTexts: Record<string, string> = {};
+    for (const built of builtItems) {
+        sourceTexts[built.name] = workshopTextForVariant(
+            projectConfig,
+            built.variant,
+        );
+    }
+    await maybeLinkBuiltItems(
+        distModel,
+        builtItems.map((built) => built.name),
+        {
+            projectRoot: projectPath,
+            backupExisting: hasFlag('backup-existing-workshop'),
+            forceLink: hasFlag('relink') || hasFlag('force-link'),
+            sourceWorkshopTxtByItem: sourceTexts,
+            onSurface: (line, level) =>
+                level === 'warn' ? warn(line) : info(line),
+        },
+    );
+
+    throwOnOutcomeFailures(variantOutcomes, variantErrors.join('\n'));
 
     const endTime = performance.now();
     info(`Build complete in ${((endTime - startTime) / 1000).toFixed(2)}s!`);

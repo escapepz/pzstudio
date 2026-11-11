@@ -90,8 +90,9 @@ export interface DistModel {
  * refused). Resolution is only for the boundary check and the junction
  * paths the link step joins itself.
  *
- * `workshopRoot` precedence: explicit config > `PZSTUDIO_WORKSHOP_ROOT`
- * env > the factory default (`%USERPROFILE%\Zomboid\Workshop`).
+ * `workshopRoot` precedence: `PZSTUDIO_WORKSHOP_ROOT` env > explicit
+ * config > the factory default (`%USERPROFILE%\Zomboid\Workshop`) —
+ * the documented order (docs/cli/07-config-files.md).
  */
 export function resolveDistModel(
     projectRoot: string,
@@ -103,8 +104,8 @@ export function resolveDistModel(
     const mode: DistModel['mode'] =
         rel === '' || rel.startsWith('..') ? 'legacy' : 'dist';
     const workshopRoot = resolve(
-        config.workshopRoot ??
-            process.env.PZSTUDIO_WORKSHOP_ROOT ??
+        process.env.PZSTUDIO_WORKSHOP_ROOT ??
+            config.workshopRoot ??
             defaultWorkshopRoot(),
     );
     return { mode, outDir, workshopRoot };
@@ -225,6 +226,13 @@ export interface AttachBuiltItemsInput {
     itemNames: string[];
     backupExisting?: boolean;
     forceLink?: boolean;
+    /**
+     * The GENERATED workshop.txt content per item name (what the build just
+     * wrote into dist). Feeds the refuse-path duplicate-publish diagnosis:
+     * a workshop.txt id in the real slot that the source does not carry
+     * means the next upload would publish a NEW item instead of updating.
+     */
+    sourceWorkshopTxtByItem?: Record<string, string>;
     /** Defaults to the host platform (caller's privilege, never the module's). */
     platform?: 'win32' | 'posix';
     /** Test seams; default to the real fs. */
@@ -290,6 +298,7 @@ export async function attachBuiltItems(
                 platform,
                 backupExisting: input.backupExisting,
                 forceLink: input.forceLink,
+                sourceWorkshopTxt: input.sourceWorkshopTxtByItem?.[itemName],
                 readMarker: workshopReadMarker(input.projectRoot, markerFs),
             });
             outcome = { ...result, itemName };
@@ -334,6 +343,9 @@ export async function attachBuiltItems(
         } else if (outcome.state === 'CONFLICT_REAL_DIR') {
             surface(
                 `Workshop link refused for '${itemName}' [${outcome.state}]: ${outcome.detail ?? outcome.error ?? ''}` +
+                    (outcome.hasUnsyncedWorkshopId
+                        ? ` The existing folder's workshop.txt carries a Steam workshop id the source does not (duplicate-publish hazard).`
+                        : '') +
                     ` Run with --backup-existing-workshop to move the existing folder aside.`,
                 'warn',
             );
