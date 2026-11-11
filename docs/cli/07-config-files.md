@@ -69,7 +69,7 @@ Write contract:
 
 ```
 ~/.pzstudio/
-  config.json             ← global defaults (templates, outdir, workshopRoot, useSymlinks, experimental)
+  config.json             ← global defaults (templates, outdir, materialize, useSymlinks, experimental)
   .pzstudio.bak           ← legacy pre-v0.3 content (only as outdir fallback)
   templates/
     <user>/<repo>/        ← one cache per template source
@@ -88,17 +88,29 @@ Write contract:
   },
   "useSymlinks": true,
   "outdir": "C:\\Users\\…\\Zomboid\\Workshop",
-  "workshopRoot": "C:\\Users\\…\\Zomboid\\Workshop",
+  "materialize": "symlink",
   "experimental": { "integration": false }
 }
 ```
 
 Behavior notes:
-- `workshopRoot` is the machine-level root for the dist model's per-item junctions
-  (`<workshopRoot>/<Item>` → `<project>/dist/<Item>`); absent → factory default
-  `%USERPROFILE%\Zomboid\Workshop`; the `PZSTUDIO_WORKSHOP_ROOT` env var wins over this
-  field. It is never a mutation target — the engine only ever writes the project-local
-  dist output root.
+- `outdir` is the machine-level **deployment root** (dist-always amendment,
+  2026-11-12): builds always write the project's canonical `dist/` output; the
+  deployment root is where each built item is exposed to the game — a junction
+  (`materialize: "symlink"`, the default) or a verified reconciled copy
+  (`"copy"`). A project.json `outdir` wins over this tier; with neither set the
+  build runs pure (dist only, no deployment — `pzstudio doctor` reports
+  `OUTDIR_UNSET` as info). There is NO factory default anymore and no
+  `PZSTUDIO_WORKSHOP_ROOT` env var; `pzstudio outdir <path>` writes this tier.
+  `pzstudio new` writes the portable token `"outdir": "~/Zomboid/Workshop"` into
+  fresh project.json files (the tilde expands at materialize time — commit the
+  token, not an absolute path).
+- `materialize` is the machine-level fallback of the project.json
+  `build.materialize` key (`'symlink' | 'copy'` only — there is no `'none'`):
+  `--materialize=` flag > project.json > this field > `'symlink'`. A developer
+  on a mount where junctions cannot be created (WSL/SMB) sets `"copy"` here
+  once, without dirtying tracked project files. `--no-materialize` skips
+  deployment for one invocation.
 - Created with all defaults on the first *real* command (pure invocations like
   `--help`/`--version` create nothing — CLI-1 contract).
 - Migrated automatically at startup when the legacy shape is detected (two reporting
@@ -113,15 +125,22 @@ Behavior notes:
 ## Build output tree
 
 ```
-<outdir>/                        ← resolved via the chain (see 02)
+<projectRoot>/dist/              ← the engine's ONLY write target (build/watch/sync)
   <title>/                       ← main output (production)
     workshop.txt                 ← generated (title, id, description lines, visibility)
     preview.png                  ← copied if present
+    .pzstudio-output.json        ← ownership marker (item root; never uploaded)
     Contents/mods/<modId>/<branch>/…    ← Build 42 layout
   <title> - dev_branch/          ← development output
     workshop.txt                 ← title + " - dev_branch" suffix, id + "_dev"
     Contents/mods/<modId>_dev/<branch>/…
 ```
+
+The deployment root (`outdir`, any tier) mirrors each item at materialize time:
+`<outdir>/<title>` is a junction → `dist/<title>` (symlink mode, default) or a
+reconciled real copy carrying its own `.pzstudio-copy.json` marker (copy mode).
+There is also `dist/<Item>.workshop.vdf` (from `pzstudio workshop-vdf`) — a
+machine-local build artifact, never committed.
 
 Planner rules worth remembering:
 - A mod folder **with** branch folders containing `media/` → files land under each branch;
@@ -159,7 +178,8 @@ exact-file.txt        ← exact path match (relative to this file's directory)
 | `~/.pzstudio/config.json` | — | — | — | — | — | — | ✔ | ✔ | — | — |
 | `~/.pzstudio/templates/**` | cache/clone | cache/clone | — | — | — | — | — | — | cache/clone (workshop) | — |
 | `~/.pzstudio/.template-legacy/**` | bootstrap (first legacy need) | same | — | — | — | — | — | — | same | — |
-| `<outdir>/**` | — | — | — | — | — | — | — | — | ✔ full ownership | ✔ delete only |
+| `<project>/dist/**` | — | — | — | — | — | — | — | — | ✔ full ownership | ✔ delete only |
+| `<outdir>/<Item>` (deployment) | — | — | — | — | — | — | — | — | ✔ junction or marker-gated copy only | — |
 
 `*` = only when `experimental.integration` is opted in (default OFF — BREAKING, CLI-10).
 
@@ -167,5 +187,8 @@ Read-only commands regardless of flags: `list` (human and `--json`), `doctor` (h
 `--json`). `delete`/`rename` with `--dry-run` write nothing. No command other than the
 ones above writes to the project or the store.
 
-`build`/`watch`/`clean` own the output tree exclusively: everything under `<outdir>/<title>*`
-is deleted and re-created; manual edits there are lost by design.
+`build`/`watch`/`clean` own the canonical `dist/` tree exclusively: everything under
+`dist/<title>*` is deleted and re-created; manual edits there are lost by design. The
+deployment root is NOT a build write target — `build`/`watch` only attach the junction
+or run the marker-gated copy reconcile there; `clean` never touches it (a dangling
+junction or stale copy heals on the next build).

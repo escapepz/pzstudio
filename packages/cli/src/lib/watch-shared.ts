@@ -6,11 +6,9 @@
  * decision logic from here.
  */
 import { relative, sep } from 'path';
-import type { BuildVariant } from '@pzstudio/core';
+import type { BuildVariant, MaterializeMode } from '@pzstudio/core';
 import { CliError } from './errors';
 import type { MaterializationResolution } from './linkStep';
-import { extractFlag } from './args';
-import type { MaterializeMode } from '@pzstudio/core';
 
 /** How long file-system events are collected before one sync pass runs. */
 export const WATCH_DEBOUNCE_MS = 300;
