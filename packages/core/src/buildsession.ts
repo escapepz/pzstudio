@@ -41,6 +41,7 @@ import {
     assertWritableOwnedOrEmptyDestination,
     isEmptyDestination,
 } from './mutation-guard';
+import { writeOutputMarker } from './output-marker';
 
 export type BuildVariant = 'main' | 'development';
 
@@ -315,6 +316,14 @@ export interface BuildSessionHost {
     fs: ProjectFileSystem;
     getPlanInput(): Promise<Omit<PlanBuildInput, 'variant'>>;
     log?(level: OperationLogLevel, message: string): void;
+    /**
+     * The engine version recorded in the per-item output marker (the
+     * browser-safe core cannot know the host package's version — the
+     * caller supplies it). Absent hosts record 'unknown', which keeps the
+     * marker valid: the field is informational and never matched by the
+     * workshop link cascade's ownership check.
+     */
+    engineVersion?: string;
 }
 
 function isLockError(e: unknown): boolean {
@@ -502,6 +511,27 @@ export class BuildSession {
                 // The rebuild replaced the root's content wholesale: the
                 // root is now entirely this session's own output.
                 this.ownedOutputPaths.add(ownershipKey(outPath));
+                // Per-item ownership marker (dist model): the workshop link
+                // cascade reads `.pzstudio-output.json` via the item
+                // directory to refuse foreign targets. Written once per
+                // item build, after the plan completed; a failure never
+                // fails the variant — fail-closed downstream, a missing
+                // marker surfaces as UNOWNED_TARGET instead of letting a
+                // foreign project adopt this item.
+                try {
+                    await writeOutputMarker(this.host.fs, {
+                        config: planInput.config,
+                        variant,
+                        projectDir: planInput.projectDir,
+                        engineVersion: this.host.engineVersion,
+                        outputRoot: planInput.config.outdir,
+                    });
+                } catch (e) {
+                    this.log(
+                        'warn',
+                        `Output ownership marker for '${outPath}' failed: ${describeError(e)}`,
+                    );
+                }
             } catch (e) {
                 errors.push(
                     `${variant === 'main' ? 'main' : 'dev_branch'}: ${describeError(e)}`,

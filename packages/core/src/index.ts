@@ -13,6 +13,7 @@ export * from './textgen';
 export * from './buildplan';
 export * from './execute';
 export * from './buildsession';
+export * from './output-marker';
 export * from './doctor';
 export * from './migration';
 export * from './constants';

@@ -98,6 +98,7 @@ describe('F23-E1a-A: case-exact destination on a case-insensitive filesystem', (
             const mainRoot = variantRoot(`${MOD_ROOT}/gen`, 'main');
             const devRoot = variantRoot(`${MOD_ROOT}/gen`, 'development');
             expect(keysUnder(fs, mainRoot)).toEqual([
+                `${mainRoot}/.pzstudio-output.json`,
                 `${mainRoot}/Contents/mods/my_mod/gen/Sync Project/Contents/template-file.txt`,
                 `${mainRoot}/Contents/mods/my_mod/media/lua/hello.lua`,
                 `${mainRoot}/Contents/mods/my_mod/media/lua/util.lua`,
@@ -107,6 +108,7 @@ describe('F23-E1a-A: case-exact destination on a case-insensitive filesystem', (
                 `${mainRoot}/workshop.txt`,
             ]);
             expect(keysUnder(fs, devRoot)).toEqual([
+                `${devRoot}/.pzstudio-output.json`,
                 `${devRoot}/Contents/mods/my_mod_dev/gen/Sync Project - dev_branch/Contents/template-file.txt`,
                 `${devRoot}/Contents/mods/my_mod_dev/gen/Sync Project/Contents/mods/my_mod/gen/Sync Project/Contents/template-file.txt`,
                 `${devRoot}/Contents/mods/my_mod_dev/gen/Sync Project/Contents/mods/my_mod/media/lua/hello.lua`,
@@ -542,6 +544,7 @@ describe('F23-E1a-G: exact output trees, both variants, in the case-variant flow
         const mainRoot = `${MOD_ROOT}/GEN/${MAIN_OUT_PREFIX}`;
         const devRoot = `${MOD_ROOT}/GEN/${DEV_OUT_PREFIX}`;
         expect(keysUnder(fs, mainRoot)).toEqual([
+            `${mainRoot}/.pzstudio-output.json`,
             `${mainRoot}/Contents/mods/my_mod/GEN/Sync Project/Contents/template-file.txt`,
             `${mainRoot}/Contents/mods/my_mod/GEN/staging/collide.lua`,
             `${mainRoot}/Contents/mods/my_mod/media/lua/hello.lua`,
@@ -552,6 +555,7 @@ describe('F23-E1a-G: exact output trees, both variants, in the case-variant flow
             `${mainRoot}/workshop.txt`,
         ]);
         expect(keysUnder(fs, devRoot)).toEqual([
+            `${devRoot}/.pzstudio-output.json`,
             `${devRoot}/Contents/mods/my_mod_dev/GEN/Sync Project - dev_branch/Contents/template-file.txt`,
             `${devRoot}/Contents/mods/my_mod_dev/GEN/Sync Project/Contents/mods/my_mod/GEN/Sync Project/Contents/template-file.txt`,
             `${devRoot}/Contents/mods/my_mod_dev/GEN/Sync Project/Contents/mods/my_mod/GEN/staging/collide.lua`,

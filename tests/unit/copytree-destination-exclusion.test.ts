@@ -140,6 +140,7 @@ describe('F23-R2: clean case-6 build from an empty destination', () => {
             // must not remove them, and — the F23 point — must not let the
             // walk re-enter its own destination and grow them further.
             expect(keysUnder(fs, mainRoot)).toEqual([
+                `${mainRoot}/.pzstudio-output.json`,
                 `${mainRoot}/Contents/mods/my_mod/gen/Sync Project/Contents/template-file.txt`,
                 `${mainRoot}/Contents/mods/my_mod/media/lua/hello.lua`,
                 `${mainRoot}/Contents/mods/my_mod/media/lua/util.lua`,
@@ -149,6 +150,7 @@ describe('F23-R2: clean case-6 build from an empty destination', () => {
                 `${mainRoot}/workshop.txt`,
             ]);
             expect(keysUnder(fs, devRoot)).toEqual([
+                `${devRoot}/.pzstudio-output.json`,
                 `${devRoot}/Contents/mods/my_mod_dev/gen/Sync Project - dev_branch/Contents/template-file.txt`,
                 `${devRoot}/Contents/mods/my_mod_dev/gen/Sync Project/Contents/mods/my_mod/gen/Sync Project/Contents/template-file.txt`,
                 `${devRoot}/Contents/mods/my_mod_dev/gen/Sync Project/Contents/mods/my_mod/media/lua/hello.lua`,
@@ -323,13 +325,16 @@ describe('F23-R1: stale output root adoption (G3-F23c)', () => {
             }
 
             // Engine deletes are exactly the adoption's own removeDir +
-            // makeDir sentinel operations — no new destructive behavior.
+            // makeDir sentinel operations plus the ownership markers' tmp
+            // cleanup — no new destructive behavior.
             expect(fs.deletes.sort()).toEqual(
                 [
                     `${MOD_ROOT}/gen-b/${MAIN_OUT_PREFIX}`,
                     `${MOD_ROOT}/gen-b/${MAIN_OUT_PREFIX}/.pzstudio-mkdir`,
+                    `${MOD_ROOT}/gen-b/${MAIN_OUT_PREFIX}/.pzstudio-output.json.tmp`,
                     `${MOD_ROOT}/gen-b/${DEV_OUT_PREFIX}`,
                     `${MOD_ROOT}/gen-b/${DEV_OUT_PREFIX}/.pzstudio-mkdir`,
+                    `${MOD_ROOT}/gen-b/${DEV_OUT_PREFIX}/.pzstudio-output.json.tmp`,
                 ].sort(),
             );
 
@@ -721,11 +726,13 @@ describe('F23-R5: source protection boundary', () => {
 
         // The refused variant executed nothing — its removeDir never ran.
         // The delete log carries only the built (empty-destination) dev
-        // variant's own removeDir + makeDir sentinel.
+        // variant's own removeDir, makeDir sentinel, and ownership-marker
+        // tmp cleanup.
         expect(fs.deletes.sort()).toEqual(
             [
                 `${MOD_ROOT}/gen-b/${DEV_OUT_PREFIX}`,
                 `${MOD_ROOT}/gen-b/${DEV_OUT_PREFIX}/.pzstudio-mkdir`,
+                `${MOD_ROOT}/gen-b/${DEV_OUT_PREFIX}/.pzstudio-output.json.tmp`,
             ].sort(),
         );
 
