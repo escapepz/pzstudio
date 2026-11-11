@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync, cpSync } from 'fs';
+import { basename, resolve } from 'path';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { CliError } from '../errors';
@@ -14,6 +15,7 @@ import {
     FileOperation,
     collectIncludedModIds,
     planBuild,
+    resolveBuildOutputPath,
 } from '@pzstudio/core';
 import {
     gatherPlanInput,
@@ -29,9 +31,15 @@ import { info, verbose, warn } from '../logger';
 import { isStandaloneBin } from '../runtime-context';
 import { maybePrintFirstBuildUrl } from '../first-run';
 import {
+    readGlobalConfig,
     resolveTemplateDirForEngine,
     scaffoldProject,
 } from '../templateManager';
+import {
+    maybeLinkBuiltItems,
+    resolveDistModel,
+    writeBuiltItemMarker,
+} from '../linkStep';
 
 addHelp(
     'build',
@@ -133,10 +141,20 @@ export async function buildCmd() {
 
     const startTime = performance.now();
 
-    const projectPath = projectDir();
-    const outDir = projectConfig.outdir!;
+    // Resolved once: the marker identity (projectId hash) and the plan input
+    // must share the project root's canonical spelling, or the ownership
+    // check never matches (Task 3 review carry-forward).
+    const projectPath = resolve(projectDir());
+    const distModel = resolveDistModel(projectPath, {
+        outdir: projectConfig.outdir,
+        workshopRoot: readGlobalConfig()?.workshopRoot,
+    });
+    const outDir = distModel.outDir;
     verbose(`Project root: ${projectPath}`);
     verbose(`Output root: ${outDir}`);
+    verbose(
+        `Dist model: ${distModel.mode}; workshop root: ${distModel.workshopRoot}`,
+    );
 
     const isProduction = hasFlag('production');
     const isDevelopment = hasFlag('development');
@@ -183,6 +201,7 @@ export async function buildCmd() {
     // fails the command after every variant got its chance.
     const variantOutcomes: OperationOutcome[] = [];
     const variantErrors: string[] = [];
+    const builtItemNames: string[] = [];
 
     // Build main workshop (Default/project.json target or explicit --production)
     if (buildMain) {
@@ -209,6 +228,29 @@ export async function buildCmd() {
                     outputRoot: outDir,
                 });
                 variantOutcomes.push(OUTCOME_SUCCESS);
+                builtItemNames.push(
+                    basename(resolveBuildOutputPath(projectConfig, 'main')),
+                );
+                // Dist model only: the marker proves ownership to the
+                // junction cascade. Legacy outdirs have no cascade. A
+                // failure never fails the variant — fail-closed downstream
+                // (a missing marker surfaces as UNOWNED_TARGET).
+                if (distModel.mode === 'dist') {
+                    try {
+                        await writeBuiltItemMarker(
+                            projectConfig,
+                            'main',
+                            projectPath,
+                            outDir,
+                        );
+                    } catch (e) {
+                        warn(
+                            `Output ownership marker for the main item failed: ${
+                                e instanceof Error ? e.message : String(e)
+                            }`,
+                        );
+                    }
+                }
             }
         } catch (e) {
             variantErrors.push(e instanceof Error ? e.message : String(e));
@@ -235,6 +277,27 @@ export async function buildCmd() {
                     { outputRoot: outDir },
                 );
                 variantOutcomes.push(OUTCOME_SUCCESS);
+                builtItemNames.push(
+                    basename(
+                        resolveBuildOutputPath(projectConfig, 'development'),
+                    ),
+                );
+                if (distModel.mode === 'dist') {
+                    try {
+                        await writeBuiltItemMarker(
+                            projectConfig,
+                            'development',
+                            projectPath,
+                            outDir,
+                        );
+                    } catch (e) {
+                        warn(
+                            `Output ownership marker for the dev_branch item failed: ${
+                                e instanceof Error ? e.message : String(e)
+                            }`,
+                        );
+                    }
+                }
             }
         } catch (e) {
             variantErrors.push(e instanceof Error ? e.message : String(e));
@@ -243,6 +306,18 @@ export async function buildCmd() {
     }
 
     throwOnOutcomeFailures(variantOutcomes, variantErrors.join('\n'));
+
+    // Dist-model link step: one junction per successfully built item.
+    // NON-FATAL by contract (Review Focus 4) — attachBuiltItems records and
+    // surfaces every refusal/failure; the exit code is already decided.
+    // Legacy mode: hard no-op inside the gate.
+    await maybeLinkBuiltItems(distModel, builtItemNames, {
+        projectRoot: projectPath,
+        backupExisting: hasFlag('backup-existing-workshop'),
+        forceLink: hasFlag('relink') || hasFlag('force-link'),
+        onSurface: (line, level) =>
+            level === 'warn' ? warn(line) : info(line),
+    });
 
     const endTime = performance.now();
     info(`Build complete in ${((endTime - startTime) / 1000).toFixed(2)}s!`);
@@ -266,6 +341,9 @@ registerCommand({
         { name: 'production', conflicts: ['development', 'both'] },
         { name: 'development', conflicts: ['production', 'both'] },
         { name: 'both', conflicts: ['production', 'development'] },
+        { name: 'relink' },
+        { name: 'force-link' },
+        { name: 'backup-existing-workshop' },
     ],
     run: () => buildCmd(),
 });

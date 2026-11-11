@@ -105,6 +105,14 @@ export interface GlobalConfig {
     useSymlinks?: boolean;
 
     /**
+     * Machine-level workshop root for the dist model's per-item junctions
+     * (`<workshopRoot>/<Item>` -> `<project>/dist/<Item>`). Absent means
+     * the factory default (`%USERPROFILE%\Zomboid\Workshop`); the
+     * `PZSTUDIO_WORKSHOP_ROOT` env var wins over this field.
+     */
+    workshopRoot?: string;
+
+    /**
      * Same shape and meaning as IProjectConfig.experimental. An explicit
      * project.json setting always wins over this one; absent in both
      * layers means disabled.

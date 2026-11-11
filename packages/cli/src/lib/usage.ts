@@ -34,6 +34,11 @@ import { emitInfo, engineIo } from './logger';
 
 export type UsageHost = 'cli' | 'api';
 
+/** Link-step vocabulary: one event per attached item (dist model). */
+export const USAGE_OP_LINK_ATTACH = 'link.attach';
+/** Link-step vocabulary: one event per backed-up real workshop folder. */
+export const USAGE_OP_LINK_BACKUP = 'link.backup';
+
 export interface UsageEvent {
     v: 1;
     ts: string; // ISO instant (end of op)
