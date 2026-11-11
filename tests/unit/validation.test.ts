@@ -548,4 +548,74 @@ describe('Validation', () => {
             ).toBe(true);
         });
     });
+
+    describe('build.materialize (dist-always amendment)', () => {
+        const validProject = {
+            workshop: { title: 'T', visibility: 'public', tags: [] },
+            mods: { mod1: { name: 'Mod 1', description: 'Desc' } },
+        };
+
+        it('should accept build.materialize "symlink" and "copy"', () => {
+            validateProject(
+                { ...validProject, build: { materialize: 'symlink' } },
+                context,
+            );
+            expect(context.hasErrors()).toBe(false);
+            context = new ValidationContext('test.json');
+            validateProject(
+                { ...validProject, build: { materialize: 'copy' } },
+                context,
+            );
+            expect(context.hasErrors()).toBe(false);
+        });
+
+        it('should accept an omitted build.materialize', () => {
+            validateProject(
+                { ...validProject, build: { target: 'both' } },
+                context,
+            );
+            expect(context.hasErrors()).toBe(false);
+        });
+
+        it('should reject build.materialize "none" — never an enum value', () => {
+            validateProject(
+                { ...validProject, build: { materialize: 'none' } },
+                context,
+            );
+            expect(context.hasErrors()).toBe(true);
+            expect(
+                context
+                    .getErrors()
+                    .some((e) => e.location.includes('build.materialize')),
+            ).toBe(true);
+        });
+
+        it('should reject a non-string build.materialize', () => {
+            validateProject(
+                { ...validProject, build: { materialize: 1 } },
+                context,
+            );
+            expect(context.hasErrors()).toBe(true);
+            expect(
+                context
+                    .getErrors()
+                    .some((e) => e.location.includes('build.materialize')),
+            ).toBe(true);
+        });
+
+        it('should accept flat "materialize" in the global config', () => {
+            validateConfig({ materialize: 'copy' }, context);
+            expect(context.hasErrors()).toBe(false);
+        });
+
+        it('should reject an invalid materialize value in the global config', () => {
+            validateConfig({ materialize: 'none' }, context);
+            expect(context.hasErrors()).toBe(true);
+            expect(
+                context
+                    .getErrors()
+                    .some((e) => e.location.endsWith(':materialize')),
+            ).toBe(true);
+        });
+    });
 });

@@ -455,21 +455,47 @@ export function validateBuildTargetField(
         context.addError(
             pathPrefix,
             'Field "build" must be an object',
-            'Use an object with an optional "target" key',
+            'Use an object with optional "target" and "materialize" keys',
         );
         return;
     }
 
-    if (build.target === undefined) {
-        return;
+    if (build.target !== undefined) {
+        const allowedTargets = ['production', 'development', 'both'];
+        if (!allowedTargets.includes(build.target)) {
+            context.addError(
+                `${pathPrefix}.target`,
+                'Field "build.target" must be one of: production, development, both',
+                'Set which workshop outputs "pzstudio build" produces when no target flag is given',
+            );
+        }
     }
 
-    const allowedTargets = ['production', 'development', 'both'];
-    if (!allowedTargets.includes(build.target)) {
+    if (build.materialize !== undefined) {
+        validateMaterializeField(
+            build.materialize,
+            context,
+            `${pathPrefix}.materialize`,
+        );
+    }
+}
+
+/**
+ * Validates a materialize mode value ('symlink' | 'copy' only — there is
+ * deliberately no 'none': omitting `outdir` disables deployment).
+ * Used for `project.json` `build.materialize` (via the build validator)
+ * and the flat machine-level `materialize` key in `~/.pzstudio/config.json`.
+ */
+export function validateMaterializeField(
+    materialize: any,
+    context: ValidationContext,
+    pathPrefix: string = 'materialize',
+): void {
+    if (materialize !== 'symlink' && materialize !== 'copy') {
         context.addError(
-            `${pathPrefix}.target`,
-            'Field "build.target" must be one of: production, development, both',
-            'Set which workshop outputs "pzstudio build" produces when no target flag is given',
+            pathPrefix,
+            `Field "${pathPrefix}" must be one of: symlink, copy`,
+            'Set how built items are exposed to the game: junction ("symlink") or reconciled copy ("copy")',
         );
     }
 }
@@ -566,6 +592,10 @@ export function validateConfig(config: any, context: ValidationContext): void {
 
     if (config.outdir !== undefined) {
         validateOutdirField(config.outdir, context);
+    }
+
+    if (config.materialize !== undefined) {
+        validateMaterializeField(config.materialize, context);
     }
 
     if (config.templates !== undefined) {
