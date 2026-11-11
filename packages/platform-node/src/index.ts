@@ -27,3 +27,23 @@ export type {
     AttachResult,
     DetachResult,
 } from './link/linkManager';
+export {
+    inspectMaterializeSlot,
+    reconcileCopySlot,
+    materializeCopySlot,
+    ERR_COPY_SLOT_HAND_MADE,
+    ERR_COPY_SLOT_NOT_DIRECTORY,
+    ERR_COPY_SLOT_LINK_INSIDE,
+} from './link/copyMaterializer';
+export type {
+    CopyFs,
+    CopyStats,
+    CopyDirEntry,
+    CopySlotState,
+    CopySlotIdentity,
+    MaterializeSlotInspection,
+    InspectMaterializeSlotOptions,
+    ReconcileCopySlotOptions,
+    ReconcileResult,
+    MaterializeCopySlotOptions,
+} from './link/copyMaterializer';

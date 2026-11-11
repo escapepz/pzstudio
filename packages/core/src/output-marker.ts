@@ -234,3 +234,111 @@ export async function readOutputMarker(
         return undefined;
     }
 }
+
+// ---------------------------------------------------------------------------
+// Copy-slot marker — the deployment root's ownership trace (2026-11-12
+// amendment §6.1). DISTINCT from the output marker on purpose: a plain copy
+// of `dist/<Item>` already carries `.pzstudio-output.json`, so checking only
+// that file would misclassify a hand-copied, hand-edited folder as an
+// engine-managed slot. `projectId` reuses `computeProjectId` — one identity
+// implementation, two markers.
+// ---------------------------------------------------------------------------
+
+/** The copy-ownership marker every engine-managed copy slot carries. */
+export const COPY_MARKER_FILENAME = '.pzstudio-copy.json';
+
+const COPY_MARKER_SCHEMA_VERSION = 1;
+const COPY_MARKER_MODE = 'copy';
+
+/** Ownership marker written into every engine-managed copy slot. */
+export interface CopySlotMarker {
+    schemaVersion: typeof COPY_MARKER_SCHEMA_VERSION;
+    mode: typeof COPY_MARKER_MODE;
+    /** Same hash as the output marker's projectId. */
+    projectId: string;
+    /** The item directory name the slot mirrors. */
+    itemId: string;
+    createdAt: string;
+}
+
+export interface CopySlotMarkerInput {
+    /** The RESOLVED ABSOLUTE project root — hashed into `projectId`. */
+    projectDir: string;
+    /** The item directory name the slot mirrors. */
+    itemId: string;
+}
+
+/** The copy-marker path inside one deployment slot: `<slotDir>/.pzstudio-copy.json`. */
+export function copyMarkerPath(slotDir: string): string {
+    return joinPosix(slotDir, COPY_MARKER_FILENAME);
+}
+
+/**
+ * Assembles the copy-slot marker (no I/O): projectId from the hashed
+ * project root (the same identity the output marker carries), itemId from
+ * the mirrored item, createdAt from the clock.
+ */
+export async function buildCopySlotMarker(
+    input: CopySlotMarkerInput,
+): Promise<CopySlotMarker> {
+    return {
+        schemaVersion: COPY_MARKER_SCHEMA_VERSION,
+        mode: COPY_MARKER_MODE,
+        projectId: await computeProjectId(input.projectDir),
+        itemId: input.itemId,
+        createdAt: new Date().toISOString(),
+    };
+}
+
+/**
+ * Writes the copy-slot marker for one deployment slot through the injected
+ * filesystem (tmp → final → tmp-delete, the output marker's atomic shape —
+ * no rename on the ProjectFileSystem contract). NOT alias-route guarded:
+ * the write happens inside the copy materializer's 4-step gate (platform-node),
+ * which has already proven the slot is a real link-free directory — the gate
+ * is the protection here, the way the F23 guard is for the output marker.
+ */
+export async function writeCopySlotMarker(
+    fs: ProjectFileSystem,
+    input: CopySlotMarkerInput & { slotDir: string },
+): Promise<CopySlotMarker> {
+    const marker = await buildCopySlotMarker(input);
+    const target = copyMarkerPath(input.slotDir);
+    const tmpTarget = `${target}.tmp`;
+    const content = encodeUtf8(`${JSON.stringify(marker, null, 2)}\n`);
+    await fs.write(tmpTarget, content);
+    await fs.write(target, content);
+    await fs.delete(tmpTarget);
+    return marker;
+}
+
+/**
+ * Reads and parses a copy-slot marker. Absent, unreadable or unparseable
+ * content, non-object JSON, and JSON ARRAYS all yield undefined (never
+ * throws; unlike the output marker reader, the array admission is not
+ * repeated — a copy slot whose marker is anything but the exact object
+ * shape is unowned).
+ */
+export async function readCopySlotMarker(
+    fs: ProjectFileSystem,
+    path: string,
+): Promise<CopySlotMarker | undefined> {
+    let raw: Uint8Array;
+    try {
+        raw = await fs.read(path);
+    } catch {
+        return undefined;
+    }
+    try {
+        const parsed: unknown = JSON.parse(decodeUtf8(raw));
+        if (parsed === null || typeof parsed !== 'object') {
+            return undefined;
+        }
+        if (Array.isArray(parsed)) {
+            return undefined;
+        }
+        return parsed as CopySlotMarker;
+    } catch {
+        return undefined;
+    }
+}
