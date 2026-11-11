@@ -17,7 +17,6 @@ import {
     planBuild,
     resolveBuildOutputPath,
     workshopTextForVariant,
-    type MaterializeMode,
 } from '@pzstudio/core';
 import {
     distRootOf,
@@ -26,6 +25,7 @@ import {
     removeDirRecursive,
     resolveProjectConfig,
 } from '../helper';
+import { parseMaterializeFlag } from '../watch-shared';
 import {
     assertNoAliasRouteSync,
     type CliMutationRouteOptions,
@@ -160,26 +160,13 @@ export async function buildCmd() {
     // ownership check never matches (Task 3 review carry-forward).
     const projectPath = resolve(projectDir());
     const distRoot = distRootOf(projectPath);
-    const flagMaterializeRaw = extractFlag('materialize');
-    if (
-        flagMaterializeRaw !== undefined &&
-        flagMaterializeRaw !== 'symlink' &&
-        flagMaterializeRaw !== 'copy'
-    ) {
-        throw new CliError(
-            `Invalid --materialize value "${flagMaterializeRaw}".`,
-            {
-                tryHint:
-                    'Use --materialize=symlink (junction, default) or --materialize=copy (reconciled real copy).',
-            },
-        );
-    }
+    // Invalid --materialize values are a usage error (shared parser).
     const materialization: MaterializationResolution = resolveMaterialization({
         projectRoot: projectPath,
         effectiveOutdir: projectConfig.outdir,
         projectMaterialize: projectConfig.build?.materialize,
         globalMaterialize: readGlobalConfig()?.materialize,
-        flagMaterialize: flagMaterializeRaw as MaterializeMode | undefined,
+        flagMaterialize: parseMaterializeFlag(extractFlag('materialize')),
         noMaterialize: hasFlag('no-materialize'),
     });
     verbose(`Project root: ${projectPath}`);
