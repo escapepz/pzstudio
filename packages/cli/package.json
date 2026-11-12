@@ -46,6 +46,10 @@
     "funding": [
         {
             "type": "ko-fi",
+            "url": "https://ko-fi.com/escapepz"
+        },
+        {
+            "type": "ko-fi",
             "url": "https://ko-fi.com/konijima"
         }
     ],
