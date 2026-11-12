@@ -334,6 +334,40 @@ async function outputDirDiagnostics(
     return diagnostics;
 }
 
+/**
+ * `backupPathFor` (linkManager) renames a conflicting real folder to a
+ * SIBLING whose name is `<Item>.backup-<ISO>` — inside the deployment
+ * root. The game scans that folder, so a backup carrying a mod.info
+ * registers as a duplicate mod. Warn only: pzstudio never deletes backups
+ * (delayed silent data loss, owner decision) — the owner moves them out by
+ * hand. A debris check must never fail the doctor, so every fs error
+ * degrades to "no diagnostics".
+ */
+async function backupDebrisDiagnostics(
+    fs: ProjectFileSystem,
+    input: DoctorInput,
+): Promise<Diagnostic[]> {
+    if (!input.outDir) return [];
+    let entries: Awaited<ReturnType<ProjectFileSystem['list']>>;
+    try {
+        entries = await fs.list(input.outDir);
+    } catch {
+        return [];
+    }
+    return entries
+        .filter(
+            (entry) =>
+                entry.type === 'directory' && entry.name.includes('.backup-'),
+        )
+        .map((entry) => ({
+            severity: 'warning' as const,
+            module: 'workshop-link' as const,
+            code: 'workshop-link.backup-debris',
+            message: `Backup folder '${entry.name}' sits inside the deployment root '${input.outDir}'.`,
+            hint: 'Move it OUT of the deployment root by hand — the game scans that folder, and a backup carrying a mod.info registers as a duplicate mod. pzstudio never deletes backups.',
+        }));
+}
+
 async function templateDiagnostics(
     fs: ProjectFileSystem,
     input: DoctorInput,
@@ -589,6 +623,7 @@ export async function runDoctor(
     }
     diagnostics.push(...environmentDiagnostics(input.capabilities));
     diagnostics.push(...(await outputDirDiagnostics(fs, input)));
+    diagnostics.push(...(await backupDebrisDiagnostics(fs, input)));
     diagnostics.push(...(await templateDiagnostics(fs, input)));
     if (project) {
         diagnostics.push(

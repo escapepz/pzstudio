@@ -10,6 +10,7 @@ import fsp from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { NodeFileSystem } from '@pzstudio/platform-node';
+import { MemoryFileSystem } from '../helpers/memory-file-system';
 import {
     runDoctor,
     workshopLinkDiagnostics,
@@ -386,5 +387,80 @@ describe('resolveDoctorWorkshopInputs (CLI host computation)', () => {
         expect(inputs.workshopLinks?.[0]?.state).toBe('COPY_SLOT');
         // Sanity: the read marker helper stays shared with the build path.
         expect(workshopReadMarker).toBeTypeOf('function');
+    });
+});
+
+describe('backup debris inside the deployment root (Batch B)', () => {
+    const ROOT = 'mem://proj';
+    const OUT = 'mem://deploy';
+    const enc = new TextEncoder();
+
+    async function seedProject(fs: MemoryFileSystem): Promise<void> {
+        await fs.write(
+            `${ROOT}/project.json`,
+            enc.encode(
+                JSON.stringify({
+                    schemaVersion: 2,
+                    title: 'Item',
+                    outdir: OUT,
+                    workshop: { title: 'Item' },
+                    mods: { my_mod: {} },
+                }),
+            ),
+        );
+    }
+
+    function debrisDiagnostics(report: Awaited<ReturnType<typeof runDoctor>>) {
+        return report.diagnostics.filter(
+            (d) => d.code === 'workshop-link.backup-debris',
+        );
+    }
+
+    it('warns once for a <Item>.backup-<ISO> folder with the out-of-root hint', async () => {
+        const fs = new MemoryFileSystem();
+        await seedProject(fs);
+        await fs.write(
+            `${OUT}/Item.backup-2026-11-12T09.00.00.000Z/workshop.txt`,
+            enc.encode('id=1'),
+        );
+        const report = await runDoctor(fs, {
+            projectDir: ROOT,
+            outDir: OUT,
+            capabilities: {} as DoctorInput['capabilities'],
+        });
+        const debris = debrisDiagnostics(report);
+        expect(debris).toHaveLength(1);
+        expect(debris[0].severity).toBe('warning');
+        expect(debris[0].module).toBe('workshop-link');
+        expect(debris[0].message).toContain('Item.backup-');
+        expect(debris[0].message).toContain(OUT);
+        expect(debris[0].hint).toContain('OUT of the deployment root');
+        expect(debris[0].hint).toContain('never deletes');
+    });
+
+    it('ignores normal item dirs and backup-shaped FILES', async () => {
+        const fs = new MemoryFileSystem();
+        await seedProject(fs);
+        await fs.write(`${OUT}/Item/workshop.txt`, enc.encode('id=1'));
+        await fs.write(
+            `${OUT}/notes.backup-2026.txt`,
+            enc.encode('a file, not a folder'),
+        );
+        const report = await runDoctor(fs, {
+            projectDir: ROOT,
+            outDir: OUT,
+            capabilities: {} as DoctorInput['capabilities'],
+        });
+        expect(debrisDiagnostics(report)).toHaveLength(0);
+    });
+
+    it('renders nothing when outDir is unset', async () => {
+        const fs = new MemoryFileSystem();
+        await seedProject(fs);
+        const report = await runDoctor(fs, {
+            projectDir: ROOT,
+            capabilities: {} as DoctorInput['capabilities'],
+        });
+        expect(debrisDiagnostics(report)).toHaveLength(0);
     });
 });
