@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
-    defaultOutRoot,
     RealEnvWorkspace,
     seedWorkshopTemplateCache,
     spawnPz,
@@ -78,26 +77,30 @@ describe('real env: watch command', () => {
                 'the development sync banner',
             );
 
-            const mainOutDir = path.join(
-                defaultOutRoot(workspace.home),
-                PROJECT_TITLE,
-                'Contents',
-                'mods',
-                MOD_ID,
-                '42',
-                'media',
-                'lua',
-                'shared',
-                'main.lua',
+            const mainOutDir = workspace.path(
+                path.join(
+                    'dist',
+                    PROJECT_TITLE,
+                    'Contents',
+                    'mods',
+                    MOD_ID,
+                    '42',
+                    'media',
+                    'lua',
+                    'shared',
+                    'main.lua',
+                ),
             );
-            const devOutDir = path.join(
-                defaultOutRoot(workspace.home),
-                `${PROJECT_TITLE} - dev_branch`,
-                'Contents',
-                'mods',
-                `${MOD_ID}_dev`,
-                '42',
-                'mod.info',
+            const devOutDir = workspace.path(
+                path.join(
+                    'dist',
+                    `${PROJECT_TITLE} - dev_branch`,
+                    'Contents',
+                    'mods',
+                    `${MOD_ID}_dev`,
+                    '42',
+                    'mod.info',
+                ),
             );
             await waitForCondition(
                 () => fs.existsSync(mainOutDir) && fs.existsSync(devOutDir),

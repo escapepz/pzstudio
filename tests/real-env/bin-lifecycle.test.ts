@@ -332,7 +332,7 @@ describe('real env: project lifecycle commands', () => {
             const result = await workspace.run(['outdir', 'custom_out']);
             expect(result.exitCode).toBe(0);
             expect(result.stdout).toContain(
-                'The output directory has been changed to',
+                'The deployment root has been changed to',
             );
 
             const config = workspace.readJson(
