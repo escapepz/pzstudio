@@ -12,6 +12,13 @@ on:
         # Merge-only targets: merging into any of these is what runs CI.
         branches: [main, 42.20.0, 42.21.0, 42.22.0]
 
+# A newer push cancels the older run on the same ref: stacked runs would
+# each queue three macOS jobs, and the hosted arm64 pool is tight enough
+# that superseded runs were losing runners they never used.
+concurrency:
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
+
 jobs:
     test:
         name: Lint, build & test (${{ matrix.os }})
