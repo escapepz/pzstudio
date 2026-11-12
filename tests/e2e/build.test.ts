@@ -162,6 +162,77 @@ describe('build command e2e', () => {
         ).toBe(true);
     });
 
+    it('toggles symlink -> copy -> symlink (§6.5 both directions)', async () => {
+        const projectTitle = 'Toggle Item';
+        const modId = 'toggle_mod';
+        const customOutDirName = 'toggle_output';
+        const customOutDirPath = path.join(workspace.dir, customOutDirName);
+        const projectJsonPath = path.join(workspace.dir, 'project.json');
+        const distItem = path.join(workspace.dir, 'dist', projectTitle);
+        const slot = path.join(customOutDirPath, projectTitle);
+
+        workspace.write(
+            'project.json',
+            JSON.stringify({
+                outdir: './' + customOutDirName,
+                workshop: {
+                    title: projectTitle,
+                    visibility: 'public',
+                    tags: [],
+                },
+                mods: { [modId]: { name: 'Toggle', description: 'D' } },
+            }),
+        );
+        workspace.write(path.join(modId, 'poster.png'), 'fake image');
+
+        const setMaterialize = (mode: 'copy' | 'symlink'): void => {
+            const cfg = JSON.parse(
+                fs.readFileSync(projectJsonPath, 'utf8'),
+            ) as Record<string, unknown>;
+            cfg.build = {
+                ...(cfg.build as Record<string, unknown> | undefined),
+                materialize: mode,
+            };
+            fs.writeFileSync(projectJsonPath, JSON.stringify(cfg, null, 2));
+        };
+
+        // Build 1 — default symlink: a junction at the deployment root.
+        const first = await workspace.run('build');
+        workspace.assertSuccess(first);
+        expect(fs.lstatSync(slot).isSymbolicLink()).toBe(true);
+        expect(
+            fs.existsSync(path.join(distItem, '.pzstudio-output.json')),
+        ).toBe(true);
+
+        // Build 2 — copy: the junction is unlinked, a real reconciled copy
+        // carrying the copy marker replaces it.
+        setMaterialize('copy');
+        const second = await workspace.run('build');
+        workspace.assertSuccess(second);
+        expect(fs.lstatSync(slot).isDirectory()).toBe(true);
+        expect(fs.lstatSync(slot).isSymbolicLink()).toBe(false);
+        expect(fs.existsSync(path.join(slot, 'workshop.txt'))).toBe(true);
+        expect(fs.existsSync(path.join(slot, '.pzstudio-copy.json'))).toBe(
+            true,
+        );
+        expect(
+            fs.existsSync(path.join(distItem, '.pzstudio-output.json')),
+        ).toBe(true);
+
+        // Build 3 — back to symlink: the proven-clean copy slot is removed
+        // and the junction restored; dist is untouched throughout.
+        setMaterialize('symlink');
+        const third = await workspace.run('build');
+        workspace.assertSuccess(third);
+        expect(fs.lstatSync(slot).isSymbolicLink()).toBe(true);
+        expect(
+            fs.readFileSync(path.join(slot, 'workshop.txt'), 'utf8'),
+        ).toContain(projectTitle);
+        expect(
+            fs.existsSync(path.join(distItem, '.pzstudio-output.json')),
+        ).toBe(true);
+    });
+
     it('should build dist cleanly and surface the deployment failure when outdir is invalid', async () => {
         workspace.write(
             'project.json',

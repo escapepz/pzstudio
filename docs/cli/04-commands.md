@@ -214,6 +214,11 @@ writes. After each successful variant the item gets an ownership marker
   owned junction is **unlinked before any copy** (never copied through). Reconcile
   prunes stale entries and overwrites changed ones in place; a hand-made directory
   is refused (`ERR_COPY_SLOT_HAND_MADE`), never adopted.
+- **Toggle copy → symlink** — a **proven-clean** copy slot (marker manifest match,
+  zero links, no hand-edits) is removed and replaced by the junction in the same
+  run; a slot whose content no longer matches its recorded manifest is refused as
+  `COPY_SLOT_DRIFT` (nothing deleted — run a copy-mode build to reconcile it, or
+  move the folder OUT of the deployment root).
 
 Mode resolution: `--materialize=<symlink|copy>` flag > project.json
 `build.materialize` > flat `materialize` in `~/.pzstudio/config.json` > hard default
@@ -617,7 +622,9 @@ Checks performed by the engine (severity in parentheses):
   copy mode — a renamed folder inside it still registers as a duplicate mod — or
   `--backup-existing-workshop` in symlink mode), real-dir
   conflict (warning → `--backup-existing-workshop`), foreign link (warning →
-  `--relink`), dangling (warning), unowned dist (warning), non-local symlink target
+  `--relink`), dangling (warning), unowned dist (warning), backup debris inside the
+  deployment root (warning → move it OUT by hand; pzstudio never deletes backups),
+  non-local symlink target
   (warning, fail-closed — no copy fallback), unsupported host (info). No outdir
   configured renders one `OUTDIR_UNSET` **info** (CI-legitimate pure build state) —
   there is no legacy mode and no `MIGRATE_TO_DIST_MODEL` anymore.

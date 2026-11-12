@@ -139,7 +139,12 @@ Behavior notes:
 The deployment root (`outdir`, any tier) mirrors each item at materialize time:
 `<outdir>/<title>` is a junction → `dist/<title>` (symlink mode, default) or a
 reconciled real copy carrying its own `.pzstudio-copy.json` marker (copy mode).
-There is also `dist/<Item>.workshop.vdf` (from `pzstudio workshop-vdf`) — a
+That marker is `{ schemaVersion: 1, mode: "copy", projectId, itemId, createdAt }`
+plus an optional `files` manifest (`item-relative path → [size, mtimeMs]`,
+captured after each copy pass). The manifest is what lets a copy→symlink toggle
+prove the slot still holds exactly what the tool wrote; a marker without it (an
+interrupted pass) refuses as `COPY_SLOT_DRIFT` until the next copy build upgrades
+it. There is also `dist/<Item>.workshop.vdf` (from `pzstudio workshop-vdf`) — a
 machine-local build artifact, never committed.
 
 Planner rules worth remembering:
