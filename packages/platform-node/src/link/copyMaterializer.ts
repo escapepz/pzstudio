@@ -248,7 +248,13 @@ export async function inspectMaterializeSlot(
     try {
         entry = await fs.lstat(W);
     } catch (e) {
-        if (errnoOf(e) === 'ENOENT') return { state: 'ABSENT' };
+        // ENOENT: nothing occupies the slot. ENOTDIR: a path component en
+        // route is a file (an outdir pointing through an existing file), so
+        // no slot can ever exist there. Both hand the item to the attach
+        // pass, which surfaces the real link failure for what it is.
+        if (errnoOf(e) === 'ENOENT' || errnoOf(e) === 'ENOTDIR') {
+            return { state: 'ABSENT' };
+        }
         throw e;
     }
 
