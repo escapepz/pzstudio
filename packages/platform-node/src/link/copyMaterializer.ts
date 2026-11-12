@@ -885,6 +885,15 @@ export async function removeCleanCopySlot(
                 detail: `${ERR_COPY_SLOT_NOT_DIRECTORY}: ${W} is no longer a real directory (the toggle only replaces a copy slot)`,
             };
         }
+        // Parity with the link attachment table: an EMPTY real dir is
+        // auto-replaced by attach. It holds no content, so deleting it
+        // loses nothing — rmdir is still the TOCTOU guard (a dir that
+        // gained entries since readdir fails ENOTEMPTY).
+        const existing = await copyFs.readdirEntries(W);
+        if (existing.length === 0) {
+            await copyFs.rmdir(W);
+            return { ok: true, state: 'COPY_SLOT_REPLACED' };
+        }
         if (!opts.readCopyMarker || !opts.copyIdentity) {
             return {
                 ok: false,

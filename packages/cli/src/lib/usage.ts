@@ -40,6 +40,8 @@ export const USAGE_OP_LINK_ATTACH = 'link.attach';
 export const USAGE_OP_LINK_BACKUP = 'link.backup';
 /** Materialize vocabulary: one event per copy-mode item pass (no paths). */
 export const USAGE_OP_MATERIALIZE_COPY = 'materialize.copy';
+/** Toggle vocabulary: one event per copy→symlink slot replacement. */
+export const USAGE_OP_MATERIALIZE_TOGGLE = 'materialize.toggle';
 
 export interface UsageEvent {
     v: 1;

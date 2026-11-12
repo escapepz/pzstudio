@@ -33,7 +33,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join as pathJoin, relative, resolve } from 'node:path';
 import {
     attachWorkshopLink,
+    inspectMaterializeSlot,
     materializeCopySlot,
+    removeCleanCopySlot,
     type AttachResult,
     type CopyFs,
     type LinkFs,
@@ -62,6 +64,7 @@ import {
     USAGE_OP_LINK_ATTACH,
     USAGE_OP_LINK_BACKUP,
     USAGE_OP_MATERIALIZE_COPY,
+    USAGE_OP_MATERIALIZE_TOGGLE,
 } from './usage';
 import type { UsageRecorder } from './usage';
 
@@ -694,6 +697,116 @@ async function copyMaterializeBuiltItems(
 }
 
 /**
+ * The COPY_SLOT → junction pre-pass: for every item whose deployment slot
+ * is an engine-owned real copy, prove (manifest + zero links + drift tiers)
+ * that it is clean, delete it, and hand the item to the junction attach.
+ * Refusals never abort — they become outcomes with their state/detail, keep
+ * the slot intact, and exclude the item from attach (a real dir at W could
+ * only refuse there too). An empty real dir is adopted exactly as the
+ * attach table does (auto-replace parity).
+ */
+async function replaceProvenCleanCopySlots(
+    materialization: MaterializationResolution,
+    itemNames: string[],
+    rest: Omit<MaterializeBuiltItemsInput, 'outDir' | 'distRoot' | 'itemNames'>,
+): Promise<{ attachNames: string[]; outcomes: MaterializeOutcome[] }> {
+    const platform =
+        rest.platform ?? (process.platform === 'win32' ? 'win32' : 'posix');
+    const linkFs = rest.linkFs ?? nodeLinkFs;
+    const copyFs = rest.copyFs ?? nodeCopyFs;
+    const markerFs = rest.markerFs ?? promisesFileSystem;
+    const usage = rest.usage ?? getUsageRecorder();
+    const surface = rest.onSurface ?? defaultSurface;
+    const outDir = materialization.outDir!;
+    const distRoot = materialization.distRoot;
+    const projectId = await computeProjectId(resolve(rest.projectRoot));
+    const readMarker = workshopReadMarker(rest.projectRoot, markerFs);
+    const readCopyMarker = (slotDir: string) =>
+        readCopySlotMarker(markerFs, copyMarkerPath(slotDir));
+
+    const attachNames: string[] = [];
+    const outcomes: MaterializeOutcome[] = [];
+    for (const itemName of itemNames) {
+        const W = pathJoin(outDir, itemName);
+        const D = pathJoin(distRoot, itemName);
+        try {
+            const inspection = await inspectMaterializeSlot(linkFs, W, D, {
+                platform,
+                readMarker,
+                readCopyMarker,
+                copyIdentity: { projectId, itemId: itemName },
+            });
+            if (inspection.state !== 'COPY_SLOT') {
+                // ABSENT / link states keep their pre-Batch-B behavior:
+                // the attach pass owns them.
+                attachNames.push(itemName);
+                continue;
+            }
+            const result = await removeCleanCopySlot(copyFs, W, D, {
+                platform,
+                readMarker,
+                readCopyMarker,
+                copyIdentity: { projectId, itemId: itemName },
+            });
+            usage.recordOp({
+                op: USAGE_OP_MATERIALIZE_TOGGLE,
+                host: 'cli',
+                durMs: 0,
+                status: result.ok ? 'ok' : 'error',
+                err: result.ok
+                    ? undefined
+                    : {
+                          code: result.state,
+                          where: USAGE_OP_MATERIALIZE_TOGGLE,
+                      },
+            });
+            if (result.ok) {
+                // The slot is gone (or was an empty dir): attach recreates
+                // it as a junction in the same run.
+                attachNames.push(itemName);
+                continue;
+            }
+            outcomes.push({
+                itemName,
+                ok: false,
+                state: result.state,
+                detail: result.detail,
+            });
+            surface(
+                `Copy slot toggle refused for '${itemName}' [${result.state}]: ${result.detail ?? ''}` +
+                    ` Move it OUT of the deployment root by hand (the game scans that folder, a renamed folder inside it still registers as a duplicate mod), or run build with --backup-existing-workshop (symlink mode).`,
+                'warn',
+            );
+        } catch (e) {
+            // Non-fatal contract: one item's inspection/mutation failure
+            // never escapes the materialize step.
+            const detail = e instanceof Error ? e.message : String(e);
+            outcomes.push({
+                itemName,
+                ok: false,
+                state: 'RECONCILE_FAILED',
+                detail,
+            });
+            usage.recordOp({
+                op: USAGE_OP_MATERIALIZE_TOGGLE,
+                host: 'cli',
+                durMs: 0,
+                status: 'error',
+                err: {
+                    code: 'RECONCILE_FAILED',
+                    where: USAGE_OP_MATERIALIZE_TOGGLE,
+                },
+            });
+            surface(
+                `Copy slot toggle failed for '${itemName}': ${detail}`,
+                'warn',
+            );
+        }
+    }
+    return { attachNames, outcomes };
+}
+
+/**
  * The materialize step gate: skip / empty item lists are no-ops; symlink
  * mode delegates to the junction attach (the 2026-11-11 link step, W =
  * `<target>/<Item>`, D = `dist/<Item>`); copy mode runs the reconciling
@@ -722,12 +835,21 @@ export async function maybeMaterializeBuiltItems(
     await fsp
         .mkdir(materialization.outDir!, { recursive: true })
         .catch(() => {});
-    return attachBuiltItems({
+    const prePass = await replaceProvenCleanCopySlots(
+        materialization,
+        itemNames,
+        rest,
+    );
+    if (prePass.attachNames.length === 0) {
+        return prePass.outcomes;
+    }
+    const attached = await attachBuiltItems({
         ...rest,
         outDir: materialization.distRoot,
         workshopRoot: materialization.outDir!,
-        itemNames,
+        itemNames: prePass.attachNames,
     });
+    return [...prePass.outcomes, ...attached];
 }
 
 function defaultSurface(line: string, level: 'info' | 'warn'): void {

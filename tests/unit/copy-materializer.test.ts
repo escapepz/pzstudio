@@ -669,6 +669,16 @@ describe('copy materializer (real fs fixtures)', () => {
         expect(result.detail).toContain('copy-mode build');
     });
 
+    it('toggle: an empty real dir is adopted (auto-replace parity)', async () => {
+        await fsp.mkdir(slotDir, { recursive: true });
+        const result = await toggle();
+        expect(result.ok, result.detail).toBe(true);
+        expect(result.state).toBe('COPY_SLOT_REPLACED');
+        await expect(fsp.lstat(slotDir)).rejects.toMatchObject({
+            code: 'ENOENT',
+        });
+    });
+
     it('toggle: a planted link inside the slot refuses (RECONCILE_FAILED)', async () => {
         await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
         await copyPass();

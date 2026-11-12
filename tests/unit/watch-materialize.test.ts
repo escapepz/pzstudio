@@ -1,4 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import fsp from 'fs/promises';
+import os from 'os';
 import path from 'path';
 import {
     assertWatchMaterializable,
@@ -7,7 +9,14 @@ import {
     isWatchPathIgnored,
     ERR_WATCH_COPY_MODE_UNSUPPORTED,
 } from '../../packages/cli/src/lib/watch-shared';
+import { maybeMaterializeBuiltItems } from '../../packages/cli/src/lib/linkStep';
 import type { MaterializationResolution } from '../../packages/cli/src/lib/linkStep';
+import { NodeFileSystem } from '@pzstudio/platform-node';
+import {
+    resolveBuildOutputPath,
+    writeOutputMarker,
+    type IProjectConfig,
+} from '@pzstudio/core';
 
 const materialize = (
     overrides: Partial<MaterializationResolution> = {},
@@ -161,5 +170,201 @@ describe('watch materialize helpers (dist-always amendment §7)', () => {
                 ),
             ).toBe(false);
         });
+    });
+});
+
+describe('maybeMaterializeBuiltItems symlink pre-pass (COPY_SLOT toggle, Batch B)', () => {
+    const ITEM = 'My Item';
+    const PLATFORM = process.platform === 'win32' ? 'win32' : 'posix';
+    const LINK_TYPE =
+        PLATFORM === 'win32' ? ('junction' as const) : ('dir' as const);
+
+    let root: string;
+    let distRoot: string;
+    let deployRoot: string;
+    let distItem: string;
+    let slotDir: string;
+    let config: IProjectConfig;
+
+    beforeEach(async () => {
+        root = await fsp.mkdtemp(path.join(os.tmpdir(), 'pz-watch-mt-'));
+        distRoot = path.join(root, 'dist');
+        deployRoot = path.join(root, 'deploy');
+        distItem = path.join(distRoot, ITEM);
+        slotDir = path.join(deployRoot, ITEM);
+        await fsp.mkdir(path.join(distItem, 'Contents'), { recursive: true });
+        await fsp.writeFile(
+            path.join(distItem, 'workshop.txt'),
+            'title=Item\n',
+        );
+        await fsp.writeFile(path.join(distItem, 'Contents', 'a.lua'), '-- a');
+        config = {
+            workshop: { title: ITEM },
+            outdir: distRoot,
+            mods: { my_mod: {} },
+        } as unknown as IProjectConfig;
+        // The junction attach proves ownership against the dist marker.
+        await writeOutputMarker(new NodeFileSystem(), {
+            config,
+            variant: 'main',
+            projectDir: root,
+            engineVersion: 'test',
+            outputRoot: distRoot,
+        });
+    });
+
+    afterEach(async () => {
+        await fsp.rm(root, { recursive: true, force: true });
+    });
+
+    const resolution = (
+        mode: 'copy' | 'symlink',
+    ): MaterializationResolution => ({
+        action: 'materialize',
+        mode,
+        outDir: deployRoot,
+        distRoot,
+    });
+
+    function seams(): {
+        usage: { recordOp: ReturnType<typeof vi.fn> };
+        warnings: string[];
+        onSurface: (line: string, level: 'info' | 'warn') => void;
+    } {
+        const warnings: string[] = [];
+        return {
+            usage: { recordOp: vi.fn() },
+            warnings,
+            onSurface: (line, level) => {
+                if (level === 'warn') warnings.push(line);
+            },
+        };
+    }
+
+    async function copyDeploy(
+        overrides: Record<string, unknown> = {},
+    ): Promise<void> {
+        const outcomes = await maybeMaterializeBuiltItems(
+            resolution('copy'),
+            [ITEM],
+            {
+                projectRoot: root,
+                platform: PLATFORM,
+                usage: { recordOp: vi.fn() },
+                onSurface: () => {},
+                ...overrides,
+            },
+        );
+        expect(outcomes).toHaveLength(1);
+        expect(outcomes[0].ok, outcomes[0].detail).toBe(true);
+    }
+
+    it('toggles a proven-clean copy slot to a junction', async () => {
+        await copyDeploy();
+        expect((await fsp.lstat(slotDir)).isDirectory()).toBe(true);
+
+        const { usage, warnings, onSurface } = seams();
+        const outcomes = await maybeMaterializeBuiltItems(
+            resolution('symlink'),
+            [ITEM],
+            {
+                projectRoot: root,
+                platform: PLATFORM,
+                usage,
+                onSurface,
+            },
+        );
+
+        expect(outcomes).toHaveLength(1);
+        expect(outcomes[0].ok, outcomes[0].detail).toBe(true);
+        expect(warnings).toEqual([]);
+        expect((await fsp.lstat(slotDir)).isSymbolicLink()).toBe(true);
+        expect(
+            await fsp.readFile(path.join(slotDir, 'workshop.txt'), 'utf8'),
+        ).toBe('title=Item\n');
+        const toggle = usage.recordOp.mock.calls.find(
+            ([event]) => event.op === 'materialize.toggle',
+        );
+        expect(toggle?.[0]).toMatchObject({
+            op: 'materialize.toggle',
+            status: 'ok',
+        });
+    });
+
+    it('refuses a hand-edited slot and leaves it untouched', async () => {
+        await copyDeploy();
+        await fsp.writeFile(
+            path.join(slotDir, 'workshop.txt'),
+            'title=Item\n# hand-edited\n',
+        );
+
+        const { usage, warnings, onSurface } = seams();
+        const outcomes = await maybeMaterializeBuiltItems(
+            resolution('symlink'),
+            [ITEM],
+            {
+                projectRoot: root,
+                platform: PLATFORM,
+                usage,
+                onSurface,
+            },
+        );
+
+        const outcome = outcomes.find((o) => o.itemName === ITEM);
+        expect(outcome?.ok).toBe(false);
+        expect(outcome?.state).toBe('COPY_SLOT_DRIFT');
+        const slotStats = await fsp.lstat(slotDir);
+        expect(slotStats.isDirectory()).toBe(true);
+        expect(slotStats.isSymbolicLink()).toBe(false);
+        expect(
+            await fsp.readFile(path.join(slotDir, 'workshop.txt'), 'utf8'),
+        ).toBe('title=Item\n# hand-edited\n');
+        const surfaced = warnings.join('\n');
+        expect(surfaced).toContain('COPY_SLOT_DRIFT');
+        expect(surfaced).toContain('--backup-existing-workshop');
+        expect(surfaced).toContain('OUT of the deployment root');
+        const toggle = usage.recordOp.mock.calls.find(
+            ([event]) => event.op === 'materialize.toggle',
+        );
+        expect(toggle?.[0]).toMatchObject({
+            op: 'materialize.toggle',
+            status: 'error',
+            err: { code: 'COPY_SLOT_DRIFT' },
+        });
+    });
+
+    it('leaves an already-attached junction alone (no toggle op)', async () => {
+        const first = await maybeMaterializeBuiltItems(
+            resolution('symlink'),
+            [ITEM],
+            {
+                projectRoot: root,
+                platform: PLATFORM,
+                usage: { recordOp: vi.fn() },
+                onSurface: () => {},
+            },
+        );
+        expect(first[0]?.ok, first[0]?.detail).toBe(true);
+
+        const { usage, warnings, onSurface } = seams();
+        const outcomes = await maybeMaterializeBuiltItems(
+            resolution('symlink'),
+            [ITEM],
+            {
+                projectRoot: root,
+                platform: PLATFORM,
+                usage,
+                onSurface,
+            },
+        );
+
+        expect(outcomes[0]?.ok, outcomes[0]?.detail).toBe(true);
+        expect(warnings).toEqual([]);
+        expect((await fsp.lstat(slotDir)).isSymbolicLink()).toBe(true);
+        expect(
+            usage.recordOp.mock.calls.some(
+                ([event]) => event.op === 'materialize.toggle',
+            ),
+        ).toBe(false);
     });
 });
