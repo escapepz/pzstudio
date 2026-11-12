@@ -250,6 +250,13 @@ export const COPY_MARKER_FILENAME = '.pzstudio-copy.json';
 const COPY_MARKER_SCHEMA_VERSION = 1;
 const COPY_MARKER_MODE = 'copy';
 
+/**
+ * The content the tool last wrote into one copy slot: item-relative POSIX
+ * path → `[size, mtimeMs]`. The copy marker itself is never a key. Keys are
+ * always '/'-joined, whatever the host separator.
+ */
+export type SlotManifest = Record<string, [size: number, mtimeMs: number]>;
+
 /** Ownership marker written into every engine-managed copy slot. */
 export interface CopySlotMarker {
     schemaVersion: typeof COPY_MARKER_SCHEMA_VERSION;
@@ -259,6 +266,12 @@ export interface CopySlotMarker {
     /** The item directory name the slot mirrors. */
     itemId: string;
     createdAt: string;
+    /**
+     * Optional since the toggle landed (Batch B): markers written by an
+     * interrupted pass (marker-before only) carry no manifest, and a
+     * copy→symlink toggle refuses those rather than guessing cleanliness.
+     */
+    files?: SlotManifest;
 }
 
 export interface CopySlotMarkerInput {
@@ -266,6 +279,8 @@ export interface CopySlotMarkerInput {
     projectDir: string;
     /** The item directory name the slot mirrors. */
     itemId: string;
+    /** The slot's content as of this write; omitted by the marker-before write. */
+    files?: SlotManifest;
 }
 
 /** The copy-marker path inside one deployment slot: `<slotDir>/.pzstudio-copy.json`. */
@@ -287,6 +302,7 @@ export async function buildCopySlotMarker(
         projectId: await computeProjectId(input.projectDir),
         itemId: input.itemId,
         createdAt: new Date().toISOString(),
+        ...(input.files !== undefined ? { files: input.files } : {}),
     };
 }
 

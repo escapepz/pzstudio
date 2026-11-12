@@ -93,6 +93,14 @@ export type CopyDirEntry = {
 export const COPY_MARKER_FILENAME = '.pzstudio-copy.json';
 
 /**
+ * The content last written into a copy slot: item-relative POSIX path →
+ * `[size, mtimeMs]`. Structurally identical to core's `SlotManifest`;
+ * duplicated here because platform-node deliberately carries no
+ * `@pzstudio/core` dependency (identity probes stay injected).
+ */
+export type SlotManifest = Record<string, [size: number, mtimeMs: number]>;
+
+/**
  * Terminal states of one `inspectMaterializeSlot` run: the link cascade's
  * states (delegated verbatim for link-shaped entries) plus the copy-slot
  * states. `CONFLICT_REAL_DIR` never appears — a real directory is
@@ -170,6 +178,39 @@ function errnoOf(error: unknown): string | undefined {
         if (typeof code === 'string') return code;
     }
     return undefined;
+}
+
+/**
+ * Walks the slot and records every file's `[size, mtimeMs]` under its
+ * item-relative POSIX path. Captured at the marker-AFTER write (the
+ * content the tool last wrote). Links and the copy marker itself are
+ * skipped: links cannot exist behind the gate, and a link appearing
+ * mid-walk is ignored rather than followed. Directories are structure,
+ * never keys — the toggle's drift walk re-derives them.
+ */
+export async function buildSlotManifest(
+    copyFs: CopyFs,
+    platform: LinkPlatform,
+    slotDir: string,
+): Promise<SlotManifest> {
+    const manifest: SlotManifest = {};
+    const walk = async (dir: string, prefix: string): Promise<void> => {
+        const entries = await copyFs.readdirEntries(dir);
+        for (const entry of entries) {
+            if (entry.name === COPY_MARKER_FILENAME) continue;
+            if (entry.isSymbolicLink()) continue;
+            const absolute = joinUnder(platform, dir, entry.name);
+            const rel = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+            if (entry.isDirectory()) {
+                await walk(absolute, rel);
+                continue;
+            }
+            const stats = await copyFs.stat(absolute);
+            manifest[rel] = [stats.size, stats.mtimeMs];
+        }
+    };
+    await walk(slotDir, '');
+    return manifest;
 }
 
 /** Does a parsed copy marker prove this identity's ownership of the slot? */
@@ -303,8 +344,12 @@ export interface ReconcileCopySlotOptions extends InspectMaterializeSlotOptions 
      * Writes/refreshes the copy marker at the slot (the host's core-backed
      * writer). Called once BEFORE the pass and once AFTER it — an
      * interrupted copy leaves an owned slot the next run self-heals.
+     * Only the AFTER call carries the slot manifest.
      */
-    writeCopyMarker?: (slotDir: string) => Promise<void>;
+    writeCopyMarker?: (
+        slotDir: string,
+        files?: SlotManifest,
+    ) => Promise<unknown>;
 }
 
 export type ReconcileResult = {
@@ -556,7 +601,10 @@ export async function reconcileCopySlot(
         const tally = { filesCopied: 0, filesPruned: 0 };
         await syncTree(copyFs, opts.platform, D, W, tally);
         if (opts.writeCopyMarker) {
-            await opts.writeCopyMarker(W);
+            await opts.writeCopyMarker(
+                W,
+                await buildSlotManifest(copyFs, opts.platform, W),
+            );
         }
         return { ok: true, state: 'COPY_SLOT', ...tally };
     } catch (e) {

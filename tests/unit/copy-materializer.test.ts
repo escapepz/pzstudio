@@ -5,6 +5,7 @@ import path from 'path';
 import {
     materializeCopySlot,
     inspectMaterializeSlot,
+    reconcileCopySlot,
     COPY_MARKER_FILENAME as NODE_COPY_MARKER_FILENAME,
 } from '../../packages/platform-node/src/link/copyMaterializer';
 import type {
@@ -17,6 +18,7 @@ import type {
 } from '../../packages/platform-node/src/link/linkManager';
 import type { ProjectFileSystem } from '@pzstudio/platform';
 import {
+    buildCopySlotMarker,
     COPY_MARKER_FILENAME,
     computeProjectId,
     writeCopySlotMarker,
@@ -491,6 +493,42 @@ describe('copy materializer (real fs fixtures)', () => {
         expect(third.filesPruned).toBe(0);
     });
 
+    it('reconcile: the marker-after write carries the slot manifest', async () => {
+        await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
+        const calls: Array<{
+            dir: string;
+            files?: Record<string, unknown>;
+        }> = [];
+        const spyWriteMarker = async (dir: string, files?: unknown) => {
+            calls.push({
+                dir,
+                files: files as Record<string, unknown> | undefined,
+            });
+            await writeMarker(dir);
+        };
+        await fsp.mkdir(slotDir, { recursive: true });
+        await writeMarker(slotDir);
+        await reconcileCopySlot(nodeCopyFs, distItem, slotDir, {
+            ...opts(),
+            writeCopyMarker: spyWriteMarker,
+            copyIdentity: await identity(),
+        });
+        expect(calls.length).toBe(2);
+        // Marker-before: ownership only — an interrupted pass leaves a
+        // marker WITHOUT a manifest, and the toggle refuses it.
+        expect(calls[0].files).toBeUndefined();
+        const manifest = calls[1].files!;
+        expect(Object.keys(manifest).sort()).toEqual([
+            'Contents/a.lua',
+            'workshop.txt',
+        ]);
+        for (const entry of Object.values(manifest) as unknown[][]) {
+            expect(entry).toHaveLength(2);
+            expect(typeof entry[0]).toBe('number'); // size
+            expect(typeof entry[1]).toBe('number'); // mtimeMs
+        }
+    });
+
     it('reconcile: replaces a slot dir with a dist file of the same name', async () => {
         await makeDist({ payload: 'now a file' });
         await fsp.mkdir(path.join(slotDir, 'payload'), { recursive: true });
@@ -514,12 +552,22 @@ describe('copy materializer (real fs fixtures)', () => {
 });
 
 describe('copy-slot marker (core)', () => {
-    it('write → read roundtrip preserves the identity fields', async () => {
+    it('buildCopySlotMarker copies the optional slot manifest through', async () => {
+        const marker = await buildCopySlotMarker({
+            projectDir: '/proj',
+            itemId: 'My Item',
+            files: { 'a.lua': [3, 5] },
+        });
+        expect(marker.files).toEqual({ 'a.lua': [3, 5] });
+    });
+
+    it('write → read roundtrip preserves the identity fields and the manifest', async () => {
         const fs = new MemoryFileSystem();
         await writeCopySlotMarker(fs, {
             projectDir: '/proj',
             itemId: 'My Item',
             slotDir: '/deploy/My Item',
+            files: { 'Contents/a.lua': [7, 11] },
         });
         const marker = await readCopySlotMarker(
             fs,
@@ -528,6 +576,7 @@ describe('copy-slot marker (core)', () => {
         expect(marker?.mode).toBe('copy');
         expect(marker?.itemId).toBe('My Item');
         expect(marker?.projectId).toBe(await computeProjectId('/proj'));
+        expect(marker?.files).toEqual({ 'Contents/a.lua': [7, 11] });
     });
 
     it('readCopySlotMarker rejects a JSON array', async () => {

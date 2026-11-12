@@ -620,11 +620,12 @@ async function copyMaterializeBuiltItems(
                     readMarker: workshopReadMarker(input.projectRoot, markerFs),
                     readCopyMarker: (slotDir) =>
                         readCopySlotMarker(markerFs, copyMarkerPath(slotDir)),
-                    writeCopyMarker: async (slotDir) => {
+                    writeCopyMarker: async (slotDir, files) => {
                         await writeCopySlotMarker(markerFs, {
                             projectDir: resolve(input.projectRoot),
                             itemId: itemName,
                             slotDir,
+                            files,
                         });
                     },
                     copyIdentity: { projectId, itemId: itemName },
