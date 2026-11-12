@@ -27,6 +27,7 @@
  * readlink target, and the dev/ino identity of `W` vs `D`.
  */
 import {
+    join as pathJoin,
     posix as pathPosix,
     resolve as pathResolve,
     win32 as pathWin32,
@@ -401,14 +402,15 @@ function extractWorkshopIds(text: string): string[] {
 async function diagnoseUnsyncedWorkshopId(
     realFs: RealFs,
     W: string,
-    platform: LinkPlatform,
     sourceWorkshopTxt: string | undefined,
 ): Promise<boolean | undefined> {
     if (sourceWorkshopTxt === undefined) return undefined;
-    const pathImpl = platform === 'win32' ? pathWin32 : pathPosix;
     let built: string;
     try {
-        built = await realFs.readFile(pathImpl.join(W, WORKSHOP_TXT), 'utf8');
+        // W is a host path: join it with the host's path module. A flavor
+        // join flips the separators and unreadable-izes the path when the
+        // flavor is simulated on the other host family.
+        built = await realFs.readFile(pathJoin(W, WORKSHOP_TXT), 'utf8');
     } catch {
         return undefined;
     }
@@ -561,7 +563,6 @@ async function attachOverRealDir(
         const hasUnsyncedWorkshopId = await diagnoseUnsyncedWorkshopId(
             realFs,
             W,
-            opts.platform,
             opts.sourceWorkshopTxt,
         );
         return {
@@ -605,6 +606,9 @@ export async function attachWorkshopLink(
 ): Promise<AttachResult> {
     // The junction target must be absolute before symlink (the host's own
     // path semantics — `D` arrives in host form regardless of the flavor).
+    // The cascade stays coherent on simulated cross-flavor rows because
+    // both sides of the target comparison flow through the same
+    // normalizeLinkTarget.
     const absoluteD = pathResolve(D);
     const pre = await inspectWorkshopLink(fs, W, absoluteD, {
         platform: opts.platform,
