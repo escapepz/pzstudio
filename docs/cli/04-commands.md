@@ -613,7 +613,9 @@ Checks performed by the engine (severity in parentheses):
 - **workshop-link** (materialize): per-item deployment-slot state from the platform-node
   materialize inspector — attached junction (info, hint carries the copyable `steamcmd`
   command with the absolute VDF path), healthy copy slot (info), missing deployment
-  (warning), hand-made directory (warning → `--backup-existing-workshop`), real-dir
+  (warning), hand-made directory (warning → move it OUT of the deployment root by hand in
+  copy mode — a renamed folder inside it still registers as a duplicate mod — or
+  `--backup-existing-workshop` in symlink mode), real-dir
   conflict (warning → `--backup-existing-workshop`), foreign link (warning →
   `--relink`), dangling (warning), unowned dist (warning), non-local symlink target
   (warning, fail-closed — no copy fallback), unsupported host (info). No outdir

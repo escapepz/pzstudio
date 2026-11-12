@@ -136,6 +136,25 @@ describe('build command e2e', () => {
         const distItem = path.join(workspace.dir, 'dist', projectTitle);
         expect(fs.existsSync(distItem)).toBe(true);
         expect(fs.existsSync(path.join(distItem, 'workshop.txt'))).toBe(true);
+        // The ownership marker must live in DIST, not the deployment root:
+        // it is what proves ownership to the junction cascade on every
+        // later build.
+        expect(
+            fs.existsSync(path.join(distItem, '.pzstudio-output.json')),
+        ).toBe(true);
+        expect(
+            fs
+                .lstatSync(path.join(customOutDirPath, projectTitle))
+                .isSymbolicLink(),
+        ).toBe(true);
+
+        // A second build re-inspects the existing junction: with the marker
+        // in place it must stay OK_LINK, never degrade to UNOWNED_TARGET.
+        const secondBuild = await workspace.run('build');
+        workspace.assertSuccess(secondBuild);
+        expect(secondBuild.stderr.join('\n')).not.toMatch(
+            /UNOWNED_TARGET|no ownership marker/i,
+        );
         expect(
             fs
                 .lstatSync(path.join(customOutDirPath, projectTitle))

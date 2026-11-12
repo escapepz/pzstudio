@@ -298,6 +298,39 @@ describe('copy materializer (real fs fixtures)', () => {
         ).toBe('-- a');
     });
 
+    it('materialize: a failed slot unlink reports UNLINK_FAILED and leaves the junction intact', async () => {
+        await makeDist({ 'workshop.txt': 'id=1' });
+        await fsp.mkdir(path.dirname(slotDir), { recursive: true });
+        await fsp.symlink(distItem, slotDir, LINK_TYPE);
+        const lockedRealFs: RealFs = {
+            ...nodeRealFs,
+            unlink: async () => {
+                const e = new Error(
+                    'EBUSY: resource busy or locked, unlink',
+                ) as NodeJS.ErrnoException;
+                e.code = 'EBUSY';
+                throw e;
+            },
+        };
+        const result = await materializeCopySlot(
+            nodeCopyFs,
+            nodeLinkFs,
+            lockedRealFs,
+            slotDir,
+            distItem,
+            { ...opts(), copyIdentity: await identity() },
+        );
+        expect(result.ok).toBe(false);
+        expect(result.state).toBe('UNLINK_FAILED');
+        expect(result.detail).toContain('unlink');
+        expect(result.detail).toContain('EBUSY');
+        // The junction survives (nothing was removed), dist is untouched.
+        expect((await fsp.lstat(slotDir)).isSymbolicLink()).toBe(true);
+        expect(
+            await fsp.readFile(path.join(distItem, 'workshop.txt'), 'utf8'),
+        ).toBe('id=1');
+    });
+
     it('materialize: a dangling owned junction heals into a copy slot', async () => {
         // True DANGLING: the link already targets D, but D does not exist
         // yet (a junction to a DIFFERENT missing path is FOREIGN_LINK).
@@ -373,6 +406,8 @@ describe('copy materializer (real fs fixtures)', () => {
             { ...opts(), copyIdentity: await identity() },
         );
         expect(result.ok).toBe(false);
+        // A failed reconcile must not report the healthy slot label (M3 pin).
+        expect(result.state).toBe('RECONCILE_FAILED');
         expect(result.detail).toContain('ERR_COPY_SLOT_LINK_INSIDE');
         expect(await fsp.readFile(path.join(slotDir, 'keep.txt'), 'utf8')).toBe(
             'keep',

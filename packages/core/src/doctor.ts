@@ -670,7 +670,7 @@ export function workshopLinkDiagnostics(
                 return {
                     ...base,
                     severity: 'warning',
-                    hint: 'A real directory without a copy marker occupies the slot — hand-made content is never adopted. Move or rename it by hand, or run build with --backup-existing-workshop.',
+                    hint: 'A real directory without a copy marker occupies the slot — hand-made content is never adopted. Move it OUT of the deployment root by hand (copy mode — the game scans that folder, a renamed folder inside it still registers as a duplicate mod), or run build with --backup-existing-workshop (symlink mode).',
                 };
             case 'MISSING_LINK':
                 return {

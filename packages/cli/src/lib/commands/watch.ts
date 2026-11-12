@@ -255,8 +255,12 @@ registerCommand({
         { name: 'relink' },
         { name: 'force-link' },
         { name: 'backup-existing-workshop' },
-        { name: 'materialize', takesValue: true },
-        { name: 'no-materialize' },
+        {
+            name: 'materialize',
+            takesValue: true,
+            conflicts: ['no-materialize'],
+        },
+        { name: 'no-materialize', conflicts: ['materialize'] },
     ],
     run: () => watchCmd(),
 });

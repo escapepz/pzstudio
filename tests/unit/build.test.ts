@@ -60,7 +60,9 @@ describe('buildCmd', () => {
         },
         mods: { my_mod: { name: 'My Mod', description: 'A mod.' } },
         excludes: [],
-        outdir: '/out',
+        // No deployment target: this suite exercises plan execution, and a
+        // configured outdir would run the real copy/junction materializer
+        // over a mocked fs (creating real artifacts at the resolved path).
     };
 
     beforeEach(() => {

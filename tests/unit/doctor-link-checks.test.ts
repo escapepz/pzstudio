@@ -118,6 +118,19 @@ describe('workshopLinkDiagnostics (core mapping)', () => {
         expect(d.message).not.toMatch(/copy|fallback/i);
     });
 
+    it('HAND_MADE_DIR advice sends the user OUT of the deployment root', () => {
+        // A renamed folder INSIDE the deployment root still registers as a
+        // duplicate mod (the game scans that folder), and in copy mode the
+        // backup flag is inert — so the advice must say "out of the root"
+        // and scope the flag to symlink mode.
+        const [d] = workshopLinkDiagnostics([
+            entry({ state: 'HAND_MADE_DIR' }),
+        ]);
+        expect(d.hint).toContain('OUT of the deployment root');
+        expect(d.hint).toContain('duplicate mod');
+        expect(d.hint).toContain('(symlink mode)');
+    });
+
     it('ATTACHED_OK renders the copyable steamcmd command with the ABSOLUTE vdf path', () => {
         const vdfPath = resolve(
             join('E:', 'proj', 'dist', 'Item.workshop.vdf'),

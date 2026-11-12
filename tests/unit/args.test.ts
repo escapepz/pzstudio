@@ -72,6 +72,72 @@ describe('Commander parser adapter', () => {
         expect(result.invocation.options['verbose']).toBe(true);
     });
 
+    it('maps a negated --no-* flag onto its declared name', async () => {
+        const result = await parseArgv(
+            ['build', '--no-materialize'],
+            VERSION_STUB,
+        );
+        expect(result.kind).toBe('invocation');
+        if (result.kind !== 'invocation') return;
+        expect(result.invocation.options['no-materialize']).toBe(true);
+        // Commander records the positive attribute as false; both readers
+        // (hasFlag/extractFlag) already treat false as "absent".
+        expect(result.invocation.options['materialize']).toBe(false);
+    });
+
+    it('leaves --no-* absent when the positive value is supplied', async () => {
+        const result = await parseArgv(
+            ['build', '--materialize', 'copy'],
+            VERSION_STUB,
+        );
+        expect(result.kind).toBe('invocation');
+        if (result.kind !== 'invocation') return;
+        expect(result.invocation.options['materialize']).toBe('copy');
+        expect(result.invocation.options['no-materialize']).toBeUndefined();
+    });
+
+    it('rejects --materialize + --no-materialize in either order (exit-2 semantics)', async () => {
+        // Commander is last-wins on the shared `materialize` attribute, so the
+        // parsed values alone cannot prove the pair. Presence evidence from
+        // the option:<name> events is what makes both orders detectable.
+        for (const argv of [
+            ['build', '--no-materialize', '--materialize', 'copy'],
+            ['build', '--materialize', 'copy', '--no-materialize'],
+        ]) {
+            const result = await parseArgv(argv, VERSION_STUB);
+            expect(result.kind).toBe('invocation');
+            if (result.kind !== 'invocation') return;
+            expect(() => validateInvocation(result.invocation)).toThrow(
+                'Conflicting options: --materialize cannot be combined with --no-materialize.',
+            );
+        }
+    });
+
+    it('a flag-shaped token consumed as a value is not a flag', async () => {
+        // `--path` takes a value, so Commander hands it the next token
+        // verbatim and never parses it as an option (no negation, no pair).
+        const result = await parseArgv(
+            ['new', 'T', '--path', '--no-materialize'],
+            VERSION_STUB,
+        );
+        expect(result.kind).toBe('invocation');
+        if (result.kind !== 'invocation') return;
+        expect(result.invocation.options['path']).toBe('--no-materialize');
+        expect(result.invocation.options['no-materialize']).toBeUndefined();
+    });
+
+    it('keeps the existing conflict pairs byte-identical', async () => {
+        const result = await parseArgv(
+            ['build', '--production', '--development'],
+            VERSION_STUB,
+        );
+        expect(result.kind).toBe('invocation');
+        if (result.kind !== 'invocation') return;
+        expect(() => validateInvocation(result.invocation)).toThrow(
+            'Conflicting options: --production cannot be combined with --development.',
+        );
+    });
+
     it('consumes command flag values per the command schema', async () => {
         const result = await parseArgv(
             ['new', 'T', '--path', 'C:\\dev'],
@@ -310,6 +376,38 @@ describe('Shared semantic validation', () => {
         ).toThrow(
             /Conflicting options: --production cannot be combined with --both/,
         );
+    });
+
+    it('rejects the materialize pair on the embedded path too', () => {
+        // The legacy path has no Commander events, so its presence fallback
+        // reads the parsed values — both orders must still exit 2 (one
+        // conflict semantics for both hosts).
+        for (const flags of [
+            ['--materialize', 'copy', '--no-materialize'],
+            ['--no-materialize', '--materialize', 'copy'],
+        ]) {
+            expect(() =>
+                validateInvocation(
+                    normalizeLegacyInvocation('build', [], flags),
+                ),
+            ).toThrow(
+                'Conflicting options: --materialize cannot be combined with --no-materialize.',
+            );
+        }
+        expect(() =>
+            validateInvocation(
+                normalizeLegacyInvocation('build', [], ['--no-materialize']),
+            ),
+        ).not.toThrow();
+        expect(() =>
+            validateInvocation(
+                normalizeLegacyInvocation(
+                    'build',
+                    [],
+                    ['--materialize', 'copy'],
+                ),
+            ),
+        ).not.toThrow();
     });
 
     it('rejects mutually exclusive watch targets as a usage error', () => {

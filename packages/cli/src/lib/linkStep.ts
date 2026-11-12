@@ -665,7 +665,7 @@ async function copyMaterializeBuiltItems(
         } else if (outcome.state === 'HAND_MADE_DIR') {
             surface(
                 `Copy deployment refused for '${itemName}' [${outcome.state}]: ${outcome.detail ?? outcome.error ?? ''}` +
-                    ` Move or rename the folder by hand, or run build with --backup-existing-workshop.`,
+                    ` Move it OUT of the deployment root by hand (copy mode — the game scans that folder, a renamed folder inside it still registers as a duplicate mod), or run build with --backup-existing-workshop (symlink mode).`,
                 'warn',
             );
         } else if (outcome.error) {

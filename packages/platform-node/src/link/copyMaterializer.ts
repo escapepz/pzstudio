@@ -309,7 +309,15 @@ export interface ReconcileCopySlotOptions extends InspectMaterializeSlotOptions 
 
 export type ReconcileResult = {
     ok: boolean;
-    state: CopySlotState;
+    /**
+     * Inspection states, plus the reconcile-only failure states. A failed
+     * pass must never reuse `COPY_SLOT` (the healthy slot label) — callers
+     * surface the state verbatim, and a failure reading as a healthy slot
+     * is indistinguishable in a log. `UNLINK_FAILED` is the pre-copy lock
+     * (the game holding the junction open), distinct from a mid-walk
+     * `RECONCILE_FAILED` so telemetry can tell the two apart.
+     */
+    state: CopySlotState | 'RECONCILE_FAILED' | 'UNLINK_FAILED';
     filesCopied?: number;
     filesPruned?: number;
     detail?: string;
@@ -553,7 +561,7 @@ export async function reconcileCopySlot(
         return { ok: true, state: 'COPY_SLOT', ...tally };
     } catch (e) {
         if (e instanceof CopyGateError) {
-            return { ok: false, state: 'COPY_SLOT', detail: e.message };
+            return { ok: false, state: 'RECONCILE_FAILED', detail: e.message };
         }
         return {
             ok: false,
@@ -572,7 +580,8 @@ export interface MaterializeCopySlotOptions
  * reconcile behind the gate. HAND_MADE_DIR / FOREIGN_LINK /
  * IDENTITY_MISMATCH / NOT_DIRECTORY refuse with their `ERR_*` detail —
  * recovery is the caller's flag surface (`--backup-existing-workshop`,
- * `--relink`), never an automatic delete.
+ * `--relink`), never an automatic delete. The copy caller does not wire a
+ * backup path today, so its refusal text must not promise one.
  */
 export async function materializeCopySlot(
     copyFs: CopyFs,
@@ -606,7 +615,7 @@ export async function materializeCopySlot(
             } catch (e) {
                 return {
                     ok: false,
-                    state: inspection.state,
+                    state: 'UNLINK_FAILED',
                     detail: describeFailure('unlink', W, e),
                 };
             }

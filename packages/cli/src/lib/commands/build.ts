@@ -274,7 +274,7 @@ export async function buildCmd() {
                 // surfaces as UNOWNED_TARGET).
                 try {
                     await writeBuiltItemMarker(
-                        projectConfig,
+                        planInput.config,
                         'main',
                         projectPath,
                         distRoot,
@@ -320,7 +320,7 @@ export async function buildCmd() {
                 });
                 try {
                     await writeBuiltItemMarker(
-                        projectConfig,
+                        planInput.config,
                         'development',
                         projectPath,
                         distRoot,
@@ -393,8 +393,12 @@ registerCommand({
         { name: 'relink' },
         { name: 'force-link' },
         { name: 'backup-existing-workshop' },
-        { name: 'materialize', takesValue: true },
-        { name: 'no-materialize' },
+        {
+            name: 'materialize',
+            takesValue: true,
+            conflicts: ['no-materialize'],
+        },
+        { name: 'no-materialize', conflicts: ['materialize'] },
     ],
     run: () => buildCmd(),
 });
