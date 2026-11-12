@@ -640,7 +640,11 @@ describe('Helper Library', () => {
                 outdir: '~/Zomboid/Workshop',
             } as any);
             expect(result?.toLowerCase()).toContain('zomboid');
-            expect(result).not.toContain('~');
+            // The tilde TOKEN is expanded to an absolute home: assert the
+            // result no longer starts with the token itself. A blanket
+            // not.toContain('~') misfires on hosts whose real paths carry
+            // 8.3 short names — e.g. GitHub's C:\Users\RUNNER~1\... (CI).
+            expect(result?.startsWith('~')).toBe(false);
         });
     });
 
