@@ -141,7 +141,13 @@ describe('workshopLinkDiagnostics (core mapping)', () => {
         ]);
         expect(d.hint).toContain('steamcmd +login <user> +workshop_build_item');
         expect(d.hint).toContain(`"${vdfPath}"`);
-        expect(vdfPath.includes('/')).toBe(false); // absolute Windows path shape
+        // Absolute in the host's own path shape: backslashes on win32, a
+        // leading slash on posix.
+        if (process.platform === 'win32') {
+            expect(vdfPath.includes('/')).toBe(false);
+        } else {
+            expect(vdfPath.startsWith('/')).toBe(true);
+        }
     });
 });
 
