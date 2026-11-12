@@ -355,6 +355,19 @@ describe('Helper Library', () => {
             const result = applyProjectDefaults(config);
             expect(result.mods).toBeUndefined();
         });
+
+        // Pin (watch-target spec 2026-11-13): the schema declares
+        // "default": "production" for build.target but no code enforces it.
+        // If this ever goes red, watch's unset-target branch is dead.
+        it('should NOT default build.target (unset stays unset)', () => {
+            const empty = applyProjectDefaults({});
+            expect(empty.build?.target).toBeUndefined();
+            const bareBuild = applyProjectDefaults({ build: {} });
+            expect(bareBuild.build?.target).toBeUndefined();
+            // The function did run: existing defaults still fill.
+            expect(empty.excludes).toEqual([]);
+            expect(empty.workshop).toEqual({});
+        });
     });
 
     describe('getStoreDir', () => {
