@@ -32,6 +32,7 @@ export {
     reconcileCopySlot,
     materializeCopySlot,
     buildSlotManifest,
+    removeCleanCopySlot,
     ERR_COPY_SLOT_HAND_MADE,
     ERR_COPY_SLOT_NOT_DIRECTORY,
     ERR_COPY_SLOT_LINK_INSIDE,
@@ -48,4 +49,5 @@ export type {
     ReconcileCopySlotOptions,
     ReconcileResult,
     MaterializeCopySlotOptions,
+    RemoveCleanResult,
 } from './link/copyMaterializer';

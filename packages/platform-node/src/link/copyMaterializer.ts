@@ -691,3 +691,250 @@ export async function materializeCopySlot(
             };
     }
 }
+
+// ---------------------------------------------------------------------------
+// COPY_SLOT -> junction toggle (Batch B): drift-gated auto-replace
+// ---------------------------------------------------------------------------
+
+export type RemoveCleanResult = {
+    ok: boolean;
+    state:
+        | 'COPY_SLOT_REPLACED' // proven clean, slot deleted (W now absent)
+        | 'COPY_SLOT_DRIFT' // hand-edit / extra file / no manifest — refuse
+        | 'RECONCILE_FAILED' // fs error, race, planted link — refuse
+        | 'HAND_MADE_DIR' // marker absent/mismatched at toggle time
+        | 'NOT_DIRECTORY'; // W is neither a real dir nor anything usable
+    detail?: string;
+};
+
+const NO_SLOT_MANIFEST_DETAIL =
+    'no slot manifest — pre-manifest marker; run a copy-mode build to upgrade it';
+
+/**
+ * Strictly validates the marker's optional `files` field: a non-array
+ * object whose every value is a `[number, number]` tuple. Anything else
+ * (absent, arrays, strings, partial tuples) yields undefined — the toggle
+ * then refuses rather than trusting an unproven cleanliness claim.
+ */
+function readSlotManifest(parsed: unknown): SlotManifest | undefined {
+    if (
+        parsed === null ||
+        typeof parsed !== 'object' ||
+        Array.isArray(parsed)
+    ) {
+        return undefined;
+    }
+    const files = (parsed as Record<string, unknown>).files;
+    if (files === null || typeof files !== 'object' || Array.isArray(files)) {
+        return undefined;
+    }
+    const manifest: SlotManifest = {};
+    for (const [key, value] of Object.entries(
+        files as Record<string, unknown>,
+    )) {
+        if (!Array.isArray(value) || value.length !== 2) return undefined;
+        const [size, mtimeMs] = value;
+        if (typeof size !== 'number' || typeof mtimeMs !== 'number') {
+            return undefined;
+        }
+        manifest[key] = [size, mtimeMs];
+    }
+    return manifest;
+}
+
+/** Joins an item-relative POSIX key under a root with the host separator. */
+function joinRelative(
+    platform: LinkPlatform,
+    root: string,
+    rel: string,
+): string {
+    const pathImpl = platform === 'win32' ? pathWin32 : pathPosix;
+    return pathImpl.join(root, ...rel.split('/'));
+}
+
+/**
+ * One current slot file against the manifest: the fast path is the same
+ * size + mtime (1 ms Date tolerance) check `syncTree` uses. A manifest
+ * mismatch falls to tier (iii) — dist's counterpart, size-matched and
+ * byte-compared. dist is consulted ONLY here (materialize runs after the
+ * build rewrote dist, so comparing against it wholesale would false-drift).
+ * Any read error means unproven ⇒ not clean.
+ */
+async function slotFileIsProvenClean(
+    copyFs: CopyFs,
+    platform: LinkPlatform,
+    W: string,
+    D: string,
+    rel: string,
+    current: [size: number, mtimeMs: number],
+    recorded: [size: number, mtimeMs: number] | undefined,
+): Promise<boolean> {
+    if (
+        recorded !== undefined &&
+        recorded[0] === current[0] &&
+        Math.abs(recorded[1] - current[1]) < 1
+    ) {
+        return true;
+    }
+    try {
+        const distPath = joinRelative(platform, D, rel);
+        const distStats = await copyFs.stat(distPath);
+        if (distStats.size !== current[0]) return false;
+        const [distBytes, slotBytes] = await Promise.all([
+            copyFs.readFile(distPath),
+            copyFs.readFile(joinRelative(platform, W, rel)),
+        ]);
+        return (
+            Buffer.compare(Buffer.from(distBytes), Buffer.from(slotBytes)) === 0
+        );
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Tier (i): every CURRENT file must either match the manifest (ii) or,
+ * byte-identical to dist (iii). A manifest file MISSING from the slot is
+ * clean by decision — a deletion adds no unique content (its source is
+ * dist). Returns the first unproven relative path.
+ */
+async function firstDriftingPath(
+    copyFs: CopyFs,
+    platform: LinkPlatform,
+    W: string,
+    D: string,
+    manifest: SlotManifest,
+): Promise<string | undefined> {
+    const current = await buildSlotManifest(copyFs, platform, W);
+    for (const [rel, stats] of Object.entries(current)) {
+        const clean = await slotFileIsProvenClean(
+            copyFs,
+            platform,
+            W,
+            D,
+            rel,
+            stats,
+            manifest[rel],
+        );
+        if (!clean) return rel;
+    }
+    return undefined;
+}
+
+/**
+ * Recursive delete inside the gated slot. Every entry is re-`lstat`ed
+ * immediately before acting (TOCTOU guard): links and files are unlinked —
+ * never followed — and only a real directory recurses. The caller rmdirs
+ * the slot root after this returns.
+ */
+async function removeSlotTree(
+    copyFs: CopyFs,
+    platform: LinkPlatform,
+    dir: string,
+): Promise<void> {
+    const entries = await copyFs.readdirEntries(dir);
+    for (const entry of entries) {
+        const path = joinUnder(platform, dir, entry.name);
+        const current = await copyFs.lstat(path);
+        if (current.isSymbolicLink()) {
+            await copyFs.unlink(path);
+            continue;
+        }
+        if (current.isDirectory()) {
+            await removeSlotTree(copyFs, platform, path);
+            await copyFs.rmdir(path);
+            continue;
+        }
+        await copyFs.unlink(path);
+    }
+}
+
+/**
+ * Spec §6.5 row: COPY_SLOT × mode 'symlink' — re-gate the slot, prove the
+ * MANIFEST's content is what still sits there (three drift tiers), then
+ * delete it so the caller can attach a junction. Refusals are never fatal
+ * to a build and NEVER delete unproven content: a hand-edit, an extra
+ * entry, a legacy marker (interrupted pass), a planted link, or any fs
+ * doubt refuses with its state and detail. Races re-`lstat` and refuse
+ * `NOT_DIRECTORY`/`RECONCILE_FAILED` instead of improvising a delete.
+ */
+export async function removeCleanCopySlot(
+    copyFs: CopyFs,
+    W: string,
+    D: string,
+    opts: ReconcileCopySlotOptions,
+): Promise<RemoveCleanResult> {
+    try {
+        let entry: CopyStats;
+        try {
+            entry = await copyFs.lstat(W);
+        } catch (e) {
+            if (errnoOf(e) === 'ENOENT') {
+                return {
+                    ok: false,
+                    state: 'NOT_DIRECTORY',
+                    detail: `${ERR_COPY_SLOT_NOT_DIRECTORY}: the copy slot at ${W} vanished before the toggle`,
+                };
+            }
+            throw e;
+        }
+        if (entry.isSymbolicLink() || !entry.isDirectory()) {
+            return {
+                ok: false,
+                state: 'NOT_DIRECTORY',
+                detail: `${ERR_COPY_SLOT_NOT_DIRECTORY}: ${W} is no longer a real directory (the toggle only replaces a copy slot)`,
+            };
+        }
+        if (!opts.readCopyMarker || !opts.copyIdentity) {
+            return {
+                ok: false,
+                state: 'HAND_MADE_DIR',
+                detail: `${ERR_COPY_SLOT_HAND_MADE}: no copy-marker reader injected — the slot at ${W} cannot prove engine ownership`,
+            };
+        }
+        const parsed = await opts.readCopyMarker(W);
+        if (!copyMarkerMatches(parsed, opts.copyIdentity)) {
+            return {
+                ok: false,
+                state: 'HAND_MADE_DIR',
+                detail: `${ERR_COPY_SLOT_HAND_MADE}: a real directory without a matching copy marker occupies ${W} — hand-made content is never adopted`,
+            };
+        }
+        const manifest = readSlotManifest(parsed);
+        if (manifest === undefined) {
+            return {
+                ok: false,
+                state: 'COPY_SLOT_DRIFT',
+                detail: NO_SLOT_MANIFEST_DETAIL,
+            };
+        }
+        // Gate step 3 — the same link scan the reconcile pass runs.
+        await assertNoLinksInside(copyFs, opts.platform, W);
+        const drift = await firstDriftingPath(
+            copyFs,
+            opts.platform,
+            W,
+            D,
+            manifest,
+        );
+        if (drift !== undefined) {
+            return {
+                ok: false,
+                state: 'COPY_SLOT_DRIFT',
+                detail: `the slot no longer matches its manifest (first difference: '${drift}') — hand-edited content is never deleted; run a copy-mode build to reconcile it, or move the folder OUT of the deployment root by hand`,
+            };
+        }
+        await removeSlotTree(copyFs, opts.platform, W);
+        await copyFs.rmdir(W);
+        return { ok: true, state: 'COPY_SLOT_REPLACED' };
+    } catch (e) {
+        if (e instanceof CopyGateError) {
+            return { ok: false, state: 'RECONCILE_FAILED', detail: e.message };
+        }
+        return {
+            ok: false,
+            state: 'RECONCILE_FAILED',
+            detail: describeFailure('toggle', W, e),
+        };
+    }
+}

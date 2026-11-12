@@ -6,6 +6,7 @@ import {
     materializeCopySlot,
     inspectMaterializeSlot,
     reconcileCopySlot,
+    removeCleanCopySlot,
     COPY_MARKER_FILENAME as NODE_COPY_MARKER_FILENAME,
 } from '../../packages/platform-node/src/link/copyMaterializer';
 import type {
@@ -24,6 +25,7 @@ import {
     writeCopySlotMarker,
     readCopySlotMarker,
 } from '../../packages/core/src/output-marker';
+import type { SlotManifest } from '../../packages/platform-node/src/link/copyMaterializer';
 import { MemoryFileSystem } from '../helpers/memory-file-system';
 
 /**
@@ -121,6 +123,28 @@ describe('copy materializer (real fs fixtures)', () => {
         };
     }
 
+    /** Runs one full copy pass — leaves a manifest-bearing slot. */
+    async function copyPass(): Promise<void> {
+        const result = await materializeCopySlot(
+            nodeCopyFs,
+            nodeLinkFs,
+            nodeRealFs,
+            slotDir,
+            distItem,
+            { ...opts(), copyIdentity: await identity() },
+        );
+        expect(result.ok, result.detail).toBe(true);
+    }
+
+    async function toggle(): Promise<
+        Awaited<ReturnType<typeof removeCleanCopySlot>>
+    > {
+        return removeCleanCopySlot(nodeCopyFs, slotDir, distItem, {
+            ...opts(),
+            copyIdentity: await identity(),
+        });
+    }
+
     const readCopyMarker = async (dir: string): Promise<unknown> => {
         try {
             return JSON.parse(
@@ -134,11 +158,12 @@ describe('copy materializer (real fs fixtures)', () => {
         }
     };
 
-    const writeMarker = (dir: string) =>
+    const writeMarker = (dir: string, files?: SlotManifest) =>
         writeCopySlotMarker(markerFs, {
             projectDir,
             itemId: ITEM,
             slotDir: dir,
+            files,
         });
 
     const opts = () => ({
@@ -548,6 +573,113 @@ describe('copy materializer (real fs fixtures)', () => {
         expect(await fsp.readFile(path.join(slotDir, 'payload'), 'utf8')).toBe(
             'now a file',
         );
+    });
+
+    it('toggle: a proven-clean copy slot is removed (COPY_SLOT_REPLACED)', async () => {
+        await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
+        await copyPass();
+        const result = await toggle();
+        expect(result.ok, result.detail).toBe(true);
+        expect(result.state).toBe('COPY_SLOT_REPLACED');
+        await expect(fsp.lstat(slotDir)).rejects.toMatchObject({
+            code: 'ENOENT',
+        });
+        // dist is never touched by the toggle.
+        expect(
+            await fsp.readFile(path.join(distItem, 'workshop.txt'), 'utf8'),
+        ).toBe('id=1');
+    });
+
+    it('toggle: a copy-then-immediate-toggle does not false-drift', async () => {
+        // Review Focus 3: Date projection truncates sub-ms mtimes, so the
+        // manifest's own numbers must compare within the 1 ms tolerance.
+        await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
+        await copyPass();
+        const result = await toggle();
+        expect(result.state).toBe('COPY_SLOT_REPLACED');
+    });
+
+    it('toggle: a hand-edit with a different size refuses (COPY_SLOT_DRIFT)', async () => {
+        await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
+        await copyPass();
+        const edited = path.join(slotDir, 'workshop.txt');
+        await fsp.writeFile(edited, 'id=1 # hand-edited, much longer');
+        const result = await toggle();
+        expect(result.ok).toBe(false);
+        expect(result.state).toBe('COPY_SLOT_DRIFT');
+        expect(await fsp.readFile(edited, 'utf8')).toBe(
+            'id=1 # hand-edited, much longer',
+        );
+    });
+
+    it('toggle: a same-size hand-edit refuses via the byte-compare tier', async () => {
+        await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
+        await copyPass();
+        const edited = path.join(slotDir, 'workshop.txt');
+        await fsp.writeFile(edited, 'id=2');
+        // Force the mtime out of the manifest's tolerance so the size-matched
+        // byte compare is the tier that decides.
+        const marker = JSON.parse(
+            await fsp.readFile(
+                path.join(slotDir, COPY_MARKER_FILENAME),
+                'utf8',
+            ),
+        ) as { files: Record<string, [number, number]> };
+        const recorded = marker.files['workshop.txt'][1];
+        const shifted = new Date(recorded + 60_000);
+        await fsp.utimes(edited, shifted, shifted);
+        const result = await toggle();
+        expect(result.ok).toBe(false);
+        expect(result.state).toBe('COPY_SLOT_DRIFT');
+        expect(await fsp.readFile(edited, 'utf8')).toBe('id=2');
+    });
+
+    it('toggle: an extra user file refuses and survives (COPY_SLOT_DRIFT)', async () => {
+        await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
+        await copyPass();
+        await fsp.writeFile(path.join(slotDir, 'notes.txt'), 'mine');
+        const result = await toggle();
+        expect(result.ok).toBe(false);
+        expect(result.state).toBe('COPY_SLOT_DRIFT');
+        expect(
+            await fsp.readFile(path.join(slotDir, 'notes.txt'), 'utf8'),
+        ).toBe('mine');
+        expect(
+            await fsp.readFile(path.join(slotDir, 'workshop.txt'), 'utf8'),
+        ).toBe('id=1');
+    });
+
+    it('toggle: a deleted deployed file is clean (the decided exception)', async () => {
+        // A deletion adds no unique content — its source is dist.
+        await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
+        await copyPass();
+        await fsp.unlink(path.join(slotDir, 'Contents/a.lua'));
+        const result = await toggle();
+        expect(result.ok, result.detail).toBe(true);
+        expect(result.state).toBe('COPY_SLOT_REPLACED');
+    });
+
+    it('toggle: a legacy marker without a manifest refuses with the upgrade hint', async () => {
+        await fsp.mkdir(slotDir, { recursive: true });
+        await writeMarker(slotDir); // a marker-before-only (interrupted) pass
+        const result = await toggle();
+        expect(result.ok).toBe(false);
+        expect(result.state).toBe('COPY_SLOT_DRIFT');
+        expect(result.detail).toContain('no slot manifest');
+        expect(result.detail).toContain('copy-mode build');
+    });
+
+    it('toggle: a planted link inside the slot refuses (RECONCILE_FAILED)', async () => {
+        await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
+        await copyPass();
+        await fsp.symlink(distItem, path.join(slotDir, 'sneaky'), LINK_TYPE);
+        const result = await toggle();
+        expect(result.ok).toBe(false);
+        expect(result.state).toBe('RECONCILE_FAILED');
+        expect(result.detail).toContain('ERR_COPY_SLOT_LINK_INSIDE');
+        expect(
+            await fsp.readFile(path.join(slotDir, 'workshop.txt'), 'utf8'),
+        ).toBe('id=1');
     });
 });
 
