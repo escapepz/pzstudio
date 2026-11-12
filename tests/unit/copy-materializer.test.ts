@@ -184,10 +184,6 @@ describe('copy materializer (real fs fixtures)', () => {
     });
 
     it('inspect: ABSENT when the slot path cannot exist (ENOTDIR through a file)', async () => {
-        // An outdir pointing through an existing FILE cannot host a slot:
-        // posix lstat reports ENOTDIR where win32 reports ENOENT. The slot
-        // is uninhabitable either way — hand the item to the attach pass,
-        // which surfaces the real link failure.
         const enotdir: NodeJS.ErrnoException = new Error('not a directory');
         enotdir.code = 'ENOTDIR';
         const inspection = await inspectMaterializeSlot(

@@ -407,9 +407,6 @@ async function diagnoseUnsyncedWorkshopId(
     if (sourceWorkshopTxt === undefined) return undefined;
     let built: string;
     try {
-        // W is a host path: join it with the host's path module. A flavor
-        // join flips the separators and unreadable-izes the path when the
-        // flavor is simulated on the other host family.
         built = await realFs.readFile(pathJoin(W, WORKSHOP_TXT), 'utf8');
     } catch {
         return undefined;
@@ -606,9 +603,6 @@ export async function attachWorkshopLink(
 ): Promise<AttachResult> {
     // The junction target must be absolute before symlink (the host's own
     // path semantics — `D` arrives in host form regardless of the flavor).
-    // The cascade stays coherent on simulated cross-flavor rows because
-    // both sides of the target comparison flow through the same
-    // normalizeLinkTarget.
     const absoluteD = pathResolve(D);
     const pre = await inspectWorkshopLink(fs, W, absoluteD, {
         platform: opts.platform,

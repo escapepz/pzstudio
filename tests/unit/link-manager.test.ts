@@ -1048,12 +1048,6 @@ describe('attachWorkshopLink (real fs)', () => {
             makeFs({
                 W: WIN_W,
                 lstatW: linkEntry(),
-                // The attach resolves D through the HOST path module before
-                // the cascade compares targets — feed the link exactly that
-                // resolved form so the fake stays host-agnostic (win32
-                // fake paths on a posix CI host would otherwise be mangled
-                // into a foreign target). The \\?\-prefix strip is pinned
-                // by the normalizeLinkTarget unit tests.
                 readlinkW: path.resolve(WIN_D),
                 statW: makeStats({
                     directory: true,

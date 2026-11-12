@@ -81,8 +81,6 @@ describe('real env: build and clean commands', () => {
             fs.readFileSync(path.join(outDir, 'workshop.txt'), 'utf8'),
         ).toContain(PROJECT_TITLE);
         expect(fs.existsSync(path.join(outDir, 'preview.png'))).toBe(true);
-        // Dist-always, deployment-only materialization: with no outdir
-        // configured nothing lands in the game folders.
         expect(
             fs.existsSync(
                 path.join(defaultOutRoot(workspace.home), PROJECT_TITLE),

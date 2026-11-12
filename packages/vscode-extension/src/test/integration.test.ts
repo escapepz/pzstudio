@@ -232,9 +232,7 @@ describe('PZ Studio extension (real VS Code host)', () => {
             'the runner project leaked into the second instance logger',
         );
 
-        // The runner's sink (project identity on disk): the extension build
-        // landed in the fixture project's dist output, and the second
-        // project contributed nothing there.
+        // The runner's sink (project identity on disk).
         assert.ok(
             fs.existsSync(path.join(fixtureOut, 'workshop.txt')),
             `runner build output missing: ${path.join(fixtureOut, 'workshop.txt')}`,
