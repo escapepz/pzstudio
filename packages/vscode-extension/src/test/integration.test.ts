@@ -81,9 +81,8 @@ describe('PZ Studio extension (real VS Code host)', () => {
         await runCLI('build', [], { flags: [] });
 
         const workshopTxt = path.join(
-            fakeHome,
-            'Zomboid',
-            'Workshop',
+            projectDir,
+            'dist',
             PROJECT_TITLE,
             'workshop.txt',
         );
@@ -94,9 +93,8 @@ describe('PZ Studio extension (real VS Code host)', () => {
         assert.ok(
             fs.existsSync(
                 path.join(
-                    fakeHome,
-                    'Zomboid',
-                    'Workshop',
+                    projectDir,
+                    'dist',
                     PROJECT_TITLE,
                     'Contents',
                     'mods',
@@ -197,12 +195,7 @@ describe('PZ Studio extension (real VS Code host)', () => {
 
         // Meaningful disk assertion: remove the fixture's earlier build
         // output so only THIS scenario's runner build can recreate it.
-        const fixtureOut = path.join(
-            fakeHome,
-            'Zomboid',
-            'Workshop',
-            PROJECT_TITLE,
-        );
+        const fixtureOut = path.join(projectDir, 'dist', PROJECT_TITLE);
         fs.rmSync(fixtureOut, { recursive: true, force: true });
 
         try {
@@ -240,22 +233,17 @@ describe('PZ Studio extension (real VS Code host)', () => {
         );
 
         // The runner's sink (project identity on disk): the extension build
-        // landed under the fixture project in the default outdir, and the
-        // second project contributed nothing there.
+        // landed in the fixture project's dist output, and the second
+        // project contributed nothing there.
         assert.ok(
             fs.existsSync(path.join(fixtureOut, 'workshop.txt')),
             `runner build output missing: ${path.join(fixtureOut, 'workshop.txt')}`,
         );
         assert.ok(
             !fs.existsSync(
-                path.join(
-                    fakeHome,
-                    'Zomboid',
-                    'Workshop',
-                    'Iso Second Project',
-                ),
+                path.join(secondProject, 'dist', 'Iso Second Project'),
             ),
-            'the second instance wrote into the runner outdir',
+            'the second instance created its own dist output',
         );
     });
 
