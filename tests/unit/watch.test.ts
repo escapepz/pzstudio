@@ -27,6 +27,31 @@ describe('resolveWatchVariants (pure)', () => {
             'development',
         ]);
     });
+
+    it('follows project.json build.target when no flag is given', () => {
+        expect(resolveWatchVariants({}, 'production')).toEqual(['main']);
+        expect(resolveWatchVariants({}, 'development')).toEqual([
+            'development',
+        ]);
+        expect(resolveWatchVariants({}, 'both')).toEqual([
+            'main',
+            'development',
+        ]);
+        expect(resolveWatchVariants({}, undefined)).toEqual([
+            'main',
+            'development',
+        ]);
+    });
+
+    it('lets target flags win over project.json build.target', () => {
+        expect(resolveWatchVariants({ both: true }, 'production')).toEqual([
+            'main',
+            'development',
+        ]);
+        expect(resolveWatchVariants({ production: true }, 'both')).toEqual([
+            'main',
+        ]);
+    });
 });
 
 describe('isWatchPathIgnored (pure)', () => {

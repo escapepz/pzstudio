@@ -6,7 +6,11 @@
  * decision logic from here.
  */
 import { relative, sep } from 'path';
-import type { BuildVariant, MaterializeMode } from '@pzstudio/core';
+import type {
+    BuildVariant,
+    MaterializeMode,
+    ProjectBuildTarget,
+} from '@pzstudio/core';
 import { CliError } from './errors';
 import type { MaterializationResolution } from './linkStep';
 
@@ -87,18 +91,27 @@ export function watchIgnoreGlobs(
 }
 
 /**
- * Pure: target flags to synced variants. Unlike `build` (main only by
- * default), watch syncs BOTH outputs unless told otherwise — a development
- * session wants the dev_branch live and the packaging output current.
+ * Pure: target flags and the project.json `build.target` to synced
+ * variants. Unlike `build` (main only by default), watch syncs BOTH outputs
+ * unless told otherwise — a development session wants the dev_branch live
+ * and the packaging output current. Explicit flags always win; with no
+ * flag, a set `build.target` steers the default ('production' → main,
+ * 'development' → development, 'both' → both) and an unset target keeps
+ * both.
  */
-export function resolveWatchVariants(flags: {
-    production?: boolean;
-    development?: boolean;
-    both?: boolean;
-}): BuildVariant[] {
+export function resolveWatchVariants(
+    flags: {
+        production?: boolean;
+        development?: boolean;
+        both?: boolean;
+    },
+    configTarget?: ProjectBuildTarget,
+): BuildVariant[] {
     if (flags.both) return ['main', 'development'];
     if (flags.production) return ['main'];
     if (flags.development) return ['development'];
+    if (configTarget === 'production') return ['main'];
+    if (configTarget === 'development') return ['development'];
     return ['main', 'development'];
 }
 
