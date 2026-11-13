@@ -62,11 +62,22 @@ export async function watchCmd() {
     const isBoth = hasFlag('both');
     // Mutually exclusive flag combinations are rejected by
     // validateInvocation (CLI-1) before the handler runs.
-    const variants = resolveWatchVariants({
-        production: isProduction,
-        development: isDevelopment,
-        both: isBoth,
-    });
+    const variants = resolveWatchVariants(
+        {
+            production: isProduction,
+            development: isDevelopment,
+            both: isBoth,
+        },
+        projectConfig.build?.target,
+    );
+    // The banner names build.target as the variant source only when the
+    // target — not a flag — decided the variants.
+    const source =
+        isProduction || isDevelopment || isBoth
+            ? undefined
+            : projectConfig.build?.target
+              ? 'build.target'
+              : undefined;
 
     const projectPath = projectDir();
     // Dist-always: the watcher ignores the canonical dist output tree (the
@@ -98,9 +109,10 @@ export async function watchCmd() {
                 : 'skip'
         }`,
     );
-    // Compact single-line banner (CLI-7): what is syncing and how to stop.
+    // Compact single-line banner (CLI-7): what is syncing, where the variant
+    // choice came from (when it came from config), and how to stop.
     info(
-        `Syncing '${projectConfig.workshop.title}' (${variants.join(' + ')}) — press Ctrl+C to stop.`,
+        `Syncing '${projectConfig.workshop.title}' (${variants.join(' + ')}${source ? ` — ${source}` : ''}) — press Ctrl+C to stop.`,
     );
 
     // Engine command: plan-input emissions must follow the active invocation

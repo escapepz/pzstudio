@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -7,9 +7,76 @@ import {
     resolveWatchVariants,
     WATCH_DEBOUNCE_MS,
 } from '../../packages/cli/src/lib/watch-shared';
-import { createDevSync } from '../../packages/cli/src/lib/devsync';
-import { setProjectDir } from '../../packages/cli/src/lib/helper';
+import {
+    createDevSync,
+    createDevSyncForEngine,
+} from '../../packages/cli/src/lib/devsync';
+import { watchCmd } from '../../packages/cli/src/lib/commands/watch';
+import * as logger from '../../packages/cli/src/lib/logger';
+import { hasFlag } from '../../packages/cli/src/lib/args';
+import {
+    projectDir,
+    resolveProjectConfig,
+    setProjectDir,
+} from '../../packages/cli/src/lib/helper';
+import { readGlobalConfig } from '../../packages/cli/src/lib/templateManager';
 import { createTempDir, deleteDir } from '../helpers/test-fixtures';
+
+// The watch-command suite drives watchCmd() with the same seams build.test.ts
+// uses; every mock is partial so the DevSync integration suite below keeps
+// running the real modules (real fs, real createDevSync, real legacyLogger).
+vi.mock('../../packages/cli/src/lib/logger', async (importOriginal) => {
+    const actual =
+        await importOriginal<
+            typeof import('../../packages/cli/src/lib/logger')
+        >();
+    return {
+        ...actual,
+        info: vi.fn(),
+        verbose: vi.fn(),
+        warn: vi.fn(),
+    };
+});
+vi.mock('../../packages/cli/src/lib/args', async (importOriginal) => ({
+    ...(await importOriginal<
+        typeof import('../../packages/cli/src/lib/args')
+    >()),
+    hasFlag: vi.fn(),
+}));
+vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => {
+    const actual =
+        await importOriginal<
+            typeof import('../../packages/cli/src/lib/helper')
+        >();
+    return {
+        ...actual,
+        projectDir: vi.fn(),
+        resolveProjectConfig: vi.fn(),
+    };
+});
+vi.mock(
+    '../../packages/cli/src/lib/templateManager',
+    async (importOriginal) => {
+        const actual =
+            await importOriginal<
+                typeof import('../../packages/cli/src/lib/templateManager')
+            >();
+        return {
+            ...actual,
+            readGlobalConfig: vi.fn(),
+        };
+    },
+);
+vi.mock('../../packages/cli/src/lib/devsync', async (importOriginal) => {
+    const actual =
+        await importOriginal<
+            typeof import('../../packages/cli/src/lib/devsync')
+        >();
+    return {
+        ...actual,
+        createDevSyncForEngine: vi.fn(),
+    };
+});
 
 describe('resolveWatchVariants (pure)', () => {
     it('defaults to syncing both outputs', () => {
@@ -357,5 +424,78 @@ describe('createDevSync (Node host integration)', () => {
         expect(fs.readFileSync(mainOut, 'utf8')).toBe('print("v2")');
         expect(fs.readFileSync(devOut, 'utf8')).toBe('print("v2")');
         await session.stop();
+    });
+});
+
+describe('watchCmd — banner names the variant source', () => {
+    const project = {
+        workshop: {
+            title: 'Test Project',
+            visibility: 'public',
+            tags: [],
+        },
+        mods: { my_mod: { name: 'My Mod', description: 'A mod.' } },
+        excludes: [],
+        // No deployment target: the materialize resolution stays 'skip'.
+    };
+
+    const configWith = (build?: Record<string, unknown>) =>
+        JSON.parse(JSON.stringify({ ...project, build })) as any;
+
+    const bannerLine = (): string | undefined =>
+        vi
+            .mocked(logger.info)
+            .mock.calls.map((call) => String(call[0]))
+            .find((message) => message.startsWith('Syncing'));
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(projectDir).mockReturnValue('/proj' as any);
+        vi.mocked(resolveProjectConfig).mockReturnValue(configWith());
+        vi.mocked(readGlobalConfig).mockReturnValue(undefined as any);
+        vi.mocked(hasFlag).mockReturnValue(false);
+        vi.mocked(createDevSyncForEngine).mockReturnValue({
+            // The banner is emitted before the engine starts; a rejected
+            // start ends the command deterministically BEFORE the watcher
+            // subscription (no native @parcel/watcher in unit tests).
+            start: vi.fn().mockRejectedValue(new Error('stop-after-banner')),
+            apply: vi.fn(),
+            stop: vi.fn().mockResolvedValue(undefined),
+        } as any);
+    });
+
+    it('names build.target as the variant source when config decided the variants', async () => {
+        vi.mocked(resolveProjectConfig).mockReturnValue(
+            configWith({ target: 'development' }),
+        );
+
+        await expect(watchCmd()).rejects.toThrow('stop-after-banner');
+
+        expect(bannerLine()).toBe(
+            "Syncing 'Test Project' (development — build.target) — press Ctrl+C to stop.",
+        );
+    });
+
+    it('omits the source suffix when a flag decided the variants', async () => {
+        vi.mocked(resolveProjectConfig).mockReturnValue(
+            configWith({ target: 'development' }),
+        );
+        vi.mocked(hasFlag).mockImplementation(
+            (name: string) => name === 'both',
+        );
+
+        await expect(watchCmd()).rejects.toThrow('stop-after-banner');
+
+        expect(bannerLine()).toBe(
+            "Syncing 'Test Project' (main + development) — press Ctrl+C to stop.",
+        );
+    });
+
+    it('keeps the banner byte-identical with no flag and no build.target', async () => {
+        await expect(watchCmd()).rejects.toThrow('stop-after-banner');
+
+        expect(bannerLine()).toBe(
+            "Syncing 'Test Project' (main + development) — press Ctrl+C to stop.",
+        );
     });
 });
