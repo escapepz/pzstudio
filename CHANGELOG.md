@@ -67,6 +67,32 @@ tool-only releases. Game compatibility is declared separately in
   declared mod folder hidden by rules stays "seen": it is hidden, not
   reported as missing on disk.
 
+- **Behavior change: the Development Sync toggle no longer shows success
+  popups.** Both information messages — "Development sync started." and
+  "Development sync stopped." — are gone; the new status-bar item is the
+  run's source of truth. The start-failure toast is kept.
+- **New status-bar sync indicator**: a muted `$(circle-slash) DevSync off`
+  while off, `$(sync~spin) DevSync: <project folder>` while a run is in
+  flight, with a per-phase tooltip (and the last start failure while off).
+  Clicking it runs the existing `pzstudio.watch` toggle, gated by the run
+  phase — start only from idle, stop while syncing, queued stop while
+  starting, no-op while stopping.
+- **Queued-stop semantics**: stopping while the initial build is still
+  running is honored once the build settles — the just-started session is
+  stopped immediately and the indicator lands off (the session does not
+  survive the request); stopping while syncing tears the run down, and
+  stopping while already stopping or off is a no-op.
+- **PZ Project Explorer badge** while a sync run is in flight: the view's
+  badge shows `1` with a per-phase tooltip naming the project; cleared
+  while off.
+- **Sync error notifications gain a 'Stop Sync' action** next to 'Show
+  Details', safe to click at any time (stops a syncing run, queues during
+  start, no-ops otherwise). Other error notifications (doctor, commands)
+  are unchanged.
+- New indicator strings ship English-only for now — the translation bundles
+  gain them (and drop the two retired popup strings) at the next
+  translation regen pass.
+
 ## [CLI 0.42210.3 / Extension 0.42210.3] - 2026-11-09
 
 ### CLI (@pzstudio/cli 0.42210.3) — notes: [`docs/releases/0.42210.3.md`](docs/releases/0.42210.3.md)

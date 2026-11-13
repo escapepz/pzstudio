@@ -150,6 +150,28 @@ Performance note (audit UX-07): this runs the full `runProjectDoctor`
 gatherer per project per rescan — every debounced refresh, every
 `project.json` change, and after every command run.
 
+## Development Sync badge (UX-15)
+
+Independent of the per-row diagnostics above, the tree view itself carries a
+badge while a development sync run is mid-flight (`starting`/`syncing`/
+`stopping` — [`06`](06-development-sync.md)):
+`treeView.badge = { value: 1, tooltip }` — the counter on the view's entry —
+rendered by `registerDevSyncTreeBadge` (`extension.ts:71-114`).
+
+- The badge is a **state indicator, not a meter**: the sync manager
+  publishes no pending count, so the value is always 1 while any phase of a
+  run is in flight. Idle clears it — including the idle-with-lastError state
+  a failed run lands in.
+- The tooltip names the project per phase (*"development sync for '{0}' is
+  starting…"* / *"…is stopping…"* / *"…running for '{0}'."*); the title is
+  the folder name once the run publishes it, else the project dir's last
+  segment — the same convention the status-bar item renders.
+- It subscribes to the sync manager's `onDidChange` (the same pattern the
+  status-bar item follows) — it never re-runs the diagnostics engine and
+  never refreshes the tree; disposal detaches the subscription with the
+  extension's other subscriptions. Pinned by
+  `tests/unit/projectExplorer.test.ts:1501`.
+
 ## Refresh behavior
 
 ```mermaid
