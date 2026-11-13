@@ -564,7 +564,13 @@ export function readGlobalConfig(
         outdir: undefined,
     };
 
-    // Fallback for outdir: .pzstudio.bak > default
+    // Fallback for outdir: the legacy .pzstudio.bak backup only — a value
+    // the USER once configured (the legacy store's outdir), never a
+    // factory default. Dist-always amendment (2026-11-12): the old
+    // `~/Zomboid/Workshop` fallback tier is REMOVED — an unconfigured
+    // global config carries no outdir, the build runs pure (dist only),
+    // and the materialize step is skipped until the user sets one
+    // (`pzstudio outdir`) or `pzstudio new` writes the project.json token.
     const backupPath = join(configDir, '.pzstudio.bak');
     if (existsSync(backupPath)) {
         try {
@@ -572,9 +578,6 @@ export function readGlobalConfig(
         } catch {
             // Fall through
         }
-    }
-    if (!defaultConfig.outdir) {
-        defaultConfig.outdir = join(homedir(), 'Zomboid', 'Workshop');
     }
 
     if (!existsSync(configPath)) {

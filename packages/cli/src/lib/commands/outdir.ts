@@ -9,11 +9,17 @@ import { readGlobalConfig, writeGlobalConfig } from '../templateManager';
 
 addHelp(
     'outdir',
-    `Change the output directory of your project.
+    `Set the machine-level deployment root for your mods.
+
+    Builds always write the canonical dist/ output inside the project; the
+    deployment root is where the game reads them from — each built item is
+    exposed there as a junction ('symlink' mode, the default) or a verified
+    copy ('copy' mode). A project.json outdir wins over this machine-level
+    value; with neither set, builds write dist/ only (no deployment).
 
     Usages:
-        pzstudio outdir <newOutDir> - Change the output directory of your project.
-    
+        pzstudio outdir <newOutDir> - Change the machine-level deployment root.
+
     Flags:
         --verbose        - Enable diagnostic output.`,
 );
@@ -31,7 +37,7 @@ export function outdirCmd(newOutDir: string) {
     if (!existsSync(newOutDir)) {
         verbose(`Validation failed: Path ${newOutDir} does not exist.`);
         throw new CliError(
-            `The output directory "${newOutDir}" does not exist.`,
+            `The deployment directory "${newOutDir}" does not exist.`,
             {
                 tryHint:
                     'Create the directory first, then run pzstudio outdir again.',
@@ -58,12 +64,12 @@ export function outdirCmd(newOutDir: string) {
     verbose(`Writing new outdir to global config...`);
     config.outdir = newOutDir;
     writeGlobalConfig(config);
-    log(`The output directory has been changed to "${newOutDir}".`);
+    log(`The deployment root has been changed to "${newOutDir}".`);
 }
 
 registerCommand({
     name: 'outdir',
-    summary: 'Set your output directory.',
+    summary: 'Set the machine-level deployment root for your mods.',
     positionals: [{ name: 'path', required: true }],
     run: (ctx) => outdirCmd(ctx.positionals[0]),
 });

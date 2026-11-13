@@ -1,0 +1,24 @@
+/* tokens.css — PZ Studio Monochromatic Brand & UI Design Tokens */
+:root {
+  /* Primary Monochromatic Surface Hierarchy */
+  --pz-color-near-black: #090A0B;
+  --pz-color-dark-surface: #121416;
+  --pz-color-elevated-surface: #202327;
+
+  /* Structural Dividers & Technical Grids */
+  --pz-color-border: #353A40;
+
+  /* Typography & Iconography Foregrounds */
+  --pz-color-secondary-text: #AEB4BB;
+  --pz-color-primary-white: #F8F8F6;
+
+  /* Typography Stacks */
+  --pz-font-sans: 'Space Grotesk', 'Inter', -apple-system, sans-serif;
+  --pz-font-mono: 'JetBrains Mono', 'Geist Mono', monospace;
+
+  /* Geometric Construction Constants */
+  --pz-logo-grid-unit: 32px;
+  --pz-logo-clear-space: 1x;
+  --pz-logo-min-icon-size: 16px;
+  --pz-logo-min-wordmark-width: 80px;
+}

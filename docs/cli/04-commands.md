@@ -194,6 +194,43 @@ timing) prints to stderr — stdout stays empty on a successful build (CLI-2).
 The workshop template resolution can touch the network (clone) when the cache is missing
 or invalid — see `08-mechanics.md` → Template resolution during build/watch.
 
+### Dist-always + deployment (materialize) — `--relink` / `--force-link` / `--backup-existing-workshop` / `--materialize=<m>` / `--no-materialize`
+
+Every build writes the canonical `dist/` root inside the project — unconditional, on
+every path (build, watch, the sync engine). The user's `outdir` (project.json, host
+settings, or `pzstudio outdir`) is the **deployment root** and never receives build
+writes. After each successful variant the item gets an ownership marker
+(`dist/<Item>/.pzstudio-output.json`) and the **materialize step** exposes it to the game:
+
+- **`'symlink'` (default)** — a pzstudio-managed junction
+  `<outdir>/<Item>` → `dist/<Item>` (zero-cost under watch). A real non-empty
+  folder occupying the slot is refused (`CONFLICT_REAL_DIR`);
+  `--backup-existing-workshop` moves it aside atomically first. A foreign link is
+  refused (`FOREIGN_LINK`); `--relink` / `--force-link` replaces it after the
+  cascade verified the identity.
+- **`'copy'`** — a verified, reconciled real copy of `dist/<Item>` guarded by a
+  distinct `.pzstudio-copy.json` marker: a 4-step gate (real directory → matching
+  marker → zero links inside → hand-made dirs refused) precedes any write, and an
+  owned junction is **unlinked before any copy** (never copied through). Reconcile
+  prunes stale entries and overwrites changed ones in place; a hand-made directory
+  is refused (`ERR_COPY_SLOT_HAND_MADE`), never adopted.
+- **Toggle copy → symlink** — a **proven-clean** copy slot (marker manifest match,
+  zero links, no hand-edits) is removed and replaced by the junction in the same
+  run; a slot whose content no longer matches its recorded manifest is refused as
+  `COPY_SLOT_DRIFT` (nothing deleted — run a copy-mode build to reconcile it, or
+  move the folder OUT of the deployment root).
+
+Mode resolution: `--materialize=<symlink|copy>` flag > project.json
+`build.materialize` > flat `materialize` in `~/.pzstudio/config.json` > hard default
+`'symlink'`. With **no outdir configured anywhere** (or `--no-materialize`) the
+build runs pure — `dist/` only, no deployment (`pzstudio doctor` reports
+`OUTDIR_UNSET` as info). There is no `'none'` config value.
+
+Materialize failures NEVER flip the exit code — every refusal/failure is recorded
+and surfaced as a warning; `pzstudio doctor` reports the full state per item. The
+junction/copy slot is outward-facing only: the engine always mutates `dist/`
+directly, never through the deployment.
+
 ---
 
 ## pzstudio watch
@@ -256,6 +293,15 @@ Special rules:
 - A source file that vanishes before the batch runs (atomic-save temp files) is silently
   skipped; directory events pass through as create/delete; RENAME arrives as delete+create.
 - Unlike `build`, the default target is **both** outputs (dev_branch needs to stay live).
+- **Deployment (materialize)**: the materialize decision resolves **before** the session
+  starts; copy mode **refuses to start** with `ERR_WATCH_COPY_MODE_UNSUPPORTED` (a
+  debounced full copy after every watched change is heavy and lock-prone — and silently
+  forcing a junction would override explicit user config). Symlink mode attaches each
+  synced item's junction once after the initial full build; every later apply flows
+  through the link at O(0) cost. `--no-materialize` watches `dist/` only.
+- The watcher natively ignores the canonical `dist/` tree and — when the deployment
+  root sits inside the project — the deployment root too (a junction surfaces the
+  engine's writes at the deployment path; watching them would loop).
 - `@parcel/watcher` is required lazily inside the command (native binding must not load
   through the embedded api import path).
 
@@ -296,7 +342,10 @@ flowchart TD
 **Nothing to clean is success, not failure** (CLI-6): `Already clean.` with exit 0
 replaced the old error path. Both outputs are always attempted — a locked main output
 does not skip the dev output cleanup; failures are collected and thrown together
-(`packages/cli/src/lib/commands/clean.ts:42-78`).
+(`packages/cli/src/lib/commands/clean.ts:42-78`). Dist-always: clean removes the
+canonical `dist/<Item>` outputs only — the deployment root never has artifacts deleted
+from it (a dangling junction or a stale copy slot heals on the next build's materialize
+step).
 
 ---
 
@@ -566,6 +615,41 @@ Checks performed by the engine (severity in parentheses):
   orphan excludes entries (warning); zero mods (info)
 - **buildTarget**: no production output possible (info); no development output possible (info);
   pzBuildCompatibility mismatch with `--game-build` (warning, never blocks)
+- **workshop-link** (materialize): per-item deployment-slot state from the platform-node
+  materialize inspector — attached junction (info, hint carries the copyable `steamcmd`
+  command with the absolute VDF path), healthy copy slot (info), missing deployment
+  (warning), hand-made directory (warning → move it OUT of the deployment root by hand in
+  copy mode — a renamed folder inside it still registers as a duplicate mod — or
+  `--backup-existing-workshop` in symlink mode), real-dir
+  conflict (warning → `--backup-existing-workshop`), foreign link (warning →
+  `--relink`), dangling (warning), unowned dist (warning), backup debris inside the
+  deployment root (warning → move it OUT by hand; pzstudio never deletes backups),
+  non-local symlink target
+  (warning, fail-closed — no copy fallback), unsupported host (info). No outdir
+  configured renders one `OUTDIR_UNSET` **info** (CI-legitimate pure build state) —
+  there is no legacy mode and no `MIGRATE_TO_DIST_MODEL` anymore.
+
+---
+
+## pzstudio workshop-vdf
+
+Generates a SteamCMD `workshop.vdf` for a built workshop item and **prints** the exact
+upload command — pzstudio never launches steamcmd or any third-party tool; running the
+upload is the user's step.
+
+- Default item: the built main item (`dist/<Item>`); `--item <dir>` overrides.
+- Default output: `dist/<Item>.workshop.vdf` — always OUTSIDE the item's `Contents/`
+  folder (SteamCMD uploads everything under `contentfolder`); `--out <file>` overrides.
+  The VDF embeds machine-local absolute paths — a build artifact, never committed.
+- `contentfolder` is always an **absolute** path pointing at `dist/<Item>/Contents`,
+  resolved at generation time (SteamCMD rejects relative paths). SteamCMD never
+  traverses the deployment root.
+- The VDF is schema-validated (`packages/cli/assets/workshop.vdf.schema.json`); the PZ
+  footer (`Workshop ID:` empty until the first upload returns the real id, one
+  `Mod ID:` line per mod) is appended to the description.
+- `--id <n>` sets `publishedfileid`; without it an existing out-file's id is reused,
+  else `0` (new item). `--login <user>` personalizes the printed command;
+  `--title/--visibility/--appid/--changenote` override metadata.
 
 ---
 

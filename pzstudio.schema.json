@@ -9,6 +9,12 @@
                     "description": "Which workshop outputs 'pzstudio build' produces when no target flag is given. An explicit --production/--development/--both flag wins.",
                     "enum": ["production", "development", "both"],
                     "type": "string"
+                },
+                "materialize": {
+                    "default": "symlink",
+                    "description": "How built items are exposed to the game from the project's dist/ output: \"symlink\" (default) maintains a junction per item in the deployment root; \"copy\" maintains a verified, reconciled real copy there. There is no \"none\" value — omitting \"outdir\" (or passing --no-materialize) disables deployment. A flat \"materialize\" key in ~/.pzstudio/config.json is the machine-level fallback; a --materialize flag wins over both.",
+                    "enum": ["symlink", "copy"],
+                    "type": "string"
                 }
             },
             "type": "object"

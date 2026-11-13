@@ -94,6 +94,17 @@ export type TemplateCategory = 'project' | 'mod' | 'workshop' | 'language';
  */
 export type ProjectBuildTarget = 'production' | 'development' | 'both';
 
+/**
+ * How the materialize step exposes each built item to the game from the
+ * canonical `dist/` output (dist-always amendment, 2026-11-12):
+ * 'symlink' creates/maintains a junction `<outdir>/<Item>` →
+ * `<root>/dist/<Item>` (the default — zero-cost under watch); 'copy'
+ * maintains a verified, reconciled real copy. There is deliberately no
+ * 'none' value: omitting `outdir` (or passing --no-materialize) is the
+ * only way to skip deployment.
+ */
+export type MaterializeMode = 'symlink' | 'copy';
+
 export interface ITemplateConfig {
     url: string;
     ref?: string;
@@ -103,6 +114,24 @@ export interface GlobalConfig {
     templates: Partial<Record<TemplateCategory, ITemplateConfig>>;
     outdir?: string;
     useSymlinks?: boolean;
+
+    /**
+     * Machine-level materialize fallback for the dist-always output model
+     * (flat key, per the global config's flat shape). Used when
+     * `project.json` carries no `build.materialize`; the default is
+     * 'symlink'. Lets a developer on a mount where junctions cannot be
+     * created (WSL/SMB) opt into 'copy' once, without dirtying tracked
+     * project files.
+     */
+    materialize?: MaterializeMode;
+
+    /**
+     * Machine-level workshop root for the dist model's per-item junctions
+     * (`<workshopRoot>/<Item>` -> `<project>/dist/<Item>`). Absent means
+     * the factory default (`%USERPROFILE%\Zomboid\Workshop`); the
+     * `PZSTUDIO_WORKSHOP_ROOT` env var wins over this field.
+     */
+    workshopRoot?: string;
 
     /**
      * Same shape and meaning as IProjectConfig.experimental. An explicit
@@ -153,6 +182,16 @@ export interface IProjectConfig {
          * flag is given. An explicit CLI flag still wins.
          */
         target?: ProjectBuildTarget;
+        /**
+         * How built items are exposed to the game from `dist/`:
+         * 'symlink' (default) junctions each item into the deployment
+         * root, 'copy' maintains a reconciled real copy there. The
+         * machine-level config (~/.pzstudio) may carry the same flat
+         * 'materialize' key as a fallback; a per-invocation
+         * --materialize flag wins over both. Omitting `outdir` disables
+         * deployment entirely — there is no 'none' value.
+         */
+        materialize?: MaterializeMode;
     };
 
     /**

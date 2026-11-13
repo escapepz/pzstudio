@@ -68,6 +68,13 @@ const NODE_BUILTINS = new Set([
 const VENDORED = {
     '@pzstudio/core': path.join(__dirname, '..', '..', 'core', 'dist'),
     '@pzstudio/platform': path.join(__dirname, '..', '..', 'platform', 'dist'),
+    '@pzstudio/platform-node': path.join(
+        __dirname,
+        '..',
+        '..',
+        'platform-node',
+        'dist',
+    ),
     commander: path.join(path.dirname(require.resolve('commander')), 'typings'),
 };
 

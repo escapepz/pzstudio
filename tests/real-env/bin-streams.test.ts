@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
-    defaultOutRoot,
     hasLegacyTemplates,
     RealEnvWorkspace,
     seedWorkshopTemplateCache,
@@ -84,8 +83,6 @@ function writeHealthyProject(): void {
     );
     workspace.write('workshop/description.txt', 'Stream description');
     workspace.write('workshop/preview.png', 'fake preview');
-    // The default output dir must exist so the filesystem module stays quiet.
-    fs.mkdirSync(defaultOutRoot(workspace.home), { recursive: true });
 }
 
 describe('real env: stream contract (CLI-2)', () => {
@@ -137,9 +134,7 @@ describe('real env: stream contract (CLI-2)', () => {
 
             // The build actually produced the output.
             expect(
-                fs.existsSync(
-                    path.join(defaultOutRoot(workspace.home), PROJECT_TITLE),
-                ),
+                fs.existsSync(workspace.path(path.join('dist', PROJECT_TITLE))),
             ).toBe(true);
         },
         60000,
@@ -216,11 +211,13 @@ describe('real env: watch keeps stdout clean (CLI-2)', () => {
             await waitForCondition(
                 () =>
                     fs.existsSync(
-                        path.join(
-                            defaultOutRoot(workspace.home),
-                            PROJECT_TITLE,
-                            'Contents',
-                            'mods',
+                        workspace.path(
+                            path.join(
+                                'dist',
+                                PROJECT_TITLE,
+                                'Contents',
+                                'mods',
+                            ),
                         ),
                     ),
                 30000,
@@ -255,17 +252,19 @@ describe('real env: watch keeps stdout clean (CLI-2)', () => {
                     await waitForCondition(
                         () =>
                             fs.existsSync(
-                                path.join(
-                                    defaultOutRoot(workspace.home),
-                                    PROJECT_TITLE,
-                                    'Contents',
-                                    'mods',
-                                    MOD_ID,
-                                    '42',
-                                    'media',
-                                    'lua',
-                                    'shared',
-                                    'main.lua',
+                                workspace.path(
+                                    path.join(
+                                        'dist',
+                                        PROJECT_TITLE,
+                                        'Contents',
+                                        'mods',
+                                        MOD_ID,
+                                        '42',
+                                        'media',
+                                        'lua',
+                                        'shared',
+                                        'main.lua',
+                                    ),
                                 ),
                             ),
                         30000,
@@ -315,17 +314,19 @@ describe('real env: watch keeps stdout clean (CLI-2)', () => {
                     // The edited content reached the output for real.
                     expect(
                         fs.readFileSync(
-                            path.join(
-                                defaultOutRoot(workspace.home),
-                                PROJECT_TITLE,
-                                'Contents',
-                                'mods',
-                                MOD_ID,
-                                '42',
-                                'media',
-                                'lua',
-                                'shared',
-                                'main.lua',
+                            workspace.path(
+                                path.join(
+                                    'dist',
+                                    PROJECT_TITLE,
+                                    'Contents',
+                                    'mods',
+                                    MOD_ID,
+                                    '42',
+                                    'media',
+                                    'lua',
+                                    'shared',
+                                    'main.lua',
+                                ),
                             ),
                             'utf8',
                         ),

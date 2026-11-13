@@ -83,7 +83,7 @@ describe('real env: error model contract', () => {
     it('keeps structured rendering on outdir failures', async () => {
         const result = await workspace.run(['outdir', 'no_such_dir']);
         expect(result.exitCode).toBe(1);
-        expect(result.stderr).toContain('Problem: The output directory');
+        expect(result.stderr).toContain('Problem: The deployment directory');
         expect(result.stderr).toContain(
             'Try: Create the directory first, then run pzstudio outdir again.',
         );

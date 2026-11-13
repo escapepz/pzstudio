@@ -62,6 +62,15 @@ export interface ParsedInvocation {
     options: Record<string, string | boolean | undefined>;
     /** Tokens rejected while structuring (legacy path); validated later. */
     unknownOptions?: string[];
+    /**
+     * Parse-layer evidence of which flags the user actually typed, keyed by
+     * dash-case declared name. Commander is last-wins on a shared attribute
+     * (`--materialize` / `--no-materialize` both write `materialize`), so the
+     * parsed VALUES cannot prove a contradictory pair. Handlers must never
+     * read this (R0) — it exists for validateInvocation's conflicts loop.
+     * Absent on the legacy embedded path, which has no Commander events.
+     */
+    presence?: ReadonlySet<string>;
 }
 
 /** A ParsedInvocation that passed validateInvocation(). */
@@ -116,7 +125,7 @@ function camelCase(name: string): string {
     return name.replace(/-([a-z])/g, (_m, c: string) => c.toUpperCase());
 }
 
-function addFlag(cmd: Command, flag: FlagSpec): void {
+function addFlag(cmd: Command, flag: FlagSpec, seenFlags: Set<string>): void {
     const value = flag.takesValue ? ' <value>' : '';
     const long = `--${flag.name}${value}`;
     const token = flag.short ? `-${flag.short}, ${long}` : long;
@@ -125,6 +134,11 @@ function addFlag(cmd: Command, flag: FlagSpec): void {
         opt.choices([...flag.choices]);
     }
     cmd.addOption(opt);
+    // Presence evidence: Commander emits `option:<declared name>` only for
+    // tokens it truly parsed as an option — never for an option-argument
+    // (`--path --no-materialize`) nor anything after `--`. This is the one
+    // place that knows a flag's declared spelling, so the hook lives here.
+    cmd.on(`option:${flag.name}`, () => seenFlags.add(flag.name));
 }
 
 function addPositional(cmd: Command, spec: PositionalSpec): void {
@@ -148,6 +162,11 @@ function buildProgram(version: string): {
 } {
     const program = new Command();
     let captured: ParsedInvocation | undefined;
+    // Per-parse presence evidence: which declared flags Commander actually
+    // parsed as options. Fresh set per program (Commander keeps parse state
+    // on the instance). See addFlag for why an event hook is the only
+    // reliable source.
+    const seenFlags = new Set<string>();
 
     program
         .name('pzstudio')
@@ -168,7 +187,7 @@ function buildProgram(version: string): {
     // every position (`pzstudio --verbose build` and `pzstudio build
     // --verbose`); subcommand actions merge them via optsWithGlobals().
     for (const flag of GLOBAL_FLAGS) {
-        addFlag(program, flag);
+        addFlag(program, flag, seenFlags);
     }
 
     program.action((...cbArgs: unknown[]) => {
@@ -177,6 +196,7 @@ function buildProgram(version: string): {
             undefined,
             cmd.optsWithGlobals() as Record<string, unknown>,
             [],
+            seenFlags,
         );
     });
 
@@ -184,10 +204,10 @@ function buildProgram(version: string): {
         const sub = program.command(def.name);
         sub.description(def.summary).helpOption(false);
         for (const flag of GLOBAL_FLAGS) {
-            addFlag(sub, flag);
+            addFlag(sub, flag, seenFlags);
         }
         for (const flag of def.flags ?? []) {
-            addFlag(sub, flag);
+            addFlag(sub, flag, seenFlags);
         }
         for (const spec of def.positionals ?? []) {
             addPositional(sub, spec);
@@ -214,7 +234,7 @@ function buildProgram(version: string): {
                     );
                 }
             }
-            captured = toInvocation(def, options, positionals);
+            captured = toInvocation(def, options, positionals, seenFlags);
         });
     }
 
@@ -225,12 +245,23 @@ function toInvocation(
     def: CommandDef | undefined,
     commanderOptions: Record<string, unknown>,
     positionals: string[],
+    seenFlags: Set<string>,
 ): ParsedInvocation {
     // Commander camelCases option names; our handlers read dash-case via
     // hasFlag/extractFlag. Map every declared flag name back to its value.
     const declared: FlagSpec[] = [...GLOBAL_FLAGS, ...(def?.flags ?? [])];
     const options: Record<string, string | boolean | undefined> = {};
     for (const flag of declared) {
+        // Commander models `--no-x` as the negation of the positive
+        // attribute (`x: false`) and never stores a `noX` key. Presence
+        // (not the value) is the truth: `--path --no-materialize` consumes
+        // the token as a value yet still leaves Commander's implicit
+        // `materialize: true` behind, which a value-based read would
+        // misreport as "the flag was used".
+        if (flag.name.startsWith('no-')) {
+            options[flag.name] = seenFlags.has(flag.name) ? true : undefined;
+            continue;
+        }
         const value = commanderOptions[camelCase(flag.name)];
         options[flag.name] =
             typeof value === 'string' || typeof value === 'boolean'
@@ -242,6 +273,7 @@ function toInvocation(
         command: def,
         positionals,
         options,
+        presence: new Set(seenFlags),
     };
 }
 
@@ -473,9 +505,18 @@ export function validateInvocation(
 
     // Mutually exclusive options: declared per flag in the registry, so the
     // executable and embedded hosts share one conflict semantics (exit 2).
+    // Presence (not truthiness) is the test: `--no-materialize` lands as
+    // `materialize: false`, which a truthiness check would read as absent.
+    // The legacy path carries no presence set — its options are built by
+    // direct token parsing, where a `true` value already means "typed".
+    const presence = invocation.presence;
+    const isPresent = (name: string): boolean =>
+        presence
+            ? presence.has(name)
+            : options[name] !== undefined && options[name] !== false;
     for (const flag of declared) {
-        if (!flag.conflicts || !options[flag.name]) continue;
-        const clash = flag.conflicts.find((other) => options[other]);
+        if (!flag.conflicts || !isPresent(flag.name)) continue;
+        const clash = flag.conflicts.find(isPresent);
         if (clash) {
             throw new CliUsageError(
                 `Conflicting options: --${flag.name} cannot be combined with --${clash}.`,

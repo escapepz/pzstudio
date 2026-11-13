@@ -38,7 +38,8 @@ export type DiagnosticModule =
     | 'filesystem'
     | 'templates'
     | 'mods'
-    | 'buildTarget';
+    | 'buildTarget'
+    | 'workshop-link';
 
 export interface Diagnostic {
     severity: DiagnosticSeverity;
@@ -62,6 +63,43 @@ export interface DoctorInput {
     capabilities: PlatformCapabilities;
     /** The running game build (e.g. "42.2.0") to check pzBuildCompatibility against. */
     gameBuild?: string;
+    /**
+     * Dist-model workshop-link checks, computed by the HOST (they need
+     * link-aware fs reads — lstat/readlink/realpath — that the browser-safe
+     * contract does not carry). Core only renders. Node hosts compute via
+     * the platform-node link manager; a browser host passes
+     * `state: 'UNSUPPORTED_HOST'` entries or omits the field entirely.
+     */
+    workshopLinks?: WorkshopLinkCheckInput[];
+    /**
+     * The host's materialize decision (dist-always amendment §3). When
+     * absent (browser hosts, or the config read failed) no deployment
+     * diagnostic renders at all.
+     */
+    materialization?: {
+        action: 'skip' | 'materialize';
+        mode: 'symlink' | 'copy';
+        /** The expanded deployment root; set iff action === 'materialize'. */
+        outDir?: string;
+        /** Symlink mode only: the target is a UNC/network volume. */
+        targetNonLocal?: boolean;
+    };
+}
+
+/** One host-computed workshop-link fact for the doctor to render. */
+export interface WorkshopLinkCheckInput {
+    /** Item (workshop slot) name the state belongs to. */
+    item: string;
+    /**
+     * A platform-node copy-slot state (the link cascade's states plus the
+     * copy materializer's COPY_SLOT / HAND_MADE_DIR), or
+     * 'UNSUPPORTED_HOST' when the host cannot maintain junctions at all.
+     */
+    state: string;
+    /** Detail text from the cascade (errno / raw target), when present. */
+    detail?: string;
+    /** Absolute path of the item's workshop VDF, when the host knows it. */
+    vdfPath?: string;
 }
 
 export interface DoctorReport {
@@ -294,6 +332,40 @@ async function outputDirDiagnostics(
         });
     }
     return diagnostics;
+}
+
+/**
+ * `backupPathFor` (linkManager) renames a conflicting real folder to a
+ * SIBLING whose name is `<Item>.backup-<ISO>` — inside the deployment
+ * root. The game scans that folder, so a backup carrying a mod.info
+ * registers as a duplicate mod. Warn only: pzstudio never deletes backups
+ * (delayed silent data loss, owner decision) — the owner moves them out by
+ * hand. A debris check must never fail the doctor, so every fs error
+ * degrades to "no diagnostics".
+ */
+async function backupDebrisDiagnostics(
+    fs: ProjectFileSystem,
+    input: DoctorInput,
+): Promise<Diagnostic[]> {
+    if (!input.outDir) return [];
+    let entries: Awaited<ReturnType<ProjectFileSystem['list']>>;
+    try {
+        entries = await fs.list(input.outDir);
+    } catch {
+        return [];
+    }
+    return entries
+        .filter(
+            (entry) =>
+                entry.type === 'directory' && entry.name.includes('.backup-'),
+        )
+        .map((entry) => ({
+            severity: 'warning' as const,
+            module: 'workshop-link' as const,
+            code: 'workshop-link.backup-debris',
+            message: `Backup folder '${entry.name}' sits inside the deployment root '${input.outDir}'.`,
+            hint: 'Move it OUT of the deployment root by hand — the game scans that folder, and a backup carrying a mod.info registers as a duplicate mod. pzstudio never deletes backups.',
+        }));
 }
 
 async function templateDiagnostics(
@@ -551,6 +623,7 @@ export async function runDoctor(
     }
     diagnostics.push(...environmentDiagnostics(input.capabilities));
     diagnostics.push(...(await outputDirDiagnostics(fs, input)));
+    diagnostics.push(...(await backupDebrisDiagnostics(fs, input)));
     diagnostics.push(...(await templateDiagnostics(fs, input)));
     if (project) {
         diagnostics.push(
@@ -560,8 +633,148 @@ export async function runDoctor(
             ...buildTargetDiagnostics(project.config, input.gameBuild),
         );
     }
+    diagnostics.push(...workshopLinkDiagnostics(input.workshopLinks ?? []));
+    diagnostics.push(...materializationDiagnostics(input.materialization));
+    if (input.materialization?.targetNonLocal) {
+        diagnostics.push(
+            workshopLinkDiagnostics([
+                { item: '*', state: 'NON_LOCAL_TARGET' },
+            ])[0],
+        );
+    }
 
     return project
         ? { projectDir: input.projectDir, project, diagnostics }
         : { projectDir: input.projectDir, diagnostics };
+}
+
+/**
+ * Renders host-computed workshop-link facts into doctor diagnostics. Pure
+ * mapping — every state gets a stable code, a severity, and an actionable
+ * hint. NON_LOCAL_TARGET's wording is fail-closed: junctions cannot target
+ * non-local volumes and pzstudio offers no copy fallback (owner decision,
+ * 2026-11-11 — real-world failures are triaged via issues).
+ */
+export function workshopLinkDiagnostics(
+    entries: WorkshopLinkCheckInput[],
+): Diagnostic[] {
+    const codes: Record<string, string> = {
+        ATTACHED_OK: 'workshop-link.attached',
+        MISSING_LINK: 'workshop-link.missing',
+        COPY_SLOT: 'workshop-link.copy-slot',
+        HAND_MADE_DIR: 'workshop-link.hand-made-dir',
+        CONFLICT_REAL_DIR: 'workshop-link.conflict-real-dir',
+        FOREIGN_LINK: 'workshop-link.foreign',
+        DANGLING_LINK: 'workshop-link.dangling',
+        UNOWNED_TARGET: 'workshop-link.unowned',
+        NOT_DIRECTORY: 'workshop-link.not-directory',
+        IDENTITY_MISMATCH: 'workshop-link.identity-mismatch',
+        NON_LOCAL_TARGET: 'workshop-link.non-local',
+        UNSUPPORTED_HOST: 'workshop-link.unsupported-host',
+    };
+    return entries.map((entryState): Diagnostic => {
+        const state = entryState.state;
+        const base = {
+            module: 'workshop-link' as const,
+            code:
+                codes[state] ??
+                `workshop-link.${state.toLowerCase().replace(/_/g, '-')}`,
+            message: `Workshop link for '${entryState.item}': ${state}${
+                entryState.detail ? ` (${entryState.detail})` : ''
+            }.`,
+        };
+        const steamcmdHint = entryState.vdfPath
+            ? `Upload with: steamcmd +login <user> +workshop_build_item "${entryState.vdfPath}" +quit`
+            : undefined;
+        switch (state) {
+            case 'ATTACHED_OK':
+                return {
+                    ...base,
+                    severity: 'info',
+                    hint: steamcmdHint,
+                };
+            case 'COPY_SLOT':
+                // A healthy engine-owned copy slot: reconciled on every
+                // build; drift heals with the next one.
+                return {
+                    ...base,
+                    severity: 'info',
+                    hint: steamcmdHint,
+                };
+            case 'HAND_MADE_DIR':
+                return {
+                    ...base,
+                    severity: 'warning',
+                    hint: 'A real directory without a copy marker occupies the slot — hand-made content is never adopted. Move it OUT of the deployment root by hand (copy mode — the game scans that folder, a renamed folder inside it still registers as a duplicate mod), or run build with --backup-existing-workshop (symlink mode).',
+                };
+            case 'MISSING_LINK':
+                return {
+                    ...base,
+                    severity: 'warning',
+                    hint: 'Run pzstudio build to deploy the item.',
+                };
+            case 'CONFLICT_REAL_DIR':
+                return {
+                    ...base,
+                    severity: 'warning',
+                    hint: 'Run with --backup-existing-workshop to move the existing folder aside and attach the link.',
+                };
+            case 'FOREIGN_LINK':
+                return {
+                    ...base,
+                    severity: 'warning',
+                    hint: 'Pass --relink (or --force-link) to replace the foreign link after checking where it points.',
+                };
+            case 'DANGLING_LINK':
+                return {
+                    ...base,
+                    severity: 'warning',
+                    hint: 'Rebuild to recreate the dist directory and re-attach the link.',
+                };
+            case 'UNOWNED_TARGET':
+                return {
+                    ...base,
+                    severity: 'warning',
+                    hint: 'The dist directory carries no ownership marker for this project — rebuild to write it. If the slot belongs to another project, do not relink.',
+                };
+            case 'NON_LOCAL_TARGET':
+                return {
+                    ...base,
+                    severity: 'warning',
+                    hint: 'Point the deployment root at a local disk — junctions cannot target network volumes.',
+                };
+            case 'UNSUPPORTED_HOST':
+                return {
+                    ...base,
+                    severity: 'info',
+                };
+            default:
+                return { ...base, severity: 'warning' };
+        }
+    });
+}
+
+/**
+ * Renders the materialize decision: an unset target is a legitimate pure
+ * build state (CI/headless) — one INFO diagnostic, never a warning
+ * (dist-always amendment §9). The MIGRATE_TO_DIST_MODEL diagnostic of the
+ * 2026-11-11 design is gone: there is no legacy mode left to migrate.
+ */
+function materializationDiagnostics(
+    materialization: DoctorInput['materialization'],
+): Diagnostic[] {
+    if (!materialization) return [];
+    if (materialization.action === 'skip') {
+        return [
+            {
+                module: 'workshop-link',
+                code: 'OUTDIR_UNSET',
+                severity: 'info',
+                message:
+                    'Deployment disabled — no outdir configured; the build wrote dist/ only.',
+                hint: 'Set project.json "outdir" (pzstudio new writes "~/Zomboid/Workshop") or run pzstudio outdir to expose built items to the game.',
+            },
+        ];
+    }
+    return [];
 }

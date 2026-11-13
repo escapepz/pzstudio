@@ -13,20 +13,20 @@ publish step, with or without an OTP. Agents build, pack, smoke, package,
 tag, and verify with read-only registry checks, then hand the owner the
 exact commands.
 
-**Branch policy (owner rule 2026-11-09; dev line renamed 2026-11-10):** every change STARTS on
-`42.22.0-dev`. A fix needed for a release is committed on the dev branch
-first; the release branch is re-cut from dev (or cherry-picks the fix). A
-`release/*` branch carries ONLY minimal release-prep — the version bump,
-the release's changelog entries, and the tag. Nothing else.
+**Branch policy (owner rule 2026-11-11; two-branch topology):** every change
+starts and stays on `42.22.0-dev` — strictly linear, direct pushes allowed.
+A graduation is ONE PR `42.22.0-dev` → `main` merged with **Create a merge
+commit** (one merge node per cycle on `main`; squash is disabled repo-wide,
+and Rebase-and-merge is disabled after it silently no-opped on a
+re-anchor-shaped PR). Per-cycle stable and `release/*` branches are
+retired; old `*-dev` lines are frozen records and must not be deleted.
 
-**Worktree layout (owner rule 2026-11-09):** release branches are operated
-from their own worktree, `../pzstudio.worktrees/release/<version>` (see
-AGENTS.md → Branching). Resolve `${VERSION}` from the DEV worktree's
-`packages/cli/package.json` — the hub's `main` may lag the release being
-cut — then cut branch and worktree in one step from the hub checkout:
-`git worktree add -b release/${VERSION} ../pzstudio.worktrees/release/${VERSION} 42.22.0-dev`
-and run the one-time setup (submodules, `pnpm install`, `pnpm build`)
-before Step 0.
+**Release operations (owner rule 2026-11-11):** releases are prepared ON
+the dev worktree (`../pzstudio.worktrees/42.22.0-dev` — resolve `${VERSION}`
+from its `packages/cli/package.json`). After the owner's manual test of the
+pre-release, merge the `42.22.0-dev` → `main` graduation PR, tag `main`'s
+post-merge tip with the bare version, and publish `latest` from `main@tag`
+(see Graduation run).
 
 ---
 
@@ -157,7 +157,8 @@ blocks a graduation.
 5. Extension: Step E1 build, Step E2 package WITHOUT `--pre-release`,
    Step E3 publish without the flag; verify the listing shows the
    graduation version NOT flagged Pre-release.
-6. Tag the release-prep commit with the bare graduation version; the
+6. Tag `main`'s post-merge tip with the bare graduation version (after the
+   `42.22.0-dev` → `main` PR merges with Create a merge commit); the
    GitHub release is marked **Latest** (the cycle's pre-release GitHub
    release stays marked **Pre-release**). Optionally `npm deprecate` the
    cycle's `-next` builds with a pointer at the graduation version.

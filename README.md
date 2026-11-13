@@ -1,13 +1,10 @@
 # PZ Studio
 
-![PZ Studio banner](.images/pzstudio-banner.png)
+![PZ Studio banner](docs/brand/pz-studio-github-social-1280x640.svg)
 
 > PZ Studio — create, validate, build and live-sync
 > Project Zomboid **Build 42** Lua mods from one engine.
 
-<!-- The escapepz.pzstudio42 Marketplace listing and the escapepz/pzstudio42
-     Open VSX extension must be published before the two version badges
-     resolve; until then they render "unknown" / "extension not found". -->
 [![VS Marketplace Version](https://vsmarketplacebadges.dev/version-short/escapepz.pzstudio42.svg?style=flat-square&color=007acc&labelColor=000000)](https://marketplace.visualstudio.com/items?itemName=escapepz.pzstudio42)
 [![Open VSX Version](https://img.shields.io/open-vsx/v/escapepz/pzstudio42?style=flat-square&color=007acc&labelColor=000000)](https://open-vsx.org/extension/escapepz/pzstudio42)
 [![npm](https://img.shields.io/npm/v/@pzstudio/cli?style=flat-square&labelColor=000000)](https://www.npmjs.com/package/@pzstudio/cli)
@@ -111,6 +108,7 @@ command list and every `pzstudio.*` setting:
 | [`CHANGELOG.md`](CHANGELOG.md)                      | Combined changelog for the monorepo (CLI + extension per release)           |
 | [`docs/releases/`](docs/releases/)                  | Per-version release notes and the [`RELEASE.md`](docs/releases/RELEASE.md) runbook |
 | [`docs/vscode-extension/`](docs/vscode-extension/)  | Behavioral spec and UI/UX audit of the extension, decision records          |
+| [`docs/brand/`](docs/brand/)                        | Monochrome brand identity: logo/wordmark SVGs, design tokens, guidelines, asset generator |
 | [`AGENTS.md`](AGENTS.md)                            | Repo instructions: commands, architecture and code style for contributors   |
 
 ## Development

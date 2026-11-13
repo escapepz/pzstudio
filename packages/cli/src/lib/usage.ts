@@ -34,6 +34,15 @@ import { emitInfo, engineIo } from './logger';
 
 export type UsageHost = 'cli' | 'api';
 
+/** Link-step vocabulary: one event per attached item (dist model). */
+export const USAGE_OP_LINK_ATTACH = 'link.attach';
+/** Link-step vocabulary: one event per backed-up real workshop folder. */
+export const USAGE_OP_LINK_BACKUP = 'link.backup';
+/** Materialize vocabulary: one event per copy-mode item pass (no paths). */
+export const USAGE_OP_MATERIALIZE_COPY = 'materialize.copy';
+/** Toggle vocabulary: one event per copy→symlink slot replacement. */
+export const USAGE_OP_MATERIALIZE_TOGGLE = 'materialize.toggle';
+
 export interface UsageEvent {
     v: 1;
     ts: string; // ISO instant (end of op)

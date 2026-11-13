@@ -4,6 +4,7 @@ import { join } from 'path';
 import * as logger from '../../packages/cli/src/lib/logger';
 import { buildCmd } from '../../packages/cli/src/lib/commands/build';
 import {
+    distRootOf,
     gatherPlanInput,
     projectDir,
     readWorkshopDescriptionLines,
@@ -59,7 +60,9 @@ describe('buildCmd', () => {
         },
         mods: { my_mod: { name: 'My Mod', description: 'A mod.' } },
         excludes: [],
-        outdir: '/out',
+        // No deployment target: this suite exercises plan execution, and a
+        // configured outdir would run the real copy/junction materializer
+        // over a mocked fs (creating real artifacts at the resolved path).
     };
 
     beforeEach(() => {
@@ -187,7 +190,12 @@ describe('buildCmd', () => {
 
     it('should generate mod.info in branch folders from the source snapshot', async () => {
         vi.mocked(gatherPlanInput).mockReturnValue({
-            config: JSON.parse(JSON.stringify(project)),
+            // Dist-always: hand-written plan inputs must carry the anchored
+            // dist output root, exactly what the real gatherPlanInput does.
+            config: {
+                ...JSON.parse(JSON.stringify(project)),
+                outdir: distRootOf('/proj'),
+            },
             workshopTemplateDir: '/templates/workshop',
             projectDir: '/proj',
             modSourceStates: {
@@ -211,7 +219,12 @@ describe('buildCmd', () => {
 
     it('should skip mod.info generation when the snapshot says it exists', async () => {
         vi.mocked(gatherPlanInput).mockReturnValue({
-            config: JSON.parse(JSON.stringify(project)),
+            // Dist-always: anchored dist output root, as the real
+            // gatherPlanInput produces.
+            config: {
+                ...JSON.parse(JSON.stringify(project)),
+                outdir: distRootOf('/proj'),
+            },
             workshopTemplateDir: '/templates/workshop',
             projectDir: '/proj',
             modSourceStates: {
@@ -471,7 +484,7 @@ describe('buildCmd', () => {
         );
 
         await expect(buildCmd()).rejects.toThrow(
-            "Cannot delete '/out/Test Project' — the folder is in use by another program",
+            `Cannot delete '${distRootOf('/proj').replace(/\\/g, '/')}/Test Project' — the folder is in use by another program`,
         );
 
         // The dev variant was still planned and executed.

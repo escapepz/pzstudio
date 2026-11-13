@@ -99,6 +99,21 @@ export function modIdForVariant(
 }
 
 /**
+ * The workshop title an item is built under: the config title plus the
+ * variant's title suffix (development: ' - dev_branch'), composed exactly
+ * as workshopTextForVariant composes it for workshop.txt. Exposed for the
+ * per-item output marker's itemTitle field (the item's directory name is
+ * the sanitized form — see resolveBuildOutputPath).
+ */
+export function itemTitleForVariant(
+    config: IProjectConfig,
+    variant: 'main' | 'development',
+): string {
+    const suffix = VARIANT_OPTIONS[variant].titleSuffix;
+    return suffix ? `${config.workshop.title}${suffix}` : config.workshop.title;
+}
+
+/**
  * Sanitizes a string for use as a directory name, replacing characters that
  * are illegal on Windows filesystems (: ? * " < > | and control chars).
  * @param name The desired directory name

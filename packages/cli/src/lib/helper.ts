@@ -369,7 +369,7 @@ export function discoveryStartDir(): string {
  * @param startDir The directory to start searching from
  * @returns The directory containing project.json, or undefined
  */
-function findProjectRoot(startDir: string): string | undefined {
+export function findProjectRoot(startDir: string): string | undefined {
     let currentDir = startDir;
     while (true) {
         if (existsSync(join(currentDir, 'project.json'))) {
@@ -725,28 +725,65 @@ export interface OutDirScope {
 }
 
 /**
- * Returns the output directory following the hierarchy:
- * project.json > config.json > .pzstudio.bak > default
+ * The fixed name of the canonical build output root (dist-always amendment,
+ * 2026-11-12): every build path writes `<projectRoot>/dist` and nothing
+ * else. The user's `outdir` is the DEPLOYMENT target, resolved separately.
+ */
+export const DIST_DIR_NAME = 'dist';
+
+/** The canonical build output root of one project: `<projectRoot>/dist`. */
+export function distRootOf(projectPath: string): string {
+    return join(resolve(projectPath), DIST_DIR_NAME);
+}
+
+/**
+ * Expands the portable `outdir` token form (dist-always amendment §4): a
+ * leading `~/` or `~\` expands to the host home directory, so a committed
+ * `project.json` can carry `"outdir": "~/Zomboid/Workshop"` without baking
+ * one machine's absolute path into version control. Absolute and relative
+ * values pass through unchanged (a relative value is resolved against the
+ * project root by the caller, as before).
+ */
+export function expandOutdirToken(raw: string): string {
+    if (raw === '~' || raw.startsWith('~/') || raw.startsWith('~\\')) {
+        return join(homedir(), raw.slice(1));
+    }
+    return raw;
+}
+
+/**
+ * Returns the DEPLOYMENT TARGET following the hierarchy:
+ * project.json > config.json > .pzstudio.bak > (nothing)
+ *
+ * Dist-always amendment (2026-11-12): the factory-default tier
+ * (`~/Zomboid/Workshop`) is REMOVED — an unconfigured cascade yields
+ * `undefined`, which means the build runs pure (dist only) and the
+ * materialize step is skipped (doctor reports OUTDIR_UNSET as info). The
+ * v1â†’v2 migration still stamps `~/Zomboid/Workshop` into the global
+ * config, so every migrated user keeps a target. A leading `~/` token
+ * expands at every tier; `pzstudio new` writes the token into fresh
+ * project.json files.
  * @param project Optional project config to use
  * @param config Optional global config to use
  * @param scope Optional explicit scope (doc 11 commit 5): resolves the
  *   exact same tier order — project config > workspace host layer > user
- *   host layer > global config > default — from caller-supplied
+ *   host layer > global config > undefined — from caller-supplied
  *   dependencies instead of the ambient context / legacy slots. Never
  *   reorders or drops a tier.
  * @param io Optional explicit io scope (doc 11 §17 commit 6) for the
- *   ambient-branched form's emissions (the default-path verbose): engine
- *   call sites pass engineIo() so the emission follows the active
- *   invocation logger; an omitted scope routes raw legacy (R1). Ignored
- *   when `scope` is supplied — the scope form carries its own logger.
- * @returns {string} The output directory
+ *   ambient-branched form's emissions: engine call sites pass engineIo()
+ *   so the emission follows the active invocation logger; an omitted
+ *   scope routes raw legacy (R1). Ignored when `scope` is supplied — the
+ *   scope form carries its own logger.
+ * @returns {string | undefined} The deployment target, or undefined when
+ *   no tier configures one (pure build mode)
  */
 export function getOutDir(
     project?: IProjectConfig,
     config?: GlobalConfig,
     scope?: OutDirScope,
     io?: IoScope | undefined,
-) {
+): string | undefined {
     if (scope) {
         const io: IoScope | undefined = scope.logger
             ? { logger: scope.logger }
@@ -754,85 +791,78 @@ export function getOutDir(
 
         // 1. Try project config (resolved against the scope's project root)
         if (project && project.outdir) {
-            return resolve(scope.projectDir, project.outdir);
+            return resolve(scope.projectDir, expandOutdirToken(project.outdir));
         }
 
         // 2. Try workspace settings
         if (scope.settings?.workspace?.outdir) {
-            return resolve(scope.settings.workspace.outdir);
+            return resolve(expandOutdirToken(scope.settings.workspace.outdir));
         }
 
         // 3. Try user settings
         if (scope.settings?.user?.outdir) {
-            return resolve(scope.settings.user.outdir);
+            return resolve(expandOutdirToken(scope.settings.user.outdir));
         }
 
         // 4. Try global config
         const global = config ?? readGlobalConfig(false, io);
         if (global.outdir) {
-            return resolve(global.outdir);
+            return resolve(expandOutdirToken(global.outdir));
         }
 
-        // This should technically never be reached because readGlobalConfig has a final fallback
-        const defaultPath = join(homedir(), 'Zomboid', 'Workshop');
-        emitVerbose(io, `Defaulting output directory to: ${defaultPath}`);
-        return defaultPath;
+        // No factory tier (dist-always amendment): unconfigured = no
+        // deployment target, not `~/Zomboid/Workshop`.
+        return undefined;
     }
 
     const ctx = getActiveInvocationContext();
     if (ctx) {
         // 1. Try project config (projectDir() resolves from the context)
         if (project && project.outdir) {
-            return resolve(projectDir(), project.outdir);
+            return resolve(projectDir(), expandOutdirToken(project.outdir));
         }
 
         // 2. Try workspace settings
         if (ctx.settings?.workspace?.outdir) {
-            return resolve(ctx.settings.workspace.outdir);
+            return resolve(expandOutdirToken(ctx.settings.workspace.outdir));
         }
 
         // 3. Try user settings
         if (ctx.settings?.user?.outdir) {
-            return resolve(ctx.settings.user.outdir);
+            return resolve(expandOutdirToken(ctx.settings.user.outdir));
         }
 
         // 4. Try global config
         const global = config ?? readGlobalConfig(false, io);
         if (global.outdir) {
-            return resolve(global.outdir);
+            return resolve(expandOutdirToken(global.outdir));
         }
 
-        // This should technically never be reached because readGlobalConfig has a final fallback
-        const defaultPath = join(homedir(), 'Zomboid', 'Workshop');
-        emitVerbose(io, `Defaulting output directory to: ${defaultPath}`);
-        return defaultPath;
+        return undefined;
     }
 
     // 1. Try project config
     if (project && project.outdir) {
-        return resolve(projectDir(), project.outdir);
+        return resolve(projectDir(), expandOutdirToken(project.outdir));
     }
 
     // 2. Try workspace settings
     if (vscodeWorkspaceSettings?.outdir) {
-        return resolve(vscodeWorkspaceSettings.outdir);
+        return resolve(expandOutdirToken(vscodeWorkspaceSettings.outdir));
     }
 
     // 3. Try user settings
     if (vscodeUserSettings?.outdir) {
-        return resolve(vscodeUserSettings.outdir);
+        return resolve(expandOutdirToken(vscodeUserSettings.outdir));
     }
 
     // 4. Try global config
     const global = config ?? readGlobalConfig(false, io);
     if (global.outdir) {
-        return resolve(global.outdir);
+        return resolve(expandOutdirToken(global.outdir));
     }
 
-    // This should technically never be reached because readGlobalConfig has a final fallback
-    const defaultPath = join(homedir(), 'Zomboid', 'Workshop');
-    emitVerbose(io, `Defaulting output directory to: ${defaultPath}`);
-    return defaultPath;
+    return undefined;
 }
 
 /**
@@ -897,6 +927,14 @@ export function gatherModSourceState(
  * Assembles the full plan input for the pure planner: resolved template,
  * per-mod source snapshots and the workshop metadata. This is the shared
  * host-side pre-planning work of `pzstudio build` and the sync engine.
+ *
+ * Dist-always anchor (2026-11-12 amendment §14.3): the returned plan
+ * input's config carries `outdir = <projectRoot>/dist` — the engine builds
+ * ONLY into the canonical dist root, on every consumer (CLI build, watch,
+ * extension sessions) from this one choke point. The user's `outdir` (the
+ * deployment target) is resolved separately by the materialize step and
+ * never reaches the planner.
+ *
  * @param projectPath The project root directory
  * @param config The fully-resolved project config (outdir absolute)
  */
@@ -913,7 +951,9 @@ export function gatherPlanInput(
     }
 
     return {
-        config,
+        // Dist-always anchor: the planner's output root is ALWAYS the
+        // canonical dist root, whatever the deployment target says.
+        config: { ...config, outdir: distRootOf(projectPath) },
         workshopTemplateDir,
         projectDir: projectPath,
         modSourceStates,

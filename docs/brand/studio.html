@@ -1,0 +1,1891 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PZ STUDIO — Monochrome Brand Identity & Live SVG Studio</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Space Grotesk (Geometric Sans) & JetBrains Mono (Technical Monospace) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            pz: {
+              black: '#090A0B',
+              surface: '#121416',
+              elevated: '#202327',
+              border: '#353A40',
+              secondary: '#AEB4BB',
+              white: '#F8F8F6'
+            }
+          },
+          fontFamily: {
+            display: ['"Space Grotesk"', 'Inter', 'sans-serif'],
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    :root {
+      --pz-near-black: #090A0B;
+      --pz-dark-surface: #121416;
+      --pz-elevated-surface: #202327;
+      --pz-border: #353A40;
+      --pz-secondary-text: #AEB4BB;
+      --pz-primary-white: #F8F8F6;
+    }
+
+    * {
+      box-sizing: border-box;
+      selection-background-color: #F8F8F6;
+      selection-color: #090A0B;
+    }
+
+    ::selection {
+      background: #F8F8F6;
+      color: #090A0B;
+    }
+
+    body {
+      background-color: var(--pz-near-black);
+      color: var(--pz-primary-white);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* Subtle architectural grid background */
+    .tech-grid-bg {
+      background-size: 32px 32px;
+      background-image: 
+        linear-gradient(to right, rgba(53, 58, 64, 0.22) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(53, 58, 64, 0.22) 1px, transparent 1px);
+    }
+
+    .tech-grid-light {
+      background-size: 24px 24px;
+      background-image: 
+        linear-gradient(to right, rgba(9, 10, 11, 0.06) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(9, 10, 11, 0.06) 1px, transparent 1px);
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090A0B;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #353A40;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #AEB4BB;
+    }
+
+    /* Crosshair corner ticks for technical precision */
+    .corner-ticks {
+      position: relative;
+    }
+    .corner-ticks::before,
+    .corner-ticks::after {
+      content: '';
+      position: absolute;
+      width: 7px;
+      height: 7px;
+      border-color: #AEB4BB;
+      pointer-events: none;
+      opacity: 0.45;
+    }
+    .corner-ticks::before {
+      top: -1px;
+      left: -1px;
+      border-top: 1px solid #F8F8F6;
+      border-left: 1px solid #F8F8F6;
+    }
+    .corner-ticks::after {
+      bottom: -1px;
+      right: -1px;
+      border-bottom: 1px solid #F8F8F6;
+      border-right: 1px solid #F8F8F6;
+    }
+
+    .btn-operational {
+      transition: all 120ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .btn-operational:active {
+      transform: translateY(1px);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-pz-black text-pz-white antialiased">
+
+  <!-- TOP OPERATIONAL CONTROL HEADER (STICKY) -->
+  <header class="sticky top-0 z-40 bg-pz-black/95 backdrop-blur-md border-b border-pz-border">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-6">
+      <!-- Top Row: Studio Identity & Deliverable Navigation -->
+      <div class="h-14 flex items-center justify-between gap-4 border-b border-pz-border/60">
+        <div class="flex items-center gap-3">
+          <div id="navMiniIcon" class="w-7 h-7 rounded bg-pz-elevated border border-pz-border flex items-center justify-center overflow-hidden"></div>
+          <div class="flex items-center gap-2">
+            <span class="font-display font-bold tracking-[0.14em] text-sm text-pz-white">PZ STUDIO</span>
+            <span class="text-pz-border font-mono text-xs">//</span>
+            <span class="font-mono text-xs text-pz-secondary hidden sm:inline">BRAND IDENTITY &amp; SVG ENGINE v2.0</span>
+          </div>
+          <span class="ml-2 px-2 py-0.5 text-[11px] font-mono bg-pz-elevated text-pz-secondary border border-pz-border rounded">MONOCHROME SPEC</span>
+        </div>
+
+        <!-- Quick Section Jump Links -->
+        <nav class="hidden xl:flex items-center gap-1 font-mono text-xs">
+          <a href="#section-deliverables" class="px-2.5 py-1.5 rounded text-pz-secondary hover:text-pz-white hover:bg-pz-surface transition">01–04.SVG_DELIVERABLES</a>
+          <a href="#section-inspector" class="px-2.5 py-1.5 rounded text-pz-secondary hover:text-pz-white hover:bg-pz-surface transition">RAW_SVG_INSPECTOR</a>
+          <a href="#section-guidelines" class="px-2.5 py-1.5 rounded text-pz-secondary hover:text-pz-white hover:bg-pz-surface transition">05.GUIDELINES</a>
+          <a href="#section-tokens" class="px-2.5 py-1.5 rounded text-pz-secondary hover:text-pz-white hover:bg-pz-surface transition">06.TOKENS</a>
+          <a href="#section-product" class="px-2.5 py-1.5 rounded text-pz-secondary hover:text-pz-white hover:bg-pz-surface transition">07.PRODUCT_BRANDING</a>
+        </nav>
+
+        <div class="flex items-center gap-2">
+          <button onclick="downloadAllSVGs()" class="btn-operational px-3 py-1.5 rounded bg-pz-white text-pz-black font-mono text-xs font-semibold hover:bg-pz-secondary transition flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+            <span>EXPORT ALL (.SVG)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Bottom Row: Live Parametric Controls (Monogram Variant + Grid + Safe Zone + Stroke Weight) -->
+      <div class="py-2.5 flex flex-wrap items-center justify-between gap-3">
+        <!-- 3 Geometric Monogram Directions -->
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="font-mono text-[11px] uppercase tracking-wider text-pz-secondary mr-1.5">MONOGRAM DIRECTION:</span>
+          <button id="btn-var-1" onclick="setVariant(1)" class="variant-btn px-3 py-1.5 rounded text-xs font-mono border transition flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
+            <span>01 // CHAMFER INTERLOCK</span>
+          </button>
+          <button id="btn-var-2" onclick="setVariant(2)" class="variant-btn px-3 py-1.5 rounded text-xs font-mono border transition flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
+            <span>02 // ARCHITECTURAL MONOLITH</span>
+          </button>
+          <button id="btn-var-3" onclick="setVariant(3)" class="variant-btn px-3 py-1.5 rounded text-xs font-mono border transition flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
+            <span>03 // TERMINAL STENCIL</span>
+          </button>
+        </div>
+
+        <!-- Engineering Overlays & Stroke Weight Adjuster -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Construction Grid Toggle -->
+          <button id="toggleGridBtn" onclick="toggleGrid()" class="px-2.5 py-1 rounded text-xs font-mono border border-pz-border bg-pz-surface text-pz-secondary hover:text-pz-white transition flex items-center gap-1.5">
+            <span id="gridDot" class="w-2 h-2 rounded-full bg-pz-border"></span>
+            <span>GRID OVERLAY</span>
+          </button>
+
+          <!-- Safe Zone / Clear Space Toggle -->
+          <button id="toggleSafeBtn" onclick="toggleSafeZone()" class="px-2.5 py-1 rounded text-xs font-mono border border-pz-border bg-pz-surface text-pz-secondary hover:text-pz-white transition flex items-center gap-1.5">
+            <span id="safeDot" class="w-2 h-2 rounded-full bg-pz-border"></span>
+            <span>SAFE ZONE 1X</span>
+          </button>
+
+          <div class="h-4 w-[1px] bg-pz-border mx-1 hidden sm:block"></div>
+
+          <!-- Stroke Weight Switcher -->
+          <div class="flex items-center bg-pz-surface border border-pz-border rounded p-0.5 font-mono text-xs">
+            <span class="px-2 text-[11px] text-pz-secondary">STROKE WEIGHT:</span>
+            <button id="weight-24" onclick="setStrokeWeight(24)" class="px-2 py-0.5 rounded text-pz-secondary hover:text-pz-white transition" title="24px / Light Stroke">24px / Light</button>
+            <button id="weight-28" onclick="setStrokeWeight(28)" class="px-2 py-0.5 rounded bg-pz-elevated text-pz-white font-semibold transition" title="28px / Regular Stroke">28px / Reg</button>
+            <button id="weight-32" onclick="setStrokeWeight(32)" class="px-2 py-0.5 rounded text-pz-secondary hover:text-pz-white transition" title="32px / Bold Stroke">32px / Bold</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN WORKSPACE -->
+  <main class="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 py-8 space-y-12">
+
+    <!-- ARCHITECTURAL BRIEF SUMMARY BANNER -->
+    <section class="bg-pz-surface border border-pz-border rounded-lg p-5 sm:p-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+      <div class="space-y-2 max-w-3xl">
+        <div class="flex flex-wrap items-center gap-2 font-mono text-xs text-pz-secondary">
+          <span class="px-2 py-0.5 bg-pz-elevated border border-pz-border rounded text-pz-white">ACTIVE SPECIFICATION</span>
+          <span>ZED.DEV / OPENCODE / ZCODE VISUAL LANGUAGE</span>
+          <span>•</span>
+          <span>PURE VECTOR PATHS (ZERO EXTERNAL FONT DEPENDENCY)</span>
+        </div>
+        <h1 id="activeVariantTitle" class="font-display text-xl sm:text-2xl font-bold tracking-tight text-pz-white">
+          Variant 01 — Chamfer Interlock Monogram (Zed.dev Inspired)
+        </h1>
+        <p id="activeVariantDesc" class="text-sm text-pz-secondary leading-relaxed">
+          Precision 45° chamfered geometry aligning the outer bowl of the P with the diagonal spine of the Z. A continuous negative-space seam locks both glyphs onto a unified structural grid—engineered for surgical legibility from 16px IDE status bars to high-resolution display headers.
+        </p>
+      </div>
+
+      <!-- Live Telemetry Readout -->
+      <div class="w-full lg:w-auto grid grid-cols-3 gap-2 bg-pz-black border border-pz-border rounded p-3 font-mono text-xs shrink-0">
+        <div class="px-2">
+          <div class="text-[10px] text-pz-secondary">BASE GRID MODULE</div>
+          <div class="text-pz-white font-semibold mt-0.5">256 × 256 U (8×8)</div>
+        </div>
+        <div class="px-2 border-l border-pz-border">
+          <div class="text-[10px] text-pz-secondary">STROKE WEIGHT (S)</div>
+          <div id="specStrokeReadout" class="text-pz-white font-semibold mt-0.5">28px / Regular</div>
+        </div>
+        <div class="px-2 border-l border-pz-border">
+          <div class="text-[10px] text-pz-secondary">CHAMFER / SEAM</div>
+          <div id="specAngleReadout" class="text-pz-white font-semibold mt-0.5">45.0° // 0.5S GAP</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 1: DELIVERABLES 01, 02, 03, 04 — LIVE SVG ASSET STUDIO        -->
+    <!-- ===================================================================== -->
+    <section id="section-deliverables" class="space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-pz-border pb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="font-mono text-xs px-2 py-0.5 rounded bg-pz-elevated border border-pz-border text-pz-white">01–04</span>
+          <h2 class="font-display text-lg font-bold tracking-wide uppercase">Deliverables 01–04 // Primary Lockups, App Icon &amp; Wordmark</h2>
+        </div>
+        <p class="font-mono text-xs text-pz-secondary">Click [INSPECT CODE] to view raw XML vector paths or [DOWNLOAD .SVG] to export standalone files.</p>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- CARD 1: DELIVERABLE 01 — PRIMARY LOGO (DARK VERSION) -->
+        <article class="bg-pz-surface border border-pz-border rounded-lg overflow-hidden flex flex-col">
+          <div class="px-4 py-3 bg-pz-elevated/60 border-b border-pz-border flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-xs font-semibold text-pz-white">DELIVERABLE 01</span>
+              <span class="text-pz-border">//</span>
+              <span class="font-mono text-xs text-pz-secondary">PRIMARY_LOCKUP // DARK_SURFACE #090A0B</span>
+            </div>
+            <span class="font-mono text-[11px] px-2 py-0.5 rounded bg-pz-black text-pz-secondary border border-pz-border">560 × 320 PX</span>
+          </div>
+
+          <!-- SVG Preview Stage -->
+          <div class="relative h-72 bg-pz-black tech-grid-bg flex items-center justify-center p-6 border-b border-pz-border corner-ticks">
+            <div class="absolute top-3 left-3 font-mono text-[11px] text-pz-secondary/70">SURFACE: #090A0B // MARK: #F8F8F6</div>
+            <div class="absolute bottom-3 right-3 font-mono text-[11px] text-pz-secondary/70">PURE &lt;PATH&gt; GEOMETRY // 0 FONTS</div>
+            <div id="preview-primary-dark" class="w-full h-full flex items-center justify-center"></div>
+          </div>
+
+          <!-- Card Footer Actions -->
+          <div class="p-3.5 bg-pz-surface flex flex-wrap items-center justify-between gap-2">
+            <span class="font-mono text-xs text-pz-secondary">pz-logo-primary-dark.svg</span>
+            <div class="flex items-center gap-2">
+              <button onclick="inspectAsset('primary-dark')" class="btn-operational px-2.5 py-1.5 rounded bg-pz-elevated hover:bg-pz-border text-pz-white border border-pz-border font-mono text-xs transition">
+                INSPECT CODE
+              </button>
+              <button onclick="copyAssetSVG('primary-dark')" class="btn-operational px-2.5 py-1.5 rounded bg-pz-elevated hover:bg-pz-border text-pz-white border border-pz-border font-mono text-xs transition">
+                COPY .SVG
+              </button>
+              <button onclick="downloadAssetSVG('primary-dark', 'pz-logo-primary-dark.svg')" class="btn-operational px-3 py-1.5 rounded bg-pz-white hover:bg-pz-secondary text-pz-black font-mono text-xs font-semibold transition">
+                DOWNLOAD .SVG
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <!-- CARD 2: DELIVERABLE 02 — PRIMARY LOGO (LIGHT VERSION) -->
+        <article class="bg-pz-surface border border-pz-border rounded-lg overflow-hidden flex flex-col">
+          <div class="px-4 py-3 bg-pz-elevated/60 border-b border-pz-border flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-xs font-semibold text-pz-white">DELIVERABLE 02</span>
+              <span class="text-pz-border">//</span>
+              <span class="font-mono text-xs text-pz-secondary">PRIMARY_LOCKUP // LIGHT_SURFACE #F8F8F6</span>
+            </div>
+            <span class="font-mono text-[11px] px-2 py-0.5 rounded bg-pz-white text-pz-black border border-pz-border font-medium">560 × 320 PX</span>
+          </div>
+
+          <!-- SVG Preview Stage (Light Surface) -->
+          <div class="relative h-72 bg-pz-white tech-grid-light flex items-center justify-center p-6 border-b border-pz-border">
+            <div class="absolute top-3 left-3 font-mono text-[11px] text-pz-black/60">SURFACE: #F8F8F6 // MARK: #090A0B</div>
+            <div class="absolute bottom-3 right-3 font-mono text-[11px] text-pz-black/60">PURE &lt;PATH&gt; GEOMETRY // 0 FONTS</div>
+            <div id="preview-primary-light" class="w-full h-full flex items-center justify-center"></div>
+          </div>
+
+          <!-- Card Footer Actions -->
+          <div class="p-3.5 bg-pz-surface flex flex-wrap items-center justify-between gap-2">
+            <span class="font-mono text-xs text-pz-secondary">pz-logo-primary-light.svg</span>
+            <div class="flex items-center gap-2">
+              <button onclick="inspectAsset('primary-light')" class="btn-operational px-2.5 py-1.5 rounded bg-pz-elevated hover:bg-pz-border text-pz-white border border-pz-border font-mono text-xs transition">
+                INSPECT CODE
+              </button>
+              <button onclick="copyAssetSVG('primary-light')" class="btn-operational px-2.5 py-1.5 rounded bg-pz-elevated hover:bg-pz-border text-pz-white border border-pz-border font-mono text-xs transition">
+                COPY .SVG
+              </button>
+              <button onclick="downloadAssetSVG('primary-light', 'pz-logo-primary-light.svg')" class="btn-operational px-3 py-1.5 rounded bg-pz-white hover:bg-pz-secondary text-pz-black font-mono text-xs font-semibold transition">
+                DOWNLOAD .SVG
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <!-- CARD 3: DELIVERABLE 03 — STANDALONE PZ APP ICON & PIXEL LEGIBILITY STRESS TEST -->
+        <article class="bg-pz-surface border border-pz-border rounded-lg overflow-hidden flex flex-col">
+          <div class="px-4 py-3 bg-pz-elevated/60 border-b border-pz-border flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-xs font-semibold text-pz-white">DELIVERABLE 03</span>
+              <span class="text-pz-border">//</span>
+              <span class="font-mono text-xs text-pz-secondary">Standalone PZ App Icon &amp; Pixel Legibility Strip</span>
+            </div>
+            <div class="flex items-center gap-1 font-mono text-[11px]">
+              <button id="iconBgDarkBtn" onclick="setIconMode('dark')" class="px-2 py-0.5 rounded bg-pz-black text-pz-white border border-pz-border">DARK (#090A0B)</button>
+              <button id="iconBgLightBtn" onclick="setIconMode('light')" class="px-2 py-0.5 rounded bg-pz-surface text-pz-secondary border border-transparent">LIGHT (#F8F8F6)</button>
+            </div>
+          </div>
+
+          <!-- App Icon Shapes (Square, Squircle, Circle) + Multi-Scale Legibility Strip -->
+          <div id="iconPreviewStage" class="relative min-h-[19rem] bg-pz-black tech-grid-bg p-5 border-b border-pz-border flex flex-col justify-between gap-5 corner-ticks">
+            <!-- Top Row: 3 Container Masks (Square Frame, macOS/VS Code Squircle rx=22%, GitHub Org Circle) -->
+            <div class="grid grid-cols-3 gap-3 pt-1">
+              <div class="flex flex-col items-center gap-1.5">
+                <div id="icon-mask-square" class="w-20 h-20 flex items-center justify-center"></div>
+                <span class="font-mono text-[10px] text-pz-secondary">SQUARE FRAME (0%)</span>
+              </div>
+              <div class="flex flex-col items-center gap-1.5">
+                <div id="icon-mask-squircle" class="w-20 h-20 flex items-center justify-center"></div>
+                <span class="font-mono text-[10px] text-pz-white font-semibold">SQUIRCLE (RX=22%)</span>
+              </div>
+              <div class="flex flex-col items-center gap-1.5">
+                <div id="icon-mask-circle" class="w-20 h-20 flex items-center justify-center"></div>
+                <span class="font-mono text-[10px] text-pz-secondary">GITHUB AVATAR (50%)</span>
+              </div>
+            </div>
+
+            <!-- Bottom Row: Real-Time Pixel Legibility Stress Test Strip (128px, 64px, 48px, 32px, 24px, 16px) -->
+            <div class="bg-pz-surface/95 border border-pz-border rounded-lg p-3">
+              <div class="font-mono text-[10px] text-pz-secondary mb-2.5 flex items-center justify-between gap-2 border-b border-pz-border pb-1.5">
+                <span>PIXEL LEGIBILITY STRESS TEST STRIP (INTEGER GRID ALIGNED)</span>
+                <span class="text-pz-white">128px → 16px</span>
+              </div>
+              <div class="flex flex-wrap items-end justify-between gap-3 px-1">
+                <div class="flex flex-col items-center gap-1">
+                  <div id="scale-128" class="w-14 h-14 flex items-center justify-center" title="Scaled representation of 128x128px Marketplace Icon"></div>
+                  <span class="font-mono text-[10px] text-pz-secondary">128px</span>
+                </div>
+                <div class="flex flex-col items-center gap-1">
+                  <div id="scale-64" class="w-12 h-12 flex items-center justify-center"></div>
+                  <span class="font-mono text-[10px] text-pz-secondary">64px</span>
+                </div>
+                <div class="flex flex-col items-center gap-1">
+                  <div id="scale-48" class="w-10 h-10 flex items-center justify-center"></div>
+                  <span class="font-mono text-[10px] text-pz-secondary">48px</span>
+                </div>
+                <div class="flex flex-col items-center gap-1">
+                  <div id="scale-32" class="w-8 h-8 flex items-center justify-center"></div>
+                  <span class="font-mono text-[10px] text-pz-secondary">32px</span>
+                </div>
+                <div class="flex flex-col items-center gap-1">
+                  <div id="scale-24" class="w-6 h-6 flex items-center justify-center"></div>
+                  <span class="font-mono text-[10px] text-pz-secondary">24px</span>
+                </div>
+                <div class="flex flex-col items-center gap-1">
+                  <div id="scale-16" class="w-4 h-4 flex items-center justify-center"></div>
+                  <span class="font-mono text-[10px] text-pz-white font-semibold">16px</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card Footer Actions -->
+          <div class="p-3.5 bg-pz-surface flex flex-wrap items-center justify-between gap-2">
+            <span id="appIconFilename" class="font-mono text-xs text-pz-secondary">pz-icon-standalone-dark.svg</span>
+            <div class="flex items-center gap-2">
+              <button onclick="inspectCurrentIconAsset()" class="btn-operational px-2.5 py-1.5 rounded bg-pz-elevated hover:bg-pz-border text-pz-white border border-pz-border font-mono text-xs transition">
+                INSPECT CODE
+              </button>
+              <button onclick="copyCurrentIconSVG()" class="btn-operational px-2.5 py-1.5 rounded bg-pz-elevated hover:bg-pz-border text-pz-white border border-pz-border font-mono text-xs transition">
+                COPY .SVG
+              </button>
+              <button onclick="downloadCurrentIconSVG()" class="btn-operational px-3 py-1.5 rounded bg-pz-white hover:bg-pz-secondary text-pz-black font-mono text-xs font-semibold transition">
+                DOWNLOAD .SVG
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <!-- CARD 4: DELIVERABLE 04 — HORIZONTAL WORDMARK LOCKUP -->
+        <article class="bg-pz-surface border border-pz-border rounded-lg overflow-hidden flex flex-col">
+          <div class="px-4 py-3 bg-pz-elevated/60 border-b border-pz-border flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-xs font-semibold text-pz-white">DELIVERABLE 04</span>
+              <span class="text-pz-border">//</span>
+              <span class="font-mono text-xs text-pz-secondary">Horizontal Wordmark + Technical Tagline</span>
+            </div>
+            <div class="flex items-center gap-1.5 font-mono text-[11px]">
+              <button id="taglineToggleBtn" onclick="toggleWordmarkTagline()" class="px-2 py-0.5 rounded bg-pz-elevated text-pz-white border border-pz-border" title="Toggle DEV_TOOLS // ENGINE descriptor">TAGLINE: ON</button>
+              <button id="wordmarkDarkBtn" onclick="setWordmarkMode('dark')" class="px-2 py-0.5 rounded bg-pz-black text-pz-white border border-pz-border">DARK</button>
+              <button id="wordmarkLightBtn" onclick="setWordmarkMode('light')" class="px-2 py-0.5 rounded bg-pz-surface text-pz-secondary border border-transparent">LIGHT</button>
+            </div>
+          </div>
+
+          <!-- Horizontal Wordmark Stage -->
+          <div id="wordmarkStage" class="relative h-72 bg-pz-black tech-grid-bg flex flex-col items-center justify-center p-6 border-b border-pz-border corner-ticks">
+            <div id="wordmarkMetaTop" class="absolute top-3 left-3 font-mono text-[11px] text-pz-secondary/70">VIEWBOX: 0 0 780 200 // MIN WIDTH: 80PX</div>
+            <div id="wordmarkMetaBottom" class="absolute bottom-3 right-3 font-mono text-[11px] text-pz-secondary/70">DESCRIPTOR: DEV_TOOLS // ENGINE</div>
+            <div id="preview-horizontal-wordmark" class="w-full h-full flex items-center justify-center"></div>
+          </div>
+
+          <!-- Card Footer Actions -->
+          <div class="p-3.5 bg-pz-surface flex flex-wrap items-center justify-between gap-2">
+            <span class="font-mono text-xs text-pz-secondary">pz-wordmark-horizontal.svg</span>
+            <div class="flex items-center gap-2">
+              <button onclick="inspectAsset('horizontal-wordmark')" class="btn-operational px-2.5 py-1.5 rounded bg-pz-elevated hover:bg-pz-border text-pz-white border border-pz-border font-mono text-xs transition">
+                INSPECT CODE
+              </button>
+              <button onclick="copyAssetSVG('horizontal-wordmark')" class="btn-operational px-2.5 py-1.5 rounded bg-pz-elevated hover:bg-pz-border text-pz-white border border-pz-border font-mono text-xs transition">
+                COPY .SVG
+              </button>
+              <button onclick="downloadAssetSVG('horizontal-wordmark', 'pz-wordmark-horizontal.svg')" class="btn-operational px-3 py-1.5 rounded bg-pz-white hover:bg-pz-secondary text-pz-black font-mono text-xs font-semibold transition">
+                DOWNLOAD .SVG
+              </button>
+            </div>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 2: LIVE CLEAN .SVG SOURCE CODE INSPECTOR                      -->
+    <!-- ===================================================================== -->
+    <section id="section-inspector" class="space-y-4">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-2 border-b border-pz-border pb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="font-mono text-xs px-2 py-0.5 rounded bg-pz-elevated border border-pz-border text-pz-white">SVG XML</span>
+          <h2 class="font-display text-lg font-bold tracking-wide uppercase">Live Clean .SVG Source Code Inspector</h2>
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5 font-mono text-xs">
+          <button onclick="inspectAsset('primary-dark')" id="tab-svg-primary-dark" class="inspector-tab px-2.5 py-1 rounded border border-pz-white bg-pz-white text-pz-black font-semibold">pz-logo-primary-dark.svg</button>
+          <button onclick="inspectAsset('primary-light')" id="tab-svg-primary-light" class="inspector-tab px-2.5 py-1 rounded border border-transparent text-pz-secondary hover:text-pz-white">pz-logo-primary-light.svg</button>
+          <button onclick="inspectAsset('icon-dark')" id="tab-svg-icon-dark" class="inspector-tab px-2.5 py-1 rounded border border-transparent text-pz-secondary hover:text-pz-white">pz-icon-standalone-dark.svg</button>
+          <button onclick="inspectAsset('icon-light')" id="tab-svg-icon-light" class="inspector-tab px-2.5 py-1 rounded border border-transparent text-pz-secondary hover:text-pz-white">pz-icon-standalone-light.svg</button>
+          <button onclick="inspectAsset('horizontal-wordmark')" id="tab-svg-horizontal-wordmark" class="inspector-tab px-2.5 py-1 rounded border border-transparent text-pz-secondary hover:text-pz-white">pz-wordmark-horizontal.svg</button>
+        </div>
+      </div>
+
+      <div class="bg-pz-surface border border-pz-border rounded-lg overflow-hidden grid grid-cols-1 lg:grid-cols-12">
+        <!-- Left Column: Live Vector Coordinate Preview -->
+        <div class="lg:col-span-5 p-6 bg-pz-black tech-grid-bg border-b lg:border-b-0 lg:border-r border-pz-border flex flex-col justify-between">
+          <div class="flex items-center justify-between font-mono text-xs text-pz-secondary">
+            <span id="inspectorAssetTitle">FILE: pz-logo-primary-dark.svg</span>
+            <span id="inspectorByteSize">1.48 KB // VALID XML</span>
+          </div>
+          <div id="inspectorLivePreview" class="my-6 h-56 flex items-center justify-center"></div>
+          <div class="grid grid-cols-2 gap-2 pt-3 border-t border-pz-border font-mono text-[11px] text-pz-secondary">
+            <div>SPEC: <span class="text-pz-white">SVG 1.1 STANDALONE</span></div>
+            <div>FONT DEPS: <span class="text-pz-white">ZERO (PURE &lt;PATH&gt;)</span></div>
+          </div>
+        </div>
+
+        <!-- Right Column: Raw SVG Code Output -->
+        <div class="lg:col-span-7 flex flex-col bg-pz-black">
+          <div class="px-4 py-2.5 bg-pz-surface border-b border-pz-border flex items-center justify-between">
+            <div class="flex items-center gap-2 font-mono text-xs text-pz-secondary">
+              <span class="w-2 h-2 rounded-full bg-pz-white"></span>
+              <span id="inspectorFileLabel">pz-logo-primary-dark.svg</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="copyInspectedSVG()" class="btn-operational px-3 py-1 rounded bg-pz-elevated hover:bg-pz-border text-pz-white border border-pz-border font-mono text-xs">
+                COPY RAW SVG
+              </button>
+              <button onclick="downloadInspectedSVG()" class="btn-operational px-3 py-1 rounded bg-pz-white hover:bg-pz-secondary text-pz-black font-mono text-xs font-semibold">
+                DOWNLOAD CURRENT SVG
+              </button>
+            </div>
+          </div>
+          <pre class="p-4 text-xs font-mono text-pz-secondary overflow-x-auto max-h-80 leading-relaxed select-all"><code id="rawSvgCodeBlock"></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 3: DELIVERABLE 05 — MONOCHROME BRAND GUIDELINES & DO/DON'T    -->
+    <!-- ===================================================================== -->
+    <section id="section-guidelines" class="space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-pz-border pb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="font-mono text-xs px-2 py-0.5 rounded bg-pz-elevated border border-pz-border text-pz-white">05</span>
+          <h2 class="font-display text-lg font-bold tracking-wide uppercase">Deliverable 05 // Monochrome Brand Guidelines &amp; Do / Don't Matrix</h2>
+        </div>
+        <span class="font-mono text-xs text-pz-secondary">GEOMETRIC CONSTRUCTION // CLEAR SPACE // LEGACY DEPRECATION</span>
+      </div>
+
+      <!-- 3 Architectural Construction & Clear-Space Specification Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Spec 1: 8x8 Module Grid & Stroke Ratio -->
+        <div class="bg-pz-surface border border-pz-border rounded-lg p-5 space-y-3">
+          <div class="flex items-center justify-between font-mono text-xs text-pz-secondary border-b border-pz-border pb-2">
+            <span>05.1 // GEOMETRIC CONSTRUCTION</span>
+            <span class="text-pz-white">8×8 MODULE GRID</span>
+          </div>
+          <div class="h-36 bg-pz-black tech-grid-bg border border-pz-border rounded flex items-center justify-center p-4 relative">
+            <div id="guideline-grid-diagram" class="w-28 h-28"></div>
+            <span class="absolute bottom-2 left-2.5 font-mono text-[10px] text-pz-secondary">CHAMFER: 45.0° // SEAM: 0.5S</span>
+          </div>
+          <p class="text-xs text-pz-secondary leading-relaxed">
+            Built on a 256×256 unit canvas subdivided into an 8×8 modular grid (32U per module). Both <strong class="text-pz-white font-mono">P</strong> and <strong class="text-pz-white font-mono">Z</strong> maintain an identical stroke weight <strong class="text-pz-white font-mono">S</strong>, with a negative-space diagonal seam equal to <strong class="text-pz-white font-mono">0.5S</strong>.
+          </p>
+        </div>
+
+        <!-- Spec 2: Clear Space (1x Rule) -->
+        <div class="bg-pz-surface border border-pz-border rounded-lg p-5 space-y-3">
+          <div class="flex items-center justify-between font-mono text-xs text-pz-secondary border-b border-pz-border pb-2">
+            <span>05.2 // CLEAR SPACE BOUNDARY</span>
+            <span class="text-pz-white">MINIMUM MARGIN: 1X</span>
+          </div>
+          <div class="h-36 bg-pz-black tech-grid-bg border border-pz-border rounded flex items-center justify-center p-4 relative">
+            <div class="border border-dashed border-pz-white/70 p-3 rounded relative">
+              <div id="guideline-safe-diagram" class="w-20 h-20 border border-pz-border"></div>
+              <span class="absolute -top-2.5 left-2 bg-pz-black px-1 font-mono text-[10px] text-pz-white">1x = P-Counter Height</span>
+            </div>
+          </div>
+          <p class="text-xs text-pz-secondary leading-relaxed">
+            Maintain an unobstructed clear-space zone of at least <strong class="text-pz-white font-mono">1x</strong> around all four sides of the monogram, where <strong class="text-pz-white font-mono">x</strong> equals the vertical interior counter height of the letter <strong class="text-pz-white font-mono">P</strong> (or 1× stroke width <strong class="text-pz-white font-mono">S</strong> for compact UI headers).
+          </p>
+        </div>
+
+        <!-- Spec 3: Minimum Size Thresholds -->
+        <div class="bg-pz-surface border border-pz-border rounded-lg p-5 space-y-3">
+          <div class="flex items-center justify-between font-mono text-xs text-pz-secondary border-b border-pz-border pb-2">
+            <span>05.3 // MINIMUM SCALE THRESHOLDS</span>
+            <span class="text-pz-white">16PX / 80PX</span>
+          </div>
+          <div class="h-36 bg-pz-black tech-grid-bg border border-pz-border rounded flex flex-col justify-center gap-3 p-4 font-mono text-xs">
+            <div class="flex items-center justify-between border-b border-pz-border pb-2">
+              <span class="text-pz-secondary">STANDALONE ICON MIN:</span>
+              <span class="px-2 py-0.5 bg-pz-elevated text-pz-white rounded border border-pz-border">16 × 16 PX</span>
+            </div>
+            <div class="flex items-center justify-between border-b border-pz-border pb-2">
+              <span class="text-pz-secondary">HORIZONTAL WORDMARK MIN:</span>
+              <span class="px-2 py-0.5 bg-pz-elevated text-pz-white rounded border border-pz-border">80 PX WIDTH</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-pz-secondary">PRIMARY VERTICAL LOCKUP:</span>
+              <span class="px-2 py-0.5 bg-pz-elevated text-pz-white rounded border border-pz-border">96 PX WIDTH</span>
+            </div>
+          </div>
+          <p class="text-xs text-pz-secondary leading-relaxed">
+            Below <strong class="text-pz-white font-mono">80px</strong> horizontal width, omit the <strong class="text-pz-white font-mono">STUDIO</strong> wordmark and use the standalone <strong class="text-pz-white font-mono">PZ</strong> monogram icon exclusively to preserve counter clarity.
+          </p>
+        </div>
+      </div>
+
+      <!-- Strict DO vs DON'T Matrix (Comparing New Identity vs Retired Gaming/Zombie Elements) -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- DO COLUMN -->
+        <div class="bg-pz-surface border border-pz-border rounded-lg p-5 space-y-4">
+          <div class="flex items-center justify-between border-b border-pz-border pb-3">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 text-xs font-mono font-bold bg-pz-white text-pz-black rounded">DO // APPROVED</span>
+              <span class="font-display font-bold text-sm text-pz-white uppercase">Developer-First Monochromatic Standard</span>
+            </div>
+            <span class="font-mono text-[11px] text-pz-secondary">ZED / OPENCODE / ZCODE</span>
+          </div>
+          <ul class="space-y-2.5 font-mono text-xs text-pz-secondary">
+            <li class="flex items-start gap-2.5">
+              <span class="text-pz-white font-bold">[+]</span>
+              <span>Use strictly the 6 approved monochromatic tokens (<strong class="text-pz-white">#090A0B</strong> through <strong class="text-pz-white">#F8F8F6</strong>) across all surfaces.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-pz-white font-bold">[+]</span>
+              <span>Render the geometric <strong class="text-pz-white">PZ</strong> monogram with crisp vector edges, uniform stroke weight, and high-contrast negative space.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-pz-white font-bold">[+]</span>
+              <span>Frame product surfaces using 1px structural borders (<strong class="text-pz-white">#353A40</strong>), technical grids, and restrained uppercase typography.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-pz-white font-bold">[+]</span>
+              <span>Pair the geometric wordmark with monospace operational metadata (<strong class="text-pz-white">@pzstudio/cli</strong>, <strong class="text-pz-white">v0.42210.0</strong>).</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- DON'T COLUMN -->
+        <div class="bg-pz-surface border border-pz-border rounded-lg p-5 space-y-4">
+          <div class="flex items-center justify-between border-b border-pz-border pb-3">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 text-xs font-mono font-bold bg-pz-elevated text-pz-secondary border border-pz-border rounded">DON'T // FORBIDDEN</span>
+              <span class="font-display font-bold text-sm text-pz-white uppercase">Retired Legacy Gaming &amp; Zombie Aesthetics</span>
+            </div>
+            <span class="font-mono text-[11px] text-pz-secondary">STRICTLY DEPRECATED</span>
+          </div>
+          <ul class="space-y-2.5 font-mono text-xs text-pz-secondary">
+            <li class="flex items-start gap-2.5">
+              <span class="text-pz-white font-bold">[×]</span>
+              <span><strong class="text-pz-white">No Red Accents (#FF0000):</strong> Never use red fills, crimson borders, neon glows, or multi-color gaming gradients.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-pz-white font-bold">[×]</span>
+              <span><strong class="text-pz-white">No Zombie Mascots or Gore:</strong> Never include zombie illustrations, blood drips, scratches, or distressed grunge textures.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-pz-white font-bold">[×]</span>
+              <span><strong class="text-pz-white">No Pixel-Art Jagged Edges:</strong> Never use 8-bit staircase pixelation or crumbling voxel fragments on the P or Z glyphs.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-pz-white font-bold">[×]</span>
+              <span><strong class="text-pz-white">No Redundant &lt;/&gt; Clip-Art:</strong> Never append generic code bracket icons next to the monogram or apply 3D bevels/drop shadows.</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 4: DELIVERABLE 06 — TYPOGRAPHY & COLOR TOKENS                 -->
+    <!-- ===================================================================== -->
+    <section id="section-tokens" class="space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-pz-border pb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="font-mono text-xs px-2 py-0.5 rounded bg-pz-elevated border border-pz-border text-pz-white">06</span>
+          <h2 class="font-display text-lg font-bold tracking-wide uppercase">Deliverable 06 // Typography &amp; Monochromatic Color Tokens</h2>
+        </div>
+        <span class="font-mono text-xs text-pz-secondary">CLICK ANY SWATCH TO COPY HEX // W3C JSON, CSS &amp; TAILWIND EXPORTS</span>
+      </div>
+
+      <!-- Color Swatch Matrix (6 Exact Brief Tokens with HEX, RGB & Role) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+        <!-- Token 1: Near Black -->
+        <div onclick="copyText('#090A0B', 'Copied Near Black #090A0B')" class="group cursor-pointer bg-pz-surface border border-pz-border hover:border-pz-white rounded-lg overflow-hidden transition">
+          <div class="h-24 bg-[#090A0B] border-b border-pz-border flex items-end p-2.5 justify-between">
+            <span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-pz-elevated text-pz-secondary">TOKEN 01</span>
+            <span class="font-mono text-[10px] text-pz-white opacity-0 group-hover:opacity-100 transition">COPY HEX</span>
+          </div>
+          <div class="p-3 space-y-1">
+            <div class="font-display font-bold text-xs text-pz-white">Near Black</div>
+            <div class="font-mono text-xs text-pz-white font-semibold">#090A0B</div>
+            <div class="font-mono text-[10px] text-pz-secondary">rgb(9, 10, 11)</div>
+            <div class="font-mono text-[10px] text-pz-secondary pt-1 border-t border-pz-border/60">Primary Background / CLI Canvas</div>
+          </div>
+        </div>
+
+        <!-- Token 2: Dark Surface -->
+        <div onclick="copyText('#121416', 'Copied Dark Surface #121416')" class="group cursor-pointer bg-pz-surface border border-pz-border hover:border-pz-white rounded-lg overflow-hidden transition">
+          <div class="h-24 bg-[#121416] border-b border-pz-border flex items-end p-2.5 justify-between">
+            <span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-pz-elevated text-pz-secondary">TOKEN 02</span>
+            <span class="font-mono text-[10px] text-pz-white opacity-0 group-hover:opacity-100 transition">COPY HEX</span>
+          </div>
+          <div class="p-3 space-y-1">
+            <div class="font-display font-bold text-xs text-pz-white">Dark Surface</div>
+            <div class="font-mono text-xs text-pz-white font-semibold">#121416</div>
+            <div class="font-mono text-[10px] text-pz-secondary">rgb(18, 20, 22)</div>
+            <div class="font-mono text-[10px] text-pz-secondary pt-1 border-t border-pz-border/60">Cards / IDE Panels / Containers</div>
+          </div>
+        </div>
+
+        <!-- Token 3: Elevated Surface -->
+        <div onclick="copyText('#202327', 'Copied Elevated Surface #202327')" class="group cursor-pointer bg-pz-surface border border-pz-border hover:border-pz-white rounded-lg overflow-hidden transition">
+          <div class="h-24 bg-[#202327] border-b border-pz-border flex items-end p-2.5 justify-between">
+            <span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-pz-black text-pz-secondary">TOKEN 03</span>
+            <span class="font-mono text-[10px] text-pz-white opacity-0 group-hover:opacity-100 transition">COPY HEX</span>
+          </div>
+          <div class="p-3 space-y-1">
+            <div class="font-display font-bold text-xs text-pz-white">Elevated Surface</div>
+            <div class="font-mono text-xs text-pz-white font-semibold">#202327</div>
+            <div class="font-mono text-[10px] text-pz-secondary">rgb(32, 35, 39)</div>
+            <div class="font-mono text-[10px] text-pz-secondary pt-1 border-t border-pz-border/60">Interactive Controls / Badges</div>
+          </div>
+        </div>
+
+        <!-- Token 4: Border -->
+        <div onclick="copyText('#353A40', 'Copied Border #353A40')" class="group cursor-pointer bg-pz-surface border border-pz-border hover:border-pz-white rounded-lg overflow-hidden transition">
+          <div class="h-24 bg-[#353A40] border-b border-pz-border flex items-end p-2.5 justify-between">
+            <span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-pz-black text-pz-white">TOKEN 04</span>
+            <span class="font-mono text-[10px] text-pz-white opacity-0 group-hover:opacity-100 transition">COPY HEX</span>
+          </div>
+          <div class="p-3 space-y-1">
+            <div class="font-display font-bold text-xs text-pz-white">Border</div>
+            <div class="font-mono text-xs text-pz-white font-semibold">#353A40</div>
+            <div class="font-mono text-[10px] text-pz-secondary">rgb(53, 58, 64)</div>
+            <div class="font-mono text-[10px] text-pz-secondary pt-1 border-t border-pz-border/60">1px Hairline Dividers / Grids</div>
+          </div>
+        </div>
+
+        <!-- Token 5: Secondary Text -->
+        <div onclick="copyText('#AEB4BB', 'Copied Secondary Text #AEB4BB')" class="group cursor-pointer bg-pz-surface border border-pz-border hover:border-pz-white rounded-lg overflow-hidden transition">
+          <div class="h-24 bg-[#AEB4BB] border-b border-pz-border flex items-end p-2.5 justify-between">
+            <span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-pz-black text-pz-white">TOKEN 05</span>
+            <span class="font-mono text-[10px] text-pz-black font-semibold opacity-0 group-hover:opacity-100 transition">COPY HEX</span>
+          </div>
+          <div class="p-3 space-y-1">
+            <div class="font-display font-bold text-xs text-pz-white">Secondary Text</div>
+            <div class="font-mono text-xs text-pz-white font-semibold">#AEB4BB</div>
+            <div class="font-mono text-[10px] text-pz-secondary">rgb(174, 180, 187)</div>
+            <div class="font-mono text-[10px] text-pz-secondary pt-1 border-t border-pz-border/60">Technical Labels / CLI Output</div>
+          </div>
+        </div>
+
+        <!-- Token 6: Primary White -->
+        <div onclick="copyText('#F8F8F6', 'Copied Primary White #F8F8F6')" class="group cursor-pointer bg-pz-surface border border-pz-border hover:border-pz-white rounded-lg overflow-hidden transition">
+          <div class="h-24 bg-[#F8F8F6] border-b border-pz-border flex items-end p-2.5 justify-between">
+            <span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-pz-black text-pz-white">TOKEN 06</span>
+            <span class="font-mono text-[10px] text-pz-black font-semibold opacity-0 group-hover:opacity-100 transition">COPY HEX</span>
+          </div>
+          <div class="p-3 space-y-1">
+            <div class="font-display font-bold text-xs text-pz-white">Primary White</div>
+            <div class="font-mono text-xs text-pz-white font-semibold">#F8F8F6</div>
+            <div class="font-mono text-[10px] text-pz-secondary">rgb(248, 248, 246)</div>
+            <div class="font-mono text-[10px] text-pz-secondary pt-1 border-t border-pz-border/60">Primary Mark / Light Background</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Typography Specimen + Token Code Exporter -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Typography Architecture Rules -->
+        <div class="lg:col-span-7 bg-pz-surface border border-pz-border rounded-lg p-5 space-y-4 flex flex-col justify-between">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between border-b border-pz-border pb-2.5">
+              <span class="font-mono text-xs font-semibold text-pz-white">TYPOGRAPHY SYSTEM SPECIFICATION</span>
+              <span class="font-mono text-[11px] text-pz-secondary">GEOMETRIC SANS + TECHNICAL MONOSPACE</span>
+            </div>
+
+            <!-- Primary Geometric Display Specimen -->
+            <div class="p-4 rounded bg-pz-black border border-pz-border space-y-2">
+              <div class="flex items-center justify-between font-mono text-[11px] text-pz-secondary">
+                <span>01. DISPLAY &amp; WORDMARK — SPACE GROTESK / INTER / CUSTOM VECTOR</span>
+                <span>WEIGHT: 700 // TRACKING: +0.16EM</span>
+              </div>
+              <div class="font-display text-2xl sm:text-3xl font-bold tracking-[0.16em] text-pz-white uppercase">
+                PZ STUDIO // DEV TOOLS
+              </div>
+              <p class="text-xs text-pz-secondary leading-relaxed">
+                Restrained uppercase geometric sans-serif with wide architectural tracking (+0.14em to +0.18em) for primary brand lockups, section headers, and cockpit navigation.
+              </p>
+            </div>
+
+            <!-- Monospace Descriptor Specimen -->
+            <div class="p-4 rounded bg-pz-black border border-pz-border space-y-2">
+              <div class="flex items-center justify-between font-mono text-[11px] text-pz-secondary">
+                <span>02. TECHNICAL DESCRIPTORS — JETBRAINS MONO / GEIST MONO</span>
+                <span>WEIGHT: 400–600 // TABULAR-NUMS</span>
+              </div>
+              <div class="font-mono text-sm sm:text-base text-pz-white">
+                @pzstudio/cli v0.42210.0 — [OK] 1,223 tests passed (142ms)
+              </div>
+              <p class="text-xs text-pz-secondary leading-relaxed">
+                Used across CLI stream outputs, deterministic build receipts, diagnostic error codes (<span class="font-mono text-pz-white">ERR_MOD_INFO_MISSING</span>), version badges, and coordinate telemetry.
+              </p>
+            </div>
+          </div>
+
+          <div class="p-3.5 rounded bg-pz-black border border-pz-border flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-pz-secondary">
+            <span>CONTRAST RATIO (#F8F8F6 ON #090A0B): <strong class="text-pz-white">19.4 : 1 (WCAG AAA)</strong></span>
+            <span>SECONDARY (#AEB4BB ON #090A0B): <strong class="text-pz-white">9.6 : 1 (WCAG AAA)</strong></span>
+          </div>
+        </div>
+
+        <!-- Design Tokens Code Exporter (CSS / JSON / Tailwind) -->
+        <div class="lg:col-span-5 bg-pz-surface border border-pz-border rounded-lg overflow-hidden flex flex-col">
+          <div class="px-4 py-2.5 bg-pz-elevated/60 border-b border-pz-border flex items-center justify-between">
+            <div class="flex items-center gap-1 font-mono text-xs">
+              <button id="token-tab-css" onclick="setTokenFormat('css')" class="px-2.5 py-1 rounded bg-pz-black text-pz-white border border-pz-border">tokens.css</button>
+              <button id="token-tab-json" onclick="setTokenFormat('json')" class="px-2.5 py-1 rounded text-pz-secondary hover:text-pz-white">tokens.json</button>
+              <button id="token-tab-tw" onclick="setTokenFormat('tw')" class="px-2.5 py-1 rounded text-pz-secondary hover:text-pz-white">tailwind.config.js</button>
+            </div>
+            <button onclick="copyTokenCode()" class="btn-operational px-2.5 py-1 rounded bg-pz-white text-pz-black font-mono text-xs font-semibold">
+              COPY TOKENS
+            </button>
+          </div>
+          <pre class="p-4 text-xs font-mono text-pz-secondary bg-pz-black flex-1 overflow-x-auto leading-relaxed select-all"><code id="tokenCodeOutput"></code></pre>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 5: DELIVERABLE 07 — GITHUB & SOFTWARE PRODUCT BRANDING        -->
+    <!-- ===================================================================== -->
+    <section id="section-product" class="space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-pz-border pb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="font-mono text-xs px-2 py-0.5 rounded bg-pz-elevated border border-pz-border text-pz-white">07</span>
+          <h2 class="font-display text-lg font-bold tracking-wide uppercase">Deliverable 07 // GitHub Organization, VS Code Extension &amp; CLI Branding</h2>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="downloadAssetSVG('github-banner', 'pz-studio-github-social-1280x640.svg')" class="btn-operational px-3 py-1 rounded bg-pz-elevated hover:bg-pz-border border border-pz-border text-pz-white font-mono text-xs">
+            DOWNLOAD GITHUB SOCIAL BANNER (1280×640 .SVG)
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- 1. GitHub Organization Header & Pinned Repositories (github.com/pzstudio) -->
+        <div class="lg:col-span-7 bg-pz-surface border border-pz-border rounded-lg overflow-hidden flex flex-col justify-between">
+          <div class="px-4 py-3 bg-pz-elevated/60 border-b border-pz-border flex items-center justify-between">
+            <span class="font-mono text-xs font-semibold text-pz-white">GITHUB ORGANIZATION PROFILE // github.com/pzstudio</span>
+            <span class="font-mono text-[11px] text-pz-secondary">RELEASE: v0.42210.0</span>
+          </div>
+
+          <div class="p-5 space-y-5">
+            <!-- Live SVG Social Preview Banner (1280x640 aspect ratio) -->
+            <div class="border border-pz-border rounded-lg overflow-hidden bg-pz-black">
+              <div id="preview-github-banner" class="w-full aspect-[2/1] flex items-center justify-center"></div>
+            </div>
+
+            <!-- GitHub Organization Header Bar Simulation -->
+            <div class="p-4 rounded-lg bg-pz-black border border-pz-border space-y-4">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-pz-border pb-4">
+                <div class="flex items-center gap-3.5">
+                  <div id="ghOrgAvatar" class="w-14 h-14 rounded-lg border border-pz-border overflow-hidden shrink-0"></div>
+                  <div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <h3 class="font-display font-bold text-base text-pz-white">PZ Studio</h3>
+                      <span class="px-2 py-0.5 text-[10px] font-mono bg-pz-elevated border border-pz-border rounded text-pz-white">VERIFIED ORGANIZATION</span>
+                      <span class="font-mono text-[11px] text-pz-secondary">v0.42210.0</span>
+                    </div>
+                    <p class="text-xs text-pz-secondary mt-0.5">Independent software engineering studio building deterministic developer tools, CLI workflows &amp; IDE extensions.</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Pinned Repositories Grid -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
+                <div class="p-3 rounded bg-pz-surface border border-pz-border space-y-1.5">
+                  <div class="flex items-center justify-between text-pz-white font-semibold">
+                    <span>@pzstudio/cli</span>
+                    <span class="text-[10px] px-1.5 py-0.5 bg-pz-elevated border border-pz-border rounded">Public</span>
+                  </div>
+                  <p class="text-[11px] text-pz-secondary font-sans leading-snug">Deterministic CLI build engine, DevSync watcher &amp; project doctor.</p>
+                  <div class="text-[10px] text-pz-secondary pt-1">TypeScript • v0.42210.0</div>
+                </div>
+
+                <div class="p-3 rounded bg-pz-surface border border-pz-border space-y-1.5">
+                  <div class="flex items-center justify-between text-pz-white font-semibold">
+                    <span>@pzstudio/core</span>
+                    <span class="text-[10px] px-1.5 py-0.5 bg-pz-elevated border border-pz-border rounded">Public</span>
+                  </div>
+                  <p class="text-[11px] text-pz-secondary font-sans leading-snug">Browser-safe domain core, receipt schemas &amp; write-boundary contracts.</p>
+                  <div class="text-[10px] text-pz-secondary pt-1">TypeScript • Zero Node Deps</div>
+                </div>
+
+                <div class="p-3 rounded bg-pz-surface border border-pz-border space-y-1.5">
+                  <div class="flex items-center justify-between text-pz-white font-semibold">
+                    <span>vscode-pzstudio</span>
+                    <span class="text-[10px] px-1.5 py-0.5 bg-pz-elevated border border-pz-border rounded">Public</span>
+                  </div>
+                  <p class="text-[11px] text-pz-secondary font-sans leading-snug">Cockpit UX extension bundling @pzstudio/cli in-process for VS Code.</p>
+                  <div class="text-[10px] text-pz-secondary pt-1">VS Code Host • B42 Ready</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. VS Code Extension Marketplace Card + Cockpit Status Bar + Terminal CLI -->
+        <div class="lg:col-span-5 flex flex-col gap-6">
+
+          <!-- VS Code Marketplace Extension Card & Cockpit UX Status Bar -->
+          <div class="bg-pz-surface border border-pz-border rounded-lg overflow-hidden">
+            <div class="px-4 py-2.5 bg-pz-elevated/60 border-b border-pz-border flex items-center justify-between">
+              <span class="font-mono text-xs font-semibold text-pz-white">VS CODE MARKETPLACE &amp; COCKPIT STATUS BAR</span>
+              <span class="font-mono text-[11px] text-pz-secondary">IN-PROCESS CLI</span>
+            </div>
+            <div class="p-4 bg-pz-black space-y-4">
+              <div class="flex items-start gap-4">
+                <div id="vscodeExtIcon" class="w-16 h-16 rounded-lg border border-pz-border shrink-0 overflow-hidden"></div>
+                <div class="space-y-1.5 flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-display font-bold text-sm text-pz-white">PZ Studio</span>
+                    <span class="px-1.5 py-0.5 text-[10px] font-mono bg-pz-elevated border border-pz-border rounded text-pz-white">v0.42210.0</span>
+                  </div>
+                  <div class="font-mono text-[11px] text-pz-secondary flex items-center gap-1.5">
+                    <span class="text-pz-white">pzstudio</span>
+                    <span>•</span>
+                    <span>Developer Tools &amp; Deterministic Build Systems</span>
+                  </div>
+                  <p class="text-xs text-pz-secondary leading-relaxed">
+                    Active-project Cockpit UX, persistent DevSync file watcher, and project health diagnostics bundled in-process.
+                  </p>
+                  <div class="pt-1 flex flex-wrap items-center gap-2">
+                    <span class="px-2.5 py-0.5 bg-pz-white text-pz-black font-mono text-[11px] font-semibold rounded">Install</span>
+                    <span class="px-2 py-0.5 bg-pz-surface border border-pz-border text-pz-secondary font-mono text-[10px] rounded">1,223 Tests Passing</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- VS Code Cockpit UX Bottom Status Bar Mockup -->
+              <div class="border border-pz-border rounded bg-pz-surface px-3 py-1.5 flex items-center justify-between font-mono text-[11px]">
+                <div class="flex items-center gap-2 text-pz-white">
+                  <span class="w-2 h-2 rounded-full bg-pz-white"></span>
+                  <span>PZ Studio: DevSync Active • B42 Ready</span>
+                </div>
+                <div class="flex items-center gap-3 text-pz-secondary">
+                  <span>SYNC: 0 DRIFT</span>
+                  <span>v0.42210.0</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Terminal CLI Session (@pzstudio/cli) -->
+          <div class="bg-pz-surface border border-pz-border rounded-lg overflow-hidden flex-1 flex flex-col">
+            <div class="px-4 py-2.5 bg-pz-elevated/60 border-b border-pz-border flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-pz-border"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-pz-border"></span>
+                <span class="font-mono text-xs font-semibold text-pz-white ml-1">TERMINAL SESSION — @pzstudio/cli</span>
+              </div>
+              <span class="font-mono text-[11px] text-pz-secondary">TTY // ZERO COLOR CLUTTER</span>
+            </div>
+            <div class="p-4 bg-pz-black font-mono text-xs leading-relaxed text-pz-secondary space-y-2 flex-1">
+              <div class="text-pz-white">$ npx @pzstudio/cli@latest doctor</div>
+              <pre class="text-[11px] leading-tight text-pz-white py-1 overflow-x-auto">┌────────────────────────────────────────────────────────┐
+│  ██████╗ ███████╗   PZ STUDIO // CLI v0.42210.0        │
+│  ██╔══██╗╚══███╔╝   Deterministic Mod &amp; Build Engine   │
+│  ██████╔╝  ███╔╝    Host: node/22.5.0 • @pzstudio/core │
+│  ██╔═══╝  ███╔╝     Config: ~/.pzstudio/config.json    │
+│  ██║     ███████╗   Stream Contract: FROZEN            │
+└────────────────────────────────────────────────────────┘</pre>
+              <div><span class="text-pz-white">[INFO]</span> 2026-11-10 20:06:12 runProjectDoctor: verifying write-boundary gates...</div>
+              <div><span class="text-pz-white">[INFO]</span> 2026-11-10 20:06:12 createDevSync: watcher state <span class="text-pz-white underline">SYNCHRONIZED</span> (p95: 14ms)</div>
+              <div><span class="text-pz-white">[OK]</span>   14/14 workspace checks passed in <span class="text-pz-white">142ms</span>. Exit code: 0</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="border-t border-pz-border bg-pz-surface mt-12 py-6">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-xs text-pz-secondary">
+      <div>PZ STUDIO — MONOCHROME BRAND IDENTITY &amp; LIVE SVG STUDIO // DELIVERABLES 01–07 COMPLETE</div>
+      <div class="flex items-center gap-4">
+        <span>#090A0B</span>
+        <span>#121416</span>
+        <span>#202327</span>
+        <span>#353A40</span>
+        <span>#AEB4BB</span>
+        <span>#F8F8F6</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- NON-INTRUSIVE TOAST NOTIFICATION -->
+  <div id="toastNotice" class="fixed bottom-5 right-5 z-50 pointer-events-none opacity-0 translate-y-2 transition-all duration-200 bg-pz-white text-pz-black border border-pz-border px-4 py-2.5 rounded shadow-lg font-mono text-xs font-semibold flex items-center gap-2">
+    <span class="w-2 h-2 rounded-full bg-pz-black"></span>
+    <span id="toastText">Copied to clipboard</span>
+  </div>
+
+  <!-- ======================================================================= -->
+  <!-- PARAMETRIC SVG GEOMETRY ENGINE & INTERACTIVE CONTROLLER                 -->
+  <!-- ======================================================================= -->
+  <script>
+    // Application State
+    const state = {
+      variant: 1,            // 1: Chamfer Interlock, 2: Architectural Monolith, 3: Terminal Stencil
+      strokeWeight: 28,      // 24 (Light) | 28 (Regular) | 32 (Bold)
+      showGrid: false,       // Technical construction grid + 45° angle guides
+      showSafeZone: false,   // 1X Clear-space boundary overlay
+      iconMode: 'dark',      // 'dark' | 'light'
+      wordmarkMode: 'dark',  // 'dark' | 'light'
+      showTagline: true,     // Includes "DEV_TOOLS // ENGINE" vector tagline in horizontal wordmark
+      inspectedAsset: 'primary-dark',
+      tokenFormat: 'css'
+    };
+
+    const variantMeta = {
+      1: {
+        title: 'Variant 01 — Chamfer Interlock Monogram (Zed.dev Inspired)',
+        desc: 'Precision 45° chamfered geometry aligning the outer bowl of the P with the diagonal spine of the Z. A continuous negative-space seam locks both glyphs onto a unified structural grid—engineered for surgical legibility from 16px IDE status bars to high-resolution display headers.',
+        angle: '45.0° // 0.5S GAP'
+      },
+      2: {
+        title: 'Variant 02 — Architectural Monolith (Modular Grid-Locked)',
+        desc: 'Bold rectilinear construction locking P and Z onto shared capline and baseline planes. The squared P counter balances the razor-sharp negative-space diagonal seam of the Z for uncompromising authority across GitHub and CLI surfaces.',
+        angle: '90.0° // ORTHOGONAL'
+      },
+      3: {
+        title: 'Variant 03 — Terminal Stencil (OpenCode / ZCode Inspired)',
+        desc: 'Operational stencil architecture inspired by terminal cursors and split-pane developer UIs. Structural strokes are segmented by precision 8-unit micro-separators, terminating in a geometric terminal cursor block at the base of the Z.',
+        angle: 'STENCIL // 8U SEAM'
+      }
+    };
+
+    const strokeLabels = {
+      24: '24px / Light',
+      28: '28px / Regular',
+      32: '32px / Bold'
+    };
+
+    /**
+     * Pure Vector Glyph Engine for "PZ STUDIO" & Technical Descriptors
+     * Generates crisp <path> geometry so exported SVGs have ZERO external font dependencies.
+     */
+    function buildVectorTextPaths(text, startX, startY, height, tracking) {
+      const scale = height / 80;
+      let cursorX = startX;
+      let dList = [];
+
+      const glyphDefs = {
+        'P': {
+          w: 60,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(0,0)} L ${p(46,0)} L ${p(60,14)} L ${p(60,36)} L ${p(46,50)} L ${p(15,50)} L ${p(15,80)} L ${p(0,80)} Z ` +
+                   `M ${p(15,14)} L ${p(15,36)} L ${p(40,36)} L ${p(45,31)} L ${p(45,19)} L ${p(40,14)} Z`;
+          }
+        },
+        'Z': {
+          w: 60,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(0,0)} L ${p(60,0)} L ${p(60,14)} L ${p(20,66)} L ${p(60,66)} L ${p(60,80)} L ${p(0,80)} L ${p(0,66)} L ${p(40,14)} L ${p(0,14)} Z`;
+          }
+        },
+        'S': {
+          w: 58,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(12,0)} L ${p(58,0)} L ${p(58,14)} L ${p(15,14)} L ${p(15,33)} L ${p(46,33)} L ${p(58,45)} L ${p(58,68)} L ${p(46,80)} L ${p(0,80)} L ${p(0,66)} L ${p(43,66)} L ${p(43,47)} L ${p(12,47)} L ${p(0,35)} L ${p(0,12)} Z`;
+          }
+        },
+        'T': {
+          w: 58,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(0,0)} L ${p(58,0)} L ${p(58,14)} L ${p(36.5,14)} L ${p(36.5,80)} L ${p(21.5,80)} L ${p(21.5,14)} L ${p(0,14)} Z`;
+          }
+        },
+        'U': {
+          w: 60,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(0,0)} L ${p(15,0)} L ${p(15,65)} L ${p(45,65)} L ${p(45,0)} L ${p(60,0)} L ${p(60,68)} L ${p(48,80)} L ${p(12,80)} L ${p(0,68)} Z`;
+          }
+        },
+        'D': {
+          w: 62,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(0,0)} L ${p(44,0)} L ${p(62,18)} L ${p(62,62)} L ${p(44,80)} L ${p(0,80)} Z ` +
+                   `M ${p(15,14)} L ${p(15,66)} L ${p(38,66)} L ${p(47,57)} L ${p(47,23)} L ${p(38,14)} Z`;
+          }
+        },
+        'I': {
+          w: 18,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(0,0)} L ${p(18,0)} L ${p(18,80)} L ${p(0,80)} Z`;
+          }
+        },
+        'O': {
+          w: 64,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(14,0)} L ${p(50,0)} L ${p(64,14)} L ${p(64,66)} L ${p(50,80)} L ${p(14,80)} L ${p(0,66)} L ${p(0,14)} Z ` +
+                   `M ${p(15,15)} L ${p(15,65)} L ${p(49,65)} L ${p(49,15)} Z`;
+          }
+        },
+        'E': {
+          w: 56,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(0,0)} L ${p(56,0)} L ${p(56,14)} L ${p(15,14)} L ${p(15,33)} L ${p(48,33)} L ${p(48,47)} L ${p(15,47)} L ${p(15,66)} L ${p(56,66)} L ${p(56,80)} L ${p(0,80)} Z`;
+          }
+        },
+        'V': {
+          w: 62,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(0,0)} L ${p(16,0)} L ${p(31,58)} L ${p(46,0)} L ${p(62,0)} L ${p(39,80)} L ${p(23,80)} Z`;
+          }
+        },
+        'L': {
+          w: 54,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(0,0)} L ${p(15,0)} L ${p(15,66)} L ${p(54,66)} L ${p(54,80)} L ${p(0,80)} Z`;
+          }
+        },
+        'N': {
+          w: 62,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(0,0)} L ${p(16,0)} L ${p(47,54)} L ${p(47,0)} L ${p(62,0)} L ${p(62,80)} L ${p(46,80)} L ${p(15,26)} L ${p(15,80)} L ${p(0,80)} Z`;
+          }
+        },
+        'G': {
+          w: 64,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(14,0)} L ${p(60,0)} L ${p(60,14)} L ${p(15,14)} L ${p(15,66)} L ${p(49,66)} L ${p(49,47)} L ${p(32,47)} L ${p(32,34)} L ${p(64,34)} L ${p(64,66)} L ${p(50,80)} L ${p(14,80)} L ${p(0,66)} L ${p(0,14)} Z`;
+          }
+        },
+        '_': {
+          w: 52,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(0,70)} L ${p(52,70)} L ${p(52,82)} L ${p(0,82)} Z`;
+          }
+        },
+        '/': {
+          w: 36,
+          d: (x, y, s) => {
+            const p = (vx, vy) => `${(x + vx * s).toFixed(2)} ${(y + vy * s).toFixed(2)}`;
+            return `M ${p(24,0)} L ${p(36,0)} L ${p(12,80)} L ${p(0,80)} Z`;
+          }
+        }
+      };
+
+      for (const ch of text) {
+        if (ch === ' ') {
+          cursorX += 26 * scale;
+          continue;
+        }
+        const def = glyphDefs[ch];
+        if (!def) continue;
+        dList.push(def.d(cursorX, startY, scale));
+        cursorX += def.w * scale + tracking;
+      }
+
+      return {
+        pathData: dList.join(' '),
+        totalWidth: cursorX - startX - tracking
+      };
+    }
+
+    /**
+     * Core PZ Monogram Vector Path Generator (256x256 local coordinate space)
+     * Coordinates reside within x: 28..228, y: 44..212 (width: 200, height: 168)
+     */
+    function getMonogramPaths(variant, w) {
+      if (variant === 1) {
+        // VARIANT 01: CHAMFER INTERLOCK (Zed-inspired 45° chamfered P bowl interlocking with Z diagonal)
+        const c = 26;
+        const pRight = 138;
+        const pBowlBottom = 148;
+        const pPath = [
+          `M 28 44`,
+          `L ${pRight - c} 44`,
+          `L ${pRight} ${44 + c}`,
+          `L ${pRight} ${pBowlBottom - c}`,
+          `L ${pRight - c} ${pBowlBottom}`,
+          `L ${28 + w} ${pBowlBottom}`,
+          `L ${28 + w} 212`,
+          `L 28 212`,
+          `Z`,
+          `M ${28 + w} ${44 + w}`,
+          `L ${28 + w} ${pBowlBottom - w}`,
+          `L ${pRight - c - 6} ${pBowlBottom - w}`,
+          `L ${pRight - w} ${pBowlBottom - w - 12}`,
+          `L ${pRight - w} ${44 + w + 12}`,
+          `L ${pRight - c - 6} ${44 + w}`,
+          `Z`
+        ].join(' ');
+
+        const zTopLeft = 144;
+        const zBottomLeft = 104;
+        const zRight = 228;
+        const zDiagW = Math.round(w * 1.08);
+        const zPath = [
+          `M ${zTopLeft} 44`,
+          `L ${zRight} 44`,
+          `L ${zRight} ${44 + w}`,
+          `L ${zBottomLeft + zDiagW} ${212 - w}`,
+          `L ${zRight} ${212 - w}`,
+          `L ${zRight} 212`,
+          `L ${zBottomLeft} 212`,
+          `L ${zBottomLeft} ${212 - w}`,
+          `L ${zRight - zDiagW} ${44 + w}`,
+          `L ${zTopLeft} ${44 + w}`,
+          `Z`
+        ].join(' ');
+
+        return { pPath, zPath };
+      }
+
+      if (variant === 2) {
+        // VARIANT 02: ARCHITECTURAL MONOLITH (Rectilinear modular grid + razor-sharp negative-space seam)
+        const pRight = 132;
+        const pBowlBottom = 144;
+        const pPath = [
+          `M 28 44`,
+          `L ${pRight} 44`,
+          `L ${pRight} ${pBowlBottom}`,
+          `L ${28 + w} ${pBowlBottom}`,
+          `L ${28 + w} 212`,
+          `L 28 212`,
+          `Z`,
+          `M ${28 + w} ${44 + w}`,
+          `L ${28 + w} ${pBowlBottom - w}`,
+          `L ${pRight - w} ${pBowlBottom - w}`,
+          `L ${pRight - w} ${44 + w}`,
+          `Z`
+        ].join(' ');
+
+        const zLeft = 114;
+        const zTopLeft = 144;
+        const zRight = 228;
+        const zDiagW = Math.round(w * 1.08);
+        const zPath = [
+          `M ${zTopLeft} 44`,
+          `L ${zRight} 44`,
+          `L ${zRight} ${44 + w}`,
+          `L ${zLeft + zDiagW} ${212 - w}`,
+          `L ${zRight} ${212 - w}`,
+          `L ${zRight} 212`,
+          `L ${zLeft} 212`,
+          `L ${zLeft} ${212 - w}`,
+          `L ${zRight - zDiagW} ${44 + w}`,
+          `L ${zTopLeft} ${44 + w}`,
+          `Z`
+        ].join(' ');
+
+        return { pPath, zPath };
+      }
+
+      // VARIANT 03: TERMINAL STENCIL (OpenCode / ZCode modular block & 8U precision micro-separators)
+      const gap = 8;
+      const pRight = 134;
+      const pBowlBottom = 146;
+      const c = 20;
+      const bowlStart = 28 + w + gap;
+
+      const pPath = [
+        `M 28 44 L ${28 + w} 44 L ${28 + w} 212 L 28 212 Z`,
+        `M ${bowlStart} 44`,
+        `L ${pRight - c} 44`,
+        `L ${pRight} ${44 + c}`,
+        `L ${pRight} ${pBowlBottom - c}`,
+        `L ${pRight - c} ${pBowlBottom}`,
+        `L ${bowlStart} ${pBowlBottom}`,
+        `L ${bowlStart} ${pBowlBottom - w}`,
+        `L ${pRight - w} ${pBowlBottom - w}`,
+        `L ${pRight - w} ${44 + w}`,
+        `L ${bowlStart} ${44 + w}`,
+        `Z`
+      ].join(' ');
+
+      const zTopLeft = 146;
+      const zBottomLeft = 108;
+      const zRight = 228;
+      const diagTopY = 44 + w + gap;
+      const diagBotY = 212 - w - gap;
+      const zDiagW = Math.round(w * 1.1);
+
+      const zPath = [
+        `M ${zTopLeft} 44 L ${zRight} 44 L ${zRight} ${44 + w} L ${zTopLeft} ${44 + w} Z`,
+        `M ${zRight - zDiagW - 4} ${diagTopY}`,
+        `L ${zRight} ${diagTopY}`,
+        `L ${zBottomLeft + zDiagW + 4} ${diagBotY}`,
+        `L ${zBottomLeft} ${diagBotY}`,
+        `Z`,
+        `M ${zBottomLeft} ${212 - w} L ${zRight - w - gap} ${212 - w} L ${zRight - w - gap} 212 L ${zBottomLeft} 212 Z`,
+        `M ${zRight - w} ${212 - w} L ${zRight} ${212 - w} L ${zRight} 212 L ${zRight - w} 212 Z`
+      ].join(' ');
+
+      return { pPath, zPath };
+    }
+
+    /**
+     * Construction Grid (with 45° angle guides & coordinate ticks) & Safe Zone 1X Overlay Generator
+     */
+    function buildOverlays(viewBoxW, viewBoxH, monoOffsetX, monoOffsetY, monoScale, isLight, forceGrid = false, forceSafe = false) {
+      let overlayMarkup = '';
+      const guideColor = isLight ? '#090A0B' : '#AEB4BB';
+      const accentGuide = isLight ? '#090A0B' : '#F8F8F6';
+
+      if (state.showGrid || forceGrid) {
+        let lines = [];
+        const step = 32;
+        for (let x = step; x < viewBoxW; x += step) {
+          lines.push(`<line x1="${x}" y1="0" x2="${x}" y2="${viewBoxH}" />`);
+        }
+        for (let y = step; y < viewBoxH; y += step) {
+          lines.push(`<line x1="0" y1="${y}" x2="${viewBoxW}" y2="${y}" />`);
+        }
+        // Key horizontal axes + 45° chamfer guide
+        const yCap = (monoOffsetY + 44 * monoScale).toFixed(1);
+        const yMid = (monoOffsetY + 148 * monoScale).toFixed(1);
+        const yBase = (monoOffsetY + 212 * monoScale).toFixed(1);
+        const dX1 = (monoOffsetX + 96 * monoScale).toFixed(1);
+        const dY1 = (monoOffsetY + 28 * monoScale).toFixed(1);
+        const dX2 = (monoOffsetX + 168 * monoScale).toFixed(1);
+        const dY2 = (monoOffsetY + 100 * monoScale).toFixed(1);
+
+        overlayMarkup += `
+  <g id="construction-grid" opacity="0.32">
+    <g stroke="${guideColor}" stroke-width="1" stroke-dasharray="2 3">
+      ${lines.join('\n      ')}
+    </g>
+    <line x1="0" y1="${yCap}" x2="${viewBoxW}" y2="${yCap}" stroke="${accentGuide}" stroke-width="1" stroke-dasharray="4 4" />
+    <line x1="0" y1="${yMid}" x2="${viewBoxW}" y2="${yMid}" stroke="${accentGuide}" stroke-width="1" stroke-dasharray="4 4" />
+    <line x1="0" y1="${yBase}" x2="${viewBoxW}" y2="${yBase}" stroke="${accentGuide}" stroke-width="1" stroke-dasharray="4 4" />
+    <line x1="${dX1}" y1="${dY1}" x2="${dX2}" y2="${dY2}" stroke="${accentGuide}" stroke-width="1" />
+  </g>`;
+      }
+
+      if (state.showSafeZone || forceSafe) {
+        const sx = (monoOffsetX + 28 * monoScale).toFixed(1);
+        const sy = (monoOffsetY + 44 * monoScale).toFixed(1);
+        const sw = (200 * monoScale).toFixed(1);
+        const sh = (168 * monoScale).toFixed(1);
+        const pad = (28 * monoScale).toFixed(1);
+        const ox = (sx - pad).toFixed(1);
+        const oy = (sy - pad).toFixed(1);
+        const ow = (parseFloat(sw) + parseFloat(pad) * 2).toFixed(1);
+        const oh = (parseFloat(sh) + parseFloat(pad) * 2).toFixed(1);
+
+        overlayMarkup += `
+  <g id="safe-zone-1x" opacity="0.7">
+    <rect x="${ox}" y="${oy}" width="${ow}" height="${oh}" fill="none" stroke="${accentGuide}" stroke-width="1" stroke-dasharray="6 4" />
+    <rect x="${sx}" y="${sy}" width="${sw}" height="${sh}" fill="none" stroke="${guideColor}" stroke-width="1" />
+    <circle cx="${ox}" cy="${oy}" r="3" fill="${accentGuide}" />
+    <circle cx="${parseFloat(ox) + parseFloat(ow)}" cy="${oy}" r="3" fill="${accentGuide}" />
+    <circle cx="${ox}" cy="${parseFloat(oy) + parseFloat(oh)}" r="3" fill="${accentGuide}" />
+    <circle cx="${parseFloat(ox) + parseFloat(ow)}" cy="${parseFloat(oy) + parseFloat(oh)}" r="3" fill="${accentGuide}" />
+  </g>`;
+      }
+
+      return overlayMarkup;
+    }
+
+    /**
+     * Master Deliverable SVG Builder
+     * Generates clean, self-contained, font-independent <path>-only SVG strings.
+     */
+    function generateDeliverableSVG(type, customMaskRx = '56') {
+      const { pPath, zPath } = getMonogramPaths(state.variant, state.strokeWeight);
+
+      // 1 & 2. PRIMARY LOGO LOCKUP (DARK & LIGHT) — 560x320
+      if (type === 'primary-dark' || type === 'primary-light') {
+        const isLight = type === 'primary-light';
+        const bg = isLight ? '#F8F8F6' : '#090A0B';
+        const fg = isLight ? '#090A0B' : '#F8F8F6';
+        const ruleColor = isLight ? '#090A0B' : '#353A40';
+
+        const wordmark = buildVectorTextPaths('STUDIO', 0, 0, 22, 13.5);
+        const wordmarkX = ((560 - wordmark.totalWidth) / 2).toFixed(2);
+        const wordmarkY = 248;
+
+        const mScale = 0.84;
+        const mOffsetX = ((560 - 256 * mScale) / 2).toFixed(2);
+        const mOffsetY = 14;
+
+        const overlays = buildOverlays(560, 320, parseFloat(mOffsetX), mOffsetY, mScale, isLight);
+
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 320" width="100%" height="100%" fill="none">
+  <title>PZ Studio — Primary Logo (${isLight ? 'Light Surface #F8F8F6' : 'Dark Surface #090A0B'})</title>
+  <rect width="560" height="320" fill="${bg}" />${overlays}
+  <!-- PZ Geometric Monogram (Pure Vector Path) -->
+  <g transform="translate(${mOffsetX}, ${mOffsetY}) scale(${mScale})" fill="${fg}" fill-rule="evenodd">
+    <path id="pz-monogram-p" d="${pPath}" />
+    <path id="pz-monogram-z" d="${zPath}" />
+  </g>
+  <!-- Structural Hairline Separator -->
+  <rect x="172" y="226" width="216" height="1.5" fill="${ruleColor}" opacity="${isLight ? '0.25' : '0.85'}" />
+  <!-- STUDIO Geometric Wordmark (Pure Vector Path) -->
+  <g transform="translate(${wordmarkX}, ${wordmarkY})" fill="${fg}" fill-rule="evenodd">
+    <path id="pz-wordmark-studio" d="${wordmark.pathData}" />
+  </g>
+</svg>`;
+      }
+
+      // 3. STANDALONE APP ICON (DARK OR LIGHT, configurable corner radius: 0, 56 (22%), or 124 (50% circle))
+      if (type === 'icon-dark' || type === 'icon-light' || type === 'app-icon') {
+        const isLight = type === 'icon-light' || (type === 'app-icon' && state.iconMode === 'light');
+        const bg = isLight ? '#F8F8F6' : '#090A0B';
+        const border = isLight ? '#090A0B' : '#353A40';
+        const fg = isLight ? '#090A0B' : '#F8F8F6';
+        const overlays = buildOverlays(256, 256, 0, 0, 1, isLight);
+
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="100%" height="100%" fill="none">
+  <title>PZ Studio — Standalone App Icon (${isLight ? 'Light' : 'Dark'})</title>
+  <rect x="4" y="4" width="248" height="248" rx="${customMaskRx}" fill="${bg}" stroke="${border}" stroke-width="4" />${overlays}
+  <g fill="${fg}" fill-rule="evenodd">
+    <path id="pz-icon-p" d="${pPath}" />
+    <path id="pz-icon-z" d="${zPath}" />
+  </g>
+</svg>`;
+      }
+
+      // 4. HORIZONTAL WORDMARK LOCKUP (780x200) — Pure <path> for PZ STUDIO + DEV_TOOLS // ENGINE
+      if (type === 'horizontal-wordmark') {
+        const isLight = state.wordmarkMode === 'light';
+        const bg = isLight ? '#F8F8F6' : '#090A0B';
+        const fg = isLight ? '#090A0B' : '#F8F8F6';
+        const muted = isLight ? '#353A40' : '#AEB4BB';
+        const ruleColor = isLight ? '#090A0B' : '#353A40';
+
+        const mScale = 0.58;
+        const mOffsetX = 44;
+        const mOffsetY = ((200 - 256 * mScale) / 2).toFixed(2);
+
+        const fullWordmark = buildVectorTextPaths('PZ STUDIO', 0, 0, 38, 12);
+        const descriptorPaths = buildVectorTextPaths('DEV_TOOLS // ENGINE', 0, 0, 12.5, 4.5);
+        const overlays = buildOverlays(780, 200, mOffsetX, parseFloat(mOffsetY), mScale, isLight);
+
+        const taglineGroup = state.showTagline
+          ? `\n  <!-- Technical Descriptor (DEV_TOOLS // ENGINE in Pure Vector Paths) -->\n  <g transform="translate(244, 124)" fill="${muted}" fill-rule="evenodd">\n    <path id="pz-wordmark-descriptor" d="${descriptorPaths.pathData}" />\n  </g>`
+          : '';
+
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 200" width="100%" height="100%" fill="none">
+  <title>PZ Studio — Horizontal Wordmark Lockup</title>
+  <rect width="780" height="200" fill="${bg}" />${overlays}
+  <!-- Left PZ Monogram Mark -->
+  <g transform="translate(${mOffsetX}, ${mOffsetY}) scale(${mScale})" fill="${fg}" fill-rule="evenodd">
+    <path id="pz-horiz-p" d="${pPath}" />
+    <path id="pz-horiz-z" d="${zPath}" />
+  </g>
+  <!-- Vertical Technical Separator (#353A40) -->
+  <rect x="214" y="52" width="2" height="96" fill="${ruleColor}" opacity="${isLight ? '0.25' : '0.95'}" />
+  <!-- Right PZ STUDIO Geometric Wordmark (Pure Vector Paths) -->
+  <g transform="translate(244, ${state.showTagline ? '62' : '81'})" fill="${fg}" fill-rule="evenodd">
+    <path id="pz-horiz-wordmark" d="${fullWordmark.pathData}" />
+  </g>${taglineGroup}
+</svg>`;
+      }
+
+      // RAW MONOGRAM ONLY (Transparent background, pure 256x256 symbol)
+      if (type === 'raw-monogram') {
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="100%" height="100%" fill="none">
+  <title>PZ Studio — Raw Monogram Symbol</title>
+  <g fill="#F8F8F6" fill-rule="evenodd">
+    <path d="${pPath}" />
+    <path d="${zPath}" />
+  </g>
+</svg>`;
+      }
+
+      // 7. GITHUB SOCIAL PREVIEW BANNER (1280x640, 100% pure <path> lockup)
+      if (type === 'github-banner') {
+        const fullWordmark = buildVectorTextPaths('PZ STUDIO', 0, 0, 48, 14);
+        const subDescriptor = buildVectorTextPaths('DEV_TOOLS // ENGINE', 0, 0, 20, 7);
+        let gridLines = [];
+        for (let x = 64; x < 1280; x += 64) {
+          gridLines.push(`<line x1="${x}" y1="0" x2="${x}" y2="640" />`);
+        }
+        for (let y = 64; y < 640; y += 64) {
+          gridLines.push(`<line x1="0" y1="${y}" x2="1280" y2="${y}" />`);
+        }
+
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="100%" height="100%" fill="none">
+  <title>PZ Studio — GitHub Social Preview (1280x640)</title>
+  <rect width="1280" height="640" fill="#090A0B" />
+  <!-- Technical Grid -->
+  <g stroke="#353A40" stroke-width="1" opacity="0.35">
+    ${gridLines.join('\n    ')}
+  </g>
+  <!-- Outer Structural Frame (64px inset: grid-aligned, inside GitHub's 40pt repo-card safe border) -->
+  <rect x="64" y="64" width="1152" height="512" fill="none" stroke="#353A40" stroke-width="2" />
+  <!-- Corner Crosshairs -->
+  <path d="M 56 64 H 72 M 64 56 V 72 M 1208 64 H 1224 M 1216 56 V 72 M 56 576 H 72 M 64 568 V 584 M 1208 576 H 1224 M 1216 568 V 584" stroke="#F8F8F6" stroke-width="2" />
+  <!-- Left Elevated Squircle Monogram Module -->
+  <rect x="112" y="168" width="304" height="304" rx="64" fill="#121416" stroke="#353A40" stroke-width="2" />
+  <g transform="translate(136, 192)" fill="#F8F8F6" fill-rule="evenodd">
+    <path d="${pPath}" />
+    <path d="${zPath}" />
+  </g>
+  <!-- Right Brand Lockup & Pure Vector Typography -->
+  <g transform="translate(476, 224)" fill="#F8F8F6" fill-rule="evenodd">
+    <path d="${fullWordmark.pathData}" />
+  </g>
+  <rect x="476" y="308" width="660" height="2" fill="#353A40" />
+  <g transform="translate(476, 336)" fill="#AEB4BB" fill-rule="evenodd">
+    <path d="${subDescriptor.pathData}" />
+  </g>
+  <rect x="476" y="392" width="140" height="8" fill="#F8F8F6" />
+  <rect x="628" y="392" width="280" height="8" fill="#202327" stroke="#353A40" />
+</svg>`;
+      }
+    }
+
+    /**
+     * Token Export Generator (CSS / W3C Design Tokens JSON / Tailwind Config)
+     */
+    function getTokenExportString(format) {
+      if (format === 'css') {
+        return `/* tokens.css — PZ Studio Monochromatic Brand & UI Design Tokens */
+:root {
+  /* Primary Monochromatic Surface Hierarchy */
+  --pz-color-near-black: #090A0B;
+  --pz-color-dark-surface: #121416;
+  --pz-color-elevated-surface: #202327;
+
+  /* Structural Dividers & Technical Grids */
+  --pz-color-border: #353A40;
+
+  /* Typography & Iconography Foregrounds */
+  --pz-color-secondary-text: #AEB4BB;
+  --pz-color-primary-white: #F8F8F6;
+
+  /* Typography Stacks */
+  --pz-font-sans: 'Space Grotesk', 'Inter', -apple-system, sans-serif;
+  --pz-font-mono: 'JetBrains Mono', 'Geist Mono', monospace;
+
+  /* Geometric Construction Constants */
+  --pz-logo-grid-unit: 32px;
+  --pz-logo-clear-space: 1x;
+  --pz-logo-min-icon-size: 16px;
+  --pz-logo-min-wordmark-width: 80px;
+}`;
+      }
+      if (format === 'json') {
+        return JSON.stringify({
+          "$schema": "https://tr.designtokens.org/format/",
+          "pzStudio": {
+            "color": {
+              "nearBlack": { "$value": "#090A0B", "$type": "color", "$description": "Primary dark canvas & terminal background" },
+              "darkSurface": { "$value": "#121416", "$type": "color", "$description": "Secondary panels, cards & IDE sidebars" },
+              "elevatedSurface": { "$value": "#202327", "$type": "color", "$description": "Interactive controls, active tabs & badges" },
+              "border": { "$value": "#353A40", "$type": "color", "$description": "1px structural hairlines & construction grids" },
+              "secondaryText": { "$value": "#AEB4BB", "$type": "color", "$description": "Technical descriptors, CLI logs & muted labels" },
+              "primaryWhite": { "$value": "#F8F8F6", "$type": "color", "$description": "Primary brand mark, display headings & light surface" }
+            },
+            "typography": {
+              "display": { "$value": "Space Grotesk, Inter, sans-serif", "$type": "fontFamily" },
+              "monospace": { "$value": "JetBrains Mono, Geist Mono, monospace", "$type": "fontFamily" }
+            }
+          }
+        }, null, 2);
+      }
+      return `// tailwind.config.js — PZ Studio Monochromatic Developer Theme
+module.exports = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        pz: {
+          black: '#090A0B',
+          surface: '#121416',
+          elevated: '#202327',
+          border: '#353A40',
+          secondary: '#AEB4BB',
+          white: '#F8F8F6',
+        },
+      },
+      fontFamily: {
+        display: ['Space Grotesk', 'Inter', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Geist Mono', 'monospace'],
+      },
+    },
+  },
+};`;
+    }
+
+    /**
+     * Render All Previews & Synchronize UI State
+     */
+    function renderAll() {
+      // Update Header Variant Buttons
+      [1, 2, 3].forEach((v) => {
+        const btn = document.getElementById(`btn-var-${v}`);
+        if (v === state.variant) {
+          btn.className = 'variant-btn px-3 py-1.5 rounded text-xs font-mono border border-pz-white bg-pz-white text-pz-black font-semibold transition flex items-center gap-2';
+        } else {
+          btn.className = 'variant-btn px-3 py-1.5 rounded text-xs font-mono border border-pz-border bg-pz-surface text-pz-secondary hover:text-pz-white transition flex items-center gap-2';
+        }
+      });
+
+      // Update Header Banner Description & Telemetry
+      document.getElementById('activeVariantTitle').textContent = variantMeta[state.variant].title;
+      document.getElementById('activeVariantDesc').textContent = variantMeta[state.variant].desc;
+      document.getElementById('specStrokeReadout').textContent = strokeLabels[state.strokeWeight];
+      document.getElementById('specAngleReadout').textContent = variantMeta[state.variant].angle;
+
+      // Update Stroke Weight Buttons
+      [24, 28, 32].forEach((w) => {
+        const btn = document.getElementById(`weight-${w}`);
+        if (w === state.strokeWeight) {
+          btn.className = 'px-2 py-0.5 rounded bg-pz-white text-pz-black font-semibold transition';
+        } else {
+          btn.className = 'px-2 py-0.5 rounded text-pz-secondary hover:text-pz-white transition';
+        }
+      });
+
+      // Update Overlay Toggle Buttons
+      const gridBtn = document.getElementById('toggleGridBtn');
+      const gridDot = document.getElementById('gridDot');
+      gridBtn.className = state.showGrid
+        ? 'px-2.5 py-1 rounded text-xs font-mono border border-pz-white bg-pz-elevated text-pz-white transition flex items-center gap-1.5'
+        : 'px-2.5 py-1 rounded text-xs font-mono border border-pz-border bg-pz-surface text-pz-secondary hover:text-pz-white transition flex items-center gap-1.5';
+      gridDot.className = state.showGrid ? 'w-2 h-2 rounded-full bg-pz-white' : 'w-2 h-2 rounded-full bg-pz-border';
+
+      const safeBtn = document.getElementById('toggleSafeBtn');
+      const safeDot = document.getElementById('safeDot');
+      safeBtn.className = state.showSafeZone
+        ? 'px-2.5 py-1 rounded text-xs font-mono border border-pz-white bg-pz-elevated text-pz-white transition flex items-center gap-1.5'
+        : 'px-2.5 py-1 rounded text-xs font-mono border border-pz-border bg-pz-surface text-pz-secondary hover:text-pz-white transition flex items-center gap-1.5';
+      safeDot.className = state.showSafeZone ? 'w-2 h-2 rounded-full bg-pz-white' : 'w-2 h-2 rounded-full bg-pz-border';
+
+      // Render Deliverable 1 & 2
+      document.getElementById('preview-primary-dark').innerHTML = generateDeliverableSVG('primary-dark');
+      document.getElementById('preview-primary-light').innerHTML = generateDeliverableSVG('primary-light');
+
+      // Render Deliverable 3 (3 Container Masks + 6-Step Pixel Legibility Strip)
+      const currentIconType = state.iconMode === 'light' ? 'icon-light' : 'icon-dark';
+      const iconSquareSVG = generateDeliverableSVG(currentIconType, '8');
+      const iconSquircleSVG = generateDeliverableSVG(currentIconType, '56');
+      const iconCircleSVG = generateDeliverableSVG(currentIconType, '124');
+
+      document.getElementById('icon-mask-square').innerHTML = iconSquareSVG;
+      document.getElementById('icon-mask-squircle').innerHTML = iconSquircleSVG;
+      document.getElementById('icon-mask-circle').innerHTML = iconCircleSVG;
+
+      document.getElementById('scale-128').innerHTML = iconSquircleSVG;
+      document.getElementById('scale-64').innerHTML = iconSquircleSVG;
+      document.getElementById('scale-48').innerHTML = iconSquircleSVG;
+      document.getElementById('scale-32').innerHTML = iconSquircleSVG;
+      document.getElementById('scale-24').innerHTML = iconSquircleSVG;
+      document.getElementById('scale-16').innerHTML = iconSquircleSVG;
+
+      document.getElementById('navMiniIcon').innerHTML = generateDeliverableSVG('raw-monogram');
+      document.getElementById('ghOrgAvatar').innerHTML = generateDeliverableSVG('icon-dark', '44');
+      document.getElementById('vscodeExtIcon').innerHTML = generateDeliverableSVG('icon-dark', '56');
+      document.getElementById('appIconFilename').textContent = `pz-icon-standalone-${state.iconMode}.svg`;
+
+      // Render Guideline Mini Diagrams (Deliverable 05)
+      const { pPath, zPath } = getMonogramPaths(state.variant, state.strokeWeight);
+      const gridOverlayOnly = buildOverlays(256, 256, 0, 0, 1, false, true, false);
+      document.getElementById('guideline-grid-diagram').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="100%" height="100%">${gridOverlayOnly}<g fill="#F8F8F6" fill-rule="evenodd"><path d="${pPath}"/><path d="${zPath}"/></g></svg>`;
+      document.getElementById('guideline-safe-diagram').innerHTML = generateDeliverableSVG('raw-monogram');
+
+      // Render Deliverable 4 (Horizontal Wordmark)
+      const wordmarkStage = document.getElementById('wordmarkStage');
+      if (state.wordmarkMode === 'light') {
+        wordmarkStage.className = 'relative h-72 bg-pz-white tech-grid-light flex flex-col items-center justify-center p-6 border-b border-pz-border';
+        document.getElementById('wordmarkMetaTop').className = 'absolute top-3 left-3 font-mono text-[11px] text-pz-black/60';
+        document.getElementById('wordmarkMetaBottom').className = 'absolute bottom-3 right-3 font-mono text-[11px] text-pz-black/60';
+      } else {
+        wordmarkStage.className = 'relative h-72 bg-pz-black tech-grid-bg flex flex-col items-center justify-center p-6 border-b border-pz-border corner-ticks';
+        document.getElementById('wordmarkMetaTop').className = 'absolute top-3 left-3 font-mono text-[11px] text-pz-secondary/70';
+        document.getElementById('wordmarkMetaBottom').className = 'absolute bottom-3 right-3 font-mono text-[11px] text-pz-secondary/70';
+      }
+      document.getElementById('preview-horizontal-wordmark').innerHTML = generateDeliverableSVG('horizontal-wordmark');
+
+      // Render Deliverable 7 (GitHub Social Preview Banner)
+      document.getElementById('preview-github-banner').innerHTML = generateDeliverableSVG('github-banner');
+
+      // Update Live Raw SVG Inspector
+      updateInspectorView();
+
+      // Update Token Code Block
+      document.getElementById('tokenCodeOutput').textContent = getTokenExportString(state.tokenFormat);
+    }
+
+    function updateInspectorView() {
+      const svgCode = generateDeliverableSVG(state.inspectedAsset);
+      document.getElementById('rawSvgCodeBlock').textContent = svgCode;
+      document.getElementById('inspectorLivePreview').innerHTML = svgCode;
+
+      const bytes = new Blob([svgCode]).size;
+      document.getElementById('inspectorByteSize').textContent = `${(bytes / 1024).toFixed(2)} KB // VALID XML`;
+
+      const fileMap = {
+        'primary-dark': 'pz-logo-primary-dark.svg',
+        'primary-light': 'pz-logo-primary-light.svg',
+        'icon-dark': 'pz-icon-standalone-dark.svg',
+        'icon-light': 'pz-icon-standalone-light.svg',
+        'horizontal-wordmark': 'pz-wordmark-horizontal.svg'
+      };
+      const fileName = fileMap[state.inspectedAsset] || 'pz-logo-primary-dark.svg';
+      document.getElementById('inspectorFileLabel').textContent = fileName;
+      document.getElementById('inspectorAssetTitle').textContent = `FILE: ${fileName}`;
+
+      // Highlight active inspector tab
+      ['primary-dark', 'primary-light', 'icon-dark', 'icon-light', 'horizontal-wordmark'].forEach((id) => {
+        const tab = document.getElementById(`tab-svg-${id}`);
+        if (!tab) return;
+        if (id === state.inspectedAsset) {
+          tab.className = 'inspector-tab px-2.5 py-1 rounded border border-pz-white bg-pz-white text-pz-black font-semibold';
+        } else {
+          tab.className = 'inspector-tab px-2.5 py-1 rounded border border-transparent text-pz-secondary hover:text-pz-white';
+        }
+      });
+    }
+
+    // Interactive Actions
+    function setVariant(v) {
+      state.variant = v;
+      renderAll();
+      showToast(`Switched to Variant 0${v}`);
+    }
+
+    function setStrokeWeight(w) {
+      state.strokeWeight = w;
+      renderAll();
+      showToast(`Stroke weight updated to ${strokeLabels[w]}`);
+    }
+
+    function toggleGrid() {
+      state.showGrid = !state.showGrid;
+      renderAll();
+      showToast(`Grid overlay ${state.showGrid ? 'enabled' : 'disabled'}`);
+    }
+
+    function toggleSafeZone() {
+      state.showSafeZone = !state.showSafeZone;
+      renderAll();
+      showToast(`Safe Zone 1x ${state.showSafeZone ? 'enabled' : 'disabled'}`);
+    }
+
+    function setIconMode(mode) {
+      state.iconMode = mode;
+      document.getElementById('iconBgDarkBtn').className = mode === 'dark'
+        ? 'px-2 py-0.5 rounded bg-pz-black text-pz-white border border-pz-border'
+        : 'px-2 py-0.5 rounded bg-pz-surface text-pz-secondary border border-transparent';
+      document.getElementById('iconBgLightBtn').className = mode === 'light'
+        ? 'px-2 py-0.5 rounded bg-pz-white text-pz-black font-semibold border border-pz-border'
+        : 'px-2 py-0.5 rounded bg-pz-surface text-pz-secondary border border-transparent';
+      renderAll();
+    }
+
+    function inspectCurrentIconAsset() {
+      inspectAsset(state.iconMode === 'light' ? 'icon-light' : 'icon-dark');
+    }
+
+    function copyCurrentIconSVG() {
+      const type = state.iconMode === 'light' ? 'icon-light' : 'icon-dark';
+      copyAssetSVG(type);
+    }
+
+    function downloadCurrentIconSVG() {
+      const type = state.iconMode === 'light' ? 'icon-light' : 'icon-dark';
+      downloadAssetSVG(type, `pz-icon-standalone-${state.iconMode}.svg`);
+    }
+
+    function setWordmarkMode(mode) {
+      state.wordmarkMode = mode;
+      document.getElementById('wordmarkDarkBtn').className = mode === 'dark'
+        ? 'px-2 py-0.5 rounded bg-pz-black text-pz-white border border-pz-border'
+        : 'px-2 py-0.5 rounded bg-pz-surface text-pz-secondary border border-transparent';
+      document.getElementById('wordmarkLightBtn').className = mode === 'light'
+        ? 'px-2 py-0.5 rounded bg-pz-white text-pz-black font-semibold border border-pz-border'
+        : 'px-2 py-0.5 rounded bg-pz-surface text-pz-secondary border border-transparent';
+      renderAll();
+    }
+
+    function toggleWordmarkTagline() {
+      state.showTagline = !state.showTagline;
+      const btn = document.getElementById('taglineToggleBtn');
+      btn.textContent = `TAGLINE: ${state.showTagline ? 'ON' : 'OFF'}`;
+      btn.className = state.showTagline
+        ? 'px-2 py-0.5 rounded bg-pz-elevated text-pz-white border border-pz-border'
+        : 'px-2 py-0.5 rounded bg-pz-surface text-pz-secondary border border-pz-border';
+      renderAll();
+    }
+
+    function inspectAsset(assetType) {
+      state.inspectedAsset = assetType;
+      updateInspectorView();
+      document.getElementById('section-inspector').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function setTokenFormat(fmt) {
+      state.tokenFormat = fmt;
+      ['css', 'json', 'tw'].forEach((f) => {
+        const btn = document.getElementById(`token-tab-${f}`);
+        btn.className = f === fmt
+          ? 'px-2.5 py-1 rounded bg-pz-black text-pz-white border border-pz-border'
+          : 'px-2.5 py-1 rounded text-pz-secondary hover:text-pz-white';
+      });
+      document.getElementById('tokenCodeOutput').textContent = getTokenExportString(fmt);
+    }
+
+    // Clipboard & File Download Utilities
+    function copyText(text, label = 'Copied to clipboard') {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        showToast(label);
+      } catch (err) {
+        showToast('Copy failed');
+      }
+      document.body.removeChild(textarea);
+    }
+
+    function copyAssetSVG(assetType) {
+      const svg = generateDeliverableSVG(assetType);
+      copyText(svg, `Copied ${assetType}.svg source code`);
+    }
+
+    function copyInspectedSVG() {
+      const svg = generateDeliverableSVG(state.inspectedAsset);
+      const filename = document.getElementById('inspectorFileLabel').textContent;
+      copyText(svg, `Copied ${filename} to clipboard`);
+    }
+
+    function copyTokenCode() {
+      const code = getTokenExportString(state.tokenFormat);
+      copyText(code, `Copied ${state.tokenFormat.toUpperCase()} design tokens`);
+    }
+
+    function downloadAssetSVG(assetType, filename) {
+      const svg = generateDeliverableSVG(assetType);
+      const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`Downloaded ${filename}`);
+    }
+
+    function downloadInspectedSVG() {
+      const filename = document.getElementById('inspectorFileLabel').textContent;
+      downloadAssetSVG(state.inspectedAsset, filename);
+    }
+
+    function downloadAllSVGs() {
+      const queue = [
+        { type: 'primary-dark', name: 'pz-logo-primary-dark.svg' },
+        { type: 'primary-light', name: 'pz-logo-primary-light.svg' },
+        { type: 'icon-dark', name: 'pz-icon-standalone-dark.svg' },
+        { type: 'icon-light', name: 'pz-icon-standalone-light.svg' },
+        { type: 'horizontal-wordmark', name: 'pz-wordmark-horizontal.svg' }
+      ];
+      queue.forEach((item, idx) => {
+        setTimeout(() => {
+          downloadAssetSVG(item.type, item.name);
+        }, idx * 180);
+      });
+    }
+
+    let toastTimer = null;
+    function showToast(message) {
+      const toast = document.getElementById('toastNotice');
+      const text = document.getElementById('toastText');
+      text.textContent = message;
+      toast.classList.remove('opacity-0', 'translate-y-2');
+      toast.classList.add('opacity-100', 'translate-y-0');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'translate-y-2');
+      }, 2200);
+    }
+
+    window.onload = function () {
+      renderAll();
+    };
+  </script>
+</body>
+</html>

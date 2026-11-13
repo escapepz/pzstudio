@@ -1,5 +1,25 @@
 # 13 — Authoritative DevSync Outdir Contract (Q3)
 
+> **Amended 2026-11-12 (dist-always amendment).** The outdir-as-write-root
+> premise below is SUPERSEDED: the engine's write root is now the canonical
+> `<projectRoot>/dist` on every path (anchored in `gatherPlanInput` — the
+> shared build/DevSync choke point), whatever the outdir tiers say. The
+> user's `outdir` (project.json > host settings > global config, no factory
+> default) is the DEPLOYMENT target, resolved by the materialize step, never
+> by the engine. Consequences for this document's contracts:
+> - `studio.resolveOutDir(dir)` returns the discovered project's dist root
+>   unconditionally (the config-resolution step still runs for its
+>   fail-closed errors and emissions); the five-tier VALUE resolution is
+>   gone.
+> - The DevSync pre-filter root and the engine's write root COINCIDE again
+>   by construction (both = dist) — every loop-protection guarantee in
+>   §2/§3 holds with a stable root that no settings change can move.
+> - The CLI watch also natively ignores the deployment root when it sits
+>   inside the project (a junction surfaces the engine's writes at the
+>   deployment path).
+> The five-tier walk-up, the fail-closed discovery, and the R1 emission
+> contracts described below are unchanged; only the VALUE semantics moved.
+
 **Design-only pass.** Originally written at HEAD
 `c34878c814bfedce22920c0164da094b37862a9f`; **hardened in a Q3 review
 revision at HEAD `25af2b5cc39a9b9e89f2fb295e7ddacfee2d31c2`**; **re-hardened

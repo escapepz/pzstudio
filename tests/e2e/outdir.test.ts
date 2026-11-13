@@ -1,4 +1,4 @@
-import path from 'path';
+﻿import path from 'path';
 import fs from 'fs';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createE2EWorkspace, E2ETestWorkspace } from '../helpers/e2e-fixtures';
@@ -14,7 +14,7 @@ describe('outdir command e2e', () => {
         workspace.cleanup();
     });
 
-    it('should change the global output directory', async () => {
+    it('should change the machine-level deployment root', async () => {
         // 1. Create a dummy directory to set as outdir
         const newOutDir = path.join(workspace.dir, 'new_out');
         fs.mkdirSync(newOutDir, { recursive: true });
@@ -26,7 +26,7 @@ describe('outdir command e2e', () => {
             workspace.assertSuccess(result);
             workspace.assertStdout(
                 result,
-                'The output directory has been changed',
+                'The deployment root has been changed',
             );
 
             // 3. Verify config.json in fake home

@@ -9,8 +9,8 @@ import {
 
 /**
  * Real-environment tests for `pzstudio build`/`clean`: hand-written fixture
- * projects (no templates, no git) built by the spawned binary into the fake
- * home's workshop output, verified on the real filesystem.
+ * projects (no templates, no git) built by the spawned binary into the
+ * project's dist output tree, verified on the real filesystem.
  */
 describe('real env: build and clean commands', () => {
     const PROJECT_TITLE = 'Real Env Build';
@@ -60,11 +60,11 @@ describe('real env: build and clean commands', () => {
         ws.write(path.join('workshop', 'preview.png'), 'fake preview');
     }
 
-    it('packages the main workshop output into the default outdir', async () => {
+    it('packages the main workshop output into dist (no outdir: nothing materialized)', async () => {
         const result = await workspace.run(['build']);
         expect(result.exitCode).toBe(0);
 
-        const outDir = path.join(defaultOutRoot(workspace.home), PROJECT_TITLE);
+        const outDir = workspace.path(path.join('dist', PROJECT_TITLE));
         const sharedLuaDir = path.join(
             outDir,
             'Contents',
@@ -81,15 +81,19 @@ describe('real env: build and clean commands', () => {
             fs.readFileSync(path.join(outDir, 'workshop.txt'), 'utf8'),
         ).toContain(PROJECT_TITLE);
         expect(fs.existsSync(path.join(outDir, 'preview.png'))).toBe(true);
+        expect(
+            fs.existsSync(
+                path.join(defaultOutRoot(workspace.home), PROJECT_TITLE),
+            ),
+        ).toBe(false);
     });
 
     it('packages the dev_branch output with patched mod ids', async () => {
         const result = await workspace.run(['build', '--development']);
         expect(result.exitCode).toBe(0);
 
-        const outDir = path.join(
-            defaultOutRoot(workspace.home),
-            `${PROJECT_TITLE} - dev_branch`,
+        const outDir = workspace.path(
+            path.join('dist', `${PROJECT_TITLE} - dev_branch`),
         );
         const modInfoPath = path.join(
             outDir,
@@ -124,13 +128,9 @@ describe('real env: build and clean commands', () => {
         const buildResult = await workspace.run(['build', '--both']);
         expect(buildResult.exitCode).toBe(0);
 
-        const mainOutDir = path.join(
-            defaultOutRoot(workspace.home),
-            PROJECT_TITLE,
-        );
-        const devOutDir = path.join(
-            defaultOutRoot(workspace.home),
-            `${PROJECT_TITLE} - dev_branch`,
+        const mainOutDir = workspace.path(path.join('dist', PROJECT_TITLE));
+        const devOutDir = workspace.path(
+            path.join('dist', `${PROJECT_TITLE} - dev_branch`),
         );
         expect(fs.existsSync(mainOutDir)).toBe(true);
         expect(fs.existsSync(devOutDir)).toBe(true);
@@ -162,10 +162,8 @@ describe('real env: build and clean commands', () => {
                 excludes: [],
             }),
         );
-        const markerPath = path.join(
-            defaultOutRoot(workspace.home),
-            PROJECT_TITLE,
-            'marker.txt',
+        const markerPath = workspace.path(
+            path.join('dist', PROJECT_TITLE, 'marker.txt'),
         );
         fs.mkdirSync(path.dirname(markerPath), { recursive: true });
         fs.writeFileSync(markerPath, 'previous output');

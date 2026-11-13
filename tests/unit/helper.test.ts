@@ -620,19 +620,30 @@ describe('Helper Library', () => {
     });
 
     describe('getOutDir', () => {
-        it('should return default workshop path if not configured', () => {
+        it('should return undefined when no tier configures an outdir (no factory tier)', () => {
             vi.mocked(fs.existsSync).mockReturnValue(false); // No config.json
-            expect(getOutDir().toLowerCase()).toContain('workshop');
+            expect(getOutDir()).toBeUndefined();
         });
 
-        it('should fall back to ~/Zomboid/Workshop when no config provides outdir', () => {
+        it('should return undefined when the global config carries no outdir', () => {
             const result = getOutDir(undefined, {
                 templates: {},
                 useSymlinks: true,
                 outdir: undefined,
             } as any);
-            expect(result.toLowerCase()).toContain('zomboid');
-            expect(result.toLowerCase()).toContain('workshop');
+            expect(result).toBeUndefined();
+        });
+
+        it('should expand a tilde token in the global config outdir', () => {
+            const result = getOutDir(undefined, {
+                templates: {},
+                outdir: '~/Zomboid/Workshop',
+            } as any);
+            expect(result?.toLowerCase()).toContain('zomboid');
+            // The tilde TOKEN is expanded: the result no longer starts with
+            // it. A blanket not.toContain('~') misfires where real paths
+            // carry 8.3 short names (GitHub's C:\Users\RUNNER~1\...).
+            expect(result?.startsWith('~')).toBe(false);
         });
     });
 

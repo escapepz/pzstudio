@@ -200,7 +200,7 @@ describe('legacy CLI facade settings (external consumers feed the slots directly
         temps = [];
     });
 
-    it('runCLI build lands in the configured outdir', async () => {
+    it('runCLI build writes dist and materializes a junction at the configured outdir', async () => {
         const proj = makeProject('Facade Build');
         withNonDefaultConfig(customOut, false);
         // Build resolves the workshop template category, so the pushed
@@ -213,8 +213,15 @@ describe('legacy CLI facade settings (external consumers feed the slots directly
         setProjectDir(proj);
         await runCLI('build', [], { flags: [] });
 
+        // Dist-always: the artifacts land in the project's canonical dist
+        // root; the configured outdir receives the DEPLOYMENT junction.
         expect(
-            fs.existsSync(path.join(customOut, 'Facade Build', 'workshop.txt')),
+            fs.existsSync(
+                path.join(proj, 'dist', 'Facade Build', 'workshop.txt'),
+            ),
+        ).toBe(true);
+        expect(
+            fs.lstatSync(path.join(customOut, 'Facade Build')).isSymbolicLink(),
         ).toBe(true);
         expect(
             fs.existsSync(
@@ -223,11 +230,11 @@ describe('legacy CLI facade settings (external consumers feed the slots directly
         ).toBe(false);
     });
 
-    it('legacy createDevSync plan input lands in the configured outdir', async () => {
+    it('legacy createDevSync plan input writes the project dist root (slots are never write targets)', async () => {
         pushLegacyLayers(customOut); // direct slot write
         const proj = makeProject('Facade Sync');
         // Hermetic template short-circuit only — the plan input still
-        // resolves outdir from the legacy slots.
+        // resolves its layers from the legacy slots.
         const workshopTemplateDir = path.join(makeTemp(), 'tpl-workshop');
         fs.mkdirSync(workshopTemplateDir, { recursive: true });
         const session = createDevSync(proj, { workshopTemplateDir });
@@ -237,7 +244,13 @@ describe('legacy CLI facade settings (external consumers feed the slots directly
             await session.stop();
         }
 
-        expect(fs.existsSync(path.join(customOut, 'Facade Sync'))).toBe(true);
+        // Dist-always: the session writes ONLY the project's canonical
+        // dist root; sessions do not materialize — both outdir slots stay
+        // empty.
+        expect(fs.existsSync(path.join(proj, 'dist', 'Facade Sync'))).toBe(
+            true,
+        );
+        expect(fs.existsSync(path.join(customOut, 'Facade Sync'))).toBe(false);
         expect(
             fs.existsSync(path.join(defaultWorkshopDir(), 'Facade Sync')),
         ).toBe(false);
@@ -261,9 +274,11 @@ describe('legacy CLI facade settings (external consumers feed the slots directly
         expect(notCached?.message).toContain('bridge/workshop-fixture');
     });
 
-    it('runCLI build with empty legacy slots falls back to the default outdir', async () => {
-        // The mirror of the slot-fed case: empty slots → tier falls through
-        // to the default workshop dir (§13.1 post-run state semantics).
+    it('runCLI build with empty legacy slots runs pure: dist only, no deployment', async () => {
+        // The mirror of the slot-fed case: empty slots → no deployment
+        // target exists (the factory-default tier is removed), so the
+        // build writes the canonical dist root and nothing else
+        // (§13.1 post-run state semantics).
         withNonDefaultConfig(customOut, false);
         const proj = makeProject('Facade Build Bare');
 
@@ -272,17 +287,20 @@ describe('legacy CLI facade settings (external consumers feed the slots directly
 
         expect(
             fs.existsSync(
+                path.join(proj, 'dist', 'Facade Build Bare', 'workshop.txt'),
+            ),
+        ).toBe(true);
+        expect(
+            fs.existsSync(
                 path.join(
                     defaultWorkshopDir(),
                     'Facade Build Bare',
                     'workshop.txt',
                 ),
             ),
-        ).toBe(true);
-        expect(
-            fs.existsSync(
-                path.join(customOut, 'Facade Build Bare', 'workshop.txt'),
-            ),
         ).toBe(false);
+        expect(fs.existsSync(path.join(customOut, 'Facade Build Bare'))).toBe(
+            false,
+        );
     });
 });

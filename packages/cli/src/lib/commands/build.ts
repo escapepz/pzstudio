@@ -1,8 +1,9 @@
 import { mkdirSync, writeFileSync, cpSync } from 'fs';
+import { basename, resolve } from 'path';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { CliError } from '../errors';
-import { hasFlag } from '../args';
+import { extractFlag, hasFlag } from '../args';
 import {
     OUTCOME_FAILURE,
     OUTCOME_SUCCESS,
@@ -14,13 +15,17 @@ import {
     FileOperation,
     collectIncludedModIds,
     planBuild,
+    resolveBuildOutputPath,
+    workshopTextForVariant,
 } from '@pzstudio/core';
 import {
+    distRootOf,
     gatherPlanInput,
     projectDir,
     removeDirRecursive,
     resolveProjectConfig,
 } from '../helper';
+import { parseMaterializeFlag } from '../watch-shared';
 import {
     assertNoAliasRouteSync,
     type CliMutationRouteOptions,
@@ -29,13 +34,25 @@ import { info, verbose, warn } from '../logger';
 import { isStandaloneBin } from '../runtime-context';
 import { maybePrintFirstBuildUrl } from '../first-run';
 import {
+    readGlobalConfig,
     resolveTemplateDirForEngine,
     scaffoldProject,
 } from '../templateManager';
+import {
+    maybeMaterializeBuiltItems,
+    resolveMaterialization,
+    writeBuiltItemMarker,
+    type MaterializationResolution,
+} from '../linkStep';
 
 addHelp(
     'build',
     `Build your project and package it for the workshop.
+
+    Builds always write the canonical dist/ output inside the project. When
+    an outdir is configured (project.json or 'pzstudio outdir'), each built
+    item is deployed there: a junction by default ('symlink'), or a verified
+    copy ('copy').
 
     NOTE: This command is for packaging only. To generate mod.info files in your source tree,
     use 'pzstudio modinfo generate'.
@@ -45,6 +62,8 @@ addHelp(
         pzstudio build --production  - Builds only the main workshop output.
         pzstudio build --development - Builds only the dev_branch workshop output.
         pzstudio build --both        - Builds both the main and dev_branch workshop outputs.
+        pzstudio build --no-materialize        - Build dist/ only; skip deployment this run.
+        pzstudio build --materialize=copy      - Force copy-mode deployment this run.
         pzstudio build --verbose     - Enable diagnostic output.`,
 );
 
@@ -133,10 +152,36 @@ export async function buildCmd() {
 
     const startTime = performance.now();
 
-    const projectPath = projectDir();
-    const outDir = projectConfig.outdir!;
+    // Dist-always amendment (2026-11-12): the canonical build root is
+    // ALWAYS `<projectRoot>/dist` (anchored in gatherPlanInput); the
+    // user's outdir (any tier) is the DEPLOYMENT target. `projectRoot`
+    // resolved once: the marker identity (projectId hash) and the plan
+    // input must share the project root's canonical spelling, or the
+    // ownership check never matches (Task 3 review carry-forward).
+    const projectPath = resolve(projectDir());
+    const distRoot = distRootOf(projectPath);
+    // Invalid --materialize values are a usage error (shared parser).
+    const materialization: MaterializationResolution = resolveMaterialization({
+        projectRoot: projectPath,
+        effectiveOutdir: projectConfig.outdir,
+        projectMaterialize: projectConfig.build?.materialize,
+        globalMaterialize: readGlobalConfig()?.materialize,
+        flagMaterialize: parseMaterializeFlag(extractFlag('materialize')),
+        noMaterialize: hasFlag('no-materialize'),
+    });
     verbose(`Project root: ${projectPath}`);
-    verbose(`Output root: ${outDir}`);
+    verbose(`Output root: ${distRoot}`);
+    verbose(
+        `Deployment: ${
+            materialization.action === 'materialize'
+                ? materialization.outDir
+                : 'disabled (no outdir configured or --no-materialize)'
+        }; materialize: ${
+            materialization.action === 'materialize'
+                ? materialization.mode
+                : 'skip'
+        }`,
+    );
 
     const isProduction = hasFlag('production');
     const isDevelopment = hasFlag('development');
@@ -183,6 +228,10 @@ export async function buildCmd() {
     // fails the command after every variant got its chance.
     const variantOutcomes: OperationOutcome[] = [];
     const variantErrors: string[] = [];
+    const builtItems: Array<{
+        name: string;
+        variant: 'main' | 'development';
+    }> = [];
 
     // Build main workshop (Default/project.json target or explicit --production)
     if (buildMain) {
@@ -206,9 +255,37 @@ export async function buildCmd() {
                 }
                 info(`\nBuilding main workshop...`);
                 executeBuildPlan(planBuild({ ...planInput, variant: 'main' }), {
-                    outputRoot: outDir,
+                    outputRoot: distRoot,
                 });
                 variantOutcomes.push(OUTCOME_SUCCESS);
+                builtItems.push({
+                    // The ANCHORED plan config carries the dist output root
+                    // (the raw project config's outdir is the deployment
+                    // target and may be unset — pure build mode).
+                    name: basename(
+                        resolveBuildOutputPath(planInput.config, 'main'),
+                    ),
+                    variant: 'main',
+                });
+                // The dist-side ownership marker is written on EVERY
+                // successful variant build (dist-always: there is no
+                // legacy mode left to gate it). A failure never fails the
+                // variant — fail-closed downstream (a missing marker
+                // surfaces as UNOWNED_TARGET).
+                try {
+                    await writeBuiltItemMarker(
+                        planInput.config,
+                        'main',
+                        projectPath,
+                        distRoot,
+                    );
+                } catch (e) {
+                    warn(
+                        `Output ownership marker for the main item failed: ${
+                            e instanceof Error ? e.message : String(e)
+                        }`,
+                    );
+                }
             }
         } catch (e) {
             variantErrors.push(e instanceof Error ? e.message : String(e));
@@ -232,15 +309,62 @@ export async function buildCmd() {
                 info(`\nBuilding dev_branch workshop...`);
                 executeBuildPlan(
                     planBuild({ ...planInput, variant: 'development' }),
-                    { outputRoot: outDir },
+                    { outputRoot: distRoot },
                 );
                 variantOutcomes.push(OUTCOME_SUCCESS);
+                builtItems.push({
+                    name: basename(
+                        resolveBuildOutputPath(planInput.config, 'development'),
+                    ),
+                    variant: 'development',
+                });
+                try {
+                    await writeBuiltItemMarker(
+                        planInput.config,
+                        'development',
+                        projectPath,
+                        distRoot,
+                    );
+                } catch (e) {
+                    warn(
+                        `Output ownership marker for the dev_branch item failed: ${
+                            e instanceof Error ? e.message : String(e)
+                        }`,
+                    );
+                }
             }
         } catch (e) {
             variantErrors.push(e instanceof Error ? e.message : String(e));
             variantOutcomes.push(OUTCOME_FAILURE);
         }
     }
+
+    // Materialize step: expose each successfully built item to the game —
+    // a junction per item (mode 'symlink', the default) or a verified,
+    // reconciled copy (mode 'copy'), into the configured deployment root.
+    // NON-FATAL by contract (Review Focus 4) — every refusal/failure is
+    // recorded and surfaced. Runs BEFORE the failure throw: a failed
+    // variant must not orphan the deployment of a variant that DID build
+    // (final review fix wave #4). No target / --no-materialize: hard no-op.
+    const sourceTexts: Record<string, string> = {};
+    for (const built of builtItems) {
+        sourceTexts[built.name] = workshopTextForVariant(
+            projectConfig,
+            built.variant,
+        );
+    }
+    await maybeMaterializeBuiltItems(
+        materialization,
+        builtItems.map((built) => built.name),
+        {
+            projectRoot: projectPath,
+            backupExisting: hasFlag('backup-existing-workshop'),
+            forceLink: hasFlag('relink') || hasFlag('force-link'),
+            sourceWorkshopTxtByItem: sourceTexts,
+            onSurface: (line, level) =>
+                level === 'warn' ? warn(line) : info(line),
+        },
+    );
 
     throwOnOutcomeFailures(variantOutcomes, variantErrors.join('\n'));
 
@@ -266,6 +390,15 @@ registerCommand({
         { name: 'production', conflicts: ['development', 'both'] },
         { name: 'development', conflicts: ['production', 'both'] },
         { name: 'both', conflicts: ['production', 'development'] },
+        { name: 'relink' },
+        { name: 'force-link' },
+        { name: 'backup-existing-workshop' },
+        {
+            name: 'materialize',
+            takesValue: true,
+            conflicts: ['no-materialize'],
+        },
+        { name: 'no-materialize', conflicts: ['materialize'] },
     ],
     run: () => buildCmd(),
 });

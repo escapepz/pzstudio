@@ -591,13 +591,16 @@ describe('R1 overlap: legacy non-engine ops beside an active v2 run', () => {
             // Project: the session resolved ITS OWN explicit path (and the
             // legacy wrapper left the anchor write intact).
             expect(getExternalProjectDir()).toBe(frame.projLegacy);
-            // Settings: the outdir tier took the LEGACY workspace layer
-            // (the project.json defines no outdir) — the sync landed in
-            // legacyOut; v2Out is untouched.
+            // Dist-always: the session writes ONLY the project's canonical
+            // dist root — the settings outdir slots are deployment targets,
+            // never write targets; both stay untouched.
             expect(
-                fs.existsSync(path.join(frame.legacyOut, 'LegacyProject')),
+                fs.existsSync(
+                    path.join(frame.projLegacy, 'dist', 'LegacyProject'),
+                ),
             ).toBe(true);
             expect(fs.readdirSync(frame.v2Out)).toEqual([]);
+            expect(fs.readdirSync(frame.legacyOut)).toEqual([]);
             // Logger: session emissions routed to the legacy slot; the v2
             // logger received nothing from the legacy operation.
             expect(frame.L1.calls.length).toBeGreaterThan(0);
@@ -815,14 +818,13 @@ describe('getOutDir explicit scope: exact tier order', () => {
         ).toBe(resolve('C:/global-out'));
     });
 
-    it('tier 5: default when nothing defines an outdir', () => {
-        const home = (globalThis as any).__PZSTUDIO_FAKE_HOME as string;
+    it('tier 5: no target when nothing defines an outdir (factory tier removed)', () => {
         expect(
             getOutDir({} as any, { outdir: undefined } as any, {
                 projectDir: makeTempDir(),
                 settings: layers(),
             }),
-        ).toBe(path.join(home, 'Zomboid', 'Workshop'));
+        ).toBeUndefined();
     });
 
     it('without a scope the ambient-branched form is unchanged (legacy slots still apply)', () => {
@@ -899,7 +901,7 @@ describe('commit 6 io threading (Appendix C): explicit io scopes', () => {
         ).toBe(true);
     });
 
-    it('getOutDir: the default-path verbose routes to the scope logger (tier 5)', () => {
+    it('getOutDir: the empty cascade emits nothing and yields no target (factory tier removed)', () => {
         const { calls, logger } = recordingLogger();
 
         const dir = getOutDir({} as any, { outdir: undefined } as any, {
@@ -908,7 +910,7 @@ describe('commit 6 io threading (Appendix C): explicit io scopes', () => {
             logger,
         });
 
-        expect(dir).toBe(path.join(fakeHome(), 'Zomboid', 'Workshop'));
+        expect(dir).toBeUndefined();
         expect(
             calls.some(
                 (c) =>
@@ -917,7 +919,7 @@ describe('commit 6 io threading (Appendix C): explicit io scopes', () => {
                         'Defaulting output directory to:',
                     ),
             ),
-        ).toBe(true);
+        ).toBe(false);
     });
 
     it('readGlobalConfig: read verbose and corrupt/validation warns route to the io logger', () => {
@@ -1571,12 +1573,15 @@ describe('commit 6 R1 cold overlap: legacy cold template op beside a parked v2 r
                 ),
             ).toBe(false);
 
-            // Config fingerprint: the sync resolved through the RAW legacy
-            // settings (the outdir slot) — the v2 outdir is untouched.
-            expect(fs.existsSync(path.join(legacyOut, 'LegacyProject'))).toBe(
-                true,
-            );
+            // Dist-always fingerprint: the sync wrote the project's
+            // canonical dist root — the RAW legacy settings slot (outdir)
+            // is a deployment target now, never a write target; the v2
+            // slot stays untouched too.
+            expect(
+                fs.existsSync(path.join(projLegacy, 'dist', 'LegacyProject')),
+            ).toBe(true);
             expect(fs.readdirSync(v2Out)).toEqual([]);
+            expect(fs.readdirSync(legacyOut)).toEqual([]);
         } finally {
             if (session) await session.stop().catch(() => {});
             release();
@@ -1667,10 +1672,14 @@ describe('commit 6 R1 mirror: v2 non-engine ops log to the instance with legacy 
         // The legacy sticky transport was never consulted.
         expect(T1.isCacheValid).not.toHaveBeenCalled();
         expect(T1.download).not.toHaveBeenCalled();
-        // Settings fingerprint: the instance's workspace layer decided;
-        // the legacy outdir slot is untouched.
-        expect(fs.existsSync(path.join(v2Out, 'MirrorProject'))).toBe(true);
+        // Dist-always settings fingerprint: the instance's plan input wrote
+        // ONLY the project's canonical dist root; NEITHER settings outdir
+        // slot is a write target.
+        expect(fs.existsSync(path.join(proj, 'dist', 'MirrorProject'))).toBe(
+            true,
+        );
         expect(fs.readdirSync(legacyOut)).toEqual([]);
+        expect(fs.readdirSync(v2Out)).toEqual([]);
     });
 
     it('studio.runProjectDoctor routes its emissions to the instance logger ([MIGRATION] + probe verboses)', async () => {

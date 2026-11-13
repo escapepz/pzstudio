@@ -314,8 +314,13 @@ describe('two instances: a v2 DevSync apply overlaps a parked v2 command run', (
             }
 
             // Project identity: the sync landed under B's project title in
-            // B's outdir; A's outdir received nothing.
-            expect(fs.existsSync(path.join(outB, 'SyncSide'))).toBe(true);
+            // B's canonical dist root (dist-always); B's outdir slot is a
+            // deployment target, never a write target — nothing landed in
+            // A's either.
+            expect(fs.existsSync(path.join(projB, 'dist', 'SyncSide'))).toBe(
+                true,
+            );
+            expect(fs.readdirSync(outB)).toEqual([]);
             expect(fs.readdirSync(outA)).toEqual([]);
 
             // Logger isolation in both directions.

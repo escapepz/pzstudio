@@ -972,10 +972,11 @@ describe('v2 lifecycle isolation', () => {
 });
 
 /* ------------------------------------------------------------------ */
-/* 8. studio.resolveOutDir (doc 13 §10-A): the five-tier outdir reader */
+/* 8. studio.resolveOutDir (doc 13 §10-A): the engine's canonical       */
+/*    dist-root reader (dist-always amendment)                          */
 /* ------------------------------------------------------------------ */
 
-describe('studio.resolveOutDir (doc 13 §10-A): the five-tier outdir reader', () => {
+describe('studio.resolveOutDir (doc 13 §10-A): the canonical dist-root reader', () => {
     const fakeHome = () => (globalThis as any).__PZSTUDIO_FAKE_HOME as string;
 
     /** A valid project.json fixture, optionally carrying an outdir. */
@@ -1009,92 +1010,45 @@ describe('studio.resolveOutDir (doc 13 §10-A): the five-tier outdir reader', ()
         return undefined;
     }
 
-    it('tier 1: a configured project outdir wins over every other tier', () => {
-        const proj = makeProject('Tier1', 'project-out');
-        writeGlobalConfig('C:/global-out');
-        const studio = createPzStudio({
-            settings: () => ({
-                workspace: { outdir: 'C:/ws-out' },
-                user: { outdir: 'C:/user-out' },
-            }),
-        });
-
-        expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'project-out'));
+    it('returns the project dist root regardless of which outdir tiers are configured', () => {
+        // Dist-always: every tier (project outdir, workspace/user host
+        // layers, global config) is a DEPLOYMENT target — the engine's
+        // output root is the canonical dist root in all combinations.
+        const combos: Array<() => PzStudioInstance> = [
+            () => createPzStudio({ settings: () => undefined }),
+            () =>
+                createPzStudio({
+                    settings: () => ({
+                        workspace: { outdir: 'C:/ws-out' },
+                        user: { outdir: 'C:/user-out' },
+                    }),
+                }),
+            () => {
+                writeGlobalConfig('C:/global-out');
+                return createPzStudio({ settings: () => undefined });
+            },
+        ];
+        for (const make of combos) {
+            const proj = makeProject('TieredProject', 'project-out');
+            expect(make().resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
+        }
     });
 
-    it('tier 1: a relative project outdir resolves against the discovered project root, even from a subdirectory', () => {
-        const proj = makeProject('Tier1Relative', 'out');
+    it('a relative or tilde project outdir never leaks into the returned root', () => {
+        const proj = makeProject('TokenProject', '~/Zomboid/Workshop');
         const nested = path.join(proj, 'src', 'content');
         fs.mkdirSync(nested, { recursive: true });
         const studio = createPzStudio();
 
-        expect(studio.resolveOutDir(nested)).toBe(path.join(proj, 'out'));
+        expect(studio.resolveOutDir(nested)).toBe(path.join(proj, 'dist'));
+        expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
     });
 
-    it('tier 2: the workspace layer — the folder-scoped composition target (UX-05) — beats the user layer', () => {
-        const proj = makeProject('Tier2Workspace');
-        const studio = createPzStudio({
-            settings: () => ({
-                workspace: { outdir: 'C:/ws-out' },
-                user: { outdir: 'C:/user-out' },
-            }),
-        });
-
-        expect(studio.resolveOutDir(proj)).toBe(path.resolve('C:/ws-out'));
-    });
-
-    it('tier 2: the workspace layer beats the global config when the user layer is absent', () => {
-        const proj = makeProject('Tier2OverGlobal');
-        writeGlobalConfig('C:/global-out');
-        const studio = createPzStudio({
-            settings: () => ({ workspace: { outdir: 'C:/ws-out' } }),
-        });
-
-        expect(studio.resolveOutDir(proj)).toBe(path.resolve('C:/ws-out'));
-    });
-
-    it('tier 3: the user layer beats the global CLI config', () => {
-        const proj = makeProject('Tier3User');
-        writeGlobalConfig('C:/global-out');
-        const studio = createPzStudio({
-            settings: () => ({ user: { outdir: 'C:/user-out' } }),
-        });
-
-        expect(studio.resolveOutDir(proj)).toBe(path.resolve('C:/user-out'));
-    });
-
-    it('tier 4: the global CLI config outdir is used when the host layers are absent', () => {
-        const proj = makeProject('Tier4Global');
-        writeGlobalConfig('C:/global-out');
+    it('resolves to an absolute, platform-native path', () => {
+        const proj = makeProject('AbsRoot');
         const studio = createPzStudio({ settings: () => undefined });
 
-        expect(studio.resolveOutDir(proj)).toBe(path.resolve('C:/global-out'));
-    });
-
-    it('tier 5: with no outdir in any tier, the default Workshop path is returned', () => {
-        const proj = makeProject('Tier5Default');
-        const studio = createPzStudio({
-            settings: () => ({ workspace: {}, user: {} }),
-        });
-
-        expect(studio.resolveOutDir(proj)).toBe(
-            path.join(fakeHome(), 'Zomboid', 'Workshop'),
-        );
-    });
-
-    it('every tier resolves to an absolute, platform-native path', () => {
-        const projRel = makeProject('AbsRelative', 'rel-out');
-        const projPlain = makeProject('AbsPlain');
-        const noLayer = createPzStudio({ settings: () => undefined });
-        const wsLayer = createPzStudio({
-            settings: () => ({ workspace: { outdir: 'C:/ws-abs' } }),
-        });
-
-        expect(path.isAbsolute(noLayer.resolveOutDir(projRel))).toBe(true);
-        expect(path.isAbsolute(wsLayer.resolveOutDir(projPlain))).toBe(true);
-        writeGlobalConfig('C:/global-abs');
-        expect(path.isAbsolute(noLayer.resolveOutDir(projPlain))).toBe(true);
-        expect(path.isAbsolute(noLayer.resolveOutDir(projRel))).toBe(true);
+        expect(path.isAbsolute(studio.resolveOutDir(proj))).toBe(true);
     });
 
     it('two project directories resolve independently — no cross-leak, and the provider receives exactly the requested projectDir', () => {
@@ -1103,10 +1057,8 @@ describe('studio.resolveOutDir (doc 13 §10-A): the five-tier outdir reader', ()
         const provider = vi.fn(() => undefined);
         const studio = createPzStudio({ settings: provider });
 
-        expect(studio.resolveOutDir(projA)).toBe(path.join(projA, 'out-a'));
-        expect(studio.resolveOutDir(projB)).toBe(
-            path.join(fakeHome(), 'Zomboid', 'Workshop'),
-        );
+        expect(studio.resolveOutDir(projA)).toBe(path.join(projA, 'dist'));
+        expect(studio.resolveOutDir(projB)).toBe(path.join(projB, 'dist'));
 
         expect(provider).toHaveBeenCalledTimes(2);
         expect(provider).toHaveBeenNthCalledWith(1, { projectDir: projA });
@@ -1173,11 +1125,10 @@ describe('studio.resolveOutDir (doc 13 §10-A): the five-tier outdir reader', ()
             settings: () => ({ user: { outdir: 'C:/instance-out' } }),
         });
 
-        // The instance provider's tier decides — not the anchored project's
-        // own outdir tier, not the legacy settings slot.
-        expect(studio.resolveOutDir(proj)).toBe(
-            path.resolve('C:/instance-out'),
-        );
+        // The instance resolves its own project's dist root through its own
+        // provider — not the anchored project's outdir tier, not the legacy
+        // settings slot; the value never depends on any tier.
+        expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
         expect(spies.legacyLogger).not.toHaveBeenCalled();
         expect(spies.legacySettings).not.toHaveBeenCalled();
         expect(spies.legacyTransport).not.toHaveBeenCalled();
@@ -1187,33 +1138,34 @@ describe('studio.resolveOutDir (doc 13 §10-A): the five-tier outdir reader', ()
 
     it('repeated calls with unchanged settings return the same result (stateless, no hidden drift)', () => {
         const proj = makeProject('RepeatStable');
-        const studio = createPzStudio({
-            settings: () => ({ workspace: { outdir: 'C:/stable-out' } }),
-        });
+        const provider = vi.fn(() => ({
+            workspace: { outdir: 'C:/stable-out' },
+        }));
+        const studio = createPzStudio({ settings: provider });
 
-        expect(studio.resolveOutDir(proj)).toBe(path.resolve('C:/stable-out'));
-        expect(studio.resolveOutDir(proj)).toBe(path.resolve('C:/stable-out'));
+        expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
+        expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
+        expect(provider).toHaveBeenCalledTimes(2);
     });
 
-    it('repeated calls observe changed settings immediately (no caching)', () => {
+    it('repeated calls re-read the settings provider every time (no caching)', () => {
         const proj = makeProject('RepeatChanged');
-        let userOut = 'C:/before-out';
-        const studio = createPzStudio({
-            settings: () => ({ user: { outdir: userOut } }),
-        });
+        const provider = vi.fn(() => ({ user: { outdir: 'C:/before-out' } }));
+        const studio = createPzStudio({ settings: provider });
 
-        expect(studio.resolveOutDir(proj)).toBe(path.resolve('C:/before-out'));
-        userOut = 'C:/after-out';
-        expect(studio.resolveOutDir(proj)).toBe(path.resolve('C:/after-out'));
+        expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
+        provider.mockReturnValue({ user: { outdir: 'C:/after-out' } });
+        // The value is the dist root either way — but the provider is
+        // re-consulted, never memoized.
+        expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
+        expect(provider).toHaveBeenCalledTimes(2);
     });
 
-    it('re-reads the fixture: a project.json outdir edit between calls is picked up', () => {
-        const proj = makeProject('EditBetweenCalls');
+    it('re-reads the fixture: a project.json outdir edit between calls does not move the dist root', () => {
+        const proj = makeProject('EditBetweenCalls', 'original-out');
         const studio = createPzStudio({ settings: () => undefined });
 
-        expect(studio.resolveOutDir(proj)).toBe(
-            path.join(fakeHome(), 'Zomboid', 'Workshop'),
-        );
+        expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
 
         const raw = JSON.parse(
             fs.readFileSync(path.join(proj, 'project.json'), 'utf8'),
@@ -1221,7 +1173,9 @@ describe('studio.resolveOutDir (doc 13 §10-A): the five-tier outdir reader', ()
         raw.outdir = 'edited-out';
         fs.writeFileSync(path.join(proj, 'project.json'), JSON.stringify(raw));
 
-        expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'edited-out'));
+        // Dist-always: the edited outdir is a deployment target; the
+        // engine's root stays put.
+        expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
     });
 
     it('resolves while an engine run parks inside the FIFO lock — never queues behind it', async () => {
@@ -1250,9 +1204,7 @@ describe('studio.resolveOutDir (doc 13 §10-A): the five-tier outdir reader', ()
 
             // The engine lock is HELD by the parked run here: the reader is
             // synchronous and lock-free, so this call cannot queue behind it.
-            expect(studio.resolveOutDir(proj)).toBe(
-                path.resolve('C:/reader-out'),
-            );
+            expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
 
             // The reader neither released nor advanced the engine.
             expect(events).not.toContain('a:end');

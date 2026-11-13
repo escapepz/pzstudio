@@ -110,6 +110,12 @@ export const migration = {
 
     /**
      * Detects if config.json needs migration.
+     *
+     * Dist-always amendment (2026-11-12): `outdir` is no longer a required
+     * field — an unconfigured global config is a legitimate pure-build
+     * state, never a migration trigger. A missing outdir on a config that
+     * needs migration for OTHER reasons still gets the v1→v2 stamp in
+     * upgradeConfig (the migrating user keeps their Workshop target).
      */
     checkConfig: (config: any): MigrationResult => {
         const issues: string[] = [];
@@ -118,10 +124,6 @@ export const migration = {
 
         if (!config.templates || Object.keys(config.templates).length === 0) {
             issues.push('missing or empty "templates"');
-        }
-
-        if (!config.outdir) {
-            issues.push('missing "outdir"');
         }
 
         if (issues.length > 0) {

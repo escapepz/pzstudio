@@ -26,8 +26,23 @@
         </script>
         <!-- End Google Tag Manager -->
         <style>
+            /* PZ Studio monochrome brand tokens (docs/brand/tokens.css) */
+            :root {
+                --pz-color-near-black: #090a0b;
+                --pz-color-dark-surface: #121416;
+                --pz-color-elevated-surface: #202327;
+                --pz-color-border: #353a40;
+                --pz-color-secondary-text: #aeb4bb;
+                --pz-color-primary-white: #f8f8f6;
+            }
+
             * {
                 box-sizing: border-box;
+            }
+
+            ::selection {
+                background: var(--pz-color-primary-white);
+                color: var(--pz-color-near-black);
             }
 
             body {
@@ -42,25 +57,91 @@
                     -apple-system,
                     'Segoe UI',
                     sans-serif;
-                background: #f6f7f9;
-                color: #1c2430;
+                background-color: var(--pz-color-near-black);
+                /* Technical construction grid (32px modules) */
+                background-image:
+                    linear-gradient(
+                        to right,
+                        rgba(53, 58, 64, 0.22) 1px,
+                        transparent 1px
+                    ),
+                    linear-gradient(
+                        to bottom,
+                        rgba(53, 58, 64, 0.22) 1px,
+                        transparent 1px
+                    );
+                background-size: 32px 32px;
+                color: var(--pz-color-primary-white);
                 text-align: center;
             }
 
+            /* Cockpit frame: structural 1px hairline panel over the
+               construction grid, with white crosshair corner ticks
+               (docs/brand/studio.html corner-ticks motif) */
             main {
-                padding: 3rem 1.5rem;
+                position: relative;
+                width: 100%;
                 max-width: 40rem;
+                margin: 0 1rem;
+                padding: 3rem 2rem;
+                background: var(--pz-color-near-black);
+                border: 1px solid var(--pz-color-border);
+            }
+
+            .corner-tick {
+                position: absolute;
+                width: 10px;
+                height: 10px;
+                pointer-events: none;
+            }
+
+            .tick-tl {
+                top: -1px;
+                left: -1px;
+                border-top: 2px solid var(--pz-color-primary-white);
+                border-left: 2px solid var(--pz-color-primary-white);
+            }
+
+            .tick-tr {
+                top: -1px;
+                right: -1px;
+                border-top: 2px solid var(--pz-color-primary-white);
+                border-right: 2px solid var(--pz-color-primary-white);
+            }
+
+            .tick-bl {
+                bottom: -1px;
+                left: -1px;
+                border-bottom: 2px solid var(--pz-color-primary-white);
+                border-left: 2px solid var(--pz-color-primary-white);
+            }
+
+            .tick-br {
+                bottom: -1px;
+                right: -1px;
+                border-bottom: 2px solid var(--pz-color-primary-white);
+                border-right: 2px solid var(--pz-color-primary-white);
+            }
+
+            .brand-mark {
+                width: 64px;
+                height: 64px;
+                margin: 0 auto 1.5rem;
+                display: block;
+                color: var(--pz-color-primary-white);
             }
 
             h1 {
                 font-size: 2.25rem;
-                letter-spacing: -0.02em;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                font-weight: 700;
                 margin: 0 0 0.5rem;
             }
 
             .pitch {
                 font-size: 1.25rem;
-                color: #46536a;
+                color: var(--pz-color-secondary-text);
                 margin: 0 0 2.5rem;
             }
 
@@ -74,17 +155,26 @@
             a.cta {
                 display: inline-block;
                 padding: 0.75rem 1.5rem;
-                border-radius: 0.5rem;
-                background: #2563eb;
-                color: #ffffff;
+                border: 1px solid var(--pz-color-border);
+                border-radius: 0.25rem;
+                background: var(--pz-color-primary-white);
+                color: var(--pz-color-near-black);
+                font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
                 font-size: 1rem;
-                font-weight: 600;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
                 text-decoration: none;
+                transition: all 120ms cubic-bezier(0.16, 1, 0.3, 1);
             }
 
             a.cta:hover,
             a.cta:focus-visible {
-                background: #1d4ed8;
+                background: var(--pz-color-secondary-text);
+            }
+
+            a.cta:active {
+                transform: translateY(1px);
             }
 
             .cmd-row {
@@ -98,39 +188,44 @@
 
             code {
                 font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
-                background: #e7eaf0;
-                color: #1c2430;
+                background: var(--pz-color-dark-surface);
+                color: var(--pz-color-primary-white);
+                border: 1px solid var(--pz-color-border);
                 padding: 0.5rem 0.75rem;
-                border-radius: 0.375rem;
+                border-radius: 0.25rem;
                 font-size: 0.95rem;
             }
 
             button.copy {
                 padding: 0.5rem 0.9rem;
-                border-radius: 0.375rem;
-                border: 1px solid #b9c1cf;
-                background: #ffffff;
-                color: #1c2430;
+                border-radius: 0.25rem;
+                border: 1px solid var(--pz-color-border);
+                background: var(--pz-color-dark-surface);
+                color: var(--pz-color-secondary-text);
+                font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
                 font-size: 0.9rem;
                 cursor: pointer;
                 min-width: 5.5rem;
+                transition: all 120ms cubic-bezier(0.16, 1, 0.3, 1);
             }
 
             button.copy:hover,
             button.copy:focus-visible {
-                border-color: #2563eb;
-                color: #2563eb;
+                border-color: var(--pz-color-primary-white);
+                color: var(--pz-color-primary-white);
             }
 
             .hint {
-                color: #64748b;
+                color: var(--pz-color-secondary-text);
                 font-size: 0.9rem;
                 margin: 0.5rem 0 0;
             }
 
             footer {
                 padding: 1.5rem;
-                color: #64748b;
+                border-top: 1px solid var(--pz-color-border);
+                color: var(--pz-color-secondary-text);
+                font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
                 font-size: 0.85rem;
             }
 
@@ -139,30 +234,62 @@
             }
 
             #first-build {
-                border: 1px solid #6a9955;
+                border: 1px solid var(--pz-color-border);
                 border-radius: 8px;
+                background: var(--pz-color-dark-surface);
                 padding: 12px 16px;
                 margin: 0 0 20px;
+                text-align: left;
             }
 
             #first-build h2 {
                 margin: 0 0 8px;
+                font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
                 font-size: 1.1rem;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+            }
+
+            #first-build h2::before {
+                content: '[OK] ';
+                font-weight: 700;
             }
 
             #first-build p {
                 margin: 0;
+                color: var(--pz-color-secondary-text);
             }
         </style>
     </head>
     <body>
         <main>
+            <span class="corner-tick tick-tl" aria-hidden="true"></span>
+            <span class="corner-tick tick-tr" aria-hidden="true"></span>
+            <span class="corner-tick tick-bl" aria-hidden="true"></span>
+            <span class="corner-tick tick-br" aria-hidden="true"></span>
+            <!-- PZ geometric monogram (docs/brand/pz-monogram-raw.svg, inline to stay dependency-free) -->
+            <svg
+                class="brand-mark"
+                viewBox="0 0 256 256"
+                fill="none"
+                role="img"
+                aria-label="PZ Studio monogram"
+            >
+                <g fill="currentColor" fill-rule="evenodd">
+                    <path
+                        d="M 28 44 L 112 44 L 138 70 L 138 122 L 112 148 L 56 148 L 56 212 L 28 212 Z M 56 72 L 56 120 L 106 120 L 110 108 L 110 84 L 106 72 Z"
+                    />
+                    <path
+                        d="M 144 44 L 228 44 L 228 72 L 134 184 L 228 184 L 228 212 L 104 212 L 104 184 L 198 72 L 144 72 Z"
+                    />
+                </g>
+            </svg>
             <h1>PZ Studio</h1>
             <p class="pitch">
                 Create, build and manage Project Zomboid Build 42 mods
             </p>
             <div id="first-build" hidden>
-                <h2>🎉 First build complete!</h2>
+                <h2>First build complete!</h2>
                 <p>
                     Your mod built successfully with PZ Studio. Enable it in
                     Project Zomboid's Mods menu to try it in game, or keep

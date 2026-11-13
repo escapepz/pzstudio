@@ -40,6 +40,9 @@ describe('new command e2e', () => {
             );
             expect(config.workshop.title).toBe('Test Project');
             expect(config.mods.test_author.name).toBe('Test Project');
+            // Dist-always: fresh projects carry the portable tilde token as
+            // their deployment target (game-ready after init + build).
+            expect(config.outdir).toBe('~/Zomboid/Workshop');
         } catch (e) {
             console.log('STDOUT:', result.stdout.join('\n'));
             console.log('STDERR:', result.stderr.join('\n'));

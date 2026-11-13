@@ -5,9 +5,23 @@
  * template cache location — then hands over to the host-blind engine in
  * @pzstudio/core. Diagnostics themselves never live here.
  */
-import { join } from 'path';
-import { NodeFileSystem, NODE_CAPABILITIES } from '@pzstudio/platform-node';
-import { runDoctor, DoctorReport } from '@pzstudio/core';
+import { basename, join, resolve } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import {
+    NodeFileSystem,
+    NODE_CAPABILITIES,
+    inspectMaterializeSlot,
+} from '@pzstudio/platform-node';
+import {
+    runDoctor,
+    DoctorReport,
+    resolveBuildOutputPath,
+    computeProjectId,
+    copyMarkerPath,
+    readCopySlotMarker,
+    type IProjectConfig,
+    type WorkshopLinkCheckInput,
+} from '@pzstudio/core';
 import {
     getExternalProjectDir,
     getOutDir,
@@ -15,9 +29,16 @@ import {
     readProjectConfig,
     setProjectDir,
 } from './helper';
-import { probeTemplateCacheDir } from './templateManager';
+import { probeTemplateCacheDir, getConfigPath } from './templateManager';
 import { legacyLogger, engineIo } from './logger';
 import type { PzStudioHostSettings, PzStudioLogger } from './invocation';
+import {
+    nodeLinkFs,
+    promisesFileSystem,
+    resolveMaterialization,
+    workshopReadMarker,
+    type MaterializationResolution,
+} from './linkStep';
 
 export interface ProjectDoctorOptions {
     /**
@@ -63,6 +84,9 @@ export async function runProjectDoctorCore(
     const io = { logger: deps.logger };
 
     let outDir: string | undefined;
+    let workshop:
+        | Awaited<ReturnType<typeof resolveDoctorWorkshopInputs>>
+        | undefined;
     try {
         const config = readProjectConfig(
             join(projectPath, 'project.json'),
@@ -75,6 +99,11 @@ export async function runProjectDoctorCore(
                 settings,
                 logger: deps.logger,
             });
+            workshop = await resolveDoctorWorkshopInputs(
+                projectPath,
+                config,
+                outDir,
+            );
         }
     } catch {
         // An invalid project.json is itself a doctor finding (reported
@@ -100,7 +129,111 @@ export async function runProjectDoctorCore(
         templateName: template?.name,
         capabilities: NODE_CAPABILITIES,
         gameBuild: deps.gameBuild,
+        workshopLinks: workshop?.workshopLinks,
+        materialization: workshop?.materialization,
     });
+}
+
+/**
+ * Host-side materialize inputs for the doctor (dist-always amendment §9):
+ * the materialize decision, and the per-item deployment-slot states (pure
+ * reads via the platform-node materialize inspector — the doctor never
+ * attaches). Only item dirs that EXIST in dist get a slot check; a missing
+ * variant has no built item to report on. The machine-level `materialize`
+ * key is read SILENTLY from the global config (readGlobalConfig() emits a
+ * verbose through the raw legacy sink, which would pollute the R1 mirror
+ * contract); a corrupt/unreadable config degrades to undefined.
+ */
+export async function resolveDoctorWorkshopInputs(
+    projectPath: string,
+    config: IProjectConfig,
+    effectiveOutdir?: string,
+): Promise<{
+    materialization: MaterializationResolution;
+    workshopLinks?: WorkshopLinkCheckInput[];
+}> {
+    const root = resolve(projectPath);
+    const materialization = resolveMaterialization({
+        projectRoot: root,
+        effectiveOutdir,
+        projectMaterialize: config.build?.materialize,
+        globalMaterialize: readMaterializeFromGlobalConfig(),
+    });
+    if (materialization.action !== 'materialize') {
+        return { materialization };
+    }
+
+    const platform =
+        process.platform === 'win32' ? ('win32' as const) : ('posix' as const);
+    const readMarker = workshopReadMarker(root);
+    const projectId = await computeProjectId(root);
+    const distRoot = materialization.distRoot;
+    const targetNonLocal =
+        materialization.mode === 'symlink' &&
+        (materialization.outDir!.startsWith('\\\\') ||
+            materialization.outDir!.startsWith('//'));
+
+    const items = (['main', 'development'] as const)
+        .map((variant) =>
+            resolveBuildOutputPath({ ...config, outdir: distRoot }, variant),
+        )
+        .filter((dir) => existsSync(dir))
+        .map((dir) => ({ name: basename(dir) }));
+    const workshopLinks: WorkshopLinkCheckInput[] = await Promise.all(
+        items.map(async ({ name }) => {
+            const inspection = await inspectMaterializeSlot(
+                nodeLinkFs,
+                join(materialization.outDir!, name),
+                join(distRoot, name),
+                {
+                    platform,
+                    readMarker,
+                    readCopyMarker: (slotDir) =>
+                        readCopySlotMarker(
+                            promisesFileSystem,
+                            copyMarkerPath(slotDir),
+                        ),
+                    copyIdentity: { projectId, itemId: name },
+                },
+            );
+            return {
+                item: name,
+                // Doctor vocabulary: the inspector's ABSENT (no slot at W)
+                // reads as a missing deployment; OK_LINK reads as
+                // attached-ok.
+                state:
+                    inspection.state === 'ABSENT'
+                        ? 'MISSING_LINK'
+                        : inspection.state === 'OK_LINK'
+                          ? 'ATTACHED_OK'
+                          : inspection.state,
+                detail: inspection.detail,
+                vdfPath: join(distRoot, `${name}.workshop.vdf`),
+            };
+        }),
+    );
+    return {
+        materialization: { ...materialization, targetNonLocal },
+        workshopLinks,
+    };
+}
+
+/**
+ * Reads the flat machine-level `materialize` key straight from the global
+ * config file, SILENTLY (R1 mirror contract — `readGlobalConfig()` emits a
+ * verbose through the raw legacy sink). A corrupt/unreadable config
+ * degrades to undefined (the hard default 'symlink' applies).
+ */
+function readMaterializeFromGlobalConfig(): 'symlink' | 'copy' | undefined {
+    try {
+        const raw = readFileSync(getConfigPath(), 'utf-8');
+        const parsed = JSON.parse(raw) as {
+            materialize?: 'symlink' | 'copy';
+        };
+        return parsed.materialize;
+    } catch {
+        return undefined;
+    }
 }
 
 /**

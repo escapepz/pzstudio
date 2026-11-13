@@ -1,14 +1,26 @@
-import { relative } from 'path';
+import { basename } from 'path';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { CliError } from '../errors';
-import { hasFlag } from '../args';
+import { extractFlag, hasFlag } from '../args';
 import type { FileDelta } from '@pzstudio/core';
-import { summarizeApplyResult } from '@pzstudio/core';
-import { projectDir, resolveProjectConfig } from '../helper';
+import { resolveBuildOutputPath, summarizeApplyResult } from '@pzstudio/core';
+import { distRootOf, projectDir, resolveProjectConfig } from '../helper';
+import { readGlobalConfig } from '../templateManager';
 import { info, verbose, warn } from '../logger';
 import { createDevSyncForEngine } from '../devsync';
-import { isWatchPathIgnored, resolveWatchVariants } from '../watch-shared';
+import {
+    assertWatchMaterializable,
+    isWatchPathIgnored,
+    parseMaterializeFlag,
+    resolveWatchVariants,
+    watchIgnoreGlobs,
+} from '../watch-shared';
+import {
+    maybeMaterializeBuiltItems,
+    resolveMaterialization,
+    type MaterializationResolution,
+} from '../linkStep';
 
 type ParcelWatcher = typeof import('@parcel/watcher');
 
@@ -17,14 +29,17 @@ addHelp(
     `Watch your project and keep your workshop outputs synced while you work.
 
     The Development Sync Engine re-plans and re-executes the smallest correct
-    change: saved files are applied incrementally, mod.info and ignore-rule
-    edits re-sync their mod, and project.json edits trigger a full rebuild.
+    change into the project's dist/ output. When an outdir is configured, each
+    item is also deployed there — a junction by default ('symlink'); copy
+    mode cannot keep up with live edits, so watch refuses it.
 
     Usages:
         pzstudio watch               - Syncs both the main and dev_branch outputs.
         pzstudio watch --production  - Syncs only the main workshop output.
         pzstudio watch --development - Syncs only the dev_branch workshop output.
         pzstudio watch --both        - Syncs both workshop outputs.
+        pzstudio watch --no-materialize        - Watch dist/ only; skip deployment.
+        pzstudio watch --materialize=copy      - Rejected: watch refuses copy mode.
         pzstudio watch --verbose     - Enable diagnostic output.
 
     Press Ctrl+C to stop.`,
@@ -54,9 +69,35 @@ export async function watchCmd() {
     });
 
     const projectPath = projectDir();
-    const outDir = projectConfig.outdir!;
+    // Dist-always: the watcher ignores the canonical dist output tree (the
+    // engine's only write target); the deployment target is never a
+    // watcher concern — except its junction, which surfaces the same
+    // writes when it sits inside the project (see watchIgnoreGlobs).
+    const outDir = distRootOf(projectPath);
+    // Materialize resolution BEFORE the session starts: the copy-mode
+    // refusal must fail the command up front, never mid-session.
+    const materialization: MaterializationResolution = resolveMaterialization({
+        projectRoot: projectPath,
+        effectiveOutdir: projectConfig.outdir,
+        projectMaterialize: projectConfig.build?.materialize,
+        globalMaterialize: readGlobalConfig()?.materialize,
+        flagMaterialize: parseMaterializeFlag(extractFlag('materialize')),
+        noMaterialize: hasFlag('no-materialize'),
+    });
+    assertWatchMaterializable(materialization);
     verbose(`Project root: ${projectPath}`);
     verbose(`Output root: ${outDir}`);
+    verbose(
+        `Deployment: ${
+            materialization.action === 'materialize'
+                ? materialization.outDir
+                : 'disabled (no outdir configured or --no-materialize)'
+        }; materialize: ${
+            materialization.action === 'materialize'
+                ? materialization.mode
+                : 'skip'
+        }`,
+    );
     // Compact single-line banner (CLI-7): what is syncing and how to stop.
     info(
         `Syncing '${projectConfig.workshop.title}' (${variants.join(' + ')}) — press Ctrl+C to stop.`,
@@ -74,6 +115,24 @@ export async function watchCmd() {
     } catch (e) {
         await session.stop();
         throw e;
+    }
+
+    // Materialize after the initial build: one junction per synced item
+    // (mode 'symlink'), created ONCE — every subsequent apply flows through
+    // the link at O(0) cost, which is exactly why watch runs in symlink
+    // mode. Non-fatal by contract; refusals surface and doctor reports.
+    if (materialization.action === 'materialize') {
+        const anchoredConfig = { ...projectConfig, outdir: outDir };
+        const itemNames = variants.map((variant) =>
+            basename(resolveBuildOutputPath(anchoredConfig, variant)),
+        );
+        await maybeMaterializeBuiltItems(materialization, itemNames, {
+            projectRoot: projectPath,
+            backupExisting: hasFlag('backup-existing-workshop'),
+            forceLink: hasFlag('relink') || hasFlag('force-link'),
+            onSurface: (line, level) =>
+                level === 'warn' ? warn(line) : info(line),
+        });
     }
 
     const pending: FileDelta[] = [];
@@ -121,7 +180,16 @@ export async function watchCmd() {
                 return;
             }
             for (const event of events) {
-                if (isWatchPathIgnored(projectPath, outDir, event.path)) {
+                if (
+                    isWatchPathIgnored(
+                        projectPath,
+                        outDir,
+                        event.path,
+                        materialization.action === 'materialize'
+                            ? materialization.outDir
+                            : undefined,
+                    )
+                ) {
                     continue;
                 }
                 // parcel's 'update' is our 'change'; directories pass
@@ -137,15 +205,17 @@ export async function watchCmd() {
             }
         },
         {
-            // Cheaper to drop the output tree natively than to filter its
-            // events after delivery (watching our own writes is pure noise).
-            ignore: (() => {
-                const outRel = relative(projectPath, outDir);
-                if (!outRel || outRel.startsWith('..')) {
-                    return undefined;
-                }
-                return [outRel, `${outRel}/**`];
-            })(),
+            // Cheaper to drop the output trees natively than to filter their
+            // events after delivery (watching our own writes is pure noise):
+            // the canonical dist root, plus the deployment root when it sits
+            // inside the project (a junction surfaces the same writes).
+            ignore: watchIgnoreGlobs(
+                projectPath,
+                outDir,
+                materialization.action === 'materialize'
+                    ? materialization.outDir
+                    : undefined,
+            ),
         },
     );
 
@@ -182,6 +252,15 @@ registerCommand({
         { name: 'production', conflicts: ['development', 'both'] },
         { name: 'development', conflicts: ['production', 'both'] },
         { name: 'both', conflicts: ['production', 'development'] },
+        { name: 'relink' },
+        { name: 'force-link' },
+        { name: 'backup-existing-workshop' },
+        {
+            name: 'materialize',
+            takesValue: true,
+            conflicts: ['no-materialize'],
+        },
+        { name: 'no-materialize', conflicts: ['materialize'] },
     ],
     run: () => watchCmd(),
 });
