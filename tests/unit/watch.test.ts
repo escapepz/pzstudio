@@ -187,6 +187,43 @@ describe('isWatchPathIgnored (pure)', () => {
         ).toBe(false);
     });
 
+    it('keeps .gitignore rule files (re-baseline parity) while unrelated dot entries stay dropped', () => {
+        // A rule-file change steers the ignore rules: .gitignore survives
+        // the dot filter exactly like .pzstudioignore, so a mod-scoped one
+        // reaches classifyDelta ('.gitignore changed (ignore rules)' — the
+        // owning mod re-baselines).
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                outDir,
+                path.join(projectPath, 'my_mod', '.gitignore'),
+            ),
+        ).toBe(false);
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                outDir,
+                path.join(projectPath, '.gitignore'),
+            ),
+        ).toBe(false);
+        // Unrelated dot entries stay invisible (.git segments, dotfile
+        // lookalikes).
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                outDir,
+                path.join(projectPath, 'my_mod', '.git', 'HEAD'),
+            ),
+        ).toBe(true);
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                outDir,
+                path.join(projectPath, 'my_mod', 'media', '.gitignore.bak'),
+            ),
+        ).toBe(true);
+    });
+
     it('keeps normal project files', () => {
         expect(
             isWatchPathIgnored(

@@ -1377,7 +1377,7 @@ describe('DevSyncController root-level ignore rules (gitignore integration)', ()
         await controller.dispose();
     });
 
-    it('reloads the rules when the root rule file changes, though the event itself stays dropped', async () => {
+    it('delivers the root rule-file event (dot-entry exemption) and still re-steers the predicate', async () => {
         serveRules('scratch/**\n');
         const session = fakeSession();
         const studio = studioStub(session, () => '/proj/dist');
@@ -1386,8 +1386,10 @@ describe('DevSyncController root-level ignore rules (gitignore integration)', ()
         const controller = new DevSyncController(studio, logger.logger);
         await controller.start(proj);
 
-        // The root .gitignore event is dropped as a dot entry and no engine
-        // re-baseline follows it — but it re-steers the predicate.
+        // The root .gitignore event survives the dot filter (re-baseline
+        // parity with .pzstudioignore) and reaches the batch — the engine
+        // classifies a ROOT-level rule file 'dot entry at project root', so
+        // no re-baseline follows it — but it re-steers the predicate first.
         handlers.change.forEach((fn) => fn({ fsPath: `${proj}/.gitignore` }));
         serveRules('*.log\n');
         await drain();
@@ -1402,9 +1404,34 @@ describe('DevSyncController root-level ignore rules (gitignore integration)', ()
 
         expect(appliedBatches(session)).toEqual([
             [
+                { type: 'change', path: `${proj}/.gitignore` },
                 { type: 'change', path: `${proj}/scratch/out.lua` },
                 { type: 'change', path: sourceFile },
             ],
+        ]);
+        await controller.dispose();
+    });
+
+    it('delivers a mod-scoped .gitignore event — the engine re-baselines the owning mod (watch parity)', async () => {
+        serveRules('');
+        const session = fakeSession();
+        const studio = studioStub(session, () => '/proj/dist');
+        const logger = recordingLogger();
+
+        const controller = new DevSyncController(studio, logger.logger);
+        await controller.start(proj);
+
+        // The fix this pins: a mod-scoped .gitignore change must reach the
+        // engine, whose classifyDelta re-baselines the owning mod ('.gitignore
+        // changed (ignore rules)') — exactly what a .pzstudioignore change
+        // does. The watch layer delivers; it never re-baselines itself.
+        handlers.change.forEach((fn) =>
+            fn({ fsPath: `${proj}/my_mod/.gitignore` }),
+        );
+        await flushOnce();
+
+        expect(appliedBatches(session)).toEqual([
+            [{ type: 'change', path: `${proj}/my_mod/.gitignore` }],
         ]);
         await controller.dispose();
     });
@@ -2077,6 +2104,45 @@ describe('DevSyncController pre-filtering over the real engine (UX-09)', () => {
                 ),
             { timeout: 5000 },
         );
+
+        await controller.dispose();
+    });
+
+    it('a mod-scoped .gitignore change re-baselines the owning mod (end-to-end watch parity)', async () => {
+        seedWorkshopTemplateCache();
+        const projectDir = makeProject('Gitignore Rebaseline');
+        const out = path.join(makeTemp(), 'out');
+        const V2 = recordingLogger();
+        const studio = createPzStudio({
+            logger: V2.logger,
+            settings: () => makeLayers(out),
+        });
+        const createDevSyncSpy = vi.spyOn(studio, 'createDevSync');
+        const controller = new DevSyncController(studio, V2.logger);
+        await controller.start(projectDir);
+        const session = createDevSyncSpy.mock.results[0]!.value as BuildSession;
+        const applySpy = vi.spyOn(session, 'apply');
+
+        // The rule file appears inside the mod and its event fires: the
+        // watch layer must deliver it (a dot-entry drop here would orphan
+        // classifyDelta's mod-scoped '.gitignore changed (ignore rules)'
+        // re-baseline until the next apply) and the engine must answer with
+        // the same mod-scoped rebuild a .pzstudioignore change produces.
+        fs.writeFileSync(
+            path.join(projectDir, 'my_mod', '.gitignore'),
+            'scratch/\n',
+        );
+        handlers.change.forEach((fn) =>
+            fn({ fsPath: path.join(projectDir, 'my_mod', '.gitignore') }),
+        );
+        await vi.waitFor(() => expect(applySpy).toHaveBeenCalledTimes(1), {
+            timeout: 5000,
+        });
+        const result = await applySpy.mock.results[0]!.value;
+        expect(result.errors).toEqual([]);
+        expect(result.scoped).toEqual([
+            { modId: 'my_mod', variants: ['main', 'development'] },
+        ]);
 
         await controller.dispose();
     });

@@ -37,11 +37,12 @@ import { ruleFileFs } from './ruleFs';
  * re-reads the closest rule files per applied path, and a nested rule-file
  * change re-baselines the owning mod), so this layer never walks nested
  * directories. The rules load once per session before the watcher exists,
- * reload when a ROOT-level rule-file event is scheduled (those events are
- * dropped as dot entries and no engine re-baseline follows them, so this
- * reload is the predicate's only in-band change signal) and after every
- * re-baseline the session reports. A failed reload retains the last good
- * matcher — the same side the engine keeps.
+ * reload when a ROOT-level rule-file event is scheduled (the event reaches
+ * the engine, but a ROOT-level rule file classifies 'dot entry at project
+ * root' — no re-baseline follows it — so this reload is the predicate's
+ * only in-band change signal) and after every re-baseline the session
+ * reports. A failed reload retains the last good matcher — the same side
+ * the engine keeps.
  *
  * A filtered drop is never fully silent (DEC-9): drops are counted and
  * reported as one aggregate line per batch at verbose level. Apply-phase
@@ -83,11 +84,11 @@ function isRootProjectJson(projectDir: string, path: string): boolean {
 /**
  * Whether `path` is THE root-level .gitignore or .pzstudioignore of the
  * session's project. These events are the ignore predicate's only in-band
- * change signal: the filter drops them as dot entries and no engine
- * re-baseline follows them, so nothing else refreshes the ROOT rules.
- * Nested rule files never match — their rules are engine apply-time
- * territory and their mod-scoped re-baseline flows through the post-apply
- * reload instead.
+ * change signal: they reach the engine, but a ROOT-level rule file
+ * classifies 'dot entry at project root' — no re-baseline follows — so
+ * nothing else refreshes the ROOT rules. Nested rule files never match —
+ * their rules are engine apply-time territory and their mod-scoped
+ * re-baseline flows through the post-apply reload instead.
  */
 function isRootRuleFile(projectDir: string, path: string): boolean {
     const dir = normalizePath(projectDir);
@@ -262,10 +263,12 @@ export class DevSyncController implements vscode.Disposable {
                 /* retain last good root — engine-aligned */
             }
         }
-        // A ROOT-level rule-file event re-steers the predicate: reload
-        // BEFORE the drop decision — the rule files are dot entries the
-        // filter drops and no engine re-baseline follows them, so this
-        // reload is the only in-band signal a root rule change gets.
+        // A ROOT-level rule-file event re-steers the predicate: no engine
+        // re-baseline follows it (classifyDelta puts a root-level rule
+        // file in the root-dot-entry ignore class), so this reload is the
+        // only in-band signal a root rule change gets. The event itself is
+        // delivered — a nested rule file is the one that re-baselines its
+        // owning mod.
         if (this.projectDir && isRootRuleFile(this.projectDir, path)) {
             void this.refreshIgnoreRules(this.projectDir);
         }

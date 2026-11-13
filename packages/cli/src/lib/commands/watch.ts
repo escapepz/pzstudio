@@ -99,9 +99,11 @@ export async function watchCmd() {
     // rule-file change re-baselines the owning mod (classifyDelta), so
     // duplicating that walk here would double-read every event and drift
     // from the engine's semantics. The ROOT rules steer the watch filter:
-    // loaded once at start, reloaded when a rule-file event arrives (the
-    // rule files are dot entries the filter drops, so the reload must run
-    // BEFORE the drop decision or a rule change would never be picked up).
+    // loaded once at start, reloaded when a rule-file event arrives
+    // (rule-file events survive the dot filter — a mod-scoped one must
+    // reach the engine for its mod-scoped re-baseline — and the reload
+    // keeps the watch-layer matcher in step; fire-and-forget, bursts
+    // coalesce into one fresh read and the next batch uses the outcome).
     const nodeFs = new NodeFileSystem();
     let ignoreMatcher: ((rel: string) => boolean) | undefined;
     const reloadIgnoreRules = async (): Promise<void> => {
@@ -224,10 +226,12 @@ export async function watchCmd() {
                 return;
             }
             for (const event of events) {
-                // A rule-file event re-steers the filter: reload BEFORE the
-                // drop decision (see the rule-loading block above). A failed
-                // reload retains the last good matcher; bursts coalesce into
-                // one fresh read each and the next batch uses the outcome.
+                // A rule-file event re-steers the filter AND reaches the
+                // engine below (a mod-scoped one re-baselines its owning
+                // mod there): trigger the reload, then apply the same
+                // shared drop decision. A failed reload retains the last
+                // good matcher; bursts coalesce into one fresh read each
+                // and the next batch uses the outcome.
                 const name = basename(event.path);
                 if (name === '.gitignore' || name === '.pzstudioignore') {
                     void reloadIgnoreRules();

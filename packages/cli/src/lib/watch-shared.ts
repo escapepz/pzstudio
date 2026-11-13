@@ -119,14 +119,16 @@ export function resolveWatchVariants(
  * Pure: should the watcher skip a path? Skips the output directory (watching
  * it would feed the engine its own writes), the deployment root when it
  * sits inside the project (same loop, surfaced through the junction), and
- * every dot segment (.git, .template-mod, ...) — except .pzstudioignore
- * files, which steer the ignore rules and are worth re-syncing on. LAST,
- * `extraIgnored` — the host's matcher over the ROOT-level .gitignore/
- * .pzstudioignore rules, built by the caller — is consulted as the final
- * drop-condition on the project-relative path (the same `rel` this function
- * computes, platform separators; the core matcher folds them itself): the
- * rails above always decide their own subtrees first, so a rule only ever
- * adds drops outside them and is never the thing keeping them safe.
+ * every dot segment (.git, .template-mod, ...) — except the rule files
+ * .gitignore and .pzstudioignore: a rule-file change steers the ignore
+ * rules, and a mod-scoped one must reach the engine, whose classifyDelta
+ * re-baselines the owning mod. LAST, `extraIgnored` — the host's matcher
+ * over the ROOT-level .gitignore/.pzstudioignore rules, built by the caller
+ * — is consulted as the final drop-condition on the project-relative path
+ * (the same `rel` this function computes, platform separators; the core
+ * matcher folds them itself): the rails above always decide their own
+ * subtrees first, so a rule only ever adds drops outside them and is never
+ * the thing keeping them safe.
  */
 export function isWatchPathIgnored(
     projectPath: string,
@@ -151,7 +153,9 @@ export function isWatchPathIgnored(
             .split(sep)
             .some(
                 (segment) =>
-                    segment.startsWith('.') && segment !== '.pzstudioignore',
+                    segment.startsWith('.') &&
+                    segment !== '.pzstudioignore' &&
+                    segment !== '.gitignore',
             )
     ) {
         return true;
