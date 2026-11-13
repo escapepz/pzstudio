@@ -159,9 +159,12 @@ Planner rules worth remembering:
 
 Per-directory ignore rules for every copy/scaffold operation (new, add, build,
 rename), the watch/devsync filters, and the extension's project explorer. Both
-files are rule sources read through one engine in `@pzstudio/core`
-(`readIgnoreRulesForDir` / `createIgnoreMatcher`, `packages/core/src/execute.ts`
-— the `ignore` package with real gitignore semantics).
+files are rule sources for one matching engine: `createIgnoreMatcher` in
+`@pzstudio/core` (`packages/core/src/execute.ts` — the `ignore` package with
+real gitignore semantics) decides every drop, while each consumer reads its
+rule files itself (`readIgnoreRulesForDir` for the watch/devsync filters and
+the explorer; the build copy parses them locally) and hands the entries to
+that matcher.
 
 ```
 # comments allowed
@@ -204,6 +207,10 @@ exact-file.txt        ← plain entry: matches only at this file's own level (fi
   `.pzstudioignore` **or `.gitignore`** re-steers ignore handling — the watch filter
   reloads its root rules, and a mod-scoped rule-file change re-baselines the owning mod
   (see `04-commands.md` → watch).
+- The output roots are protected at the consumer layer, above the rules: events under
+  the build output tree (`dist/`) or a deployment root inside the project are dropped
+  by the watch filter's own rail before the rule matcher is ever consulted — a
+  `dist/**` rule can never own or break that protection.
 
 ## What writes where (matrix)
 

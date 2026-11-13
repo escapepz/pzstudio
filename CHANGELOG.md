@@ -45,9 +45,13 @@ tool-only releases. Game compatibility is declared separately in
   (`ignoreDotFiles`), `.pzstudioignore` is exempt from dot-file exclusion
   but `.gitignore` is not — a `.gitignore` is still always **read** as
   rules, it just may not be copied as a file. A changed `.gitignore`
-  re-baselines ignore handling exactly like a changed `.pzstudioignore`
-  (the watch filter reloads its root rules; a mod-scoped rule change
-  re-baselines the owning mod).
+  re-steers ignore handling exactly like a changed `.pzstudioignore`:
+  the watch filter reloads its root rules, and a mod-scoped rule change
+  re-baselines the owning mod.
+- The watch/devsync output protection sits above the rules: events under
+  the build output tree (`dist/`) or a deployment root inside the project
+  are dropped by the watch layer's own rail before the rule matcher is ever
+  consulted — a `dist/**` rule can never own or break that protection.
 - No changes to the JSON contract, the exit-code matrix, or the stream
   contract.
 
