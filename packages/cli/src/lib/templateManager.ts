@@ -27,8 +27,9 @@ import type {
     TemplateCategory,
     GlobalConfig,
     ITemplateConfig,
+    IgnoreRuleSet,
 } from '@pzstudio/core';
-import { DEFAULT_TEMPLATES } from '@pzstudio/core';
+import { createIgnoreMatcher, DEFAULT_TEMPLATES } from '@pzstudio/core';
 import type { TemplateTransport } from '@pzstudio/platform';
 import type {
     IoScope,
@@ -46,8 +47,31 @@ import { getTemplateTransport } from './transport';
 export type { TemplateCategory, GlobalConfig, ITemplateConfig };
 
 /**
- * Creates a filter for fs.cpSync derived from .pzstudioignore or hardcoded defaults.
- * Supports nested .pzstudioignore files where the closest one to the subtree wins.
+ * Parses one ignore file's content into entries with the core engine's
+ * semantics (trimmed, backslashes folded to '/', trailing slashes stripped,
+ * blanks and comments dropped): the same shape readIgnoreRulesForDir
+ * produces on the ProjectFileSystem contract. Returns null when nothing
+ * usable remains — a directory whose rule files all parse empty carries no
+ * rules at all.
+ */
+function parseIgnoreEntries(content: string): string[] | null {
+    const lines = content
+        .split(/\r?\n/)
+        .map((line: string) =>
+            line.trim().replace(/\\/g, '/').replace(/\/+$/, ''),
+        )
+        .filter((line: string) => line && !line.startsWith('#'));
+    return lines.length > 0 ? lines : null;
+}
+
+/**
+ * Creates a filter for fs.cpSync derived from .gitignore/.pzstudioignore or
+ * hardcoded defaults. Matching is delegated to the core engine
+ * (createIgnoreMatcher): each directory's rule set carries both files, the
+ * closest directory carrying rules between the entry's parent and the copy
+ * root decides, and within that level .gitignore entries are added first so
+ * .pzstudioignore outranks them. The basenames mod.info, .pzstudioignore
+ * and .gitignore are rails the engine always keeps regardless of rules.
  * @param sourceRoot The root directory of the copy operation
  * @param options Filter options
  * @returns A filter function compatible with fs.cpSync
@@ -56,57 +80,42 @@ export function createIgnoreFilter(
     sourceRoot: string,
     options: { excludeIgnoreFile?: boolean; ignoreDotFiles?: boolean } = {},
 ): (src: string, dest: string) => boolean {
-    // Cache for compiled filter functions per directory
-    const filterCache: Record<string, (relPath: string) => boolean | null> = {};
+    // Cache for parsed rule sets per directory (both rule files, read once)
+    const rulesCache: Record<string, IgnoreRuleSet> = {};
 
     /**
-     * Resolves and caches ignore rules for a specific directory.
-     * Searches for .pzstudioignore in the given directory.
+     * Resolves and caches the ignore rules of a specific directory:
+     * its .pzstudioignore and .gitignore entries.
      */
-    const getFilterForDir = (
-        dir: string,
-    ): ((relPath: string) => boolean | null) => {
-        if (filterCache[dir]) return filterCache[dir];
+    const getRulesForDir = (dir: string): IgnoreRuleSet => {
+        if (rulesCache[dir]) return rulesCache[dir];
 
-        const ignorePath = join(dir, '.pzstudioignore');
-        let entries: string[] = [];
+        const ruleSet: IgnoreRuleSet = { pzstudio: null, git: null };
 
-        if (existsSync(ignorePath)) {
+        const pzstudioPath = join(dir, '.pzstudioignore');
+        if (existsSync(pzstudioPath)) {
             try {
-                const content = readFileSync(ignorePath, 'utf-8');
-                entries = content
-                    .split(/\r?\n/)
-                    .map((line: string) => line.trim())
-                    .filter((line: string) => line && !line.startsWith('#'));
+                ruleSet.pzstudio = parseIgnoreEntries(
+                    readFileSync(pzstudioPath, 'utf-8'),
+                );
             } catch (_e) {
-                warn(`Failed to read .pzstudioignore at ${ignorePath}.`);
+                warn(`Failed to read .pzstudioignore at ${pzstudioPath}.`);
             }
         }
 
-        if (entries.length === 0) {
-            filterCache[dir] = () => null; // No local rules
-            return filterCache[dir];
+        const gitPath = join(dir, '.gitignore');
+        if (existsSync(gitPath)) {
+            try {
+                ruleSet.git = parseIgnoreEntries(
+                    readFileSync(gitPath, 'utf-8'),
+                );
+            } catch (_e) {
+                warn(`Failed to read .gitignore at ${gitPath}.`);
+            }
         }
 
-        filterCache[dir] = (relPath: string) => {
-            // RelPath is relative to the directory where .pzstudioignore lives
-            for (let entry of entries) {
-                // Normalize entry to use forward slashes
-                entry = entry.replace(/\\/g, '/');
-
-                // Remove trailing slashes for directory prefix matching
-                if (entry.endsWith('/')) {
-                    entry = entry.slice(0, -1);
-                }
-
-                if (relPath === entry || relPath.startsWith(entry + '/')) {
-                    return false; // Ignored
-                }
-            }
-            return true; // Not ignored by this file
-        };
-
-        return filterCache[dir];
+        rulesCache[dir] = ruleSet;
+        return ruleSet;
     };
 
     return (src: string) => {
@@ -144,24 +153,25 @@ export function createIgnoreFilter(
             return !options.excludeIgnoreFile;
         }
 
-        // Rule 2: Search for the closest .pzstudioignore in the hierarchy up to sourceRoot
-        let currentPath = lstatSync(src).isDirectory() ? src : dirname(src);
-
-        while (currentPath.length >= sourceRoot.length) {
-            const filter = getFilterForDir(currentPath);
-            const relToIgnore = relative(currentPath, src).replace(/\\/g, '/');
-
-            if (relToIgnore) {
-                const result = filter(relToIgnore);
-                if (result === false) return false;
-                if (result === true) return true; // Closest one wins
+        // Rule 2: The closest directory carrying rules between the entry's
+        // parent and the source root decides (the core engine's walk — a
+        // directory entry is governed by its parent's rules, never its own).
+        const segments = relToRoot.split('/');
+        const rulesByDir: Record<string, IgnoreRuleSet> = {};
+        for (let end = segments.length - 1; end >= 0; end -= 1) {
+            const key = segments.slice(0, end).join('/');
+            const dir =
+                end === 0
+                    ? sourceRoot
+                    : join(sourceRoot, ...segments.slice(0, end));
+            const ruleSet = getRulesForDir(dir);
+            if (ruleSet.pzstudio !== null || ruleSet.git !== null) {
+                rulesByDir[key] = ruleSet;
+                break; // Closest one wins
             }
-
-            if (currentPath === sourceRoot) break;
-            currentPath = dirname(currentPath);
         }
 
-        return true;
+        return !createIgnoreMatcher(rulesByDir).isIgnored(relToRoot);
     };
 }
 

@@ -206,6 +206,80 @@ describe('templateManager - createIgnoreFilter', () => {
             false,
         );
     });
+
+    it('honors .gitignore globs co-located with the filter root', () => {
+        actualFs.writeFileSync(join(tmpRoot, '.gitignore'), 'build/\n*.tmp\n');
+        actualFs.mkdirSync(join(tmpRoot, 'build'));
+        actualFs.writeFileSync(join(tmpRoot, 'build', 'x.lua'), 'test');
+        actualFs.writeFileSync(join(tmpRoot, 'a.tmp'), 'test');
+        actualFs.writeFileSync(join(tmpRoot, 'keep.lua'), 'test');
+
+        const filter = createIgnoreFilter(tmpRoot);
+
+        expect(filter(join(tmpRoot, 'build'), '')).toBe(false);
+        expect(filter(join(tmpRoot, 'build', 'x.lua'), '')).toBe(false);
+        expect(filter(join(tmpRoot, 'a.tmp'), '')).toBe(false);
+        expect(filter(join(tmpRoot, 'keep.lua'), '')).toBe(true);
+    });
+
+    it('honors .gitignore with .pzstudioignore outranking it at the same level', () => {
+        actualFs.writeFileSync(join(tmpRoot, '.gitignore'), '*.log\n');
+        actualFs.writeFileSync(join(tmpRoot, '.pzstudioignore'), '!a.log\n');
+        actualFs.writeFileSync(join(tmpRoot, 'a.log'), 'test');
+        actualFs.writeFileSync(join(tmpRoot, 'b.log'), 'test');
+
+        const filter = createIgnoreFilter(tmpRoot);
+
+        expect(filter(join(tmpRoot, 'a.log'), '')).toBe(true);
+        expect(filter(join(tmpRoot, 'b.log'), '')).toBe(false);
+    });
+
+    it('lets nested .gitignore rules decide closest-wins like the core engine', () => {
+        actualFs.writeFileSync(join(tmpRoot, '.gitignore'), '*.log\n');
+        actualFs.mkdirSync(join(tmpRoot, 'media'));
+        actualFs.writeFileSync(
+            join(tmpRoot, 'media', '.gitignore'),
+            '!keep.log\n',
+        );
+        actualFs.writeFileSync(join(tmpRoot, 'other.log'), 'test');
+        actualFs.writeFileSync(join(tmpRoot, 'media', 'keep.log'), 'test');
+        actualFs.writeFileSync(join(tmpRoot, 'media', 'other.log'), 'test');
+
+        const filter = createIgnoreFilter(tmpRoot);
+
+        expect(filter(join(tmpRoot, 'other.log'), '')).toBe(false);
+        // The closest directory carrying rules decides entirely: media's
+        // '!keep.log' is its only rule there, so media's other.log is kept.
+        expect(filter(join(tmpRoot, 'media', 'keep.log'), '')).toBe(true);
+        expect(filter(join(tmpRoot, 'media', 'other.log'), '')).toBe(true);
+    });
+
+    it('keeps the rails: mod.info and the rule files survive rules that name them', () => {
+        actualFs.writeFileSync(
+            join(tmpRoot, '.pzstudioignore'),
+            'mod.info\n.gitignore\nnested\n',
+        );
+        actualFs.writeFileSync(join(tmpRoot, '.gitignore'), '*.info\n');
+        actualFs.mkdirSync(join(tmpRoot, 'nested'));
+        actualFs.writeFileSync(
+            join(tmpRoot, 'nested', '.gitignore'),
+            '*.log\n',
+        );
+        actualFs.writeFileSync(join(tmpRoot, 'mod.info'), 'test');
+        actualFs.writeFileSync(join(tmpRoot, 'nested', 'media.log'), 'test');
+        actualFs.writeFileSync(join(tmpRoot, 'nested', 'media.lua'), 'test');
+
+        const filter = createIgnoreFilter(tmpRoot);
+
+        // Rails: always included whatever the rules say.
+        expect(filter(join(tmpRoot, 'mod.info'), '')).toBe(true);
+        expect(filter(join(tmpRoot, '.gitignore'), '')).toBe(true);
+        expect(filter(join(tmpRoot, '.pzstudioignore'), '')).toBe(true);
+        expect(filter(join(tmpRoot, 'nested', '.gitignore'), '')).toBe(true);
+        // The rules still bite everything that is not a rail.
+        expect(filter(join(tmpRoot, 'nested', 'media.log'), '')).toBe(false);
+        expect(filter(join(tmpRoot, 'nested', 'media.lua'), '')).toBe(true);
+    });
 });
 
 describe('templateManager - config and resolution', () => {
