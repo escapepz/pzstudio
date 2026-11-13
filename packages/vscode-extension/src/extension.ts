@@ -1,12 +1,16 @@
 import * as vscode from 'vscode';
 import { createPzStudio } from '@pzstudio/cli/api';
-import { createPZLogger } from './util/logger';
-import { initExtensionL10n } from './util/l10n';
+import { createPZLogger, type PZLoggerErrorAction } from './util/logger';
+import { initExtensionL10n, t } from './util/l10n';
 import { readPzStudioHostSettings } from './util/settings';
 import { createCommandRunner } from './util/execute';
 import { notifyFirstBuildSuccess } from './util/firstSuccess';
 import { DevSyncController } from './util/devsync';
-import { DevSyncManager, DevSyncStateService } from './util/devSyncState';
+import {
+    DevSyncManager,
+    DevSyncStateService,
+    type DevSyncState,
+} from './util/devSyncState';
 import { createProjectDiagnostics } from './util/doctor';
 import { registerAllCommands } from './commands';
 import { registerExplorerCommands } from './commands/explorer';
@@ -21,6 +25,93 @@ import {
     SHOW_ALL_FILES_CONTEXT_KEY,
 } from './providers/projectExplorer';
 import { BuildTaskProvider, PZ_TASK_TYPE } from './providers/buildTaskProvider';
+
+/**
+ * UX-15 Task 4: the error-notification actions the DevSync controller's
+ * logger offers. Only a run in flight has something to stop — off (including
+ * the idle-with-lastError state a failed run lands in) the factory returns
+ * no action, so the offered button can never be dead. The getter is lazy:
+ * the manager does not exist when the logger is constructed (the controller
+ * needs the logger first), and the thunk only ever RUNS when an apply-error
+ * notification is built — mid-run, long after activation — so the
+ * construction cycle it breaks is safe.
+ */
+export function devSyncErrorActions(
+    getManager: () => DevSyncManager | undefined,
+): () => PZLoggerErrorAction[] {
+    return () => {
+        const manager = getManager();
+        if (!manager || manager.state.phase === 'idle') {
+            return [];
+        }
+        return [
+            {
+                label: t('Stop Sync'),
+                // Safe anytime: stop() is idempotent — syncing tears down,
+                // starting queues the stop, idle/stopping no-op (the
+                // manager contract). The notification may outlive the run
+                // it reported; a late click then lands on a no-op.
+                run: (): void => {
+                    void manager.stop();
+                },
+            },
+        ];
+    };
+}
+
+/**
+ * UX-15 Task 4: the explorer badge — the DevSyncManager's state painted onto
+ * the project explorer's tree view through the same onDidChange subscription
+ * pattern the status bar uses (commands/watch.ts). A run mid-flight badges 1
+ * — the manager publishes no pending count, so the badge is the state
+ * indicator, not a precision meter (the same mid-flight rule the status bar
+ * paints by: starting/syncing/stopping all count as in flight) — and idle
+ * clears it, including the idle-with-lastError state a failed run lands in.
+ */
+export function registerDevSyncTreeBadge<T>(
+    manager: DevSyncManager,
+    treeView: vscode.TreeView<T>,
+): vscode.Disposable {
+    // The folder-title convention commands/watch.ts renders the status bar
+    // with: the projectTitle once beginSyncing published it, else the
+    // projectDir's last segment (both separators fold).
+    const runTitle = (state: DevSyncState): string =>
+        state.projectTitle ??
+        state.projectDir?.split(/[\\/]/).filter(Boolean).pop() ??
+        state.projectDir ??
+        '';
+
+    const render = (state: DevSyncState): void => {
+        if (state.phase === 'idle') {
+            treeView.badge = undefined;
+            return;
+        }
+        const title = runTitle(state);
+        let tooltip: string;
+        if (state.phase === 'starting') {
+            tooltip = t(
+                "PZStudio: development sync for '{0}' is starting…",
+                title,
+            );
+        } else if (state.phase === 'stopping') {
+            tooltip = t(
+                "PZStudio: development sync for '{0}' is stopping…",
+                title,
+            );
+        } else {
+            tooltip = t("PZStudio: development sync running for '{0}'.", title);
+        }
+        treeView.badge = { value: 1, tooltip };
+    };
+
+    render(manager.state);
+    const subscription = manager.onDidChange(render);
+    return {
+        dispose(): void {
+            subscription.dispose();
+        },
+    };
+}
 
 export async function activate(context: vscode.ExtensionContext) {
     // Load the display-language override before any UI string is produced.
@@ -61,11 +152,30 @@ export async function activate(context: vscode.ExtensionContext) {
     // Development Sync Engine (UX-15): ONE manager for the whole extension
     // lifetime — the lifecycle wrapper that drives the controller and
     // publishes every transition through the state service. The palette
-    // toggle and the status-bar indicator below are its only consumers;
-    // both gate on state.phase, so a click can never re-anchor a live run.
+    // toggle, the status-bar indicator and the explorer badge below are its
+    // only consumers; all gate on state.phase, so a click can never
+    // re-anchor a live run.
     const devSyncService = new DevSyncStateService();
-    const devSync = new DevSyncController(studio, pzLogger);
-    const devSyncManager = new DevSyncManager(devSync, devSyncService);
+    // UX-15 Task 4: the controller gets its OWN logger over the same
+    // channel — the one error surface whose notification carries the
+    // 'Stop Sync' action (the apply errors, DEC-6). Every other error
+    // surface (doctor, the command runner, the CLI engine) keeps the plain
+    // logger with Show Details only. devsync.ts is untouched: its sync
+    // logic already routes apply errors through logger.error.
+    // The two annotations are load-bearing: the getter closes over
+    // devSyncManager before its declaration, and without them TS's
+    // circular inference would land both as implicit any (TS7022).
+    const devSync: DevSyncController = new DevSyncController(
+        studio,
+        createPZLogger(
+            outputChannel,
+            devSyncErrorActions(() => devSyncManager),
+        ),
+    );
+    const devSyncManager: DevSyncManager = new DevSyncManager(
+        devSync,
+        devSyncService,
+    );
 
     // UX-15: the status-bar indicator — with the toggle's success popups
     // gone, this item is the run's user surface. It fires the existing
@@ -73,6 +183,11 @@ export async function activate(context: vscode.ExtensionContext) {
     // toggle; disposal with the subscriptions detaches the state
     // subscription and the item together.
     const devSyncStatusBar = registerDevSyncStatusBar(devSyncManager);
+
+    // UX-15 Task 4: the explorer badge — the manager's state painted onto
+    // the tree view created above, through the same subscription pattern
+    // the status bar follows; disposal detaches it like any subscription.
+    const devSyncBadge = registerDevSyncTreeBadge(devSyncManager, treeView);
 
     // Refresh the explorer when any project.json changes (new/added/renamed/
     // deleted mods all touch it).
@@ -101,6 +216,9 @@ export async function activate(context: vscode.ExtensionContext) {
         ...registerAllCommands(context, executePZCommand, studio),
         registerWatchCommand(devSyncManager),
         devSyncStatusBar,
+        // UX-15 Task 4: dropping it with the subscriptions detaches the
+        // badge's state subscription (the tree view itself disposes above).
+        devSyncBadge,
         // UX-16: user-invoked doctor failures route through the host logger
         // (one notification, channel detail, Show Details) — the runner
         // itself stays notification-free.

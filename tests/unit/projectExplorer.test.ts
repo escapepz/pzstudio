@@ -58,10 +58,31 @@ const vscodeMock = vi.hoisted(() => {
                 this.id = id;
             }
         },
+        // Functional (the extCommandsWatch.test.ts Task 3 pattern): the
+        // DevSync badge wiring subscribes to the manager's onDidChange, so
+        // the emitter must actually deliver. The provider's tree-data
+        // emitter keeps working — its fire() reaches no listeners here.
         EventEmitter: class {
-            event = vi.fn();
-            fire = vi.fn();
-            dispose = vi.fn();
+            listeners: Array<(value: unknown) => unknown> = [];
+            event = (listener: (value: unknown) => unknown) => {
+                this.listeners.push(listener);
+                return {
+                    dispose: () => {
+                        const index = this.listeners.indexOf(listener);
+                        if (index >= 0) {
+                            this.listeners.splice(index, 1);
+                        }
+                    },
+                };
+            };
+            fire = (value: unknown): void => {
+                for (const listener of [...this.listeners]) {
+                    listener(value);
+                }
+            };
+            dispose = vi.fn(() => {
+                this.listeners = [];
+            });
         },
         l10n: {
             // Pass-through: assertions compare against the English keys.
@@ -89,6 +110,12 @@ import {
     MOD_BRANCH_INFO_FILE,
     MOD_BRANCH_ICON_FILE,
 } from '../../packages/vscode-extension/src/providers/projectExplorer';
+import { registerDevSyncTreeBadge } from '../../packages/vscode-extension/src/extension';
+import {
+    DevSyncManager,
+    DevSyncStateService,
+} from '../../packages/vscode-extension/src/util/devSyncState';
+import type { DevSyncController } from '../../packages/vscode-extension/src/util/devsync';
 
 const asUri = (path: string) =>
     vscodeMock.Uri.joinPath(vscodeMock.Uri.joinPath({ path: '' }), path);
@@ -1695,5 +1722,130 @@ describe('ignore-filtered entries', () => {
         } finally {
             vscodeMock.Uri.parse = originalParse;
         }
+    });
+});
+
+// ── UX-15 Task 4: DevSync explorer badge ────────────────────────────────────
+//
+// extension.ts drives treeView.badge from the shared DevSyncManager through
+// the same onDidChange subscription pattern the status bar (Task 3) uses —
+// the tree mock below is judged by what the wiring actually paints. The
+// manager publishes no pending count, so the badge is a state indicator, not
+// a precision meter: constant 1 while a run is mid-flight (starting /
+// syncing / stopping — the same rule the status bar paints by) and cleared
+// on idle, including the idle-with-lastError state a failed run lands in.
+
+describe('DevSync explorer badge (UX-15)', () => {
+    interface BadgeTreeView {
+        badge: { value: number; tooltip: string } | undefined;
+    }
+
+    /**
+     * A real DevSyncManager over a minimal controller double: only the
+     * lifecycle phases matter here — the badge reads the manager's
+     * published state, never the controller's internals.
+     */
+    function makeManager(
+        startImpl: () => Promise<void> = async () => {},
+        stopImpl: () => Promise<void> = async () => {},
+    ): DevSyncManager {
+        const controller = {
+            start: vi.fn(startImpl),
+            stop: vi.fn(stopImpl),
+            dispose: vi.fn(async () => {}),
+        } as unknown as DevSyncController;
+        return new DevSyncManager(controller, new DevSyncStateService());
+    }
+
+    function makeTreeView(): BadgeTreeView & vscode.TreeView<never> {
+        return { badge: undefined } as never;
+    }
+
+    it('renders the initial idle state with no badge', () => {
+        const manager = makeManager();
+        const treeView = makeTreeView();
+        const badge = registerDevSyncTreeBadge(manager, treeView);
+
+        expect(treeView.badge).toBeUndefined();
+
+        badge.dispose();
+        return manager.dispose();
+    });
+
+    it('shows the badge mid-flight (starting → syncing → stopping) and clears it on idle', async () => {
+        let releaseStart!: () => void;
+        const startGate = new Promise<void>((resolve) => {
+            releaseStart = resolve;
+        });
+        let releaseStop!: () => void;
+        const stopGate = new Promise<void>((resolve) => {
+            releaseStop = resolve;
+        });
+        const manager = makeManager(
+            () => startGate,
+            () => stopGate,
+        );
+        const treeView = makeTreeView();
+        const badge = registerDevSyncTreeBadge(manager, treeView);
+
+        // starting: the run is anchored before the initial build settles —
+        // the badge is already up (mid-flight visual, like the status bar).
+        const starting = manager.start('/ws/proj');
+        expect(manager.state.phase).toBe('starting');
+        expect(treeView.badge).toBeDefined();
+        expect(treeView.badge?.value).toBe(1);
+        expect(treeView.badge?.tooltip).toContain('is starting');
+        expect(treeView.badge?.tooltip).toContain("'proj'");
+
+        releaseStart();
+        await starting;
+        expect(manager.state.phase).toBe('syncing');
+        expect(treeView.badge?.tooltip).toBe(
+            "PZStudio: development sync running for 'proj'.",
+        );
+
+        // stopping keeps the badge until the teardown settles.
+        const stopping = manager.stop();
+        expect(manager.state.phase).toBe('stopping');
+        expect(treeView.badge).toBeDefined();
+        expect(treeView.badge?.tooltip).toContain('is stopping');
+
+        releaseStop();
+        await stopping;
+        expect(manager.state.phase).toBe('idle');
+        expect(treeView.badge).toBeUndefined();
+
+        badge.dispose();
+        await manager.dispose();
+    });
+
+    it('stays cleared on the idle-with-lastError state a failed run lands in', async () => {
+        const manager = makeManager(async () => {
+            throw new Error('boom');
+        });
+        const treeView = makeTreeView();
+        const badge = registerDevSyncTreeBadge(manager, treeView);
+
+        await expect(manager.start('/ws/proj')).rejects.toThrow('boom');
+
+        expect(manager.state.phase).toBe('idle');
+        expect(manager.state.lastError).toBe('boom');
+        expect(treeView.badge).toBeUndefined();
+
+        badge.dispose();
+        await manager.dispose();
+    });
+
+    it('dispose detaches the subscription: later transitions stop repainting', async () => {
+        const manager = makeManager();
+        const treeView = makeTreeView();
+        const badge = registerDevSyncTreeBadge(manager, treeView);
+        badge.dispose();
+
+        await manager.start('/ws/proj');
+
+        expect(manager.state.phase).toBe('syncing');
+        expect(treeView.badge).toBeUndefined();
+        await manager.dispose();
     });
 });

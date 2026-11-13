@@ -35,6 +35,12 @@ vi.mock('vscode', async () => {
 import * as vscode from 'vscode';
 import { configurationStore } from '../helpers/vscode-mock';
 import { DevSyncController } from '../../packages/vscode-extension/src/util/devsync';
+import {
+    DevSyncManager,
+    DevSyncStateService,
+} from '../../packages/vscode-extension/src/util/devSyncState';
+import { createPZLogger } from '../../packages/vscode-extension/src/util/logger';
+import { devSyncErrorActions } from '../../packages/vscode-extension/src/extension';
 import { readPzStudioHostSettings } from '../../packages/vscode-extension/src/util/settings';
 import * as api from '@pzstudio/cli/api';
 import {
@@ -2273,5 +2279,156 @@ describe('DevSyncController resource-scoped settings (UX-05)', () => {
             expect(dir).toBe(projectB);
         }
         expect(callsForA).toBeGreaterThan(0);
+    });
+});
+
+/* ------------------------------------------------------------------ */
+/* UX-15 Task 4: the DEC-6 apply-error surface offers 'Stop Sync'      */
+/* beside 'Show Details'. The notification is constructed in           */
+/* createPZLogger's error sink (the real notification site — devsync.ts */
+/* only calls logger.error and its sync logic stays frozen);           */
+/* extension.ts wires the controller's logger with a lazy manager      */
+/* getter, mirrored here so the shipped wiring is what is exercised.   */
+/* ------------------------------------------------------------------ */
+
+describe('DevSync apply-error notification actions (UX-15 Task 4)', () => {
+    /**
+     * The extension.ts wiring, mirrored: the controller gets its OWN logger
+     * whose error notification carries the action, and the manager does not
+     * exist at logger-construction time — the factory receives the lazy
+     * getter, which only ever runs when an error notification is built.
+     */
+    function wiredManager(
+        channel: unknown,
+        applyImpl: () => Promise<unknown>,
+    ): {
+        session: ReturnType<typeof fakeSession>;
+        controller: DevSyncController;
+        manager: DevSyncManager;
+    } {
+        const session = fakeSession();
+        asMock(session.apply).mockImplementation(applyImpl as never);
+        const studio = studioStub(session);
+        // The same lazy getter extension.ts passes: `manager` is declared
+        // after the logger, and the thunk only runs once an error
+        // notification is built — long after the assignment below.
+        const controller = new DevSyncController(
+            studio,
+            createPZLogger(
+                channel as never,
+                devSyncErrorActions(() => manager),
+            ),
+        );
+        const manager = new DevSyncManager(
+            controller,
+            new DevSyncStateService(),
+        );
+        return { session, controller, manager };
+    }
+
+    /** Microtask pump: settles the notification's choice dispatch. */
+    const drain = async (): Promise<void> => {
+        for (let i = 0; i < 20; i++) {
+            await Promise.resolve();
+        }
+    };
+
+    /** Drives one failed apply batch through the real debounce. */
+    async function runFailingBatch(
+        channel: unknown,
+        applyImpl: () => Promise<unknown>,
+    ): Promise<ReturnType<typeof wiredManager>> {
+        vi.useFakeTimers();
+        const wired = wiredManager(channel, applyImpl);
+        await wired.manager.start('/proj');
+        handlers.change.forEach((fn) => fn({ fsPath: '/proj/a.lua' }));
+        await vi.advanceTimersByTimeAsync(WATCH_DEBOUNCE_MS);
+        await drain();
+        return wired;
+    }
+
+    const failedApply = async () => ({
+        incremental: 0,
+        scoped: [],
+        fullRebuild: false,
+        ignored: 0,
+        errors: ['boom'],
+    });
+
+    it('offers Show Details and Stop Sync; choosing Stop Sync stops the manager', async () => {
+        const channel = vscode.window.createOutputChannel('PZ Studio');
+        asMock(vscode.window.showErrorMessage).mockResolvedValue('Stop Sync');
+        const { session, controller, manager } = await runFailingBatch(
+            channel,
+            failedApply,
+        );
+
+        // The DEC-6 count message with BOTH actions, in order.
+        const errors = asMock(vscode.window.showErrorMessage).mock.calls;
+        expect(errors).toHaveLength(1);
+        expect(String(errors[0][0])).toContain(
+            'Development sync: 1 change(s) failed to apply',
+        );
+        expect(errors[0].slice(1)).toEqual(['Show Details', 'Stop Sync']);
+
+        // The click dispatched manager.stop(): the run drains, the state
+        // lands idle and the session stopped (stop() is safe mid-apply).
+        expect(asMock(session.stop)).toHaveBeenCalled();
+        expect(controller.active).toBe(false);
+        expect(manager.state.phase).toBe('idle');
+
+        await manager.dispose();
+    });
+
+    it('Show Details still opens the channel and never stops the run (DEC-6 preserved)', async () => {
+        const channel = vscode.window.createOutputChannel('PZ Studio');
+        asMock(vscode.window.showErrorMessage).mockResolvedValue(
+            'Show Details',
+        );
+        const { session, controller, manager } = await runFailingBatch(
+            channel,
+            failedApply,
+        );
+
+        expect(
+            asMock((channel as { show: unknown }).show),
+        ).toHaveBeenCalledWith(true);
+        expect(asMock(session.stop)).not.toHaveBeenCalled();
+        expect(controller.active).toBe(true);
+        expect(manager.state.phase).toBe('syncing');
+
+        await manager.dispose();
+    });
+
+    it('the action factory offers Stop Sync only while a run is in flight', async () => {
+        const controller = {
+            start: vi.fn(async () => {}),
+            stop: vi.fn(async () => {}),
+            dispose: vi.fn(async () => {}),
+        } as unknown as DevSyncController;
+        const manager = new DevSyncManager(
+            controller,
+            new DevSyncStateService(),
+        );
+        const actions = devSyncErrorActions(() => manager);
+
+        // Off: nothing to stop — the button would be dead.
+        expect(actions()).toEqual([]);
+
+        await manager.start('/proj');
+        const offered = actions();
+        expect(offered).toHaveLength(1);
+        expect(offered[0].label).toBe('Stop Sync');
+
+        // The offered action's run() IS manager.stop() — idempotent, safe
+        // anytime (mirrors the notification click, which is fire-and-forget).
+        offered[0].run();
+        for (let i = 0; i < 20; i++) {
+            await Promise.resolve();
+        }
+        expect(manager.state.phase).toBe('idle');
+        expect(actions()).toEqual([]);
+
+        await manager.dispose();
     });
 });
