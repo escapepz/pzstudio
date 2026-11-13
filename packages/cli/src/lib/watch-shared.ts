@@ -120,13 +120,20 @@ export function resolveWatchVariants(
  * it would feed the engine its own writes), the deployment root when it
  * sits inside the project (same loop, surfaced through the junction), and
  * every dot segment (.git, .template-mod, ...) — except .pzstudioignore
- * files, which steer the ignore rules and are worth re-syncing on.
+ * files, which steer the ignore rules and are worth re-syncing on. LAST,
+ * `extraIgnored` — the host's matcher over the ROOT-level .gitignore/
+ * .pzstudioignore rules, built by the caller — is consulted as the final
+ * drop-condition on the project-relative path (the same `rel` this function
+ * computes, platform separators; the core matcher folds them itself): the
+ * rails above always decide their own subtrees first, so a rule only ever
+ * adds drops outside them and is never the thing keeping them safe.
  */
 export function isWatchPathIgnored(
     projectPath: string,
     outDir: string,
     target: string,
     deploymentRoot?: string,
+    extraIgnored?: (rel: string) => boolean,
 ): boolean {
     const rel = relative(projectPath, target);
     if (rel === '') return false; // the watched root itself
@@ -139,10 +146,15 @@ export function isWatchPathIgnored(
             return true;
         }
     }
-    return rel
-        .split(sep)
-        .some(
-            (segment) =>
-                segment.startsWith('.') && segment !== '.pzstudioignore',
-        );
+    if (
+        rel
+            .split(sep)
+            .some(
+                (segment) =>
+                    segment.startsWith('.') && segment !== '.pzstudioignore',
+            )
+    ) {
+        return true;
+    }
+    return extraIgnored?.(rel) ?? false;
 }

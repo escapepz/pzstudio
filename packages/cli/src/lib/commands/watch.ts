@@ -4,11 +4,17 @@ import { registerCommand } from '../registry';
 import { CliError } from '../errors';
 import { extractFlag, hasFlag } from '../args';
 import type { FileDelta } from '@pzstudio/core';
-import { resolveBuildOutputPath, summarizeApplyResult } from '@pzstudio/core';
+import {
+    createIgnoreMatcher,
+    readIgnoreRulesForDir,
+    resolveBuildOutputPath,
+    summarizeApplyResult,
+} from '@pzstudio/core';
 import { distRootOf, projectDir, resolveProjectConfig } from '../helper';
 import { readGlobalConfig } from '../templateManager';
 import { info, verbose, warn } from '../logger';
 import { createDevSyncForEngine } from '../devsync';
+import { NodeFileSystem } from '@pzstudio/platform-node';
 import {
     assertWatchMaterializable,
     isWatchPathIgnored,
@@ -85,6 +91,32 @@ export async function watchCmd() {
     // watcher concern — except its junction, which surfaces the same
     // writes when it sits inside the project (see watchIgnoreGlobs).
     const outDir = distRootOf(projectPath);
+
+    // Root-level ignore rules ONLY — this filter never walks nested
+    // directories. Nested .gitignore/.pzstudioignore rules are the engine's
+    // apply-time territory: the sync engine re-reads the closest rule files
+    // for every path it applies (isSourcePathIncluded) and a nested
+    // rule-file change re-baselines the owning mod (classifyDelta), so
+    // duplicating that walk here would double-read every event and drift
+    // from the engine's semantics. The ROOT rules steer the watch filter:
+    // loaded once at start, reloaded when a rule-file event arrives (the
+    // rule files are dot entries the filter drops, so the reload must run
+    // BEFORE the drop decision or a rule change would never be picked up).
+    const nodeFs = new NodeFileSystem();
+    let ignoreMatcher: ((rel: string) => boolean) | undefined;
+    const reloadIgnoreRules = async (): Promise<void> => {
+        try {
+            ignoreMatcher = createIgnoreMatcher({
+                '': await readIgnoreRulesForDir(nodeFs, projectPath),
+            }).isIgnored;
+        } catch {
+            // readIgnoreRulesForDir already tolerates unreadable rule
+            // files; a total failure here retains the last good matcher.
+        }
+    };
+    await reloadIgnoreRules();
+    const ignorePredicate = (rel: string): boolean =>
+        ignoreMatcher?.(rel) ?? false;
     // Materialize resolution BEFORE the session starts: the copy-mode
     // refusal must fail the command up front, never mid-session.
     const materialization: MaterializationResolution = resolveMaterialization({
@@ -192,6 +224,14 @@ export async function watchCmd() {
                 return;
             }
             for (const event of events) {
+                // A rule-file event re-steers the filter: reload BEFORE the
+                // drop decision (see the rule-loading block above). A failed
+                // reload retains the last good matcher; bursts coalesce into
+                // one fresh read each and the next batch uses the outcome.
+                const name = basename(event.path);
+                if (name === '.gitignore' || name === '.pzstudioignore') {
+                    void reloadIgnoreRules();
+                }
                 if (
                     isWatchPathIgnored(
                         projectPath,
@@ -200,6 +240,7 @@ export async function watchCmd() {
                         materialization.action === 'materialize'
                             ? materialization.outDir
                             : undefined,
+                        ignorePredicate,
                     )
                 ) {
                     continue;

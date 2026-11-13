@@ -6,7 +6,9 @@ import type {
     PzStudioLogger,
 } from '@pzstudio/cli/api';
 import {
+    createIgnoreMatcher,
     isWatchPathIgnored,
+    readIgnoreRulesForDir,
     summarizeApplyResult,
     WATCH_DEBOUNCE_MS,
 } from '@pzstudio/cli/api';
@@ -26,6 +28,19 @@ import { t } from './l10n';
  * classifies full-rebuild, so a re-baseline attempt is immediately behind
  * it) and after every apply that reports a re-baseline. A failed
  * re-resolution retains the last good root — the same side the engine keeps.
+ *
+ * As the final drop-condition of the same shared decision, the ROOT-level
+ * .gitignore/.pzstudioignore rules steer the filter (readIgnoreRulesForDir +
+ * createIgnoreMatcher over vscode.workspace.fs). Root rules only: nested
+ * rule files are the engine's apply-time territory (isSourcePathIncluded
+ * re-reads the closest rule files per applied path, and a nested rule-file
+ * change re-baselines the owning mod), so this layer never walks nested
+ * directories. The rules load once per session before the watcher exists,
+ * reload when a ROOT-level rule-file event is scheduled (those events are
+ * dropped as dot entries and no engine re-baseline follows them, so this
+ * reload is the predicate's only in-band change signal) and after every
+ * re-baseline the session reports. A failed reload retains the last good
+ * matcher — the same side the engine keeps.
  *
  * A filtered drop is never fully silent (DEC-9): drops are counted and
  * reported as one aggregate line per batch at verbose level. Apply-phase
@@ -64,6 +79,97 @@ function isRootProjectJson(projectDir: string, path: string): boolean {
     return normalizePath(path) === `${normalizePath(projectDir)}/project.json`;
 }
 
+/**
+ * Whether `path` is THE root-level .gitignore or .pzstudioignore of the
+ * session's project. These events are the ignore predicate's only in-band
+ * change signal: the filter drops them as dot entries and no engine
+ * re-baseline follows them, so nothing else refreshes the ROOT rules.
+ * Nested rule files never match — their rules are engine apply-time
+ * territory and their mod-scoped re-baseline flows through the post-apply
+ * reload instead.
+ */
+function isRootRuleFile(projectDir: string, path: string): boolean {
+    const dir = normalizePath(projectDir);
+    const normalized = normalizePath(path);
+    return (
+        normalized === `${dir}/.gitignore` ||
+        normalized === `${dir}/.pzstudioignore`
+    );
+}
+
+/**
+ * The filesystem contract readIgnoreRulesForDir consumes, restated
+ * structurally: the extension consumes the CLI bundle (`@pzstudio/cli/api`)
+ * and cannot import @pzstudio/platform to name the interface, so the
+ * adapter below satisfies it by structure.
+ */
+interface RuleFsEntry {
+    name: string;
+    uri: string;
+    type: 'file' | 'directory' | 'symbolicLink' | 'unknown';
+}
+
+interface RuleFsStat {
+    type: RuleFsEntry['type'];
+    ctime: number;
+    mtime: number;
+    size: number;
+}
+
+interface RuleFs {
+    read(uri: string): Promise<Uint8Array>;
+    write(uri: string, data: Uint8Array): Promise<void>;
+    delete(uri: string): Promise<void>;
+    stat(uri: string): Promise<RuleFsStat>;
+    list(uri: string): Promise<RuleFsEntry[]>;
+}
+
+function toRuleFsObjectType(type: number): RuleFsEntry['type'] {
+    if (type === vscode.FileType.File) return 'file';
+    if (type === vscode.FileType.Directory) return 'directory';
+    if (type === vscode.FileType.SymbolicLink) return 'symbolicLink';
+    return 'unknown';
+}
+
+/**
+ * A filesystem view over vscode.workspace.fs for reading the ignore rule
+ * files (readIgnoreRulesForDir only lists and reads). URIs travel in this
+ * adapter's own space — `vscode.Uri.file(dir).toString()` with plain
+ * '/'-joined children — which vscode.Uri.parse round-trips on every scheme
+ * the editor exposes, exactly like the rest of the workspace.fs consumers.
+ */
+const ruleFileFs: RuleFs = {
+    async read(uri: string): Promise<Uint8Array> {
+        return vscode.workspace.fs.readFile(vscode.Uri.parse(uri));
+    },
+    async write(uri: string, data: Uint8Array): Promise<void> {
+        return vscode.workspace.fs.writeFile(vscode.Uri.parse(uri), data);
+    },
+    async delete(uri: string): Promise<void> {
+        return vscode.workspace.fs.delete(vscode.Uri.parse(uri));
+    },
+    async stat(uri: string): Promise<RuleFsStat> {
+        const stats = await vscode.workspace.fs.stat(vscode.Uri.parse(uri));
+        return {
+            type: toRuleFsObjectType(stats.type),
+            ctime: stats.ctime,
+            mtime: stats.mtime,
+            size: stats.size,
+        };
+    },
+    async list(uri: string): Promise<RuleFsEntry[]> {
+        const entries = await vscode.workspace.fs.readDirectory(
+            vscode.Uri.parse(uri),
+        );
+        const base = uri.replace(/\/+$/, '');
+        return entries.map(([name, type]) => ({
+            name,
+            uri: `${base}/${name}`,
+            type: toRuleFsObjectType(type),
+        }));
+    },
+};
+
 export class DevSyncController implements vscode.Disposable {
     private readonly studio: PzStudio;
     private readonly logger: PzStudioLogger;
@@ -73,6 +179,12 @@ export class DevSyncController implements vscode.Disposable {
     private projectDir: string | undefined;
     /** The resolved output root the outdir rule filters against. */
     private filterRoot: string | undefined;
+    /**
+     * The matcher over the ROOT-level .gitignore/.pzstudioignore rules —
+     * the final drop-condition. Undefined until the first successful read
+     * (fail-open) and cleared with the rest of the filter state in stop().
+     */
+    private ignoreMatcher: ((rel: string) => boolean) | undefined;
     private pending: FileDelta[] = [];
     private timer: ReturnType<typeof setTimeout> | undefined;
     private starting = false;
@@ -118,6 +230,12 @@ export class DevSyncController implements vscode.Disposable {
                 /* retain the pre-start root */
             }
 
+            // The root-level rules load once per session, before the watcher
+            // exists: no event can ever be filtered by rules that were not
+            // read, and a failed read lands in the fail-open no-matcher
+            // state (the same side the engine keeps).
+            await this.refreshIgnoreRules(projectDir);
+
             const watcher = vscode.workspace.createFileSystemWatcher(
                 new vscode.RelativePattern(vscode.Uri.file(projectDir), '**/*'),
             );
@@ -150,6 +268,7 @@ export class DevSyncController implements vscode.Disposable {
         this.session = undefined;
         this.projectDir = undefined;
         this.filterRoot = undefined;
+        this.ignoreMatcher = undefined;
         if (this.timer) {
             clearTimeout(this.timer);
             this.timer = undefined;
@@ -162,6 +281,36 @@ export class DevSyncController implements vscode.Disposable {
 
     async dispose(): Promise<void> {
         await this.stop();
+    }
+
+    /**
+     * Re-reads the project's ROOT-level ignore rules and rebuilds the
+     * matcher. Adopted only while this session still owns the project — a
+     * stop()/start() race between the fire-and-forget reloads and the next
+     * start must not leave the next session's filter holding this session's
+     * rules (the next start re-reads before its watcher exists anyway). A
+     * failed read retains the last good matcher — the same side the engine
+     * keeps.
+     */
+    private async refreshIgnoreRules(projectDir: string): Promise<void> {
+        let matcher: ((rel: string) => boolean) | undefined;
+        try {
+            const rules = await readIgnoreRulesForDir(
+                ruleFileFs,
+                vscode.Uri.file(projectDir).toString(),
+            );
+            matcher = createIgnoreMatcher({ '': rules }).isIgnored;
+        } catch {
+            return; // retain the last good matcher
+        }
+        if (this.projectDir === undefined || this.projectDir === projectDir) {
+            this.ignoreMatcher = matcher;
+        }
+    }
+
+    /** The final drop-condition: root-level rules, fail-open when unset. */
+    private isRuleIgnored(rel: string): boolean {
+        return this.ignoreMatcher?.(rel) ?? false;
     }
 
     private schedule(type: FileDelta['type'], path: string): void {
@@ -185,6 +334,13 @@ export class DevSyncController implements vscode.Disposable {
                 /* retain last good root — engine-aligned */
             }
         }
+        // A ROOT-level rule-file event re-steers the predicate: reload
+        // BEFORE the drop decision — the rule files are dot entries the
+        // filter drops and no engine re-baseline follows them, so this
+        // reload is the only in-band signal a root rule change gets.
+        if (this.projectDir && isRootRuleFile(this.projectDir, path)) {
+            void this.refreshIgnoreRules(this.projectDir);
+        }
         // Fail open: an unknown filtering root must never discard source
         // events. Unreachable in practice (the root is published before the
         // watcher exists and cleared after it is disposed), but the safe
@@ -192,7 +348,13 @@ export class DevSyncController implements vscode.Disposable {
         if (
             this.projectDir !== undefined &&
             this.filterRoot !== undefined &&
-            isWatchPathIgnored(this.projectDir, this.filterRoot, path)
+            isWatchPathIgnored(
+                this.projectDir,
+                this.filterRoot,
+                path,
+                undefined,
+                (rel) => this.isRuleIgnored(rel),
+            )
         ) {
             this.filteredEvents += 1;
             return;
@@ -239,6 +401,10 @@ export class DevSyncController implements vscode.Disposable {
             } catch {
                 /* retain last good root */
             }
+            // The engine just re-baselined (doc 13 §6.3): re-read the rules
+            // with the same freshness the root gets — a rule change whose
+            // event never reached schedule is picked up here.
+            void this.refreshIgnoreRules(projectDir);
         }
         // A successful sync is otherwise silent in the output channel —
         // say what the batch did, same wording the CLI watch prints.

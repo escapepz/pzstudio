@@ -1250,6 +1250,203 @@ describe('DevSyncController pre-filtering (UX-09)', () => {
 });
 
 /* ------------------------------------------------------------------ */
+/* Root-level ignore rules (2026-11-13 gitignore integration): the     */
+/* controller reads the project's ROOT .gitignore/.pzstudioignore via  */
+/* the core exports (readIgnoreRulesForDir + createIgnoreMatcher over  */
+/* vscode.workspace.fs) and consults the matcher as the FINAL          */
+/* drop-condition of the shared isWatchPathIgnored call. Nested rules  */
+/* are engine apply-time territory — the predicate carries root rules  */
+/* only, reloaded on a root rule-file event (no engine re-baseline     */
+/* follows those — the filter drops them as dot entries) and after     */
+/* every re-baseline the session reports.                              */
+/* ------------------------------------------------------------------ */
+
+describe('DevSyncController root-level ignore rules (gitignore integration)', () => {
+    const proj = '/proj';
+    const sourceFile = '/proj/my_mod/media/lua/hello.lua';
+    const emptyResult = {
+        incremental: 0,
+        scoped: [],
+        fullRebuild: false,
+        ignored: 0,
+        errors: [] as string[],
+    };
+
+    const flushOnce = () => vi.advanceTimersByTimeAsync(WATCH_DEBOUNCE_MS);
+    const drain = () => vi.advanceTimersByTimeAsync(0);
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    /**
+     * Serves a fake root listing (the rule file plus one mod folder) and
+     * the given .gitignore content through the workspace.fs mock the
+     * controller's rule reader consumes. Content is re-servable: a test
+     * that changes the rules on disk calls serveRules again.
+     */
+    function serveRules(content: string): void {
+        const encoder = new TextEncoder();
+        const list = [
+            ['.gitignore', vscode.FileType.File],
+            ['my_mod', vscode.FileType.Directory],
+        ];
+        asMock(vscode.workspace.fs.readDirectory).mockImplementation(
+            async (uri: unknown) => {
+                if ((uri as { toString(): string }).toString() !== proj) {
+                    return [];
+                }
+                return list;
+            },
+        );
+        asMock(vscode.workspace.fs.readFile).mockImplementation(
+            async (uri: unknown) => {
+                const target = (uri as { toString(): string }).toString();
+                if (target === `${proj}/.gitignore`) {
+                    return encoder.encode(content);
+                }
+                throw new Error(`not found: ${target}`);
+            },
+        );
+    }
+
+    /** Every batch the controller delivered to session.apply, in order. */
+    function appliedBatches(
+        session: ReturnType<typeof fakeSession>,
+    ): FileDelta[][] {
+        return asMock(session.apply).mock.calls.map(
+            (call) => call[0] as FileDelta[],
+        );
+    }
+
+    it('drops source events matching the root .gitignore through the predicate', async () => {
+        serveRules('scratch/**\n*.log\n');
+        const session = fakeSession();
+        const studio = studioStub(session, () => '/proj/dist');
+        const logger = recordingLogger();
+
+        const controller = new DevSyncController(studio, logger.logger);
+        await controller.start(proj);
+
+        handlers.change.forEach((fn) =>
+            fn({ fsPath: `${proj}/scratch/out.lua` }),
+        );
+        handlers.change.forEach((fn) => fn({ fsPath: `${proj}/notes.log` }));
+        // A legitimate source edit in the SAME debounce window is delivered —
+        // the drop happens at schedule time, before the pending batch.
+        handlers.change.forEach((fn) => fn({ fsPath: sourceFile }));
+        await flushOnce();
+
+        expect(appliedBatches(session)).toEqual([
+            [{ type: 'change', path: sourceFile }],
+        ]);
+        await controller.dispose();
+    });
+
+    it('the output-root rail wins over a dist/** rule: the dist event drops by the rail and a nested dist stays source', async () => {
+        serveRules('dist/**\n');
+        const session = fakeSession();
+        const studio = studioStub(session, () => '/proj/dist');
+        const logger = recordingLogger();
+
+        const controller = new DevSyncController(studio, logger.logger);
+        await controller.start(proj);
+
+        // An engine-output event under the filtering root: dropped by the
+        // watch layer's OWN rail, never reaching (or needing) the rules.
+        handlers.change.forEach((fn) =>
+            fn({ fsPath: '/proj/dist/My Title/x.lua' }),
+        );
+        // The rooted rule never stretches past the output root: a nested
+        // dist folder is ordinary mod source (gitignore anchoring).
+        handlers.change.forEach((fn) =>
+            fn({ fsPath: `${proj}/my_mod/dist/x.lua` }),
+        );
+        handlers.change.forEach((fn) => fn({ fsPath: sourceFile }));
+        await flushOnce();
+
+        expect(appliedBatches(session)).toEqual([
+            [
+                { type: 'change', path: `${proj}/my_mod/dist/x.lua` },
+                { type: 'change', path: sourceFile },
+            ],
+        ]);
+        await controller.dispose();
+    });
+
+    it('reloads the rules when the root rule file changes, though the event itself stays dropped', async () => {
+        serveRules('scratch/**\n');
+        const session = fakeSession();
+        const studio = studioStub(session, () => '/proj/dist');
+        const logger = recordingLogger();
+
+        const controller = new DevSyncController(studio, logger.logger);
+        await controller.start(proj);
+
+        // The root .gitignore event is dropped as a dot entry and no engine
+        // re-baseline follows it — but it re-steers the predicate.
+        handlers.change.forEach((fn) => fn({ fsPath: `${proj}/.gitignore` }));
+        serveRules('*.log\n');
+        await drain();
+
+        // The refreshed rules: scratch is source again, notes.log dropped.
+        handlers.change.forEach((fn) =>
+            fn({ fsPath: `${proj}/scratch/out.lua` }),
+        );
+        handlers.change.forEach((fn) => fn({ fsPath: `${proj}/notes.log` }));
+        handlers.change.forEach((fn) => fn({ fsPath: sourceFile }));
+        await flushOnce();
+
+        expect(appliedBatches(session)).toEqual([
+            [
+                { type: 'change', path: `${proj}/scratch/out.lua` },
+                { type: 'change', path: sourceFile },
+            ],
+        ]);
+        await controller.dispose();
+    });
+
+    it('a re-baseline reloads the rules alongside the filter-root correction', async () => {
+        serveRules('');
+        const session = fakeSession();
+        const studio = studioStub(session, () => '/proj/dist');
+        const logger = recordingLogger();
+
+        const controller = new DevSyncController(studio, logger.logger);
+        await controller.start(proj);
+
+        // A rule appears on disk without any root rule-file event reaching
+        // schedule (e.g. coalesced away); the engine then re-baselines
+        // through a scoped rebuild — the post-apply correction re-reads
+        // the rules with the same freshness the filter root gets.
+        serveRules('scratch/**\n');
+        asMock(session.apply).mockResolvedValue({
+            ...emptyResult,
+            scoped: [{ modId: 'my_mod', variants: ['main'] }],
+        } as never);
+        handlers.change.forEach((fn) =>
+            fn({ fsPath: `${proj}/my_mod/mod.info` }),
+        );
+        await flushOnce();
+        await drain();
+
+        // The refreshed predicate now drops scratch.
+        handlers.change.forEach((fn) =>
+            fn({ fsPath: `${proj}/scratch/out.lua` }),
+        );
+        await flushOnce();
+
+        expect(appliedBatches(session)).toEqual([
+            [{ type: 'change', path: `${proj}/my_mod/mod.info` }],
+        ]);
+        await controller.dispose();
+    });
+});
+
+/* ------------------------------------------------------------------ */
 /* Integration: the controller over the REAL v2 instance               */
 /* ------------------------------------------------------------------ */
 

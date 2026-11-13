@@ -42,6 +42,7 @@ export type {
 export { patchModInfoId } from '@pzstudio/core';
 export { matchBuildCompatibility, runDoctor } from '@pzstudio/core';
 export { summarizeApplyResult } from '@pzstudio/core';
+export { readIgnoreRulesForDir, createIgnoreMatcher } from '@pzstudio/core';
 export type {
     Diagnostic,
     DiagnosticModule,
@@ -49,6 +50,7 @@ export type {
     DoctorInput,
     DoctorReport,
 } from '@pzstudio/core';
+export type { IgnoreRuleSet } from '@pzstudio/core';
 export { runProjectDoctor } from './lib/doctor';
 export type { ProjectDoctorOptions } from './lib/doctor';
 export {

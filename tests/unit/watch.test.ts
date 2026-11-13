@@ -7,6 +7,7 @@ import {
     resolveWatchVariants,
     WATCH_DEBOUNCE_MS,
 } from '../../packages/cli/src/lib/watch-shared';
+import { createIgnoreMatcher } from '../../packages/core/src/execute';
 import {
     createDevSync,
     createDevSyncForEngine,
@@ -303,6 +304,87 @@ describe('isWatchPathIgnored — containment invariants (doc 13 §10-C)', () => 
                 path.join(projectPath, 'my_mod', 'media', 'lua', 'x.lua'),
             ),
         ).toBe(false);
+    });
+});
+
+/**
+ * The injected ignore matcher (root-level .gitignore/.pzstudioignore rules,
+ * 2026-11-13 gitignore integration): the callback is the FINAL
+ * drop-condition. The output/deployment rails above it decide their own
+ * subtrees first, so a rule only ever adds drops outside them and is never
+ * consulted for rail-covered paths.
+ */
+describe('isWatchPathIgnored — injected ignore matcher', () => {
+    const projectPath = path.join(os.tmpdir(), 'pzstudio-watch-rules');
+    const outDir = path.join(projectPath, 'dist');
+
+    it('drops a source path matching a root .gitignore rule (old callers unchanged)', () => {
+        const matcher = createIgnoreMatcher({
+            '': { pzstudio: null, git: ['scratch/**', '*.log'] },
+        }).isIgnored;
+        const target = path.join(projectPath, 'scratch', 'out.lua');
+        // Without the matcher the path is ordinary source — the optional
+        // param keeps every pre-existing consumer's decision unchanged.
+        expect(isWatchPathIgnored(projectPath, outDir, target)).toBe(false);
+        expect(
+            isWatchPathIgnored(projectPath, outDir, target, undefined, matcher),
+        ).toBe(true);
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                outDir,
+                path.join(projectPath, 'notes.log'),
+                undefined,
+                matcher,
+            ),
+        ).toBe(true);
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                outDir,
+                path.join(projectPath, 'keep.lua'),
+                undefined,
+                matcher,
+            ),
+        ).toBe(false);
+    });
+
+    it('the output-root rail wins: dist events drop without consulting the rules, and dist/** never stretches into nested sources', () => {
+        const matcher = createIgnoreMatcher({
+            '': { pzstudio: null, git: ['dist/**'] },
+        }).isIgnored;
+        let consulted = 0;
+        const spy = (rel: string) => {
+            consulted += 1;
+            return matcher(rel);
+        };
+        // The dist event is dropped by the watch layer's OWN output-root
+        // rail — the callback is the final drop-condition and is never
+        // reached for rail-covered paths, so a rule cannot own (or miss)
+        // that decision.
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                outDir,
+                path.join(outDir, 'My Title', 'x.lua'),
+                undefined,
+                spy,
+            ),
+        ).toBe(true);
+        expect(consulted).toBe(0);
+        // And the rooted rule never stretches past the output root: a
+        // nested dist folder is ordinary mod source (gitignore anchoring),
+        // delivered to the engine which enforces the nested rules itself.
+        expect(
+            isWatchPathIgnored(
+                projectPath,
+                outDir,
+                path.join(projectPath, 'my_mod', 'dist', 'x.lua'),
+                undefined,
+                spy,
+            ),
+        ).toBe(false);
+        expect(consulted).toBe(1);
     });
 });
 
