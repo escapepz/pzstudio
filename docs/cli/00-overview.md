@@ -140,7 +140,7 @@ project.json  →  workspace settings (VS Code)  →  user settings (VS Code)  �
   **off** — BREAKING since CLI-10). See `07-config-files.md`.
 - **~/.pzstudio/config.json** — global defaults: `templates`, `outdir`, `useSymlinks`,
   `experimental.integration`.
-- **.pzstudioignore** — per-directory ignore rules for copy operations.
+- **.pzstudioignore / .gitignore** — per-directory ignore rules for copy operations.
 
 ## Exit codes
 

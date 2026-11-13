@@ -267,6 +267,34 @@ describe('unified ignore engine (.gitignore + .pzstudioignore)', () => {
         );
     });
 
+    it('isSourcePathIncluded pins the trailing-slash realization: build/ excludes the directory and a same-level file named build', async () => {
+        // The parse strips the trailing slash ('build/' -> 'build'), so the
+        // matcher's verdict is type-blind: the DIRECTORY `build` is excluded,
+        // and so is a same-level FILE named `build` — the documented
+        // divergence from git's dir-only semantics, pinned as shipped.
+        const dirFs = new MemoryFileSystem();
+        await dirFs.writeText('/mod/.gitignore', 'build/\n');
+        await dirFs.writeText('/mod/build/inner.lua', 'inner');
+
+        const cases: Array<[string, boolean]> = [
+            ['build', false],
+            ['build/x.lua', false],
+            ['builder.lua', true],
+        ];
+        for (const [rel, expected] of cases) {
+            expect(await isSourcePathIncluded(dirFs, '/mod', rel)).toBe(
+                expected,
+            );
+        }
+
+        // The file case on disk: the path `build` gets the same verdict when
+        // it names a file — git would keep it (its pattern is dir-only).
+        const fileFs = new MemoryFileSystem();
+        await fileFs.writeText('/mod/.gitignore', 'build/\n');
+        await fileFs.writeText('/mod/build', 'content');
+        expect(await isSourcePathIncluded(fileFs, '/mod', 'build')).toBe(false);
+    });
+
     it('isSourcePathIncluded gives ** patterns their real gitignore reach', async () => {
         const fs = new MemoryFileSystem();
         await fs.writeText('/mod/.pzstudioignore', '**/temp/**\n');

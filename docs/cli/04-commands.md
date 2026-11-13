@@ -256,12 +256,12 @@ flowchart TD
     EVT --> LOOP
 
     subgraph LOOP["event loop (300ms debounce window)"]
-        L2{"path ignored?<br/>(outside project, output subtree,<br/>dot segments except .pzstudioignore)"} -- yes --> L3["drop event"]
+        L2{"path ignored?<br/>(outside project, output subtree,<br/>dot segments except .pzstudioignore/.gitignore)"} -- yes --> L3["drop event"]
         L2 -- no --> L4["queue delta"]
         L4 --> L6["session.apply(batch)"]
         L6 --> L7{"delta type?"}
         L7 -- "regular file" --> L8["incremental sync"]
-        L7 -- "mod.info / .pzstudioignore" --> L9["scoped rebuild of that mod"]
+        L7 -- "mod.info / .pzstudioignore / .gitignore" --> L9["scoped rebuild of that mod"]
         L7 -- "project.json" --> L10["full rebuild with fresh input"]
         L8 --> L11{"apply result?"}
         L9 --> L11

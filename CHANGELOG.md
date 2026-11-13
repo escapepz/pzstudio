@@ -30,6 +30,10 @@ tool-only releases. Game compatibility is declared separately in
   anything.
 - **Negation is now real**: `!keep.txt` re-includes what an earlier rule
   ignored — previously a literal no-op.
+- **Leading-slash entries are now active**: `/old.lua` anchors at the rule
+  file's directory and matches there — under the old prefix matcher the
+  leading slash was part of the literal, so the entry was dead and never
+  matched anything.
 - **Plain entries are unchanged**: a bare `entry` still matches the file or
   folder of that name at the rule file's own level — a folder with its whole
   subtree (gitignore `entry` + `entry/**`, anchored at that level), never a

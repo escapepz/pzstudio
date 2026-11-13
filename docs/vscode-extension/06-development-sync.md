@@ -48,8 +48,8 @@ stateDiagram-v2
 4. **Apply** (`devsync.ts:97-113`): `session.apply(batch)` never throws; the
    session serializes, coalesces and classifies deltas (core
    `classifyDelta`, `packages/core/src/buildsession.ts:129-219`):
-   file edits → incremental per-mod write; `mod.info` or `.pzstudioignore`
-   → mod-scoped rebuild; `project.json` → full rebuild with fresh input;
+   file edits → incremental per-mod write; `mod.info`, `.pzstudioignore` or
+   `.gitignore` → mod-scoped rebuild; `project.json` → full rebuild with fresh input;
    everything else (dot entries, non-mod paths, excluded mods, folder-level
    events, paths outside the project) → ignored with reason.
    A transient source that vanished before the batch (atomic-save temp
@@ -70,7 +70,7 @@ stateDiagram-v2
 | :--- | :--- | :--- |
 | Watcher | `@parcel/watcher` native subscription | VS Code `FileSystemWatcher` |
 | Variants | both by default; `--production`/`--development`/`--both` restrict | **always both** (`['main', 'development']`) — no flags exposed |
-| Pre-filtering | events filtered by `isWatchPathIgnored` before feeding (`packages/cli/src/lib/commands/watch.ts:120`) — outdir + dot segments (except `.pzstudioignore`) | **no pre-filter** — everything is fed to the session, which ignores most noise by classification (audit UX-09) |
+| Pre-filtering | events filtered by `isWatchPathIgnored` before feeding (`packages/cli/src/lib/commands/watch.ts:120`) — outdir + dot segments (except `.pzstudioignore`/`.gitignore`) | **no pre-filter** — everything is fed to the session, which ignores most noise by classification (audit UX-09) |
 | Interruption | SIGINT → exit 130, single "Development sync stopped." | toggle command / dispose |
 | Debounce | 300 ms (`WATCH_DEBOUNCE_MS`) | same constant |
 | Initial build | yes, both outputs | yes, both outputs |

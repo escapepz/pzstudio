@@ -180,9 +180,12 @@ scaffoldProject(template, dest, false, false)  ← always copies
 
 1. **Hardcoded always-exclude**: `.git`, `.github`, `.gitmodules`, `.gitkeep`
 2. **Optional dotfiles**: when `ignoreDotFiles: true` — all dot-prefixed files except `.pzstudioignore`
-3. **Closest-ancestor .pzstudioignore rule wins**: walk up from the file to sourceRoot, apply the
-   first matching rule found
-4. **.pzstudioignore itself**: included unless `excludeIgnoreFile: true`
+3. **Closest-ancestor rule file wins**: walk up from the file to sourceRoot; the first directory
+   carrying `.gitignore`/`.pzstudioignore` rules decides, with gitignore-standard matching
+   (wildcards, negations, `**`) via the unified engine — within a level `.gitignore` entries
+   apply first and `.pzstudioignore` second
+4. **The rule files themselves**: `.pzstudioignore` included unless `excludeIgnoreFile: true`;
+   `.gitignore` follows the dotfile rule above (always read as rules either way)
 
 ## Template category usage
 

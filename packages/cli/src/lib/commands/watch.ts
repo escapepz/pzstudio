@@ -102,8 +102,9 @@ export async function watchCmd() {
     // loaded once at start, reloaded when a rule-file event arrives
     // (rule-file events survive the dot filter — a mod-scoped one must
     // reach the engine for its mod-scoped re-baseline — and the reload
-    // keeps the watch-layer matcher in step; fire-and-forget, bursts
-    // coalesce into one fresh read and the next batch uses the outcome).
+    // keeps the watch-layer matcher in step; fire-and-forget, so a burst
+    // starts one overlapping reload per event — the last completed read
+    // wins and the reads converge on the same fresh rules).
     const nodeFs = new NodeFileSystem();
     let ignoreMatcher: ((rel: string) => boolean) | undefined;
     const reloadIgnoreRules = async (): Promise<void> => {
@@ -230,8 +231,9 @@ export async function watchCmd() {
                 // engine below (a mod-scoped one re-baselines its owning
                 // mod there): trigger the reload, then apply the same
                 // shared drop decision. A failed reload retains the last
-                // good matcher; bursts coalesce into one fresh read each
-                // and the next batch uses the outcome.
+                // good matcher; every burst event starts its own reload
+                // and the reads overlap — the last completed read wins,
+                // and they converge on the same fresh rules.
                 const name = basename(event.path);
                 if (name === '.gitignore' || name === '.pzstudioignore') {
                     void reloadIgnoreRules();
