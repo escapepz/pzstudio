@@ -66,7 +66,7 @@ stateDiagram-v2
 |---|---|---|---|
 | `build` (main) | built | skipped + warning | skipped |
 | `build` (development) | built (id + `_dev` suffix in mod.info) | built (id + `_dev`) | skipped |
-| `watch` | synced to both outputs | main-output files never produced | ignored |
+| `watch` | synced to the selected outputs (both by default) | main-output files never produced | ignored |
 | `modinfo generate` | generated | generated | skipped |
 | `list` | "on disk, included" | "on disk, dev builds only" | "on disk, excluded from workshop build" |
 | `clean` | output removed (state irrelevant) | output removed | output never existed |

@@ -34,7 +34,7 @@ addHelp(
     mode cannot keep up with live edits, so watch refuses it.
 
     Usages:
-        pzstudio watch               - Syncs both the main and dev_branch outputs.
+        pzstudio watch               - Syncs the outputs selected by project.json build.target (both by default).
         pzstudio watch --production  - Syncs only the main workshop output.
         pzstudio watch --development - Syncs only the dev_branch workshop output.
         pzstudio watch --both        - Syncs both workshop outputs.

@@ -241,7 +241,7 @@ flowchart TD
     B -- no --> ERR1["ERR: No pzstudio project found."]
     B -- yes --> C{"flag conflict?<br/>validateInvocation (CLI-1)"}
     C -- yes --> ERR2["ERR: Conflicting options: ...<br/>CliUsageError → exit 2"]
-    C -- no --> D["resolveWatchVariants()<br/>default: BOTH outputs"]
+    C -- no --> D["resolveWatchVariants()<br/>flag > build.target > default both"]
     D --> BN["stderr: Syncing 'title' (main + development) — press Ctrl+C to stop."]
     BN --> E["createDevSync(projectPath)"]
     E --> F["session.start(variants)<br/>initial FULL build"]
@@ -282,8 +282,10 @@ flowchart TD
 Special rules:
 
 - The banner is a **single line** (CLI-7):
-  `Syncing '<title>' (main + development) — press Ctrl+C to stop.`
-  (`packages/cli/src/lib/commands/watch.ts:68-71`).
+  `Syncing '<title>' (main + development) — press Ctrl+C to stop.` — when
+  `build.target` (not a flag) picked the variants, the banner names the source:
+  `Syncing '<title>' (main — build.target) — press Ctrl+C to stop.`
+  (`packages/cli/src/lib/commands/watch.ts:112-116`).
 - **watch owns SIGINT** (CLI-6): one `process.once('SIGINT')` sets `exitCode = 130`,
   unsubscribes, stops the session and prints `Development sync stopped.` exactly once —
   there is no global handler double-reporting anymore
@@ -292,7 +294,9 @@ Special rules:
   which cannot reliably deliver SIGINT to a child).
 - A source file that vanishes before the batch runs (atomic-save temp files) is silently
   skipped; directory events pass through as create/delete; RENAME arrives as delete+create.
-- Unlike `build`, the default target is **both** outputs (dev_branch needs to stay live).
+- With no variant flag, `watch` follows `project.json build.target`; when it is unset
+  the default stays **both** outputs (dev_branch needs to stay live) — unlike `build`,
+  which falls back to main.
 - **Deployment (materialize)**: the materialize decision resolves **before** the session
   starts; copy mode **refuses to start** with `ERR_WATCH_COPY_MODE_UNSUPPORTED` (a
   debounced full copy after every watched change is heavy and lock-prone — and silently

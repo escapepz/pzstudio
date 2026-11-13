@@ -173,4 +173,5 @@ if any category fails. See `03-template-resolution.md`.
 Both can be built in one run with `--both` (or `build.target: both` in project.json).
 A variant with zero eligible mods is skipped with a warning — the previous output on
 disk is never wiped. `clean` always attempts to remove both output trees.
-`watch` defaults to syncing **both** variants (unlike `build`, which defaults to main).
+`watch` follows `build.target` when set and defaults to syncing **both** variants when
+it is unset (unlike `build`, which falls back to main).
