@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { DevSyncController } from './devsync';
 
 /**
  * DevSyncStateService (UX-15): the pure single-writer state store behind the
@@ -86,5 +87,135 @@ export class DevSyncStateService implements vscode.Disposable {
     private set(next: DevSyncState): void {
         this.current = next;
         this.emitter.fire(next);
+    }
+}
+
+/**
+ * DevSyncManager (UX-15): the lifecycle wrapper UI and commands consume —
+ * the single compositor that drives DevSyncController and publishes every
+ * transition through DevSyncStateService. It adds exactly ONE piece of
+ * logic of its own, the queued-stop protocol; it deliberately adds NO
+ * second start-guard (the controller already blocks start-while-active and
+ * start-while-starting) and never touches the controller's internals.
+ *
+ * The queued-stop protocol exists because the controller alone cannot
+ * survive a stop during its initial build: controller.start() assigns
+ * session and watcher only AFTER its await settles, so a controller.stop()
+ * fired in that window is silently overwritten and the session survives.
+ * The manager therefore treats stop() while `starting` as a request only —
+ * when the start settles it runs controller.stop() IMMEDIATELY and lands
+ * `idle`, so the state path is starting → (start settles) → stopping →
+ * idle and the just-published session never outlives the request.
+ *
+ * One start at a time remains the caller's discipline (the UI toggle reads
+ * `state.phase`); a second start() while one is in flight re-anchors the
+ * run and rides the controller's own re-entrancy guard.
+ */
+export class DevSyncManager implements vscode.Disposable {
+    private readonly controller: DevSyncController;
+    private readonly service: DevSyncStateService;
+    readonly onDidChange: vscode.Event<DevSyncState>;
+    /** Set by stop() while the initial build is still in flight. */
+    private stopRequested = false;
+    /** The in-flight start() settlement — dispose awaits it. */
+    private startPromise: Promise<void> | undefined;
+
+    constructor(controller: DevSyncController, service: DevSyncStateService) {
+        this.controller = controller;
+        this.service = service;
+        this.onDidChange = service.onDidChange;
+    }
+
+    get state(): DevSyncState {
+        return this.service.state;
+    }
+
+    /**
+     * Starts the full build plus live sync for the project at projectDir.
+     * The failure of the underlying start is rethrown after the state lands
+     * `idle` with the reason, so a command can still notify while the
+     * indicator already shows the settled outcome.
+     */
+    async start(projectDir: string): Promise<void> {
+        // Folder-name title — the commands/watch.ts convention (uri.path's
+        // last segment); both separators fold so a Windows fsPath still
+        // titles by folder. Never workshop.title (unreadable mid-start).
+        const projectTitle =
+            projectDir.split(/[\\/]/).filter(Boolean).pop() ?? projectDir;
+        this.stopRequested = false;
+        this.service.beginStarting(projectDir);
+        const run = this.settleStart(projectDir, projectTitle);
+        this.startPromise = run;
+        try {
+            await run;
+        } finally {
+            if (this.startPromise === run) {
+                this.startPromise = undefined;
+            }
+        }
+    }
+
+    /**
+     * Stops the run. While syncing this tears down immediately
+     * (beginStopping → controller.stop → idle); while starting it only
+     * queues — see the queued-stop protocol above; while idle or already
+     * stopping it is a no-op, making repeated calls harmless.
+     */
+    async stop(): Promise<void> {
+        if (this.service.state.phase === 'starting') {
+            this.stopRequested = true;
+            return;
+        }
+        if (this.service.state.phase !== 'syncing') {
+            return;
+        }
+        this.service.beginStopping();
+        await this.controller.stop();
+        this.service.resetToIdle();
+    }
+
+    /**
+     * Full teardown, safe mid-run: a syncing run goes through the same
+     * stop semantics as stop(); a starting run settles through the queued
+     * stop so the session the start is about to publish cannot outlive the
+     * manager. Then the controller and the service are disposed.
+     */
+    async dispose(): Promise<void> {
+        if (this.service.state.phase === 'starting') {
+            this.stopRequested = true;
+            await this.startPromise?.catch(() => undefined);
+        }
+        await this.stop();
+        await this.controller.dispose();
+        this.service.dispose();
+    }
+
+    /**
+     * The start settlement: success publishes `syncing` — unless a stop was
+     * requested while the build was in flight, which is executed RIGHT HERE
+     * before anything else observes the session. A failure lands `idle`
+     * with the reason and rethrows.
+     */
+    private async settleStart(
+        projectDir: string,
+        projectTitle: string,
+    ): Promise<void> {
+        try {
+            await this.controller.start(projectDir);
+        } catch (e) {
+            this.stopRequested = false;
+            this.service.resetToIdle(
+                e instanceof Error ? e.message : String(e),
+            );
+            throw e;
+        }
+        if (this.stopRequested) {
+            this.stopRequested = false;
+            this.service.beginStopping();
+            await this.controller.stop();
+            this.service.resetToIdle();
+            return;
+        }
+        this.service.beginSyncing(projectTitle);
     }
 }
