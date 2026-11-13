@@ -11,6 +11,54 @@ Project Zomboid build (build 42.20 → `42200`), the patch bumps for
 tool-only releases. Game compatibility is declared separately in
 `pzBuildCompatibility` (e.g. `"42.x"`).
 
+## [Unreleased]
+
+### CLI (@pzstudio/cli)
+
+- **Ignore-rule semantics upgrade: `.gitignore` is now honored as a rule
+  source next to `.pzstudioignore` on every surface** (build copy, watch,
+  development sync, project explorer), through the unified engine in
+  `@pzstudio/core` (the `ignore` package behind `readIgnoreRulesForDir` /
+  `createIgnoreMatcher`). Within one directory, `.gitignore` entries apply
+  first and `.pzstudioignore` second — later rules win, so
+  **`.pzstudioignore` keeps the higher precedence at the same level**;
+  across directories, the **closest rule file to an entry decides** (the
+  deeper file wins, and the deciding level decides entirely).
+- **Wildcard entries are now active**: `*.log`, `**/temp/**` and friends get
+  their real gitignore meaning, matching at any depth below the rule file —
+  previously entries were compared literally, so a wildcard never matched
+  anything.
+- **Negation is now real**: `!keep.txt` re-includes what an earlier rule
+  ignored — previously a literal no-op.
+- **Plain entries are unchanged**: a bare `entry` still matches the file or
+  folder of that name at the rule file's own level — a folder with its whole
+  subtree (gitignore `entry` + `entry/**`, anchored at that level), never a
+  same-name basename deeper down (historical prefix semantics, pinned).
+- One documented realization, kept for backward-compat with existing
+  fixtures: trailing slashes are still stripped at parse, so a
+  trailing-slash entry (`build/`) also excludes a same-level **file** named
+  `build` — gitignore's dir-only semantics would not.
+- Safety rails unchanged: rules only ever hide or copy-filter — they can
+  never hide `mod.info` or the `.pzstudioignore`/`.gitignore` files
+  themselves.
+- Behavior notes: under the build copy's dot-file option
+  (`ignoreDotFiles`), `.pzstudioignore` is exempt from dot-file exclusion
+  but `.gitignore` is not — a `.gitignore` is still always **read** as
+  rules, it just may not be copied as a file. A changed `.gitignore`
+  re-baselines ignore handling exactly like a changed `.pzstudioignore`
+  (the watch filter reloads its root rules; a mod-scoped rule change
+  re-baselines the owning mod).
+- No changes to the JSON contract, the exit-code matrix, or the stream
+  contract.
+
+### Extension (pzstudio42)
+
+- The PZ Project Explorer hides entries matched by ignore rules
+  (`.gitignore`/`.pzstudioignore`) — the same visual treatment as dot
+  entries — with rule-read failures failing open (every child shown). A
+  declared mod folder hidden by rules stays "seen": it is hidden, not
+  reported as missing on disk.
+
 ## [CLI 0.42210.3 / Extension 0.42210.3] - 2026-11-09
 
 ### CLI (@pzstudio/cli 0.42210.3) — notes: [`docs/releases/0.42210.3.md`](docs/releases/0.42210.3.md)

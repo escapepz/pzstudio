@@ -25,19 +25,50 @@ flowchart TD
   = `id <workshopId> · <workshopTitle> · <diagnostics badge>` (parts joined
   with ` · `, omitted when empty). Empty workspace → placeholder
   *"No project found in the workspace."*.
-- **Project children** (`getProjectChildren`, `projectExplorer.ts:451-542`):
-  reads `project.json` tolerantly (`readProjectConfig`, `592-605` —
+- **Project children** (`getProjectChildren`, `projectExplorer.ts:703-806`):
+  reads `project.json` tolerantly (`readProjectConfig`, `863-876` —
   invalid JSON → placeholder *"Failed to read project.json — check the
   file."*; unreadable folder → *"Failed to read the project folder."*).
-  Dot-prefixed entries are always hidden.
+  Dot-prefixed entries are always hidden, and entries matched by the
+  `.gitignore`/`.pzstudioignore` rules are hidden the same way (see
+  [Ignore rules](#ignore-rules-gitignore--pzstudioignore) below).
 - **Mod folders**: a directory whose name is a key of `project.json.mods`
-  (`projectExplorer.ts:481-487`). Mods declared but missing on disk render as
+  (`projectExplorer.ts:736-738`). Mods declared but missing on disk render as
   `missing-mod` nodes with description *"missing on disk"*, sorted **after**
-  directories and before files (`524-541`).
+  directories and before files (`788-805`).
 - **Files**: at project root, only `project.json` and `.emmyrc.json` are
-  shown unless "show all files" is on (`PROJECT_ROOT_FILES`, `projectExplorer.ts:155`;
-  filter applied at `513`); **subfolders are never filtered** (`getDirectoryChildren`,
-  `544-585`).
+  shown unless "show all files" is on (`PROJECT_ROOT_FILES`, `projectExplorer.ts:228`;
+  filter applied at `777`); that curation never applies below the root —
+  subfolder listings (`getDirectoryChildren`, `808-856`) only hide dot
+  entries and rule-matched entries.
+
+## Ignore rules (.gitignore / .pzstudioignore)
+
+Both rule files hide entries from the tree, through the CLI's bundled engine
+(`createIgnoreMatcher` / `readIgnoreRulesForDir` from `@pzstudio/cli/api`
+over the `ruleFileFs` vscode.workspace.fs adapter, `src/util/ruleFs.ts`):
+
+- **What hides what**: entries matched by the rules are hidden entirely —
+  the same visual treatment as dot entries (hidden, not dimmed). Applied at
+  project root (`getProjectChildren`) and in every subfolder listing
+  (`getDirectoryChildren`).
+- **Rules load per listed directory** (`childrenIgnoreFilter`,
+  `projectExplorer.ts:672-701`): rules for the listed directory and every
+  ancestor up to the project root, keyed project-root-relative so the
+  matcher's closest-wins walk decides each child (the listed directory's
+  rules first; ancestor rules with wildcards still apply at depth).
+  `mod.info` and the two rule files stay rails inside the matcher — rules
+  can never hide them.
+- **Fail-open**: any failure — a directory whose rules cannot be read, an
+  adapter error — leaves the predicate undefined and every child is shown;
+  the tree never breaks because of rules.
+- **Hidden is not missing**: a declared mod folder that the rules hide
+  stays "seen" (`seenModDirs` is marked before the rule check) — it is
+  simply not rendered, and never becomes a `missing-mod` node.
+- **No rule-file watcher**: rules are re-read on every listing, so the
+  refresh events above stay the only repaint triggers; the Development
+  Sync's own rule handling is a separate surface
+  ([`06`](06-development-sync.md)).
 
 ## Sorting and icons
 

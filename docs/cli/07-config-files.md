@@ -155,22 +155,55 @@ Planner rules worth remembering:
 - `workshop.txt` is an **output artifact** — never watched, never edited by hand;
   its source is `workshop/description.txt`.
 
-## .pzstudioignore
+## .pzstudioignore and .gitignore
 
-Per-directory ignore file for every copy/scaffold operation (new, add, build, rename).
+Per-directory ignore rules for every copy/scaffold operation (new, add, build,
+rename), the watch/devsync filters, and the extension's project explorer. Both
+files are rule sources read through one engine in `@pzstudio/core`
+(`readIgnoreRulesForDir` / `createIgnoreMatcher`, `packages/core/src/execute.ts`
+— the `ignore` package with real gitignore semantics).
 
 ```
 # comments allowed
-folder-name/          ← directory prefix match
-exact-file.txt        ← exact path match (relative to this file's directory)
+*.log                 ← wildcard: real gitignore glob (matches at any depth below this file)
+!keep.log             ← negation: re-includes what an earlier rule ignored
+folder-name/          ← folder entry: the folder and everything under it (and a same-level
+                        FILE of that name — the trailing slash is stripped at parse)
+exact-file.txt        ← plain entry: matches only at this file's own level (file or folder)
 ```
 
-- The **closest** `.pzstudioignore` up the tree wins (first match stops the walk).
+- **Two rule files, one engine**: a directory's `.gitignore` and `.pzstudioignore`
+  load together. Within one directory, `.gitignore` entries apply first and
+  `.pzstudioignore` second — later rules win, so **`.pzstudioignore` outranks
+  `.gitignore` at the same level**.
+- The **closest** directory carrying rules (either file) up the tree wins — the walk
+  from an entry's parent stops there and that level decides entirely. A directory is
+  governed by its parent's rules, never its own.
+- Entry semantics (the upgrade; plain entries pinned for backward-compat):
+  - wildcards (`*.log`, `**/temp/**`) get their real gitignore meaning, matching at
+    any depth below the rule file — previously entries were compared literally, so a
+    wildcard never matched anything;
+  - negation (`!keep.txt`) really re-includes — previously a literal no-op;
+  - plain entries keep the historical prefix semantics exactly: file or folder of that
+    name at the rule file's own level, folder with its whole subtree — never a
+    same-name basename deeper down;
+  - trailing slashes are stripped at parse (`build/` → `build`): the folder and
+    everything under it is excluded, and so is a same-level FILE named `build` —
+    gitignore's dir-only semantics would not. A documented realization, kept for
+    backward-compat with existing fixtures.
+- **Rails** (`createIgnoreMatcher`): `mod.info`, `.pzstudioignore` and `.gitignore`
+  are always included regardless of rules, at any depth — rules only ever hide or
+  copy-filter, they can never hide these three.
 - Hardcoded always-ignored regardless: `.git`, `.github`, `.gitmodules`, `.gitkeep`.
 - `.pzstudioignore` itself is carried over during `new` (so user rules survive) but excluded
-  from mod scaffolding during `add`/`build` (`excludeIgnoreFile`).
+  from mod scaffolding during `add`/`build` (`excludeIgnoreFile`). Under the build copy's
+  dot-file option (`ignoreDotFiles`), `.pzstudioignore` is exempt from dot-file exclusion
+  but `.gitignore` is not — a `.gitignore` is still always **read** as rules, it just may
+  not be copied as a file.
 - The watch engine is the one place a dotfile is *not* ignored: a changed
-  `.pzstudioignore` triggers a re-sync of its mod (see `04-commands.md` → watch).
+  `.pzstudioignore` **or `.gitignore`** re-steers ignore handling — the watch filter
+  reloads its root rules, and a mod-scoped rule-file change re-baselines the owning mod
+  (see `04-commands.md` → watch).
 
 ## What writes where (matrix)
 

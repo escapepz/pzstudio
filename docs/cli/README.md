@@ -20,7 +20,8 @@ Files in this directory:
 - `04-commands.md` — Per-command flows: new, add, build, watch, clean, delete, rename, ...
 - `05-mod-state-machine.md` — Build state transitions: include → dev-only → exclude
 - `06-error-taxonomy.md` — CliError / CliUsageError / unexpected, Problem/Cause/Try rendering
-- `07-config-files.md` — File-based state: project.json, config.json, .pzstudioignore
+- `07-config-files.md` — File-based state: project.json, config.json, ignore rules
+  (.pzstudioignore, .gitignore)
 - `08-mechanics.md` — Cross-cutting: stream contract, consent gate, SIGINT, experimental
   opt-in hook, embedding API
 - `09-machine-interface.md` — `--json` envelope contract v1 and the embedded `runCLI` API
