@@ -1,8 +1,11 @@
 import * as vscode from 'vscode';
 import { TextDecoder } from 'util';
+import { createIgnoreMatcher, readIgnoreRulesForDir } from '@pzstudio/cli/api';
+import type { IgnoreRuleSet } from '@pzstudio/cli/api';
 import { findProjectDirs } from '../util/project';
 import { t } from '../util/l10n';
 import type { ProjectDiagnosticsSummary } from '../util/doctor';
+import { ruleFileFs } from '../util/ruleFs';
 
 export const PROJECT_EXPLORER_VIEW_ID = 'pzstudio.projectExplorer';
 
@@ -223,6 +226,27 @@ export async function resolveModFolderIcon(
  * files"; subfolders are never filtered.
  */
 const PROJECT_ROOT_FILES = new Set(['project.json', '.emmyrc.json']);
+
+/**
+ * Path segments of `uri` relative to `base` (both tree URIs of one
+ * project): [] when identical, undefined when `uri` sits outside `base`.
+ * Compares the URIs' '/'-separated path form — the same space the ignore
+ * matcher documents its keys in ('' is the root itself).
+ */
+function relativeSegments(
+    base: vscode.Uri,
+    uri: vscode.Uri,
+): string[] | undefined {
+    const basePath = base.path.replace(/\/+$/, '');
+    const uriPath = uri.path.replace(/\/+$/, '');
+    if (uriPath === basePath) {
+        return [];
+    }
+    if (!uriPath.startsWith(`${basePath}/`)) {
+        return undefined;
+    }
+    return uriPath.slice(basePath.length + 1).split('/');
+}
 
 interface TreeElement {
     kind: 'project' | 'directory' | 'file' | 'missing-mod' | 'placeholder';
@@ -633,6 +657,49 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         return nodes;
     }
 
+    /**
+     * Builds the ignore predicate for the direct children of the directory
+     * being listed: rules load for that directory and every ancestor up to
+     * the project root, keyed project-root-relative — the exact key
+     * convention createIgnoreMatcher documents ('' is the root), so its own
+     * closest-wins walk decides each child against the deepest rule set
+     * (the listed directory's rules first; ancestor rules with wildcards
+     * still apply at depth). mod.info and the two rule files stay rails
+     * inside the matcher. Any failure — a directory whose rules cannot be
+     * read, an adapter error — fails open: the predicate stays undefined
+     * and every child is shown.
+     */
+    private async childrenIgnoreFilter(
+        element: TreeElement,
+    ): Promise<((name: string) => boolean) | undefined> {
+        const relSegments = relativeSegments(element.projectDir, element.uri);
+        if (!relSegments) {
+            return undefined;
+        }
+        try {
+            const rulesByDir: Record<string, IgnoreRuleSet> = {};
+            for (let end = relSegments.length; end >= 0; end -= 1) {
+                const dirUri =
+                    end === 0
+                        ? element.projectDir
+                        : vscode.Uri.joinPath(
+                              element.projectDir,
+                              ...relSegments.slice(0, end),
+                          );
+                const key = relSegments.slice(0, end).join('/');
+                rulesByDir[key] = await readIgnoreRulesForDir(
+                    ruleFileFs,
+                    dirUri.toString(),
+                );
+            }
+            const matcher = createIgnoreMatcher(rulesByDir);
+            return (name: string) =>
+                matcher.isIgnored([...relSegments, name].join('/'));
+        } catch {
+            return undefined;
+        }
+    }
+
     private async getProjectChildren(
         element: TreeElement,
     ): Promise<TreeElement[]> {
@@ -653,6 +720,11 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
             return [infoNode(t('Failed to read the project folder.'))];
         }
 
+        // Ignore rules (.gitignore/.pzstudioignore) hide entries entirely —
+        // the same visual treatment as dot entries (spec: hidden, not
+        // dimmed; no badges in v1). Loaded per listed directory, fail-open.
+        const isRuleIgnored = await this.childrenIgnoreFilter(element);
+
         const directories: TreeElement[] = [];
         const files: TreeElement[] = [];
         const seenModDirs = new Set<string>();
@@ -661,12 +733,19 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
             if (name.startsWith('.')) {
                 continue;
             }
+            const isMod =
+                type === vscode.FileType.Directory &&
+                project.mods?.[name] != null;
+            // A declared mod folder present on disk stays 'seen' even when
+            // the rules hide it — hidden is not missing-on-disk.
+            if (isMod) {
+                seenModDirs.add(name);
+            }
+            if (isRuleIgnored?.(name)) {
+                continue;
+            }
             const childUri = vscode.Uri.joinPath(element.uri, name);
             if (type === vscode.FileType.Directory) {
-                const isMod = project.mods?.[name] != null;
-                if (isMod) {
-                    seenModDirs.add(name);
-                }
                 const state = isMod
                     ? modBuildState(project, name, excludes)
                     : undefined;
@@ -737,8 +816,15 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         }
 
         const children: TreeElement[] = [];
+        // Ignore rules (.gitignore/.pzstudioignore) hide entries entirely —
+        // the same visual treatment as dot entries (spec: hidden, not
+        // dimmed; no badges in v1). Loaded per listed directory, fail-open.
+        const isRuleIgnored = await this.childrenIgnoreFilter(element);
         for (const [name, type] of entries) {
             if (name.startsWith('.')) {
+                continue;
+            }
+            if (isRuleIgnored?.(name)) {
                 continue;
             }
             const childUri = vscode.Uri.joinPath(element.uri, name);

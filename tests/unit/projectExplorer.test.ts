@@ -6,16 +6,29 @@ import path from 'path';
 
 // ── vscode mock ─────────────────────────────────────────────────────────────
 
-type MockUri = { path: string; joinPath?: unknown };
+type MockUri = {
+    path: string;
+    joinPath?: unknown;
+    /** Round-trips like a real vscode.Uri: back to the URI's string form. */
+    toString(): string;
+};
 
 const vscodeMock = vi.hoisted(() => {
-    const makeUri = (parts: string[]): MockUri => {
-        const uri: MockUri = {
-            path: '/' + parts.join('/'),
-            joinPath: undefined,
-        };
-        return uri;
-    };
+    // Class, not object literal: toString must live on the prototype, or it
+    // becomes an own enumerable function property and vitest's toEqual
+    // (used on tree elements carrying URIs) compares it by reference.
+    class MockUriImpl {
+        path: string;
+        joinPath: unknown = undefined;
+        constructor(parts: string[]) {
+            this.path = '/' + parts.join('/');
+        }
+        /** Round-trips like a real vscode.Uri: back to the URI's string form. */
+        toString(): string {
+            return this.path;
+        }
+    }
+    const makeUri = (parts: string[]): MockUri => new MockUriImpl(parts);
     return {
         Uri: {
             joinPath: (base: MockUri, ...rest: string[]): MockUri => {
@@ -24,6 +37,10 @@ const vscodeMock = vi.hoisted(() => {
             },
             file: (path: string): MockUri =>
                 makeUri(path.split('/').filter(Boolean)),
+            // The ignore-rule fs adapter travels in string URIs and
+            // round-trips them through parse — plain paths here.
+            parse: (uri: string): MockUri =>
+                makeUri(uri.split('/').filter(Boolean)),
         },
         FileType: { File: 1, Directory: 2, SymbolicLink: 64 },
         TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
@@ -1458,5 +1475,225 @@ describe('project diagnostics cache (UX-07)', () => {
         // its late resolution decorated only that already-begun render).
         const oldNodes = await first;
         expect(oldNodes[0].description).toBe('id 1 · Project A · ✗ 9 ⚠ 9');
+    });
+});
+
+// ── ignore-filtered entries (.gitignore / .pzstudioignore) ──────────────────
+//
+// The explorer hides entries matched by the project's ignore rules with the
+// same visual treatment as dot entries: gone entirely, not dimmed (spec
+// decision — no badges in v1). Rules load per listed directory through the
+// same vscode.workspace.fs the explorer already uses; a failed rule read
+// fails open (every child shown).
+
+describe('ignore-filtered entries', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    /**
+     * Installs workspace.fs over a tree (nested objects are directories,
+     * anything else is a file) with file contents keyed by absolute path
+     * ('/proj/.gitignore').
+     */
+    function seedWorkspaceFs(
+        tree: Record<string, Record<string, unknown>>,
+        files: Record<string, string> = {},
+    ): void {
+        vscodeMock.workspace.fs.readDirectory = vi.fn(
+            async (dir: MockUri): Promise<Entry[]> => {
+                const segs = dir.path.split('/').filter(Boolean);
+                let node: unknown = tree;
+                for (const seg of segs) {
+                    node = (node as Record<string, unknown>)?.[seg];
+                }
+                if (!node || typeof node !== 'object') {
+                    throw new Error('ENOENT');
+                }
+                return Object.entries(node as Record<string, unknown>).map(
+                    ([name, value]): Entry => [
+                        name,
+                        value !== null && typeof value === 'object'
+                            ? FileType.Directory
+                            : FileType.File,
+                    ],
+                );
+            },
+        );
+        vscodeMock.workspace.fs.readFile = vi.fn(async (uri: MockUri) => {
+            const content = files[uri.path];
+            if (content === undefined) {
+                throw new Error('ENOENT');
+            }
+            return new TextEncoder().encode(content);
+        });
+    }
+
+    const directoryElement = (path: string) => ({
+        kind: 'directory' as const,
+        uri: asUri(path),
+        projectDir: asUri('proj'),
+        label: path.split('/').pop() ?? path,
+        collapsible: 0,
+    });
+
+    const projectElement = () => ({
+        kind: 'project' as const,
+        uri: asUri('proj'),
+        projectDir: asUri('proj'),
+        label: 'proj',
+        collapsible: 0,
+    });
+
+    it('hides files and directories matched by the listed folder rules', async () => {
+        seedWorkspaceFs(
+            {
+                proj: {
+                    media: {
+                        'keep.txt': 'x',
+                        'skip.txt': 'x',
+                        'skip-me': { 'inner.txt': 'x' },
+                        '.gitignore': 'x',
+                    },
+                    '.gitignore': 'x',
+                },
+            },
+            { '/proj/media/.gitignore': 'skip.txt\nskip-me\n' },
+        );
+        const provider = new ProjectExplorerProvider(asUri('ext'));
+
+        const children = await provider.getChildren(
+            directoryElement('proj/media'),
+        );
+
+        expect(children.map((c) => c.label)).toEqual(['keep.txt']);
+    });
+
+    it('ancestor rules with wildcards still hide nested entries', async () => {
+        seedWorkspaceFs(
+            {
+                proj: {
+                    media: { generated: { 'x.txt': 'x' }, 'keep.txt': 'x' },
+                    '.gitignore': 'x',
+                },
+            },
+            { '/proj/.gitignore': 'gen*\n' },
+        );
+        const provider = new ProjectExplorerProvider(asUri('ext'));
+
+        const children = await provider.getChildren(
+            directoryElement('proj/media'),
+        );
+
+        // 'media' itself carries no rules, so the matcher's closest-wins
+        // walk falls through to the project root's 'gen*' wildcard.
+        expect(children.map((c) => c.label)).toEqual(['keep.txt']);
+    });
+
+    it('keeps the mod.info rail and the dot-entry skip under match-everything rules', async () => {
+        seedWorkspaceFs(
+            {
+                proj: {
+                    media: {
+                        'mod.info': 'x',
+                        'icon.png': 'x',
+                        'notes.txt': 'x',
+                        '.gitignore': 'x',
+                        '.pzstudioignore': 'x',
+                    },
+                    '.gitignore': 'x',
+                },
+            },
+            { '/proj/media/.gitignore': '*\n.gitignore\n.pzstudioignore\n' },
+        );
+        const provider = new ProjectExplorerProvider(asUri('ext'));
+
+        const children = await provider.getChildren(
+            directoryElement('proj/media'),
+        );
+
+        // mod.info is a rail: matched by '*' yet still shown. The two rule
+        // files are rails too but never reach the matcher — the dot skip
+        // already governs them (dot behavior unchanged by the filter).
+        expect(children.map((c) => c.label)).toEqual(['mod.info']);
+    });
+
+    it('hides matched entries at the project root and keeps a present-but-ignored mod off the missing list', async () => {
+        const projectJson = JSON.stringify({
+            workshop: { id: 1, title: 'T' },
+            mods: { 'good-mod': {}, 'secret-mod': {} },
+        });
+        seedWorkspaceFs(
+            {
+                proj: {
+                    'project.json': 'x',
+                    'good-mod': { '42': { 'mod.info': 'x' } },
+                    'secret-mod': { '42': { 'mod.info': 'x' } },
+                    '.gitignore': 'x',
+                },
+            },
+            {
+                '/proj/project.json': projectJson,
+                '/proj/.gitignore': 'secret-mod\n',
+            },
+        );
+        const provider = new ProjectExplorerProvider(asUri('ext'));
+
+        const children = await provider.getChildren(projectElement());
+
+        // 'secret-mod' is on disk but rule-hidden: the row disappears and
+        // no missing-on-disk phantom may replace it.
+        expect(children.map((c) => c.label)).toEqual([
+            'good-mod',
+            'project.json',
+        ]);
+        expect(children.every((c) => c.kind !== 'missing-mod')).toBe(true);
+    });
+
+    it('fails open when a rule read fails (every child shown)', async () => {
+        seedWorkspaceFs({
+            proj: { media: { 'a.txt': 'x', 'b.txt': 'x' } },
+        });
+        // The first readDirectory is the listing itself; every later one is
+        // a rule load and fails.
+        const listing = vscodeMock.workspace.fs.readDirectory;
+        let calls = 0;
+        vscodeMock.workspace.fs.readDirectory = vi.fn(
+            async (dir: MockUri): Promise<Entry[]> => {
+                calls += 1;
+                if (calls > 1) {
+                    throw new Error('rule read boom');
+                }
+                return listing(dir);
+            },
+        );
+        const provider = new ProjectExplorerProvider(asUri('ext'));
+
+        const children = await provider.getChildren(
+            directoryElement('proj/media'),
+        );
+
+        expect(children.map((c) => c.label)).toEqual(['a.txt', 'b.txt']);
+    });
+
+    it('fails open when the rule filesystem adapter itself throws', async () => {
+        seedWorkspaceFs({
+            proj: { media: { 'a.txt': 'x', 'b.txt': 'x' } },
+        });
+        const originalParse = vscodeMock.Uri.parse;
+        vscodeMock.Uri.parse = (): MockUri => {
+            throw new Error('adapter boom');
+        };
+        try {
+            const provider = new ProjectExplorerProvider(asUri('ext'));
+
+            const children = await provider.getChildren(
+                directoryElement('proj/media'),
+            );
+
+            expect(children.map((c) => c.label)).toEqual(['a.txt', 'b.txt']);
+        } finally {
+            vscodeMock.Uri.parse = originalParse;
+        }
     });
 });
