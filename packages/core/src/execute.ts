@@ -4,15 +4,18 @@
  * This is the host-agnostic counterpart of the CLI's synchronous build
  * executor: same plan, same ignore semantics, but running through the
  * filesystem contract so the Node adapter, the vscode.workspace.fs adapter
- * and any future host can drive it. The ignore rule handling is a faithful
- * port of the CLI's createIgnoreFilter (closest .pzstudioignore wins, dot
- * files optional, .gitkeep never copied).
+ * and any future host can drive it. The ignore rule handling unifies
+ * .gitignore and .pzstudioignore through the `ignore` package (the closest
+ * directory carrying rules wins; within one level .gitignore entries load
+ * first so .pzstudioignore outranks them), with hard rails for mod.info
+ * and the rule files themselves; dot files optional, .gitkeep never copied.
  *
  * Known divergence from the synchronous executor: directories whose entire
  * content is filtered out are not materialized in the output (there is no
  * mkdir on the filesystem contract). The game only consumes files, so empty
  * directories have no effect.
  */
+import ignore from 'ignore';
 import type {
     DirectoryEntry,
     FileObjectType,
@@ -66,63 +69,155 @@ export function encodeUtf8(text: string): Uint8Array {
     return TEXT_ENCODER.encode(text);
 }
 
+/** Basenames that are always kept, whatever the ignore rules say. */
+const IGNORE_RAIL_BASENAMES = new Set([
+    'mod.info',
+    '.pzstudioignore',
+    '.gitignore',
+]);
+
+/** Characters that make an entry a gitignore glob instead of a plain name. */
+const WILDCARD_PATTERN = /[*?[]/;
+
 /**
- * Reads the .pzstudioignore entries of one directory, or null when the
- * directory has no readable ignore file. Mirrors the CLI's parsing: lines
- * are trimmed, blanks and comments dropped, backslashes normalized.
+ * The ignore rules carried by one directory. Entries keep the historical
+ * parsing (trimmed, blanks and comments dropped, backslashes folded to '/',
+ * trailing slashes stripped): plain names match at the directory's own
+ * level — the directory itself and everything under it — while wildcards,
+ * negations and `**` get their real gitignore meaning in the matcher.
  */
-async function readIgnoreEntries(
+export interface IgnoreRuleSet {
+    /** Parsed .pzstudioignore entries, or null when absent/unreadable. */
+    pzstudio: string[] | null;
+    /** Parsed .gitignore entries, or null when absent/unreadable. */
+    git: string[] | null;
+}
+
+/** Parses one ignore file's content into entries, or null when empty. */
+function parseIgnoreEntries(content: string): string[] | null {
+    const lines = content
+        .split(/\r?\n/)
+        .map((line) => line.trim().replace(/\\/g, '/').replace(/\/+$/, ''))
+        .filter((line) => line && !line.startsWith('#'));
+    return lines.length > 0 ? lines : null;
+}
+
+/** Reads one named ignore file from an already-listed directory. */
+async function readNamedIgnoreEntries(
     fs: ProjectFileSystem,
-    dirUri: string,
+    entries: DirectoryEntry[],
+    name: string,
 ): Promise<string[] | null> {
-    let entries: DirectoryEntry[];
-    try {
-        entries = await fs.list(dirUri);
-    } catch {
-        return null;
-    }
-    const ignoreEntry = entries.find(
-        (entry) => entry.name === '.pzstudioignore',
-    );
-    if (!ignoreEntry) {
+    const entry = entries.find((candidate) => candidate.name === name);
+    if (!entry) {
         return null;
     }
     try {
-        const content = decodeUtf8(await fs.read(ignoreEntry.uri));
-        const lines = content
-            .split(/\r?\n/)
-            .map((line) => line.trim().replace(/\\/g, '/'))
-            .filter((line) => line && !line.startsWith('#'))
-            .map((line) => (line.endsWith('/') ? line.slice(0, -1) : line));
-        return lines.length > 0 ? lines : null;
+        return parseIgnoreEntries(decodeUtf8(await fs.read(entry.uri)));
     } catch {
         return null;
     }
 }
 
 /**
- * Checks a path (relative to the .pzstudioignore's directory) against that
- * file's entries. Entries only ever ignore: a match means "excluded", a
- * non-match means this file has no verdict for the path and the closest-wins
- * walk stops here with "included".
+ * Reads the ignore rules of one directory: its .pzstudioignore and
+ * .gitignore entries. A directory that cannot be listed, or a rule file
+ * that cannot be read, carries no rules rather than failing the walk.
  */
-function matchesIgnoreEntries(entries: string[], relPath: string): boolean {
-    for (const entry of entries) {
-        if (relPath === entry || relPath.startsWith(`${entry}/`)) {
-            return true;
-        }
+export async function readIgnoreRulesForDir(
+    fs: ProjectFileSystem,
+    dirUri: string,
+): Promise<IgnoreRuleSet> {
+    let entries: DirectoryEntry[];
+    try {
+        entries = await fs.list(dirUri);
+    } catch {
+        return { pzstudio: null, git: null };
     }
-    return false;
+    return {
+        pzstudio: await readNamedIgnoreEntries(fs, entries, '.pzstudioignore'),
+        git: await readNamedIgnoreEntries(fs, entries, '.gitignore'),
+    };
+}
+
+/** Whether a rule set carries at least one usable entries list. */
+function hasIgnoreRules(ruleSet: IgnoreRuleSet): boolean {
+    return ruleSet.pzstudio !== null || ruleSet.git !== null;
+}
+
+/**
+ * Converts one parsed entry into an `ignore`-package pattern. Plain names
+ * (no wildcard, no negation, not already anchored) gain a leading '/': the
+ * old prefix matcher only ever matched the entry at the rules directory's
+ * own level, never as a basename at depth — a pinned behavior the raw
+ * gitignore semantics would change.
+ */
+function toIgnorePattern(entry: string): string {
+    if (
+        !entry.startsWith('!') &&
+        !entry.startsWith('/') &&
+        !WILDCARD_PATTERN.test(entry)
+    ) {
+        return `/${entry}`;
+    }
+    return entry;
+}
+
+/**
+ * Builds the ignore matcher over rule sets keyed by their directory path
+ * relative to the copy root ('' is the root itself, 'media' a child, and so
+ * on) — the same keys the isSourcePathIncluded walk produces. isIgnored
+ * walks from the entry's parent directory up to the root and the FIRST
+ * directory carrying rules decides (closest-wins): its .gitignore entries
+ * are added first, its .pzstudioignore entries second, so within that level
+ * the .pzstudioignore wins. The basenames mod.info, .pzstudioignore and
+ * .gitignore are rails: always included regardless of rules, at any depth.
+ */
+export function createIgnoreMatcher(
+    rulesByDir: Record<string, IgnoreRuleSet>,
+): { isIgnored(relPath: string): boolean } {
+    return {
+        isIgnored(relPath: string): boolean {
+            const segments = relPath
+                .replace(/\\/g, '/')
+                .split('/')
+                .filter((segment) => segment !== '');
+            if (segments.length === 0) {
+                return false; // The root itself
+            }
+            if (IGNORE_RAIL_BASENAMES.has(segments[segments.length - 1])) {
+                return false;
+            }
+            for (let end = segments.length - 1; end >= 0; end -= 1) {
+                const ruleSet = rulesByDir[segments.slice(0, end).join('/')];
+                if (!ruleSet || !hasIgnoreRules(ruleSet)) {
+                    continue;
+                }
+                const relToDir = segments.slice(end).join('/');
+                // Paths come from fs listings and caller path spaces and
+                // need not be git-canonical, so relative paths stay allowed.
+                const ig = ignore({ allowRelativePaths: true });
+                if (ruleSet.git) {
+                    ig.add(ruleSet.git.map(toIgnorePattern));
+                }
+                if (ruleSet.pzstudio) {
+                    ig.add(ruleSet.pzstudio.map(toIgnorePattern));
+                }
+                return ig.ignores(relToDir);
+            }
+            return false;
+        },
+    };
 }
 
 /**
  * Decides whether a source path is copied by a copyTree with the given
  * options. This is the standalone (non-walking) form of the ignore rules so
  * the sync engine can test a single changed file against the same semantics
- * the full build used, reading .pzstudioignore files through the injected
- * filesystem.
+ * the full build used, reading .gitignore/.pzstudioignore rules through the
+ * injected filesystem.
  *
- * @param fs The injected filesystem (used to read .pzstudioignore files)
+ * @param fs The injected filesystem (used to read the ignore rule files)
  * @param sourceRoot The copy root the relative path is measured from
  * @param relativePath The candidate path relative to sourceRoot, '/'-separated
  * @param options The copyTree filter options
@@ -176,26 +271,31 @@ export async function isSourcePathIncluded(
         return false;
     }
 
-    // Rule 2: the closest .pzstudioignore between the entry's parent and the
-    // copy root wins. A directory entry is governed by its parent's rules,
-    // never by its own (a file in dir D is evaluated against D's rules).
+    // Rule 2: the closest directory with ignore rules between the entry's
+    // parent and the copy root wins. A directory entry is governed by its
+    // parent's rules, never by its own (a file in dir D is evaluated
+    // against D's rules). Each level loads .gitignore and .pzstudioignore
+    // (readIgnoreRulesForDir); the first level carrying rules decides, and
+    // the matcher adds .gitignore entries before .pzstudioignore entries so
+    // the latter outranks the former at the same level.
     const parentSegments = segments.slice(0, -1);
     let current = parentSegments;
+    const rulesByDir: Record<string, IgnoreRuleSet> = {};
     while (true) {
         const dirUri = current.length
             ? joinPath(sourceRoot, ...current)
             : sourceRoot;
-        const entries = await readIgnoreEntries(fs, dirUri);
-        if (entries) {
-            const relToDir = segments.slice(current.length).join('/');
-            return !matchesIgnoreEntries(entries, relToDir);
+        const ruleSet = await readIgnoreRulesForDir(fs, dirUri);
+        if (hasIgnoreRules(ruleSet)) {
+            rulesByDir[current.join('/')] = ruleSet;
+            break;
         }
         if (current.length === 0) {
             break;
         }
         current = current.slice(0, -1);
     }
-    return true;
+    return !createIgnoreMatcher(rulesByDir).isIgnored(rel);
 }
 
 /**

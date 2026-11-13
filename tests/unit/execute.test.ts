@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { MemoryFileSystem } from '../helpers/memory-file-system';
 import {
+    createIgnoreMatcher,
     executeFileOperations,
     isSourcePathIncluded,
     joinPath,
     OperationLogger,
+    readIgnoreRulesForDir,
 } from '../../packages/core/src/execute';
 import { FileOperation } from '../../packages/core/src/buildplan';
 
@@ -162,5 +164,160 @@ describe('executeFileOperations (fs-driven executor)', () => {
         );
         expect(joinPath('C:\\proj\\mod', 'media\\')).toBe('C:/proj/mod/media');
         expect(joinPath('', 'a', '', 'b')).toBe('a/b');
+    });
+});
+
+describe('unified ignore engine (.gitignore + .pzstudioignore)', () => {
+    it('readIgnoreRulesForDir parses both rule files, tolerating missing and unreadable dirs', async () => {
+        const fs = new MemoryFileSystem();
+        await fs.writeText(
+            '/mod/.pzstudioignore',
+            '*.tmp\n\n# comment\n!special.tmp\n',
+        );
+        await fs.writeText('/mod/.gitignore', 'build/\n');
+
+        expect(await readIgnoreRulesForDir(fs, '/mod')).toEqual({
+            pzstudio: ['*.tmp', '!special.tmp'],
+            // 'build/' parses to 'build' — the trailing slash is stripped
+            // and dir behavior comes from the matcher's anchored matching.
+            git: ['build'],
+        });
+
+        // A directory without either file carries no rules.
+        expect(await readIgnoreRulesForDir(fs, '/mod/plain')).toEqual({
+            pzstudio: null,
+            git: null,
+        });
+
+        // An unreadable directory carries no rules either.
+        const sealed = new MemoryFileSystem();
+        sealed.list = async () => {
+            throw new Error('EACCES');
+        };
+        expect(await readIgnoreRulesForDir(sealed, '/sealed')).toEqual({
+            pzstudio: null,
+            git: null,
+        });
+    });
+
+    it('createIgnoreMatcher walks rulesByDir closest-wins', () => {
+        const matcher = createIgnoreMatcher({
+            '': { pzstudio: ['*.log'], git: null },
+            media: { pzstudio: null, git: ['!keep.log'] },
+        });
+        expect(matcher.isIgnored('a.log')).toBe(true);
+        // The deepest directory with rules decides entirely: the root
+        // '*.log' is never consulted for media paths.
+        expect(matcher.isIgnored('media/keep.log')).toBe(false);
+        expect(matcher.isIgnored('media/other.log')).toBe(false);
+        expect(matcher.isIgnored('media/sub/keep.log')).toBe(false);
+        expect(matcher.isIgnored('deep/other.log')).toBe(true);
+    });
+
+    it('createIgnoreMatcher skips directories whose rule set is empty', () => {
+        const matcher = createIgnoreMatcher({
+            sub: { pzstudio: null, git: null },
+            '': { pzstudio: ['*.log'], git: null },
+        });
+        expect(matcher.isIgnored('sub/a.log')).toBe(true);
+        expect(matcher.isIgnored('sub/new.lua')).toBe(false);
+    });
+
+    it('createIgnoreMatcher keeps plain entries anchored to the rules directory', () => {
+        const matcher = createIgnoreMatcher({
+            '': { pzstudio: ['old.lua'], git: null },
+        });
+        expect(matcher.isIgnored('old.lua')).toBe(true);
+        expect(matcher.isIgnored('old.lua/inner.lua')).toBe(true);
+        // Plain entries never match their basename at depth — the prefix
+        // semantics the existing fixtures pin.
+        expect(matcher.isIgnored('sub/old.lua')).toBe(false);
+    });
+
+    it('createIgnoreMatcher applies .gitignore entries first and .pzstudioignore second', () => {
+        const matcher = createIgnoreMatcher({
+            '': { pzstudio: ['!a.log'], git: ['*.log'] },
+        });
+        expect(matcher.isIgnored('a.log')).toBe(false);
+        expect(matcher.isIgnored('b.log')).toBe(true);
+    });
+
+    it('createIgnoreMatcher keeps rails included regardless of rules', () => {
+        const matcher = createIgnoreMatcher({
+            '': { pzstudio: ['*'], git: ['*'] },
+        });
+        expect(matcher.isIgnored('mod.info')).toBe(false);
+        expect(matcher.isIgnored('media/mod.info')).toBe(false);
+        expect(matcher.isIgnored('.pzstudioignore')).toBe(false);
+        expect(matcher.isIgnored('nested/.gitignore')).toBe(false);
+        expect(matcher.isIgnored('other.lua')).toBe(true);
+    });
+
+    it('isSourcePathIncluded honors .gitignore negation', async () => {
+        const fs = new MemoryFileSystem();
+        await fs.writeText('/mod/.gitignore', '*.txt\n!keep.txt\n');
+
+        expect(await isSourcePathIncluded(fs, '/mod', 'keep.txt')).toBe(true);
+        expect(await isSourcePathIncluded(fs, '/mod', 'other.txt')).toBe(false);
+        expect(await isSourcePathIncluded(fs, '/mod', 'sub/keep.txt')).toBe(
+            true,
+        );
+        expect(await isSourcePathIncluded(fs, '/mod', 'sub/other.txt')).toBe(
+            false,
+        );
+    });
+
+    it('isSourcePathIncluded gives ** patterns their real gitignore reach', async () => {
+        const fs = new MemoryFileSystem();
+        await fs.writeText('/mod/.pzstudioignore', '**/temp/**\n');
+
+        expect(await isSourcePathIncluded(fs, '/mod', 'a/b/temp/x.lua')).toBe(
+            false,
+        );
+        expect(await isSourcePathIncluded(fs, '/mod', 'temp/y.lua')).toBe(
+            false,
+        );
+        expect(await isSourcePathIncluded(fs, '/mod', 'a/b/keep.lua')).toBe(
+            true,
+        );
+    });
+
+    it('isSourcePathIncluded lets .pzstudioignore outrank .gitignore at the same level', async () => {
+        const fs = new MemoryFileSystem();
+        await fs.writeText('/mod/.gitignore', '*.log\n');
+        await fs.writeText('/mod/.pzstudioignore', '!a.log\n');
+
+        expect(await isSourcePathIncluded(fs, '/mod', 'a.log')).toBe(true);
+        expect(await isSourcePathIncluded(fs, '/mod', 'b.log')).toBe(false);
+    });
+
+    it('isSourcePathIncluded lets deeper rules win two levels down', async () => {
+        const fs = new MemoryFileSystem();
+        await fs.writeText('/mod/.gitignore', '*.log\n');
+        await fs.writeText('/mod/media/.gitignore', '!keep.log\n');
+
+        expect(await isSourcePathIncluded(fs, '/mod', 'other.log')).toBe(false);
+        expect(await isSourcePathIncluded(fs, '/mod', 'media/keep.log')).toBe(
+            true,
+        );
+        expect(await isSourcePathIncluded(fs, '/mod', 'media/other.log')).toBe(
+            true,
+        );
+    });
+
+    it('isSourcePathIncluded never rules out mod.info', async () => {
+        const fs = new MemoryFileSystem();
+        await fs.writeText('/mod/.pzstudioignore', '*.info\n');
+
+        expect(await isSourcePathIncluded(fs, '/mod', 'other.info')).toBe(
+            false,
+        );
+        expect(await isSourcePathIncluded(fs, '/mod', 'deep/other.info')).toBe(
+            false,
+        );
+        expect(await isSourcePathIncluded(fs, '/mod', 'mod.info')).toBe(true);
+        expect(await isSourcePathIncluded(fs, '/mod', 'media/mod.info')).toBe(
+            true,
+        );
     });
 });
