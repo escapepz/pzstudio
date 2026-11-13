@@ -227,6 +227,10 @@ export function createVscodeMock() {
         ThemeIcon: class {
             constructor(public id: string) {}
         },
+        ThemeColor: class {
+            constructor(public id: string) {}
+        },
+        StatusBarAlignment: { Left: 1, Right: 2 },
         FileType: { File: 1, Directory: 2, SymbolicLink: 64 },
         TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
         ProgressLocation: { SourceControl: 1, Window: 10, Notification: 15 },
@@ -265,6 +269,15 @@ export function createVscodeMock() {
                 dispose: vi.fn(),
             })),
             createTreeView: vi.fn(() => ({ dispose: vi.fn() })),
+            createStatusBarItem: vi.fn(() => ({
+                text: '',
+                tooltip: undefined as string | undefined,
+                color: undefined as unknown,
+                command: undefined as string | undefined,
+                show: vi.fn(),
+                hide: vi.fn(),
+                dispose: vi.fn(),
+            })),
             activeTextEditor: undefined as
                 | { document: { uri: unknown } }
                 | undefined,

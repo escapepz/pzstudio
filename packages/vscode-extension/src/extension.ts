@@ -6,10 +6,14 @@ import { readPzStudioHostSettings } from './util/settings';
 import { createCommandRunner } from './util/execute';
 import { notifyFirstBuildSuccess } from './util/firstSuccess';
 import { DevSyncController } from './util/devsync';
+import { DevSyncManager, DevSyncStateService } from './util/devSyncState';
 import { createProjectDiagnostics } from './util/doctor';
 import { registerAllCommands } from './commands';
 import { registerExplorerCommands } from './commands/explorer';
-import { registerWatchCommand } from './commands/watch';
+import {
+    registerWatchCommand,
+    registerDevSyncStatusBar,
+} from './commands/watch';
 import { registerDoctorCommand } from './commands/doctor';
 import {
     PROJECT_EXPLORER_VIEW_ID,
@@ -54,6 +58,22 @@ export async function activate(context: vscode.ExtensionContext) {
         treeDataProvider: projectExplorer,
     });
 
+    // Development Sync Engine (UX-15): ONE manager for the whole extension
+    // lifetime — the lifecycle wrapper that drives the controller and
+    // publishes every transition through the state service. The palette
+    // toggle and the status-bar indicator below are its only consumers;
+    // both gate on state.phase, so a click can never re-anchor a live run.
+    const devSyncService = new DevSyncStateService();
+    const devSync = new DevSyncController(studio, pzLogger);
+    const devSyncManager = new DevSyncManager(devSync, devSyncService);
+
+    // UX-15: the status-bar indicator — with the toggle's success popups
+    // gone, this item is the run's user surface. It fires the existing
+    // `pzstudio.watch` command, so clicking it runs the identical gated
+    // toggle; disposal with the subscriptions detaches the state
+    // subscription and the item together.
+    const devSyncStatusBar = registerDevSyncStatusBar(devSyncManager);
+
     // Refresh the explorer when any project.json changes (new/added/renamed/
     // deleted mods all touch it).
     const projectJsonWatcher =
@@ -69,19 +89,18 @@ export async function activate(context: vscode.ExtensionContext) {
         (cmd) => notifyFirstBuildSuccess(context, cmd),
     );
 
-    // Development Sync Engine: one controller shared by the palette toggle.
-    // The session comes from the host instance (per-apply settings
-    // freshness, instance-logger routing — commit 9).
-    const devSync = new DevSyncController(studio, pzLogger);
-
     context.subscriptions.push(
         outputChannel,
-        devSync,
+        // The manager owns the controller AND the state service — disposal
+        // settles a mid-start run through the queued stop, then tears both
+        // down (UX-15).
+        devSyncManager,
         // The provider owns the per-project diagnostics cache (UX-07);
         // dropping it with the subscriptions is the cache's lifecycle end.
         projectExplorer,
         ...registerAllCommands(context, executePZCommand, studio),
-        registerWatchCommand(devSync),
+        registerWatchCommand(devSyncManager),
+        devSyncStatusBar,
         // UX-16: user-invoked doctor failures route through the host logger
         // (one notification, channel detail, Show Details) — the runner
         // itself stays notification-free.
@@ -117,5 +136,7 @@ export async function activate(context: vscode.ExtensionContext) {
 export function deactivate() {
     // Nothing to clean up: the host instance and all its owned state
     // (logger, settings, transport) die with the extension context; DevSync
-    // stops via disposal (the controller is already in subscriptions).
+    // stops via disposal (the manager is already in subscriptions — it
+    // settles a mid-start run through the queued stop, then disposes the
+    // controller and the state service).
 }
