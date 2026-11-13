@@ -258,6 +258,31 @@ describe('classifyDelta (pure)', () => {
         ).toMatchObject({ kind: 'mod-scoped', modId: 'my_mod' });
     });
 
+    it('routes .gitignore change and delete events to scoped rebuilds', () => {
+        expect(
+            classifyDelta(
+                { type: 'change', path: '/proj/my_mod/media/.gitignore' },
+                planInput,
+            ),
+        ).toEqual({
+            kind: 'mod-scoped',
+            modId: 'my_mod',
+            reason: '.gitignore changed (ignore rules)',
+            variants: ['main', 'development'],
+        });
+        expect(
+            classifyDelta(
+                { type: 'delete', path: '/proj/my_mod/.gitignore' },
+                planInput,
+            ),
+        ).toEqual({
+            kind: 'mod-scoped',
+            modId: 'my_mod',
+            reason: '.gitignore changed (ignore rules)',
+            variants: ['main', 'development'],
+        });
+    });
+
     it('ignores dot entries, excluded mods and unknown folders', () => {
         expect(
             classifyDelta(

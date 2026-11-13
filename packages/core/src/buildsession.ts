@@ -210,6 +210,15 @@ export function classifyDelta(
             variants: includedVariantsFor(config, modId),
         };
     }
+    // A .gitignore is the second ignore source: same re-baseline shape.
+    if (name === '.gitignore') {
+        return {
+            kind: 'mod-scoped',
+            modId,
+            reason: '.gitignore changed (ignore rules)',
+            variants: includedVariantsFor(config, modId),
+        };
+    }
 
     // Everything inside a dot entry is invisible to the build.
     if (rest.some((segment) => segment.startsWith('.'))) {
