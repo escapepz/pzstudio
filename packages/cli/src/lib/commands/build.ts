@@ -169,6 +169,14 @@ export async function buildCmd() {
         flagMaterialize: parseMaterializeFlag(extractFlag('materialize')),
         noMaterialize: hasFlag('no-materialize'),
     });
+    // Boundary refusal (data safety): an invalid deployment target is a
+    // hard error, never a silent skip-to-build-only.
+    if (materialization.refused) {
+        throw new CliError(materialization.refused, {
+            tryHint:
+                'Set project.json "outdir" to a dedicated directory outside the project (pzstudio new writes "~/Zomboid/Workshop").',
+        });
+    }
     verbose(`Project root: ${projectPath}`);
     verbose(`Output root: ${distRoot}`);
     verbose(

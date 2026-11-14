@@ -9,7 +9,10 @@ import {
     isWatchPathIgnored,
     ERR_WATCH_COPY_MODE_UNSUPPORTED,
 } from '../../packages/cli/src/lib/watch-shared';
-import { maybeMaterializeBuiltItems } from '../../packages/cli/src/lib/linkStep';
+import {
+    maybeMaterializeBuiltItems,
+    resolveMaterialization,
+} from '../../packages/cli/src/lib/linkStep';
 import type { MaterializationResolution } from '../../packages/cli/src/lib/linkStep';
 import { NodeFileSystem } from '@pzstudio/platform-node';
 import {
@@ -170,6 +173,87 @@ describe('watch materialize helpers (dist-always amendment §7)', () => {
                 ),
             ).toBe(false);
         });
+    });
+});
+
+describe('resolveMaterialization boundary gate (data safety)', () => {
+    it('refuses the project root itself as the deployment target', () => {
+        const r = resolveMaterialization({
+            projectRoot: 'C:/proj',
+            effectiveOutdir: 'C:/proj',
+        });
+        expect(r.action).toBe('skip');
+        expect(r.refused).toContain('the project root itself');
+        expect(r.refused).toContain('would write links or copies');
+        // The cascade result still travels (doctor UX, callers may render).
+        expect(r.mode).toBe('symlink');
+        expect(r.distRoot).toBe(path.resolve('C:/proj/dist'));
+    });
+
+    it('aliases the canonical dist root itself to a plain skip (healthy dist-model shape)', () => {
+        // The doctor e2e pins outdir=<root>/dist as the healthy shape:
+        // deployment target == build root IS pure-build mode, an info —
+        // never a refusal.
+        const r = resolveMaterialization({
+            projectRoot: 'C:/proj',
+            effectiveOutdir: 'C:/proj/dist',
+        });
+        expect(r.action).toBe('skip');
+        expect(r.refused).toBeUndefined();
+        expect(r.aliasDistRoot).toBe(true);
+    });
+
+    it('refuses anything strictly inside the canonical dist root', () => {
+        const r = resolveMaterialization({
+            projectRoot: 'C:/proj',
+            effectiveOutdir: 'C:/proj/dist/Workshop',
+        });
+        expect(r.action).toBe('skip');
+        expect(r.refused).toContain("build output root 'C:");
+        expect(r.aliasDistRoot).toBeUndefined();
+    });
+
+    it('allows a dedicated target inside the project but outside dist', () => {
+        // The dist model requires a dedicated artifact DIRECTORY — an
+        // in-project deployment root (<root>/deploy) is legitimate (the
+        // watcher already steers its loop check around one).
+        const r = resolveMaterialization({
+            projectRoot: 'C:/proj',
+            effectiveOutdir: 'C:/proj/deploy',
+        });
+        expect(r.action).toBe('materialize');
+        expect(r.refused).toBeUndefined();
+        expect(r.outDir).toBe('C:/proj/deploy');
+    });
+
+    it('allows a target outside the project entirely (the normal case)', () => {
+        const r = resolveMaterialization({
+            projectRoot: 'C:/proj',
+            effectiveOutdir: 'C:/Users/u/Zomboid/Workshop',
+        });
+        expect(r.action).toBe('materialize');
+        expect(r.refused).toBeUndefined();
+    });
+
+    it('--no-materialize wins over a refused target (no confusing refusal)', () => {
+        const r = resolveMaterialization({
+            projectRoot: 'C:/proj',
+            effectiveOutdir: 'C:/proj',
+            noMaterialize: true,
+        });
+        expect(r.action).toBe('skip');
+        expect(r.refused).toBeUndefined();
+    });
+
+    it('a refused copy-mode target keeps its resolved mode', () => {
+        const r = resolveMaterialization({
+            projectRoot: 'C:/proj',
+            effectiveOutdir: 'C:/proj/dist/Workshop',
+            projectMaterialize: 'copy',
+        });
+        expect(r.action).toBe('skip');
+        expect(r.refused).toBeDefined();
+        expect(r.mode).toBe('copy');
     });
 });
 

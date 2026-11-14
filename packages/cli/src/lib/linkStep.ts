@@ -30,7 +30,7 @@ import { version } from '../../package.json';
 import fsp from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { join as pathJoin, relative, resolve } from 'node:path';
+import { join as pathJoin, relative, resolve, sep } from 'node:path';
 import {
     attachWorkshopLink,
     inspectMaterializeSlot,
@@ -157,6 +157,25 @@ export interface MaterializationResolution {
      * by the doctor's host computation; the build path never consults it.
      */
     targetNonLocal?: boolean;
+    /**
+     * Set iff the boundary gate refused the target: the deployment root
+     * is the project root itself or lies inside the canonical dist root,
+     * so materializing there would write links/copies into the source
+     * tree or the build output the materializer reconciles FROM. The
+     * action is 'skip', and `refused` carries the full user-facing
+     * problem — every consumer must surface it (build/watch throw, the
+     * doctor renders a DEPLOY_ROOT_INVALID finding), never treat it as a
+     * plain skip.
+     */
+    refused?: string;
+    /**
+     * Set iff the deployment target aliases the canonical dist root
+     * (`outdir = <projectRoot>/dist`): the action is 'skip' — the
+     * artifacts already live there, there is nothing to deploy — and the
+     * doctor renders an OUTDIR_ALIAS_DIST info (never an error; the
+     * healthy dist-model shape the doctor e2e pins).
+     */
+    aliasDistRoot?: boolean;
 }
 
 export interface ResolveMaterializationInput {
@@ -193,19 +212,58 @@ export function resolveMaterialization(
         input.projectMaterialize ??
         input.globalMaterialize ??
         'symlink';
+    const distRoot = distRootOf(input.projectRoot);
     if (input.noMaterialize || !input.effectiveOutdir) {
+        return { action: 'skip', mode, distRoot };
+    }
+    const outDir = expandOutdirToken(input.effectiveOutdir);
+    // Boundary gate (data safety, same rule as resolveDistModel's legacy
+    // classification): the deployment root must be a dedicated directory
+    // outside the project root and outside the canonical dist root.
+    // Materializing into the project root junctions/copies item slots
+    // straight into the source tree (attachOverRealDir would rename a real
+    // user directory aside under --backup-existing-workshop); materializing
+    // inside dist points the materializer at the very tree it builds.
+    // Deliberately NOT path.relative(): on win32 it cannot relate a UNC
+    // target against a local root and returns the target verbatim, which a
+    // startsWith('..') idiom misclassifies as "inside" — a legitimate UNC
+    // symlink target (NON_LOCAL_TARGET's job) must survive this gate.
+    const resolvedOutDir = resolve(outDir);
+    const resolvedProjectRoot = resolve(input.projectRoot);
+    const resolvedDistRoot = resolve(distRoot);
+    const samePath = (a: string, b: string): boolean =>
+        process.platform === 'win32'
+            ? a.toLowerCase() === b.toLowerCase()
+            : a === b;
+    const insideOrEqual = (root: string, target: string): boolean => {
+        const cr = process.platform === 'win32' ? root.toLowerCase() : root;
+        const ct = process.platform === 'win32' ? target.toLowerCase() : target;
+        return ct === cr || ct.startsWith(cr + sep);
+    };
+    // The dist-root ALIAS is legitimate (the doctor e2e pins
+    // outdir=<root>/dist as the healthy dist-model shape): pointing the
+    // deployment target at the canonical build root IS pure-build mode —
+    // there is nothing to deploy where the artifacts already live. Resolved
+    // as a plain skip; the doctor renders the alias as an info, not a
+    // refusal.
+    if (samePath(resolvedOutDir, resolvedDistRoot)) {
+        return { action: 'skip', mode, distRoot, aliasDistRoot: true };
+    }
+    if (
+        samePath(resolvedOutDir, resolvedProjectRoot) ||
+        insideOrEqual(resolvedDistRoot, resolvedOutDir)
+    ) {
+        const why = samePath(resolvedOutDir, resolvedProjectRoot)
+            ? 'it is the project root itself'
+            : `it lies inside the build output root '${resolvedDistRoot}'`;
         return {
             action: 'skip',
             mode,
-            distRoot: distRootOf(input.projectRoot),
+            distRoot,
+            refused: `Deployment target '${outDir}' refused — ${why}; deploying there would write links or copies into the source tree.`,
         };
     }
-    return {
-        action: 'materialize',
-        mode,
-        outDir: expandOutdirToken(input.effectiveOutdir),
-        distRoot: distRootOf(input.projectRoot),
-    };
+    return { action: 'materialize', mode, outDir, distRoot };
 }
 
 /**
