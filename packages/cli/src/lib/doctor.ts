@@ -180,36 +180,52 @@ export async function resolveDoctorWorkshopInputs(
         .filter((dir) => existsSync(dir))
         .map((dir) => ({ name: basename(dir) }));
     const workshopLinks: WorkshopLinkCheckInput[] = await Promise.all(
-        items.map(async ({ name }) => {
-            const inspection = await inspectMaterializeSlot(
-                nodeLinkFs,
-                join(materialization.outDir!, name),
-                join(distRoot, name),
-                {
-                    platform,
-                    readMarker,
-                    readCopyMarker: (slotDir) =>
-                        readCopySlotMarker(
-                            promisesFileSystem,
-                            copyMarkerPath(slotDir),
-                        ),
-                    copyIdentity: { projectId, itemId: name },
-                },
-            );
-            return {
-                item: name,
-                // Doctor vocabulary: the inspector's ABSENT (no slot at W)
-                // reads as a missing deployment; OK_LINK reads as
-                // attached-ok.
-                state:
-                    inspection.state === 'ABSENT'
-                        ? 'MISSING_LINK'
-                        : inspection.state === 'OK_LINK'
-                          ? 'ATTACHED_OK'
-                          : inspection.state,
-                detail: inspection.detail,
-                vdfPath: join(distRoot, `${name}.workshop.vdf`),
-            };
+        items.map(async ({ name }): Promise<WorkshopLinkCheckInput> => {
+            // A slot read fails for exactly the real-world reasons the
+            // doctor runs at all — the game holds the junction open, an AV
+            // locks the marker (EPERM/EBUSY). That failure is THIS item's
+            // finding, not a report-killer: one locked slot must never
+            // reject the Promise.all and erase every workshop-link finding
+            // into the outer invalid-project.json catch.
+            try {
+                const inspection = await inspectMaterializeSlot(
+                    nodeLinkFs,
+                    join(materialization.outDir!, name),
+                    join(distRoot, name),
+                    {
+                        platform,
+                        readMarker,
+                        readCopyMarker: (slotDir) =>
+                            readCopySlotMarker(
+                                promisesFileSystem,
+                                copyMarkerPath(slotDir),
+                            ),
+                        copyIdentity: { projectId, itemId: name },
+                    },
+                );
+                return {
+                    item: name,
+                    // Doctor vocabulary: the inspector's ABSENT (no slot at
+                    // W) reads as a missing deployment; OK_LINK reads as
+                    // attached-ok.
+                    state:
+                        inspection.state === 'ABSENT'
+                            ? 'MISSING_LINK'
+                            : inspection.state === 'OK_LINK'
+                              ? 'ATTACHED_OK'
+                              : inspection.state,
+                    detail: inspection.detail,
+                    vdfPath: join(distRoot, `${name}.workshop.vdf`),
+                };
+            } catch (e) {
+                const message = e instanceof Error ? e.message : String(e);
+                return {
+                    item: name,
+                    state: 'INSPECT_FAILED',
+                    detail: message,
+                    vdfPath: join(distRoot, `${name}.workshop.vdf`),
+                };
+            }
         }),
     );
     return {

@@ -94,6 +94,16 @@ describe('workshopLinkDiagnostics (core mapping)', () => {
                 'info',
                 undefined,
             ],
+            // Not an inspector state — the host's per-item catch-all for a
+            // slot read that failed outright (EPERM/EBUSY: the game holds
+            // the junction open). Must render as its own finding, never
+            // drop out of the report.
+            [
+                'INSPECT_FAILED',
+                'workshop-link.inspect-failed',
+                'warning',
+                undefined,
+            ],
         ];
         const diagnostics = workshopLinkDiagnostics(
             rows.map(([state]) => entry({ state })),
@@ -189,6 +199,52 @@ describe('runDoctor materialization inputs (core rendering)', () => {
         expect(unset).toHaveLength(1);
         expect(unset[0].severity).toBe('info');
         expect(unset[0].message).toContain('dist/ only');
+    });
+
+    it('a dist-root alias renders OUTDIR_ALIAS_DIST as an info, not OUTDIR_UNSET', async () => {
+        const report = await runDoctor(
+            new NodeFileSystem(),
+            baseInput({
+                materialization: {
+                    action: 'skip',
+                    mode: 'symlink',
+                    aliasDistRoot: true,
+                },
+            }),
+        );
+        const alias = report.diagnostics.filter(
+            (d) => d.code === 'OUTDIR_ALIAS_DIST',
+        );
+        expect(alias).toHaveLength(1);
+        expect(alias[0].severity).toBe('info');
+        expect(alias[0].message).toContain('dist/ root');
+        expect(
+            report.diagnostics.filter((d) => d.code === 'OUTDIR_UNSET'),
+        ).toHaveLength(0);
+    });
+
+    it('a boundary-refused deployment renders DEPLOY_ROOT_INVALID, not OUTDIR_UNSET', async () => {
+        const report = await runDoctor(
+            new NodeFileSystem(),
+            baseInput({
+                materialization: {
+                    action: 'skip',
+                    mode: 'symlink',
+                    refused:
+                        "Deployment target 'C:/proj' refused — it is the project root itself; deploying there would write links or copies into the source tree.",
+                },
+            }),
+        );
+        const invalid = report.diagnostics.filter(
+            (d) => d.code === 'DEPLOY_ROOT_INVALID',
+        );
+        expect(invalid).toHaveLength(1);
+        expect(invalid[0].severity).toBe('error');
+        expect(invalid[0].message).toContain('refused');
+        expect(invalid[0].module).toBe('workshop-link');
+        expect(
+            report.diagnostics.filter((d) => d.code === 'OUTDIR_UNSET'),
+        ).toHaveLength(0);
     });
 
     it('an active materialization renders no OUTDIR_UNSET diagnostic', async () => {

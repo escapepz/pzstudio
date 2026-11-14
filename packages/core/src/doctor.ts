@@ -83,6 +83,18 @@ export interface DoctorInput {
         outDir?: string;
         /** Symlink mode only: the target is a UNC/network volume. */
         targetNonLocal?: boolean;
+        /**
+         * Set iff the host's boundary gate refused the deployment target
+         * (project root itself, or strictly inside the dist root): renders
+         * as a DEPLOY_ROOT_INVALID error finding instead of OUTDIR_UNSET.
+         */
+        refused?: string;
+        /**
+         * Set iff the deployment target aliases the canonical dist root:
+         * renders as an OUTDIR_ALIAS_DIST info — the healthy dist-model
+         * shape, never a warning or error.
+         */
+        aliasDistRoot?: boolean;
     };
 }
 
@@ -764,6 +776,29 @@ function materializationDiagnostics(
     materialization: DoctorInput['materialization'],
 ): Diagnostic[] {
     if (!materialization) return [];
+    if (materialization.aliasDistRoot) {
+        return [
+            {
+                module: 'workshop-link',
+                code: 'OUTDIR_ALIAS_DIST',
+                severity: 'info',
+                message:
+                    'Deployment disabled — outdir equals the canonical dist/ root; builds write dist only, there is nothing to deploy.',
+                hint: 'Point project.json "outdir" at ~/Zomboid/Workshop (the pzstudio new default) to expose built items to the game.',
+            },
+        ];
+    }
+    if (materialization.refused) {
+        return [
+            {
+                module: 'workshop-link',
+                code: 'DEPLOY_ROOT_INVALID',
+                severity: 'error',
+                message: materialization.refused,
+                hint: 'Set project.json "outdir" to a dedicated directory outside the project (pzstudio new writes "~/Zomboid/Workshop").',
+            },
+        ];
+    }
     if (materialization.action === 'skip') {
         return [
             {
