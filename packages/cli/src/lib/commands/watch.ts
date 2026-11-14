@@ -5,6 +5,7 @@ import { CliError } from '../errors';
 import { extractFlag, hasFlag } from '../args';
 import type { FileDelta } from '@pzstudio/core';
 import {
+    collectIncludedModIds,
     createIgnoreMatcher,
     readIgnoreRulesForDir,
     resolveBuildOutputPath,
@@ -178,9 +179,19 @@ export async function watchCmd() {
     // mode. Non-fatal by contract; refusals surface and doctor reports.
     if (materialization.action === 'materialize') {
         const anchoredConfig = { ...projectConfig, outdir: outDir };
-        const itemNames = variants.map((variant) =>
-            basename(resolveBuildOutputPath(anchoredConfig, variant)),
-        );
+        // Materialize only variants the engine actually built: buildVariants
+        // skips a variant whose included-mod set is empty (buildsession's
+        // `continue`), so its dist item root never exists — a junction for
+        // it would dangle. The same filter gates the standalone build's
+        // materialize step (builtItems).
+        const itemNames = variants
+            .filter(
+                (variant) =>
+                    collectIncludedModIds(projectConfig, variant).length > 0,
+            )
+            .map((variant) =>
+                basename(resolveBuildOutputPath(anchoredConfig, variant)),
+            );
         await maybeMaterializeBuiltItems(materialization, itemNames, {
             projectRoot: projectPath,
             backupExisting: hasFlag('backup-existing-workshop'),
