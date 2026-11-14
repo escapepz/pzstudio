@@ -94,6 +94,9 @@ The envelope does not change the exit matrix — it only changes stdout. Full co
 | Copy deployment refuse | build copy pass / copy→symlink toggle / doctor | `ERR_COPY_SLOT_HAND_MADE` (real dir without a matching `.pzstudio-copy.json`) / `ERR_COPY_SLOT_NOT_DIRECTORY` / `ERR_COPY_SLOT_LINK_INSIDE` (a link inside the slot — a prune could follow it outside); reconcile outcomes surface `RECONCILE_FAILED` (mid-walk failure) / `UNLINK_FAILED` (the game holds the junction open) / `NOT_DIRECTORY` — never the healthy `COPY_SLOT` label; the copy→symlink toggle adds `COPY_SLOT_DRIFT` (the slot no longer matches its recorded manifest — hand-edit, extra file, or a pre-manifest marker: refuse, never delete; run a copy-mode build to reconcile) | owned junctions are unlinked BEFORE any copy; never copied through; usage events carry `materialize.toggle` (ok/error) |
 | Watch copy-mode refusal | watch | `ERR_WATCH_COPY_MODE_UNSUPPORTED` (Problem/Cause/Try: switch to symlink, one-shot build, or `--no-materialize`) | fail-fast before the watcher starts; never silently forced to symlink |
 | Deployment unset | doctor | `OUTDIR_UNSET` (info): no outdir configured — the build wrote `dist/` only | CI-legitimate pure build state, never a warning |
+| Deployment boundary refuse | build / watch / doctor | `DEPLOY_ROOT_INVALID` — build/watch: hard `CliError` (exit 1), `Deployment target 'x' refused — it is the project root itself / it lies inside the build output root '<dist>'`; doctor: error finding with the same text | data-safety boundary gate, never a silent skip; fix = point `outdir` at a dedicated directory outside the project (`pzstudio new` writes `~/Zomboid/Workshop`) |
+| Deployment aliases dist | doctor | `OUTDIR_ALIAS_DIST` (info): `outdir` equals the canonical `dist/` root — the artifacts already live there, there is nothing to deploy | pure-build shape, pinned healthy by the doctor e2e; never a warning |
+| Slot inspection failed | doctor | `INSPECT_FAILED` (warning, per item): the slot could not be inspected — game/AV lock (EPERM/EBUSY); detail carries the fs message | one locked slot is that item's finding only — the rest of the workshop-link report survives |
 | workshop-vdf refusal | workshop-vdf | `... previews must be < 1 MB` / `no title: pass --title or add title= to workshop.txt` / `the VDF must be written outside contentfolder (...)` / schema error list | generates + PRINTS the steamcmd command; never launches a process |
 | Not implemented | lang | `Not implemented yet!` (rendered through the unexpected wrapper) | hidden stub |
 
@@ -107,6 +110,7 @@ Warnings print to stderr (`[WARN]`, yellow on TTY) and never change the exit cod
 | build | Dev-only mods skipped in the main build: `<ids>` (names listed) |
 | build/watch | All mods are excluded — nothing to build for the dev_branch workshop output |
 | watch | Per-batch apply errors (session keeps running); watcher transport errors |
+| build/watch | `Deployment failed for '<item>': deployment root <outDir> could not be created: <reason>` (state `DEPLOY_ROOT_UNAVAILABLE` in usage events) — deployment is skipped, the build/sync keeps going |
 | templateManager | Community template not verified by PZStudio; cache invalid → re-cloning; refresh failed → re-cloning |
 | templateManager | Falling back to offline legacy template (official templates only) |
 | new/add scaffolding | Failed to create junction → falling back to copy; failed to remove staging directory (original error preserved) |

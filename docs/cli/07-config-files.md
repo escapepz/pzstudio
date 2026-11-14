@@ -147,6 +147,16 @@ interrupted pass) refuses as `COPY_SLOT_DRIFT` until the next copy build upgrade
 it. There is also `dist/<Item>.workshop.vdf` (from `pzstudio workshop-vdf`) — a
 machine-local build artifact, never committed.
 
+The deployment root sits behind a hard boundary (data-safety gate, resolved on
+every build/watch/doctor run): an `outdir` equal to the **project root** or
+lying **inside the canonical `dist/` root** is refused (`DEPLOY_ROOT_INVALID` —
+build and watch exit 1, doctor renders an error finding), because materializing
+there would write links or copies into the source tree. An `outdir` that
+**equals** `dist/` itself aliases the canonical build root — that is pure-build
+mode: deployment resolves as a skip and doctor renders `OUTDIR_ALIAS_DIST` as
+info. Point `outdir` at a dedicated directory outside the project (`pzstudio
+new` writes `~/Zomboid/Workshop`).
+
 Planner rules worth remembering:
 - A mod folder **with** branch folders containing `media/` → files land under each branch;
   **without** any branch folder → files land at mod root (legacy Build 41 layout).

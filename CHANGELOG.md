@@ -58,6 +58,16 @@ tool-only releases. Game compatibility is declared separately in
   consulted — a `dist/**` rule can never own or break that protection.
 - No changes to the JSON contract, the exit-code matrix, or the stream
   contract.
+- **Materialize boundary gate (data safety)**: an `outdir` equal to the
+  project root or lying inside the canonical `dist/` root is now refused
+  (`DEPLOY_ROOT_INVALID` — hard error in build/watch, error finding in
+  doctor) instead of writing links or copies into the source tree; an
+  `outdir` equal to `dist/` itself is pure-build mode (skip +
+  `OUTDIR_ALIAS_DIST` info). Watch no longer materializes variants with an
+  empty included-mod set (dangling junctions), a locked deployment slot no
+  longer erases the doctor's workshop findings (`INSPECT_FAILED` per item),
+  and generic copy-slot reconcile failures report `RECONCILE_FAILED` —
+  never the healthy `COPY_SLOT` label.
 
 ### Extension (pzstudio42)
 
@@ -82,6 +92,11 @@ tool-only releases. Game compatibility is declared separately in
   stopped immediately and the indicator lands off (the session does not
   survive the request); stopping while syncing tears the run down, and
   stopping while already stopping or off is a no-op.
+- **Re-entrancy hardening**: the DevSyncManager holds the authoritative
+  atomic start gate — a start from a non-idle phase now fails honestly
+  instead of re-anchoring the in-flight run — and the toggle re-checks the
+  phase after the async project picker, so two stacked invocations can no
+  longer race into a phantom run.
 - **PZ Project Explorer badge** while a sync run is in flight: the view's
   badge shows `1` with a per-phase tooltip naming the project; cleared
   while off.
