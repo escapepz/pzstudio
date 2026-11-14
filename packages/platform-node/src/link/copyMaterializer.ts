@@ -618,7 +618,7 @@ export async function reconcileCopySlot(
         }
         return {
             ok: false,
-            state: 'COPY_SLOT',
+            state: 'RECONCILE_FAILED',
             detail: describeFailure('reconcile', `${D} -> ${W}`, e),
         };
     }

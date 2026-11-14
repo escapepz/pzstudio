@@ -591,6 +591,45 @@ describe('copy materializer (real fs fixtures)', () => {
         );
     });
 
+    it('reconcile: a mid-walk fs error reports RECONCILE_FAILED, never the healthy COPY_SLOT label', async () => {
+        // Contract (ReconcileResult.state): a failed pass must never reuse
+        // COPY_SLOT — callers surface the state verbatim, so a generic fs
+        // error (EIO, ENOSPC) must land in the reconcile-only failure state.
+        await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
+        await fsp.mkdir(slotDir, { recursive: true });
+        await writeMarker(slotDir);
+        const eio: NodeJS.ErrnoException = new Error(
+            'EIO: i/o error, write',
+        ) as NodeJS.ErrnoException;
+        eio.code = 'EIO';
+        const failingCopyFs: CopyFs = {
+            ...nodeCopyFs,
+            writeFile: async (p, d) => {
+                if (
+                    typeof p === 'string' &&
+                    p.includes(path.join(slotDir, 'Contents'))
+                ) {
+                    throw eio;
+                }
+                return nodeCopyFs.writeFile(p, d);
+            },
+        };
+        const result = await reconcileCopySlot(
+            failingCopyFs,
+            distItem,
+            slotDir,
+            { ...opts(), copyIdentity: await identity() },
+        );
+        expect(result.ok).toBe(false);
+        expect(result.state).toBe('RECONCILE_FAILED');
+        expect(result.detail).toContain('EIO');
+        // The marker-before write survives the failed pass (self-heal is the
+        // next run's job); nothing else in the walk order is guaranteed.
+        await expect(
+            fsp.readFile(path.join(slotDir, COPY_MARKER_FILENAME), 'utf8'),
+        ).resolves.toBeDefined();
+    });
+
     it('toggle: a proven-clean copy slot is removed (COPY_SLOT_REPLACED)', async () => {
         await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
         await copyPass();
