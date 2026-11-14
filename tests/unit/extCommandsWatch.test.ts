@@ -474,7 +474,65 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
         expect(item.text).toBe('$(circle-slash) DevSync off');
         await manager.dispose();
     });
+
+    it('a manager.start() from a non-idle phase throws instead of re-anchoring the in-flight run', async () => {
+        withProjects('proj');
+        let releaseStart!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            releaseStart = resolve;
+        });
+        const { studio, session, manager } = setup(() => gate);
+
+        const first = startViaManager(manager);
+        await vi.waitFor(() => expect(manager.state.phase).toBe('starting'));
+
+        // The atomic gate: refused BEFORE any state mutation — the in-flight
+        // run's queued stop and anchor stay intact.
+        await expect(manager.start(fsPath(['proj']))).rejects.toThrow(
+            /already starting/,
+        );
+        expect(manager.state.phase).toBe('starting');
+        expect(asMock(studio.createDevSync)).toHaveBeenCalledTimes(1);
+
+        releaseStart();
+        await first;
+        expect(manager.state.phase).toBe('syncing');
+        expect(asMock(session.start)).toHaveBeenCalledTimes(1);
+        await manager.dispose();
+    });
+
+    it('two stacked commands resolving over the same tick start exactly one run — the loser fails honestly', async () => {
+        withProjects('proj');
+        const { handler, studio, session, manager, item } = setup();
+
+        // Both invocations read the idle guard before either reaches the
+        // manager (status-bar click vs palette over one project). One wins;
+        // the other must fail without duplicating the session or corrupting
+        // the state timeline. Neither handler() ever rejects — the command
+        // boundary owns the failure (the one start-fail toast).
+        await expect(Promise.all([handler(), handler()])).resolves.toEqual([
+            undefined,
+            undefined,
+        ]);
+        await vi.waitFor(() => expect(manager.state.phase).toBe('syncing'));
+        expect(asMock(studio.createDevSync)).toHaveBeenCalledTimes(1);
+        expect(asMock(session.start)).toHaveBeenCalledTimes(1);
+        // The winner's surface is the normal started feedback...
+        expect(item.text).toBe('$(sync~spin) DevSync: proj');
+        // ...and the loser's failure is the one honest start-fail toast —
+        // not a generic host error and not a silent swallow.
+        expect(asMock(vscode.window.showErrorMessage)).toHaveBeenCalledTimes(1);
+        expect(
+            asMock(vscode.window.showErrorMessage).mock.calls[0][0],
+        ).toContain('already starting');
+        await manager.dispose();
+    });
 });
+
+/** Starts through the manager directly (no command), for gate-level tests. */
+function startViaManager(manager: DevSyncManager): Promise<void> {
+    return manager.start(fsPath(['proj']));
+}
 
 describe('DevSync status-bar item (UX-15)', () => {
     beforeEach(() => {

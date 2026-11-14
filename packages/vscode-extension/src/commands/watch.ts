@@ -17,13 +17,14 @@ export function registerWatchCommand(
     manager: DevSyncManager,
 ): vscode.Disposable {
     return vscode.commands.registerCommand('pzstudio.watch', async () => {
-        // The one start-guard — the manager deliberately has none (hand-off
-        // ruling): a start while syncing/stopping would re-anchor the
-        // indicator over a live run, so start happens only from idle
-        // (including the idle-with-lastError state a failed run lands in),
-        // a stop while syncing tears down, while starting it queues through
-        // the manager's queued-stop protocol and while stopping it is a
-        // no-op.
+        // The command owns the UX gating (amended hand-off ruling — the
+        // manager now holds the authoritative atomic start gate, this
+        // toggle the wording): a start while syncing/stopping would
+        // re-anchor the indicator over a live run, so start happens only
+        // from idle (including the idle-with-lastError state a failed run
+        // lands in), a stop while syncing tears down, while starting it
+        // queues through the manager's queued-stop protocol and while
+        // stopping it is a no-op.
         const phase = manager.state.phase;
         if (phase !== 'idle') {
             if (phase === 'stopping') {
@@ -46,6 +47,15 @@ export function registerWatchCommand(
             return;
         }
         const dir = resolution.dir;
+        // Re-check after the await: the picker (or a second invocation
+        // resolving over the same tick — status-bar click vs palette with a
+        // single project) yields the event loop, and a stop or a sibling
+        // start can land in that window. The stale idle snapshot above must
+        // not start over it; the manager's atomic gate is the backstop for
+        // whatever remains.
+        if (manager.state.phase !== 'idle') {
+            return;
+        }
         const projectName = dir.path.split('/').pop() ?? dir.fsPath;
         try {
             // The initial full build of both outputs runs in here (UX-06):

@@ -93,10 +93,12 @@ export class DevSyncStateService implements vscode.Disposable {
 /**
  * DevSyncManager (UX-15): the lifecycle wrapper UI and commands consume —
  * the single compositor that drives DevSyncController and publishes every
- * transition through DevSyncStateService. It adds exactly ONE piece of
- * logic of its own, the queued-stop protocol; it deliberately adds NO
- * second start-guard (the controller already blocks start-while-active and
- * start-while-starting) and never touches the controller's internals.
+ * transition through DevSyncStateService. It adds two pieces of logic of
+ * its own: the queued-stop protocol and the atomic start gate (the
+ * amendment of the earlier hand-off ruling that gave the manager none —
+ * two commands stacked over the async project picker both read `idle` and
+ * both started; the controller's own re-entrancy guard is a silent no-op,
+ * so the second run re-anchored the state and clobbered a queued stop).
  *
  * The queued-stop protocol exists because the controller alone cannot
  * survive a stop during its initial build: controller.start() assigns
@@ -107,9 +109,12 @@ export class DevSyncStateService implements vscode.Disposable {
  * `idle`, so the state path is starting → (start settles) → stopping →
  * idle and the just-published session never outlives the request.
  *
- * One start at a time remains the caller's discipline (the UI toggle reads
- * `state.phase`); a second start() while one is in flight re-anchors the
- * run and rides the controller's own re-entrancy guard.
+ * The start gate is the counterpart: a start() from any non-idle phase
+ * throws instead of re-anchoring the run. The UI toggle still gates on
+ * `state.phase` (UX wording) and re-checks after its async project
+ * resolution; the manager gate is the authoritative backstop — the check
+ * and the `beginStarting` anchor land on the same synchronous tick, so JS
+ * cannot interleave a second start() between them.
  */
 export class DevSyncManager implements vscode.Disposable {
     private readonly controller: DevSyncController;
@@ -137,6 +142,14 @@ export class DevSyncManager implements vscode.Disposable {
      * indicator already shows the settled outcome.
      */
     async start(projectDir: string): Promise<void> {
+        // Atomic re-entrancy gate — see the class doc. Placed BEFORE any
+        // state mutation: a refused second start must not reset
+        // stopRequested or re-anchor the in-flight run it raced against.
+        if (this.service.state.phase !== 'idle') {
+            throw new Error(
+                'Development sync is already starting or running for this workspace.',
+            );
+        }
         // Folder-name title — the commands/watch.ts convention (uri.path's
         // last segment); both separators fold so a Windows fsPath still
         // titles by folder. Never workshop.title (unreadable mid-start).
