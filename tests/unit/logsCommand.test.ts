@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import { join } from 'path';
 // Importing the command module runs registerCommand + addHelp at import time.
@@ -352,5 +352,18 @@ describe('pzstudio logs command', () => {
                 sourceRootUri: join(projectPath, 'zul_test_dev'),
             },
         ]);
+    });
+
+    it('8. importing the CLI entry alone registers logs in a fresh registry', async () => {
+        // cli.ts self-registers every command through import side effects;
+        // the logs feature's file list missed ./commands/logs there, so the
+        // production binary printed `Unknown command [logs]` and exited 2
+        // while this suite stayed green — the direct command-module import
+        // at the top masked the gap. A fresh module graph importing ONLY
+        // the entry pins the registration.
+        vi.resetModules();
+        await import('../../packages/cli/src/lib/cli');
+        const registry = await import('../../packages/cli/src/lib/registry');
+        expect(registry.getCommand('logs')).toBeDefined();
     });
 });

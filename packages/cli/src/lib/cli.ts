@@ -12,6 +12,7 @@ import './commands/delete';
 import './commands/doctor';
 import './commands/lang';
 import './commands/list';
+import './commands/logs';
 import './commands/new';
 import './commands/outdir';
 import './commands/rename';
