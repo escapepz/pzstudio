@@ -10,6 +10,11 @@
  * This module is pure (no I/O, no Node builtins): callers feed raw lines and
  * get a PeeledLine back. Unknown lines come back as `kind: 'other'` — nothing
  * is ever dropped; later stages own classification and continuations.
+ *
+ * Stage 2 lives here too: `assembleEntries` groups peeled lines into entries
+ * with their tab-prefixed continuations (capped at 64 lines), and the dormant
+ * continuation extractors (`extractKahluaException`, `extractFrames`)
+ * classify continuation content for later classification stages.
  */
 
 export type ConsoleLogLevel =
@@ -112,4 +117,225 @@ export function peelLine(raw: string): PeeledLine {
     }
 
     return { kind: 'other', raw };
+}
+
+// ---------------------------------------------------------------------------
+// Stage 2: entry assembly + dormant continuation extractors
+// ---------------------------------------------------------------------------
+
+/** One assembled log entry: an envelope/severe/jul-header line plus its continuations. */
+export interface ParsedEntry {
+    kind: 'envelope' | 'severe' | 'jul-header';
+    level?: ConsoleLogLevel;
+    channel?: string;
+    frame?: number;
+    caller?: string;
+    body: string;
+    /** 1-based */
+    lineNo: number;
+    /** following tab-prefixed lines, verbatim (tabs kept) */
+    continuations: string[];
+    /** true when truncated at the 64-line cap */
+    continuationsCapped: boolean;
+}
+
+export interface AssembleResult {
+    entries: ParsedEntry[];
+    totalLines: number;
+    junkCount: number;
+}
+
+export type ParsedFrame = {
+    kind: 'lua' | 'lua-vm' | 'engine' | 'jvm';
+    text: string;
+    /** basename */
+    file?: string;
+    line?: number;
+    /** Lua(Vanilla) | Lua((MOD:<display name>)) display name | B41 `| MOD:` value */
+    owner?: string;
+};
+
+export interface KahluaExceptionInfo {
+    basename: string;
+    line: number;
+    message: string;
+}
+
+// Continuations attach to the current entry up to this many lines (design
+// invariant: the cap is never crossed silently — see assembleEntries).
+const CONTINUATION_CAP = 64;
+
+// Kahlua compile-error headline: `\tse.krka.kahlua.vm.KahluaException:
+// <basename>.lua:<line>: <msg> at Lua.<chunk>(<chunk>:<line>).` (design §Stage
+// 2 regex, prefixed with \s* because continuations keep their leading tabs).
+const KAHLUA_EXCEPTION =
+    /^\s*se\.krka\.kahlua\.vm\.KahluaException:\s*(?<basename>[^:]+\.lua):(?<line>\d+):\s*(?<msg>.+?)\s+at\s+Lua\./;
+
+// B41-era Kahlua stack frame (dormant in B42): `function: new -- file:
+// ISHandcraftAction.lua line # 354 | Vanilla` / `... | MOD: <name>`.
+const B41_FRAME =
+    /^\s*function:\s+\S+\s+--\s+file:\s+(?<file>[^|]+?)\s+line\s+#\s+(?<line>\d+)(?:\s*\|\s*(?:MOD:\s*(?<mod>.+)|Vanilla))?/;
+
+// B42 synthetic Lua frames (dormant until a real runtime error is captured):
+// `Lua((MOD:<display name>)).func(<basename>.lua:<line>)`, `Lua(Vanilla).func(...)`,
+// `Lua(BuiltIn).func(...)` and the compile-error variant `Lua.<chunk>(<chunk>:<line>)`.
+const LUA_FRAME =
+    /^\s*Lua(?:\((?<owner>\(MOD:[^)]*\)|[^)]*)\))?\.(?<func>[\w$.]+)\((?<basename>[^():]+\.lua):(?<line>\d+)\)\s*$/;
+
+// Generic stack element: `org.luaj.kahluafork.compiler.LexState.lexerror(LexState.java:274)`,
+// `java.base/java.lang.Thread.run(Thread.java:833)`, `zombie.*` engine frames.
+// PZ prints frames without an `at ` prefix (StackTraceContainer appends
+// indent + element directly); one is tolerated defensively and stripped from
+// `text`. Anchored so body-like lines (exception headlines, captions) can
+// never pass as frames.
+const JVM_FRAME = /^\s*(?:at\s+)?(?<frame>[A-Za-z_$][\w$./]*)\((?:[^)]*)\)\s*$/;
+
+/**
+ * Assembles peeled lines into entries. Envelope/severe/jul-header lines open
+ * a new entry; `kind: 'other'` lines attach to the current entry as verbatim
+ * continuations only when tab-prefixed (capped at 64, flagging
+ * `continuationsCapped`); every other 'other' line counts as junk — nothing
+ * is silently dropped.
+ */
+export function assembleEntries(lines: string[]): AssembleResult {
+    const entries: ParsedEntry[] = [];
+    let junkCount = 0;
+    let current: ParsedEntry | undefined;
+
+    for (let i = 0; i < lines.length; i += 1) {
+        const raw = lines[i];
+        const peeled = peelLine(raw);
+        if (peeled.kind !== 'other') {
+            // jul-header records have no peeled body — the raw caption is the body.
+            current = {
+                kind: peeled.kind,
+                level: peeled.level,
+                channel: peeled.channel,
+                frame: peeled.frame,
+                caller: peeled.caller,
+                body:
+                    peeled.kind === 'jul-header'
+                        ? peeled.raw
+                        : (peeled.body ?? ''),
+                lineNo: i + 1,
+                continuations: [],
+                continuationsCapped: false,
+            };
+            entries.push(current);
+            continue;
+        }
+        if (current && raw.startsWith('\t')) {
+            if (current.continuations.length < CONTINUATION_CAP) {
+                current.continuations.push(raw);
+            } else {
+                // Over-cap continuations are dropped from the entry but still
+                // counted, and the entry is flagged (never a silent drop).
+                current.continuationsCapped = true;
+                junkCount += 1;
+            }
+        } else {
+            junkCount += 1;
+        }
+    }
+
+    return { entries, totalLines: lines.length, junkCount };
+}
+
+/** Finds the Kahlua compile-error headline in an entry's continuations, if any. */
+export function extractKahluaException(
+    continuations: string[],
+): KahluaExceptionInfo | null {
+    for (const cont of continuations) {
+        const found = KAHLUA_EXCEPTION.exec(cont);
+        if (found) {
+            return {
+                basename: found.groups.basename,
+                line: parseInt(found.groups.line, 10),
+                message: found.groups.msg,
+            };
+        }
+    }
+    return null;
+}
+
+/**
+ * Classifies continuation lines into stack frames. B42 synthetic Lua frames
+ * and the B41-era Kahlua frames carry file/line (+owner); JVM-shaped frames
+ * are classified by leading package: kahlua/luaj-fork → lua-vm,
+ * `zombie.*` → engine, everything else → jvm. Captions (`Stack trace:`,
+ * `Caused by: `, `Suppressed: `), separators and exception headlines never
+ * become frames.
+ */
+export function extractFrames(continuations: string[]): ParsedFrame[] {
+    const frames: ParsedFrame[] = [];
+    for (const cont of continuations) {
+        const trimmed = cont.trim();
+        if (!trimmed) {
+            continue;
+        }
+        if (
+            trimmed === 'Stack trace:' ||
+            trimmed.startsWith('Caused by: ') ||
+            trimmed.startsWith('Suppressed: ')
+        ) {
+            continue;
+        }
+
+        const lua = LUA_FRAME.exec(cont);
+        if (lua) {
+            frames.push({
+                kind: 'lua',
+                text: trimmed,
+                file: lua.groups.basename,
+                line: parseInt(lua.groups.line, 10),
+                owner: unwrapModOwner(lua.groups.owner),
+            });
+            continue;
+        }
+
+        const b41 = B41_FRAME.exec(cont);
+        if (b41) {
+            frames.push({
+                kind: 'lua',
+                text: trimmed,
+                file: b41.groups.file,
+                line: parseInt(b41.groups.line, 10),
+                // undefined for `| Vanilla` and bare frames (group not present).
+                owner: b41.groups.mod,
+            });
+            continue;
+        }
+
+        const jvm = JVM_FRAME.exec(cont);
+        if (jvm) {
+            const cls = jvm.groups.frame;
+            let kind: ParsedFrame['kind'] = 'jvm';
+            if (
+                cls.startsWith('se.krka.kahlua.') ||
+                cls.startsWith('org.luaj.kahluafork.')
+            ) {
+                kind = 'lua-vm';
+            } else if (cls.startsWith('zombie.')) {
+                kind = 'engine';
+            }
+            frames.push({
+                kind,
+                text: trimmed.replace(/^at\s+/, ''),
+                file: undefined,
+                line: undefined,
+                owner: undefined,
+            });
+        }
+    }
+    return frames;
+}
+
+// `Lua((MOD:<display name>))` carries the display name wrapped in a second
+// paren group; plain owners (`Vanilla`, `BuiltIn`) pass through unchanged.
+function unwrapModOwner(owner: string | undefined): string | undefined {
+    if (!owner) {
+        return undefined;
+    }
+    const mod = /^\(MOD:(.+)\)$/.exec(owner);
+    return mod ? mod[1] : owner;
 }
