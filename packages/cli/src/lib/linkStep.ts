@@ -607,6 +607,8 @@ export type MaterializeOutcome = {
     detail?: string;
     filesCopied?: number;
     filesPruned?: number;
+    /** The full path of every pruned leaf file (d03-B5), from the pass. */
+    prunedPaths?: string[];
 };
 
 /**
@@ -717,6 +719,24 @@ async function copyMaterializeBuiltItems(
         });
 
         if (outcome.ok) {
+            // Sweep d03-B5: a prune deletes slot content the manifest does
+            // not carry — frequently a hand-made file the user placed in the
+            // deployment root. The build contract stays dist-mirror (exit 0,
+            // no rollback), but every pruned path is now surfaced on stderr
+            // with a loud total, never just the (N copied, M pruned) count.
+            const prunedPaths = outcome.prunedPaths ?? [];
+            for (const prunedPath of prunedPaths) {
+                surface(
+                    `Pruned hand-made file from deployment slot '${itemName}' (not in the build manifest): ${prunedPath}`,
+                    'warn',
+                );
+            }
+            if (prunedPaths.length > 0) {
+                surface(
+                    `Copy deployment for '${itemName}': ${prunedPaths.length} file(s) outside the build manifest were pruned — rebuilds mirror dist/, hand-made files in the deployment slot do not survive them.`,
+                    'warn',
+                );
+            }
             surface(
                 `Deployed (copy): '${itemName}' -> ${outDir}` +
                     (outcome.filesCopied || outcome.filesPruned

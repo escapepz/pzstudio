@@ -534,6 +534,79 @@ describe('copy materializer (real fs fixtures)', () => {
         expect(third.filesPruned).toBe(0);
     });
 
+    // d03-B5: a prune deletes slot content the manifest does not carry —
+    // frequently a hand-made file. The result must carry every pruned leaf
+    // path so the caller can warn per file, not just count.
+    it('reconcile: reports the full path of every pruned hand-made file', async () => {
+        await makeDist({ 'workshop.txt': 'id=1' });
+        await copyPass();
+        // The user drops a hand-made file and a hand-made tree in the slot.
+        const orphanFile = path.join(slotDir, 'notes.txt');
+        const nestedOrphan = path.join(slotDir, 'handmade', 'extra.lua');
+        await fsp.writeFile(orphanFile, 'mine');
+        await fsp.mkdir(path.dirname(nestedOrphan), { recursive: true });
+        await fsp.writeFile(nestedOrphan, 'mine too');
+
+        const result = await materializeCopySlot(
+            nodeCopyFs,
+            nodeLinkFs,
+            nodeRealFs,
+            slotDir,
+            distItem,
+            { ...opts(), copyIdentity: await identity() },
+        );
+        expect(result.ok, result.detail).toBe(true);
+        expect(result.filesPruned).toBe(2);
+        expect(result.prunedPaths).toBeDefined();
+        expect(result.prunedPaths).toHaveLength(2);
+        expect(result.prunedPaths).toContain(orphanFile);
+        expect(result.prunedPaths).toContain(nestedOrphan);
+        // The prune itself still ran — the slot mirrors dist again.
+        expect(await fsp.readdir(slotDir)).toEqual(['workshop.txt']);
+    });
+
+    it('reconcile: a converged pass prunes nothing (empty prunedPaths)', async () => {
+        await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
+        await copyPass();
+        const result = await materializeCopySlot(
+            nodeCopyFs,
+            nodeLinkFs,
+            nodeRealFs,
+            slotDir,
+            distItem,
+            { ...opts(), copyIdentity: await identity() },
+        );
+        expect(result.ok, result.detail).toBe(true);
+        expect(result.filesCopied).toBe(0);
+        expect(result.filesPruned).toBe(0);
+        expect(result.prunedPaths).toEqual([]);
+    });
+
+    it('reconcile: a replacement prune (dist file over slot dir) reports the displaced file', async () => {
+        await makeDist({ 'workshop.txt': 'id=1' });
+        await copyPass();
+        // dist turns payload/ into a single file while the slot still has
+        // the directory — the dir's leaf file is a replacement prune.
+        await fsp.writeFile(path.join(distItem, 'payload'), 'now a file');
+        await fsp.mkdir(path.join(slotDir, 'payload'), { recursive: true });
+        await fsp.writeFile(path.join(slotDir, 'payload', 'old.txt'), 'dir');
+
+        const result = await materializeCopySlot(
+            nodeCopyFs,
+            nodeLinkFs,
+            nodeRealFs,
+            slotDir,
+            distItem,
+            { ...opts(), copyIdentity: await identity() },
+        );
+        expect(result.ok, result.detail).toBe(true);
+        expect(result.filesPruned).toBe(1);
+        expect(result.prunedPaths).toBeDefined();
+        expect(result.prunedPaths).toContain(
+            path.join(slotDir, 'payload', 'old.txt'),
+        );
+    });
+
     it('reconcile: the marker-after write carries the slot manifest', async () => {
         await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
         const calls: Array<{

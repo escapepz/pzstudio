@@ -370,16 +370,25 @@ export type ReconcileResult = {
     state: CopySlotState | 'RECONCILE_FAILED' | 'UNLINK_FAILED';
     filesCopied?: number;
     filesPruned?: number;
+    /**
+     * The FULL path of every pruned leaf file (d03-B5): a prune deletes
+     * slot content the user may have placed there by hand — the count alone
+     * was too easy to miss, so the caller warns per file. Undefined on
+     * failed passes (nothing pruned behind a refusal).
+     */
+    prunedPaths?: string[];
     detail?: string;
 };
 
 /** Recursively removes one slot entry bottom-up; refuses links on sight.
- * Returns the number of leaf files deleted (directories are structure). */
+ * Returns the number of leaf files deleted (directories are structure) and
+ * pushes every deleted leaf's full path onto `prunedPaths`. */
 async function removeSlotEntry(
     copyFs: CopyFs,
     platform: LinkPlatform,
     dir: string,
     entry: CopyDirEntry,
+    prunedPaths: string[],
 ): Promise<number> {
     const path = joinUnder(platform, dir, entry.name);
     if (entry.isSymbolicLink()) {
@@ -392,12 +401,19 @@ async function removeSlotEntry(
         let pruned = 0;
         const children = await copyFs.readdirEntries(path);
         for (const child of children) {
-            pruned += await removeSlotEntry(copyFs, platform, path, child);
+            pruned += await removeSlotEntry(
+                copyFs,
+                platform,
+                path,
+                child,
+                prunedPaths,
+            );
         }
         await copyFs.rmdir(path);
         return pruned;
     }
     await copyFs.unlink(path);
+    prunedPaths.push(path);
     return 1;
 }
 
@@ -448,7 +464,11 @@ async function syncTree(
     platform: LinkPlatform,
     distDir: string,
     slotDir: string,
-    tally: { filesCopied: number; filesPruned: number },
+    tally: {
+        filesCopied: number;
+        filesPruned: number;
+        prunedPaths: string[];
+    },
 ): Promise<void> {
     const distEntries = await copyFs.readdirEntries(distDir);
     const slotEntries = await copyFs.readdirEntries(slotDir);
@@ -480,6 +500,7 @@ async function syncTree(
                         platform,
                         slotDir,
                         slotEntry,
+                        tally.prunedPaths,
                     );
                 }
                 tally.filesCopied += await copyEntry(
@@ -503,6 +524,7 @@ async function syncTree(
                     platform,
                     slotDir,
                     slotEntry,
+                    tally.prunedPaths,
                 );
             }
             tally.filesCopied += await copyEntry(
@@ -541,6 +563,7 @@ async function syncTree(
                 platform,
                 slotDir,
                 slotEntry,
+                tally.prunedPaths,
             );
         }
     }
@@ -603,7 +626,11 @@ export async function reconcileCopySlot(
         if (opts.writeCopyMarker) {
             await opts.writeCopyMarker(W);
         }
-        const tally = { filesCopied: 0, filesPruned: 0 };
+        const tally = {
+            filesCopied: 0,
+            filesPruned: 0,
+            prunedPaths: [] as string[],
+        };
         await syncTree(copyFs, opts.platform, D, W, tally);
         if (opts.writeCopyMarker) {
             await opts.writeCopyMarker(
