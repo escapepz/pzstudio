@@ -300,6 +300,12 @@ export function createVscodeMock() {
             // section/resource-aware getConfiguration resolves through.
             configurationStore,
             workspaceFolders: [] as Array<{ uri: MockUri; name: string }>,
+            // Per-test knob: seed a workspace folder to pin the watcher-base
+            // resolution (DevSyncController watches the CONTAINING workspace
+            // folder, never the project folder itself). Default: none.
+            getWorkspaceFolder: vi.fn(
+                () => undefined as { uri: MockUri; name: string } | undefined,
+            ),
             onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
             createFileSystemWatcher: vi.fn(() => ({
                 onDidChange: vi.fn(),

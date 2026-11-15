@@ -165,12 +165,60 @@ export class DevSyncController implements vscode.Disposable {
             // state (the same side the engine keeps).
             await this.refreshIgnoreRules(projectDir);
 
-            const watcher = vscode.workspace.createFileSystemWatcher(
-                new vscode.RelativePattern(vscode.Uri.file(projectDir), '**/*'),
+            // The watcher base is the WORKSPACE FOLDER containing the
+            // project — never the project folder itself (sweep d09-B2). A
+            // project folder created mid-session (the standard extension
+            // flow `pzstudio new` → `add` → build → watch) is accepted as a
+            // RelativePattern base, but the watcher service then delivers
+            // NOTHING for it — zero events, zero channel lines, no error
+            // (VM probe evidence 2026-11-16, VS Code stable 1.146: with a
+            // pre-existing project the fs/editor saves sync in ~1s; the
+            // same session with the project created through the palette
+            // delivers nothing at all). The workspace folder pre-dates the
+            // window — VS Code already watches it for the workbench — so a
+            // pattern over it delivers. Scope stays per-project: every
+            // event still passes the isWatchPathIgnored decision in
+            // schedule() (outside the project or under the output root →
+            // counted and dropped).
+            const projectUri = vscode.Uri.file(projectDir);
+            const workspaceFolder =
+                vscode.workspace.getWorkspaceFolder(projectUri);
+            const watcherBase = workspaceFolder
+                ? new vscode.RelativePattern(workspaceFolder.uri, '**/*')
+                : // Unreachable through the picker (the project dir always
+                  // resolves inside a workspace folder); the historical
+                  // project-dir base stays the fail-open fallback.
+                  new vscode.RelativePattern(projectUri, '**/*');
+            let watcher: vscode.FileSystemWatcher;
+            try {
+                watcher = vscode.workspace.createFileSystemWatcher(watcherBase);
+                watcher.onDidCreate((uri) =>
+                    this.schedule('create', uri.fsPath),
+                );
+                watcher.onDidChange((uri) =>
+                    this.schedule('change', uri.fsPath),
+                );
+                watcher.onDidDelete((uri) =>
+                    this.schedule('delete', uri.fsPath),
+                );
+            } catch (e) {
+                // A session without a working watcher is a silently dead
+                // sync — registration failures must never be silent again
+                // (d09-B2) and the half-start must not pretend to run.
+                const message = e instanceof Error ? e.message : String(e);
+                this.logger.error(
+                    new Error(
+                        `Development sync: watcher registration failed (${message}) — file changes cannot be observed, stopping the session.`,
+                    ),
+                );
+                await this.stop();
+                throw e;
+            }
+            // One channel line proving the watcher is registered (the
+            // dead-watcher state used to be fully invisible).
+            this.logger.info(
+                `Development sync: watching '${watcherBase.base.toString()}' for changes (**/*).`,
             );
-            watcher.onDidCreate((uri) => this.schedule('create', uri.fsPath));
-            watcher.onDidChange((uri) => this.schedule('change', uri.fsPath));
-            watcher.onDidDelete((uri) => this.schedule('delete', uri.fsPath));
 
             // Publish the filter state only once the session is live, so no
             // event can ever be filtered by a root without a session.
@@ -229,8 +277,15 @@ export class DevSyncController implements vscode.Disposable {
                 vscode.Uri.file(projectDir).toString(),
             );
             matcher = createIgnoreMatcher({ '': rules }).isIgnored;
-        } catch {
-            return; // retain the last good matcher
+        } catch (e) {
+            // Retain the last good matcher (fail-open), but never silently:
+            // a rules failure is diagnostic gold when nothing syncs.
+            this.logger.warn(
+                `Development sync: reading the root ignore rules failed (${
+                    e instanceof Error ? e.message : String(e)
+                }); keeping the previous filter.`,
+            );
+            return;
         }
         if (this.projectDir === undefined || this.projectDir === projectDir) {
             this.ignoreMatcher = matcher;
@@ -243,6 +298,18 @@ export class DevSyncController implements vscode.Disposable {
     }
 
     private schedule(type: FileDelta['type'], path: string): void {
+        // Event processing must never die silently (d09-B2): a throwing
+        // handler or filter is surfaced through the error channel + toast.
+        // The debounce state stays consistent — a later event re-arms the
+        // timer and flushes whatever was already queued.
+        try {
+            this.scheduleEvent(type, path);
+        } catch (e) {
+            this.logger.error(e instanceof Error ? e : String(e));
+        }
+    }
+
+    private scheduleEvent(type: FileDelta['type'], path: string): void {
         if (!this.session) {
             return;
         }

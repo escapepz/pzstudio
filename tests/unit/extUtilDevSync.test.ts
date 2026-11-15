@@ -418,6 +418,127 @@ describe('DevSyncController (unit, stubbed studio)', () => {
 });
 
 /* ------------------------------------------------------------------ */
+/* Sweep d09-B2: the watcher base + never-silent failure surfaces.      */
+/* The watcher must base on the CONTAINING workspace folder — a project */
+/* folder created mid-session (`pzstudio new` → add → build → watch,   */
+/* the standard extension flow) is accepted as a RelativePattern base  */
+/* but delivers nothing at all on VS Code stable 1.146 (VM probe       */
+/* evidence 2026-11-16), which made every journey DevSync session      */
+/* silently dead. Registration failures and event-processing           */
+/* exceptions must surface through the error channel + toast.          */
+/* ------------------------------------------------------------------ */
+
+describe('DevSyncController watcher base + failure surfaces (d09-B2)', () => {
+    it('bases the watcher on the containing workspace folder and logs the registration', async () => {
+        const session = fakeSession();
+        const studio = studioStub(session);
+        const logger = recordingLogger();
+        const folderUri = vscode.Uri.file('/ws');
+        asMock(vscode.workspace.getWorkspaceFolder).mockReturnValue({
+            uri: folderUri,
+            name: 'ws',
+        });
+
+        const controller = new DevSyncController(studio, logger.logger);
+        await controller.start('/ws/dev_loop_mod');
+
+        const pattern = asMock(vscode.workspace.createFileSystemWatcher).mock
+            .calls[0]?.[0] as unknown as {
+            base: { fsPath: string; toString(): string };
+            pattern: string;
+        };
+        expect(pattern.pattern).toBe('**/*');
+        expect(pattern.base.fsPath).toBe(folderUri.fsPath);
+        // The registration is observable in the channel — the dead-watcher
+        // state used to be fully invisible.
+        expect(logger.calls).toContainEqual({
+            method: 'info',
+            message: `Development sync: watching '${pattern.base.toString()}' for changes (**/*).`,
+        });
+        await controller.dispose();
+    });
+
+    it('falls back to the project-dir base when the project resolves outside every workspace folder', async () => {
+        const session = fakeSession();
+        const studio = studioStub(session);
+        const logger = recordingLogger();
+        asMock(vscode.workspace.getWorkspaceFolder).mockReturnValue(undefined);
+
+        const controller = new DevSyncController(studio, logger.logger);
+        await controller.start('/proj');
+
+        const pattern = asMock(vscode.workspace.createFileSystemWatcher).mock
+            .calls[0]?.[0] as unknown as {
+            base: { fsPath: string };
+            pattern: string;
+        };
+        expect(pattern.pattern).toBe('**/*');
+        expect(pattern.base.fsPath).toBe(vscode.Uri.file('/proj').fsPath);
+        await controller.dispose();
+    });
+
+    it('surfaces watcher registration failures and never leaves a silently dead session', async () => {
+        asMock(vscode.workspace.createFileSystemWatcher).mockImplementation(
+            () => {
+                throw new Error('watcher service unavailable');
+            },
+        );
+        const session = fakeSession();
+        const studio = studioStub(session);
+        const logger = recordingLogger();
+
+        const controller = new DevSyncController(studio, logger.logger);
+        await expect(controller.start('/proj')).rejects.toThrow(
+            'watcher service unavailable',
+        );
+
+        const errorCall = logger.calls.find((c) => c.method === 'error');
+        expect(errorCall).toBeDefined();
+        expect(String(errorCall?.message)).toContain(
+            'watcher registration failed',
+        );
+        expect(String(errorCall?.message)).toContain(
+            'watcher service unavailable',
+        );
+        // The half-start is torn down: the controller is idle and the
+        // session (never published) required no stop.
+        expect(controller.active).toBe(false);
+        expect(session.stop).not.toHaveBeenCalled();
+    });
+
+    it('surfaces event-processing exceptions through the error channel without dying', async () => {
+        vi.useFakeTimers();
+        const session = fakeSession();
+        const studio = studioStub(session);
+        const logger = recordingLogger();
+
+        const controller = new DevSyncController(studio, logger.logger);
+        await controller.start('/proj');
+
+        // A poisoned ignore matcher (the schedule-side filter's final
+        // drop-condition) makes the next event's processing throw inside
+        // schedule().
+        (
+            controller as unknown as {
+                ignoreMatcher: unknown;
+            }
+        ).ignoreMatcher = () => {
+            throw new Error('matcher boom');
+        };
+        expect(() =>
+            handlers.change.forEach((fn) => fn({ fsPath: '/proj/a.lua' })),
+        ).not.toThrow();
+        // The exception reached the error surface (channel + toast path).
+        const errorCall = logger.calls.find((c) => c.method === 'error');
+        expect(errorCall).toBeDefined();
+        expect(String(errorCall?.message)).toContain('matcher boom');
+        // The session survives the poisoned event.
+        expect(controller.active).toBe(true);
+        await controller.dispose();
+    });
+});
+
+/* ------------------------------------------------------------------ */
 /* UX-09: watcher events are pre-filtered through the shared           */
 /* isWatchPathIgnored decision, driven by the studio.resolveOutDir     */
 /* reader (doc 13 §6.3 — refresh-triggered re-resolution). The filter  */
