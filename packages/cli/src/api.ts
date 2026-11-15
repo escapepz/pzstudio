@@ -77,3 +77,13 @@ export {
     GitTransport,
     FetchTransport,
 } from './lib/transport';
+export { analyzeConsoleLog } from '@pzstudio/core';
+export type {
+    ConsoleLogReport,
+    ConsoleLogFinding,
+    ConsoleLogCategory,
+    ConsoleLogProjectContext,
+    ConsoleLogModContext,
+    AnalyzeConsoleLogOptions,
+} from '@pzstudio/core';
+export { analyzeGameLogFile, buildProjectContext } from './lib/consoleLogHost';
