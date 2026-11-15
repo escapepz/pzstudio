@@ -47,5 +47,6 @@
     "config.newProject.defaultLocation.description": "Carpeta predeterminada preferida para nuevos proyectos. El selector de New Project abre aquí; si se cancela, se aborta la creación del proyecto sin seleccionar una carpeta de reserva.",
     "command.watch.title": "PZStudio: Alternar sincronización de desarrollo",
     "command.doctor.title": "PZStudio: Ejecutar diagnóstico",
+    "command.analyzeGameLog.title": "PZ Studio: Analizar el registro del juego",
     "command.openProjectJson.title": "PZStudio: Abrir project.json"
 }

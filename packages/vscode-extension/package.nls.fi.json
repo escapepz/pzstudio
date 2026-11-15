@@ -47,5 +47,6 @@
     "config.newProject.defaultLocation.description": "Ensisijainen oletuskansio uusille projekteille. New Project -valitsin avautuu tähän, ja peruuttaminen keskeyttää projektin luomisen valitsematta varakansiota.",
     "command.watch.title": "PZStudio: Vaihda kehityssynkronointi",
     "command.doctor.title": "PZStudio: Suorita diagnostiikka",
+    "command.analyzeGameLog.title": "PZ Studio: Analysoi peliloki",
     "command.openProjectJson.title": "PZStudio: Avaa project.json"
 }

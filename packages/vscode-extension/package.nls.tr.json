@@ -47,5 +47,6 @@
     "config.newProject.defaultLocation.description": "Yeni projeler için tercih edilen varsayılan klasör. New Project seçicisi buradan açılır; iptal edilirse proje oluşturma, yedek bir klasör seçilmeden durdurulur.",
     "command.watch.title": "PZStudio: Geliştirme eşitlemesini aç/kapat",
     "command.doctor.title": "PZStudio: Tanılamayı Çalıştır",
+    "command.analyzeGameLog.title": "PZ Studio: Oyun günlüğünü analiz et",
     "command.openProjectJson.title": "PZStudio: project.json dosyasını aç"
 }

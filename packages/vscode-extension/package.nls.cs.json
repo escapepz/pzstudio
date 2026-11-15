@@ -47,5 +47,6 @@
     "config.newProject.defaultLocation.description": "Upřednostňovaná výchozí složka pro nové projekty. Výběr Nový projekt zde začíná; jeho zrušení vytváření projektu přeruší bez výběru náhradní složky.",
     "command.watch.title": "PZStudio: Přepnout vývojovou synchronizaci",
     "command.doctor.title": "PZStudio: Spustit diagnostiku",
+    "command.analyzeGameLog.title": "PZ Studio: Analyzovat herní log",
     "command.openProjectJson.title": "PZStudio: Otevřít project.json"
 }

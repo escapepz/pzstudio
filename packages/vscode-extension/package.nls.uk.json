@@ -47,5 +47,6 @@
     "config.newProject.defaultLocation.description": "Бажана типова папка для нових проєктів. Вибір у New Project починається тут; скасування перериває створення проєкту без вибору резервної папки.",
     "command.watch.title": "PZStudio: Переключити синхронізацію розробки",
     "command.doctor.title": "PZStudio: Запустити діагностику",
+    "command.analyzeGameLog.title": "PZ Studio: Аналізувати ігровий журнал",
     "command.openProjectJson.title": "PZStudio: Відкрити project.json"
 }

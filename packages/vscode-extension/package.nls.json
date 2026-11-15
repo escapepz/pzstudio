@@ -47,5 +47,6 @@
     "config.newProject.defaultLocation.description": "Preferred default folder for new projects. The New Project picker opens at this location; cancelling the picker aborts project creation without selecting a fallback destination.",
     "command.watch.title": "PZStudio: Toggle Development Sync",
     "command.doctor.title": "PZStudio: Run Diagnostics",
+    "command.analyzeGameLog.title": "PZ Studio: Analyze Game Log",
     "command.openProjectJson.title": "PZStudio: Open project.json"
 }

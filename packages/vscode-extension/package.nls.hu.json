@@ -47,5 +47,6 @@
     "config.newProject.defaultLocation.description": "Az új projektek előnyben részesített alapértelmezett mappája. A New Project választó itt nyílik; megszakításkor a projektlétrehozás megszakad tartalékmappa kiválasztása nélkül.",
     "command.watch.title": "PZStudio: Fejlesztési szinkronizálás be/ki",
     "command.doctor.title": "PZStudio: Diagnosztika futtatása",
+    "command.analyzeGameLog.title": "PZ Studio: Játéknapló elemzése",
     "command.openProjectJson.title": "PZStudio: project.json megnyitása"
 }

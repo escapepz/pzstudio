@@ -47,5 +47,6 @@
     "config.newProject.defaultLocation.description": "Pasta padrão preferencial para novos projetos. O seletor de New Project abre aqui; ao cancelar, a criação do projeto é abortada sem selecionar uma pasta de reserva.",
     "command.watch.title": "PZStudio: Alternar sincronização de desenvolvimento",
     "command.doctor.title": "PZStudio: Executar diagnóstico",
+    "command.analyzeGameLog.title": "PZ Studio: Analisar log do jogo",
     "command.openProjectJson.title": "PZStudio: Abrir project.json"
 }

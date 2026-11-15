@@ -47,5 +47,6 @@
     "config.newProject.defaultLocation.description": "Bevorzugter Standardordner für neue Projekte. Der New-Project-Auswahldialog beginnt hier; beim Abbrechen wird die Projekterstellung abgebrochen, ohne einen Ersatzordner auszuwählen.",
     "command.watch.title": "PZStudio: Entwicklungssynchronisierung umschalten",
     "command.doctor.title": "PZStudio: Diagnose ausführen",
+    "command.analyzeGameLog.title": "PZ Studio: Spielprotokoll analysieren",
     "command.openProjectJson.title": "PZStudio: project.json öffnen"
 }

@@ -47,5 +47,6 @@
     "config.newProject.defaultLocation.description": "Gewenste standaardmap voor nieuwe projecten. De New Project-keuzedialoog opent hier; bij annuleren wordt het aanmaken van het project afgebroken zonder een alternatieve map te kiezen.",
     "command.watch.title": "PZStudio: Ontwikkelsynchronisatie in-/uitschakelen",
     "command.doctor.title": "PZStudio: Diagnostiek uitvoeren",
+    "command.analyzeGameLog.title": "PZ Studio: Spellog analyseren",
     "command.openProjectJson.title": "PZStudio: project.json openen"
 }

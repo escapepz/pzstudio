@@ -432,6 +432,10 @@
                 "title": "%command.doctor.title%"
             },
             {
+                "command": "pzstudio.analyzeGameLog",
+                "title": "%command.analyzeGameLog.title%"
+            },
+            {
                 "command": "pzstudio.modinfoGenerate",
                 "title": "%command.modinfoGenerate.title%",
                 "icon": "$(note)"
