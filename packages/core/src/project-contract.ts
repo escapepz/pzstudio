@@ -74,7 +74,11 @@ export function migrateProject(raw: unknown): MigratedProject {
         const check = migration.checkProject(config);
         if (check.needsMigration) {
             migrations.push(check.reason ?? 'legacy project shape');
-            config = migration.upgradeProject(config);
+            config = migration.upgradeProject(config, {
+                // Record the migration decisions (moved/kept root fields)
+                // alongside the reason so loadProject callers see them.
+                onNotice: (message) => migrations.push(message),
+            });
         }
         config = { ...(config as object), schemaVersion: 2 };
     }

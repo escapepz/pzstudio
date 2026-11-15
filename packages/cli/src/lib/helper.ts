@@ -483,7 +483,12 @@ export function readProjectConfig(
                 io,
                 `[MIGRATION] ${basename(configPath)} needs migration: ${migrationCheck.reason}`,
             );
-            config = migration.upgradeProject(config);
+            config = migration.upgradeProject(config, {
+                // Surface what the in-memory upgrade decided to do with
+                // legacy values (moved/kept) — the on-disk file still pays
+                // this tax on every read until `pzstudio migrate` writes it.
+                onNotice: (message) => emitWarn(io, `[MIGRATION] ${message}`),
+            });
         }
 
         const context = new ValidationContext(basename(configPath));

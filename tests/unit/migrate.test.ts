@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { join } from 'path';
 import fs from 'fs';
 import { migrateCmd } from '../../packages/cli/src/lib/commands/migrate';
+import * as logger from '../../packages/cli/src/lib/logger';
 import {
     findProjectDir,
     resolveModInfoTargets,
@@ -134,8 +135,99 @@ describe('migrateCmd', () => {
             expect(upgraded.workshop.title).toBe('T');
             expect(upgraded.id).toBeUndefined();
             expect(upgraded.title).toBeUndefined();
+            // d16-B2: the root value is not deleted — with exactly one mod
+            // it MOVES onto that mod's author field.
             expect(upgraded.authors).toBeUndefined();
+            expect(upgraded.mods.m1.author).toBe('a');
             expect(upgraded.excludes).toEqual([]);
+        });
+
+        it('should announce a moved root authors value on stderr (d16-B2)', async () => {
+            mockFiles(
+                {
+                    'config.json': JSON.stringify({
+                        useSymlinks: true,
+                        templates: {},
+                        outdir: '/games',
+                    }),
+                    'project.json': JSON.stringify({
+                        title: 'T',
+                        authors: ['OldAuthor', 'SecondAuthor'],
+                        mods: { m1: { name: 'M' } },
+                    }),
+                },
+                [CONFIG_PATH, PROJECT_PATH],
+            );
+
+            await migrateCmd();
+
+            expect(logger.info).toHaveBeenCalledWith(
+                "- moved root authors to mod 'm1'",
+            );
+        });
+
+        it('should KEEP root authors when the project has multiple mods (d16-B2 no-data-loss)', async () => {
+            const authors = ['OldAuthor', 'SecondAuthor'];
+            mockFiles(
+                {
+                    'config.json': JSON.stringify({
+                        useSymlinks: true,
+                        templates: {},
+                        outdir: '/games',
+                    }),
+                    'project.json': JSON.stringify({
+                        title: 'T',
+                        authors,
+                        mods: {
+                            m1: { name: 'M1' },
+                            m2: { name: 'M2' },
+                        },
+                    }),
+                },
+                [CONFIG_PATH, PROJECT_PATH],
+            );
+
+            await migrateCmd();
+
+            expect(updateProjectConfig).toHaveBeenCalledTimes(1);
+            const [, upgraded] = vi.mocked(updateProjectConfig).mock
+                .calls[0] as any[];
+            // The value survives verbatim — never deleted.
+            expect(upgraded.authors).toEqual(['OldAuthor', 'SecondAuthor']);
+            expect(upgraded.mods.m1.author).toBeUndefined();
+            expect(upgraded.mods.m2.author).toBeUndefined();
+            // And the user is told, loudly, that it is deprecated.
+            expect(logger.warn).toHaveBeenCalledWith(
+                expect.stringContaining('kept deprecated root "authors"'),
+            );
+        });
+
+        it('should KEEP root authors when the only mod already has an author (no clobber)', async () => {
+            mockFiles(
+                {
+                    'config.json': JSON.stringify({
+                        useSymlinks: true,
+                        templates: {},
+                        outdir: '/games',
+                    }),
+                    'project.json': JSON.stringify({
+                        title: 'T',
+                        authors: ['RootAuthor'],
+                        mods: { m1: { name: 'M', author: 'Existing' } },
+                    }),
+                },
+                [CONFIG_PATH, PROJECT_PATH],
+            );
+
+            await migrateCmd();
+
+            const [, upgraded] = vi.mocked(updateProjectConfig).mock
+                .calls[0] as any[];
+            expect(upgraded.authors).toEqual(['RootAuthor']);
+            expect(upgraded.mods.m1.author).toBe('Existing');
+            expect(logger.warn).toHaveBeenCalledWith(
+                expect.stringContaining('kept deprecated root "authors"'),
+            );
         });
 
         it('should report when no project.json exists', async () => {

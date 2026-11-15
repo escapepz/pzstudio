@@ -1,6 +1,6 @@
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
-import { info, log, verbose } from '../logger';
+import { info, log, verbose, warn } from '../logger';
 import {
     updateProjectConfig,
     findProjectDir,
@@ -86,7 +86,13 @@ export async function migrateCmd() {
         const projectCheck = migration.checkProject(project);
         if (projectCheck.needsMigration) {
             info(`- Migrating project.json: ${projectCheck.reason}`);
-            project = migration.upgradeProject(project);
+            project = migration.upgradeProject(project, {
+                // stderr, per the CLI-2 stream contract: every legacy value
+                // the upgrade moved (or deliberately kept) is announced —
+                // migration must never be silent about user data (d16-B2).
+                onNotice: (message, level) =>
+                    level === 'warn' ? warn(message) : info(`- ${message}`),
+            });
             projectModified = true;
         }
 

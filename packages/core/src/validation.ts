@@ -79,13 +79,12 @@ export function validateProject(config: any, context: ValidationContext): void {
         );
     }
 
-    if ('authors' in config) {
-        context.addError(
-            'authors',
-            'Field "authors" is no longer supported at the root',
-            'Use mod-level authors or remove it',
-        );
-    }
+    // Root "authors" is deliberately NOT a validation error: migration now
+    // preserves it (kept in place when there is no single mod to move it
+    // onto — d16-B2), so a migrated project may legitimately still carry
+    // the field. The deprecation signal lives in migration.checkProject
+    // (the persistent [MIGRATION] warning); rejecting the field here would
+    // brick every command on the very file migrate just fail-closed kept.
 
     if ('id' in config) {
         context.addError(

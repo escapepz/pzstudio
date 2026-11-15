@@ -153,6 +153,34 @@ describe('Helper Library', () => {
             // applyProjectDefaults silently defaults modInfo to 'auto-if-missing'
             expect(config!.mods.mod1.build!.modInfo).toBe('auto-if-missing');
         });
+
+        it('should read a multi-mod legacy file that keeps root authors (d16-B2: warn, no brick)', () => {
+            vi.mocked(fs.existsSync).mockReturnValue(true);
+            vi.mocked(fs.readFileSync).mockReturnValue(
+                JSON.stringify({
+                    title: 'Old Title',
+                    authors: ['OldAuthor', 'SecondAuthor'],
+                    workshop: { title: 'Test', visibility: 'public', tags: [] },
+                    mods: {
+                        mod1: { name: 'Mod 1', description: 'Desc' },
+                        mod2: { name: 'Mod 2', description: 'Desc' },
+                    },
+                }),
+            );
+
+            const config = readProjectConfig();
+            expect(config).toBeDefined();
+            // The in-memory upgrade kept the deprecated field (no single
+            // mod to move it onto) and said so — without failing the read.
+            expect((config as any).authors).toEqual([
+                'OldAuthor',
+                'SecondAuthor',
+            ]);
+            expect(logger.emitWarn).toHaveBeenCalledWith(
+                undefined,
+                expect.stringContaining('kept deprecated root "authors"'),
+            );
+        });
     });
 
     describe('atomicWriteJson', () => {

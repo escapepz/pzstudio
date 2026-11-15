@@ -119,7 +119,33 @@ describe('project.json contract (core)', () => {
 
             const project = await loadProject(fs, CONFIG_URI);
 
-            expect(project.migrations).toHaveLength(1);
+            // The reason line + the recorded move decision (d16-B2).
+            expect(project.migrations).toHaveLength(2);
+            expect(project.migrations).toContain(
+                "moved root authors to mod 'my_mod'",
+            );
+        });
+
+        it('loads a multi-mod legacy file that keeps root authors (d16-B2 no brick, no data loss)', async () => {
+            const fs = new MemoryFileSystem();
+            await writeJson(fs, CONFIG_URI, {
+                ...validConfig(),
+                mods: {
+                    mod_a: { name: 'A', description: 'a' },
+                    mod_b: { name: 'B', description: 'b' },
+                },
+                authors: ['OldAuthor', 'SecondAuthor'],
+            });
+
+            const project = await loadProject(fs, CONFIG_URI);
+
+            // The kept deprecated root field must NOT trip validation —
+            // the project stays loadable and the value survives verbatim.
+            expect((project.config as any).authors).toEqual([
+                'OldAuthor',
+                'SecondAuthor',
+            ]);
+            expect(project.config.mods.mod_a.author).toBeUndefined();
         });
 
         it('throws ProjectParseError for invalid JSON', async () => {

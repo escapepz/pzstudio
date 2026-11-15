@@ -24,6 +24,16 @@ export interface MigrationResult {
 }
 
 /**
+ * Options for upgradeProject. Core never prints: decisions the host should
+ * surface (a moved root field, a kept deprecated field) travel out through
+ * this sink — the CLI migrate command prints them on stderr, the in-memory
+ * loader warns, the engine chain records them in MigratedProject.migrations.
+ */
+export interface MigrationUpgradeOptions {
+    onNotice?: (message: string, level: 'info' | 'warn') => void;
+}
+
+/**
  * Helpers for detecting and upgrading legacy file shapes.
  */
 export const migration = {
@@ -35,7 +45,10 @@ export const migration = {
 
         // Legacy: deprecated root fields
         if ('title' in config) issues.push('root "title" is deprecated');
-        if ('authors' in config) issues.push('root "authors" is deprecated');
+        if ('authors' in config)
+            issues.push(
+                'root "authors" is deprecated (move the values to the mod-level "author" field)',
+            );
         if ('id' in config) issues.push('root "id" is deprecated');
 
         // Legacy: workshop.excludes has moved to root excludes
@@ -58,9 +71,15 @@ export const migration = {
     },
 
     /**
-     * Upgrades a project.json to the current shape.
+     * Upgrades a project.json to the current shape. Never drops data: a
+     * root field with no direct modern home is MOVED onto a mod (when there
+     * is exactly one unambiguous target) or KEPT in place with a notice —
+     * never silently deleted (sweep d16-B2).
      */
-    upgradeProject: (config: any): IProjectConfig => {
+    upgradeProject: (
+        config: any,
+        options: MigrationUpgradeOptions = {},
+    ): IProjectConfig => {
         const upgraded = JSON.parse(JSON.stringify(config));
 
         if (!upgraded.workshop) upgraded.workshop = {};
@@ -77,8 +96,45 @@ export const migration = {
         }
         delete upgraded.title;
 
-        // Migrate root authors (not kept in workshop, but we remove it)
-        delete upgraded.authors;
+        // Migrate root authors. The mod data model has no workshop-level
+        // authors list — authorship lives on each mod (`author`). To keep
+        // the migration lossless: with exactly one mod that has no author
+        // yet, the value MOVES onto that mod; otherwise the root field is
+        // KEPT as-is (still deprecated) so nothing is lost (d16-B2).
+        if ('authors' in upgraded) {
+            const authors = upgraded.authors;
+            const modIds =
+                upgraded.mods && typeof upgraded.mods === 'object'
+                    ? Object.keys(upgraded.mods)
+                    : [];
+            const onlyMod =
+                modIds.length === 1 ? upgraded.mods[modIds[0]] : undefined;
+            const movableShape =
+                typeof authors === 'string' ||
+                (Array.isArray(authors) &&
+                    authors.every((entry: any) => typeof entry === 'string'));
+
+            if (
+                onlyMod &&
+                typeof onlyMod === 'object' &&
+                onlyMod.author === undefined &&
+                movableShape
+            ) {
+                onlyMod.author = Array.isArray(authors)
+                    ? authors.join(', ')
+                    : authors;
+                delete upgraded.authors;
+                options.onNotice?.(
+                    `moved root authors to mod '${modIds[0]}'`,
+                    'info',
+                );
+            } else {
+                options.onNotice?.(
+                    'kept deprecated root "authors" in place — move the values to a mod-level "author" field and remove the root field',
+                    'warn',
+                );
+            }
+        }
 
         // Migrate workshop.excludes to root excludes
         if (upgraded.workshop.excludes !== undefined) {
