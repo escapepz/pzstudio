@@ -20,3 +20,5 @@ export * from './constants';
 export * from './defaults';
 export * from './errors/TemplateResolutionError';
 export * from './project-contract';
+export * from './consoleLog';
+export * from './consoleLogSource';
