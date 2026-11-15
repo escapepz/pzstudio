@@ -48,6 +48,10 @@ const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 
 const ATTRIBUTED_URI =
     'file:///proj/zul_test_dev/42/media/lua/client/zul_test_client.lua';
+// A plain Windows filesystem path, not a file:// URI: a context built
+// without the vscode-URI remap carries filesystem paths from the CLI host.
+const PLAIN_WINDOWS_PATH =
+    'E:\\proj\\zul_test_dev\\42\\media\\lua\\client\\zul_test_client.lua';
 
 function makeReport(
     findings: ConsoleLogReport['findings'],
@@ -220,6 +224,44 @@ describe('pzstudio.analyzeGameLog', () => {
         expect(range.endLine).toBe(42);
         expect(range.startCharacter).toBe(0);
         expect(range.endCharacter).toBe(500);
+    });
+
+    it('maps a plain filesystem-path sourceFile into a file-Uri diagnostic', async () => {
+        asMock(analyze).mockResolvedValue(
+            makeReport([
+                {
+                    category: 'lua-syntax-error',
+                    severity: 'error',
+                    message: "unexpected symbol near 'end'",
+                    modId: 'zul_test_dev',
+                    sourceFile: PLAIN_WINDOWS_PATH,
+                    line: 43,
+                    count: 1,
+                    firstLine: 40,
+                    lastLine: 43,
+                },
+            ]),
+        );
+        const { handler } = await setupHandler(analyze);
+
+        await handler();
+
+        const collection = createdCollection('pzstudio-game-log');
+        const setCalls = asMock(collection.set).mock.calls as Array<
+            [vscode.Uri, Array<Record<string, unknown>>]
+        >;
+        expect(setCalls).toHaveLength(1);
+        const [uri, diagnostics] = setCalls[0];
+        // Uri.file materialization (not Uri.parse's verbatim pass-through):
+        // a real vscode host cannot parse a bare Windows path as a URI.
+        expect(uri).toBeInstanceOf(vscode.Uri);
+        expect(String(uri.path)).toContain('zul_test_client.lua');
+        expect(diagnostics).toHaveLength(1);
+        expect(diagnostics[0].message).toBe(
+            "lua-syntax-error: unexpected symbol near 'end'",
+        );
+        expect(diagnostics[0].severity).toBe(vscode.DiagnosticSeverity.Error);
+        expect(diagnostics[0].source).toBe('pzstudio');
     });
 
     it('the unattributed finding produces no diagnostic', async () => {

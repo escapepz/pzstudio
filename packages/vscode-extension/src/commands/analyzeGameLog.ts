@@ -105,7 +105,14 @@ function renderReport(
     }
 }
 
-/** Pins attributed findings as diagnostics; unattributed ones stay out. */
+/**
+ * Pins attributed findings as diagnostics; unattributed ones stay out.
+ * sourceFile arrives in two shapes: `file://` URIs (the extension wiring
+ * remaps each context mod root through vscode.Uri.file) and plain
+ * filesystem paths (a context built without the remap — the CLI host emits
+ * paths). Only the URI shape is parseable; paths must materialize through
+ * Uri.file or a real host rejects the string as a malformed URI.
+ */
 function publishDiagnostics(
     collection: vscode.DiagnosticCollection,
     report: ConsoleLogReport,
@@ -121,6 +128,13 @@ function publishDiagnostics(
             diagnosticSeverity(finding.severity),
         );
         diagnostic.source = 'pzstudio';
-        collection.set(vscode.Uri.parse(finding.sourceFile), [diagnostic]);
+        collection.set(sourceFileUri(finding.sourceFile), [diagnostic]);
     }
+}
+
+/** `file:` strings parse as URIs; anything else is a filesystem path. */
+function sourceFileUri(sourceFile: string): vscode.Uri {
+    return sourceFile.startsWith('file:')
+        ? vscode.Uri.parse(sourceFile)
+        : vscode.Uri.file(sourceFile);
 }

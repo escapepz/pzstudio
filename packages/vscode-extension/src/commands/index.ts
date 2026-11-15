@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { analyzeGameLogFile } from '@pzstudio/cli/api';
 import type { PzStudio } from '@pzstudio/cli/api';
 import { ExecutePZCommand } from '../util/execute';
 import { registerBuildCommand } from './build';
@@ -14,7 +13,6 @@ import { registerModinfoCommand } from './modinfo';
 import { registerModStateCommands } from './modstate';
 import { registerConfigureCommand } from './configure';
 import { registerOpenProjectJsonCommand } from './openProjectJson';
-import { registerAnalyzeGameLogCommand } from './analyzeGameLog';
 
 export function registerAllCommands(
     context: vscode.ExtensionContext,
@@ -34,8 +32,5 @@ export function registerAllCommands(
         ...registerModStateCommands(execute),
         registerConfigureCommand(execute),
         registerOpenProjectJsonCommand(),
-        registerAnalyzeGameLogCommand((logPath?: string) =>
-            analyzeGameLogFile(logPath),
-        ),
     ];
 }

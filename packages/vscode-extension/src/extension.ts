@@ -1,5 +1,10 @@
 import * as vscode from 'vscode';
-import { createPzStudio } from '@pzstudio/cli/api';
+import {
+    analyzeGameLogFile,
+    buildProjectContext,
+    createPzStudio,
+} from '@pzstudio/cli/api';
+import type { ConsoleLogProjectContext } from '@pzstudio/cli/api';
 import { createPZLogger, type PZLoggerErrorAction } from './util/logger';
 import { initExtensionL10n, t } from './util/l10n';
 import { readPzStudioHostSettings } from './util/settings';
@@ -13,6 +18,7 @@ import {
 } from './util/devSyncState';
 import { createProjectDiagnostics } from './util/doctor';
 import { registerAllCommands } from './commands';
+import { registerAnalyzeGameLogCommand } from './commands/analyzeGameLog';
 import { registerExplorerCommands } from './commands/explorer';
 import {
     registerWatchCommand,
@@ -113,6 +119,41 @@ export function registerDevSyncTreeBadge<T>(
     };
 }
 
+/**
+ * The game-log analyzer's attribution context, resolved per run: the first
+ * workspace folder containing a project.json (the explorer's root-scan
+ * discovery rule, util/project.ts). buildProjectContext (CLI host) maps the
+ * project's mods to `{ modId, displayName, sourceRootUri }` with
+ * filesystem-path roots; each root is remapped to a vscode file URI here so
+ * attributed findings pin diagnostics on clickable files instead of dead
+ * paths. No project folder (or no readable config) → undefined/throw — the
+ * command handler routes both through the shared error sink.
+ */
+async function resolveGameLogContext(): Promise<
+    ConsoleLogProjectContext | undefined
+> {
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+        try {
+            await vscode.workspace.fs.stat(
+                vscode.Uri.joinPath(folder.uri, 'project.json'),
+            );
+        } catch {
+            continue; // no project.json in this root
+        }
+        const context = buildProjectContext(folder.uri.fsPath);
+        if (!context) {
+            return undefined;
+        }
+        return {
+            mods: (context.mods ?? []).map((mod) => ({
+                ...mod,
+                sourceRootUri: vscode.Uri.file(mod.sourceRootUri).toString(),
+            })),
+        };
+    }
+    return undefined;
+}
+
 export async function activate(context: vscode.ExtensionContext) {
     // Load the display-language override before any UI string is produced.
     await initExtensionL10n(context);
@@ -204,6 +245,12 @@ export async function activate(context: vscode.ExtensionContext) {
         (cmd) => notifyFirstBuildSuccess(context, cmd),
     );
 
+    // UX-16: user-invoked failures route through the host logger (one
+    // notification, channel detail, Show Details) — the handlers themselves
+    // stay notification-free. Shared by doctor and the game-log analyzer.
+    const hostErrorSink = (error: unknown): void =>
+        pzLogger.error(error instanceof Error ? error : String(error));
+
     context.subscriptions.push(
         outputChannel,
         // The manager owns the controller AND the state service — disposal
@@ -222,8 +269,15 @@ export async function activate(context: vscode.ExtensionContext) {
         // UX-16: user-invoked doctor failures route through the host logger
         // (one notification, channel detail, Show Details) — the runner
         // itself stays notification-free.
-        registerDoctorCommand(runProjectDiagnostics, (error) =>
-            pzLogger.error(error instanceof Error ? error : String(error)),
+        registerDoctorCommand(runProjectDiagnostics, hostErrorSink),
+        // The game-log analyzer registers next to doctor (same UX-16 sink):
+        // it needs the resolved attribution context — the plain
+        // registerAllCommands list could not provide one, so its findings
+        // never carried a sourceFile and diagnostics shipped dead.
+        registerAnalyzeGameLogCommand(
+            async (logPath?: string) =>
+                analyzeGameLogFile(logPath, await resolveGameLogContext()),
+            hostErrorSink,
         ),
         treeView,
         projectJsonWatcher,
