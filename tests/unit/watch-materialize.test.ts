@@ -209,7 +209,13 @@ describe('resolveMaterialization boundary gate (data safety)', () => {
             effectiveOutdir: 'C:/proj/dist/Workshop',
         });
         expect(r.action).toBe('skip');
-        expect(r.refused).toContain("build output root 'C:");
+        // The refusal names the RESOLVED build output root — resolve the
+        // same literal here so the pin holds on every host (a Windows-style
+        // literal resolves against the cwd on POSIX instead of mapping a
+        // drive; the refusal semantics are identical either way).
+        expect(r.refused).toContain(
+            `build output root '${path.resolve('C:/proj/dist')}`,
+        );
         expect(r.aliasDistRoot).toBeUndefined();
     });
 
