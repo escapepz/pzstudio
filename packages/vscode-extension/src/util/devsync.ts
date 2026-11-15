@@ -14,11 +14,18 @@ import {
 } from '@pzstudio/cli/api';
 import { t } from './l10n';
 import { ruleFileFs } from './ruleFs';
+import { watchTreeRecursive, type RecursiveFsWatcherHandle } from './fsWatcher';
 
 /**
- * Desktop auto-sync: ONE core BuildSession driven by a workspace
- * FileSystemWatcher. Watch writes into the workshop output folders, so this
- * feature is Node-host only — the web build never registers the command.
+ * Desktop auto-sync: ONE core BuildSession driven by file events from TWO
+ * watcher legs — the workspace FileSystemWatcher (host-managed) and the
+ * self-owned recursive fs.watch walker (fsWatcher.ts, enabled at the
+ * activation site; d09-B2 — the host watcher alone silently stops
+ * delivering on hosts where the watched tree's shape changes after the
+ * window's watcher established itself). Overlapping events are safe: the
+ * engine's coalesceDeltas collapses same-path duplicates. Watch writes
+ * into the workshop output folders, so this feature is Node-host only —
+ * the web build never registers the command.
  *
  * Events are pre-filtered through the same decision the CLI watch uses
  * (isWatchPathIgnored, driven by studio.resolveOutDir) so the engine's own
@@ -104,6 +111,18 @@ export class DevSyncController implements vscode.Disposable {
     private readonly logger: PzStudioLogger;
     private session: BuildSession | undefined;
     private watcher: vscode.FileSystemWatcher | undefined;
+    /**
+     * The self-owned delivery leg (fsWatcher.ts): Node fs.watch over the
+     * project tree. The vscode watcher is host-managed and silently stops
+     * delivering when the watched tree's shape changes under it (d09-B2) —
+     * this one subscribes what exists at session start and follows new
+     * directories, so delivery never depends on the host watcher service.
+     * Both sources feed the same schedule(); the engine's coalesceDeltas
+     * collapses the overlap on healthy hosts.
+     */
+    private fsWatcher: RecursiveFsWatcherHandle | undefined;
+    /** Whether start() also runs the self-owned fs.watch delivery leg. */
+    private readonly useFsWatcher: boolean;
     /** The session's project directory — published with the filter root. */
     private projectDir: string | undefined;
     /** The resolved output root the outdir rule filters against. */
@@ -120,9 +139,18 @@ export class DevSyncController implements vscode.Disposable {
     /** Events dropped by the scope filter since the last reported batch. */
     private filteredEvents = 0;
 
-    constructor(studio: PzStudio, logger: PzStudioLogger) {
+    constructor(
+        studio: PzStudio,
+        logger: PzStudioLogger,
+        options?: { useFsWatcher?: boolean },
+    ) {
         this.studio = studio;
         this.logger = logger;
+        // Off by default: the self-owned delivery leg is a product decision
+        // made at the activation site (extension.ts). Tests construct the
+        // controller directly and drive the schedule pipeline through the
+        // vscode watcher mock — deterministic, no real fs dependency.
+        this.useFsWatcher = options?.useFsWatcher === true;
     }
 
     get active(): boolean {
@@ -220,6 +248,26 @@ export class DevSyncController implements vscode.Disposable {
                 `Development sync: watching '${watcherBase.base.toString()}' for changes (**/*).`,
             );
 
+            // The GUARANTEED delivery leg (d09-B2): a self-owned recursive
+            // fs.watch walker over the PROJECT tree. The vscode watcher
+            // above is host-managed and — on some VS Code builds/hosts —
+            // silently delivers nothing for trees that changed shape after
+            // the window's watcher established itself; this walker
+            // subscribes what exists at session start and follows new
+            // directories, so delivery never depends on the host service.
+            // Both legs feed the same schedule(); the engine's
+            // coalesceDeltas collapses the overlap on healthy hosts.
+            if (this.useFsWatcher) {
+                this.fsWatcher = watchTreeRecursive(
+                    projectDir,
+                    (type, path) => this.schedule(type, path),
+                    (message) => this.logger.warn(message),
+                );
+                this.logger.info(
+                    `Development sync: fs watcher subscribed ${this.fsWatcher.subscribedCount} director(ies) under '${projectDir}'.`,
+                );
+            }
+
             // Publish the filter state only once the session is live, so no
             // event can ever be filtered by a root without a session.
             this.projectDir = projectDir;
@@ -241,7 +289,9 @@ export class DevSyncController implements vscode.Disposable {
     async stop(): Promise<void> {
         const watcher = this.watcher;
         const session = this.session;
+        const fsWatcher = this.fsWatcher;
         this.watcher = undefined;
+        this.fsWatcher = undefined;
         this.session = undefined;
         this.projectDir = undefined;
         this.filterRoot = undefined;
@@ -253,6 +303,7 @@ export class DevSyncController implements vscode.Disposable {
         this.pending = [];
         this.filteredEvents = 0;
         watcher?.dispose();
+        fsWatcher?.dispose();
         await session?.stop();
     }
 

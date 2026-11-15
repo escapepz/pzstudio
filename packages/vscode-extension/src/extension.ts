@@ -212,6 +212,11 @@ export async function activate(context: vscode.ExtensionContext) {
             outputChannel,
             devSyncErrorActions(() => devSyncManager),
         ),
+        // d09-B2: the self-owned fs.watch delivery leg ships ON — the
+        // vscode watcher alone silently stops delivering on hosts where the
+        // watched tree's shape changes after the window's watcher
+        // established itself; the fs walker guarantees delivery.
+        { useFsWatcher: true },
     );
     const devSyncManager: DevSyncManager = new DevSyncManager(
         devSync,
