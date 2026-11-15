@@ -104,6 +104,17 @@ describe('consoleLogParse peelLine', () => {
         });
     });
 
+    it('peels the NOISE envelope level', () => {
+        const p = peelLine('NOISE: General      f:0> x');
+        expect(p).toMatchObject({
+            kind: 'envelope',
+            level: 'NOISE',
+            channel: 'General',
+            frame: 0,
+            body: 'x',
+        });
+    });
+
     it('marks junk as other', () => {
         expect(peelLine('"]').kind).toBe('other');
         expect(peelLine('').kind).toBe('other');

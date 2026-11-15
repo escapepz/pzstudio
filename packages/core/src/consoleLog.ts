@@ -452,7 +452,14 @@ export async function analyzeConsoleLog(
         };
     }
 
-    const assembled = assembleEntries(text.split(/\r\n|\r|\n/));
+    // A real console.txt ends with \n: the split leaves ONE trailing empty
+    // element that is not a visible line — drop it so totalLines counts
+    // what the file shows. Blank lines anywhere else stay counted.
+    const lines = text.split(/\r\n|\r|\n/);
+    if (lines.length > 0 && lines[lines.length - 1] === '') {
+        lines.pop();
+    }
+    const assembled = assembleEntries(lines);
     const built = buildFindings(
         assembled.entries,
         assembled.totalLines,
@@ -519,13 +526,25 @@ async function attributeFindings(
     }
 
     // Tier-3 bookkeeping: basename -> workspace URIs per context mod, built
-    // lazily on the first finding that needs it.
+    // lazily on the first finding that needs it. Airtight fail-soft: the
+    // log-read try/catch covers only fs.read, so a basename-index failure
+    // must degrade to unattributed findings here — never reject
+    // analyzeConsoleLog.
     let basenameIndex:
         | Promise<Map<string, Array<{ modId: string; uri: string }>>>
         | undefined;
     const ensureBasenameIndex = () => {
         if (basenameIndex === undefined) {
-            basenameIndex = buildBasenameIndex(fs, contextMods);
+            basenameIndex = (async () => {
+                try {
+                    return await buildBasenameIndex(fs, contextMods);
+                } catch {
+                    return new Map<
+                        string,
+                        Array<{ modId: string; uri: string }>
+                    >();
+                }
+            })();
         }
         return basenameIndex;
     };

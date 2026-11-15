@@ -48,12 +48,12 @@ export interface PeeledLine {
 }
 
 // Padded console envelope. Level prefixes are the fixed LogSeverity literals
-// (`TRACE: `, `DEBUG: `, `LOG  : `, `WARN : `, `ERROR: `). The caller capture
-// terminates at the first `>`, so embedded `ERROR:`/`>` text in the body can
-// never re-open the envelope; `Lua(<owner>).<func>` callers pass through
-// `[^>\r\n]+?`. `t:`/`st:` metadata is config-gated and optional.
+// (`TRACE: `, `DEBUG: `, `NOISE: `, `LOG  : `, `WARN : `, `ERROR: `). The
+// caller capture terminates at the first `>`, so embedded `ERROR:`/`>` text
+// in the body can never re-open the envelope; `Lua(<owner>).<func>` callers
+// pass through `[^>\r\n]+?`. `t:`/`st:` metadata is config-gated and optional.
 const PADDED_ENVELOPE =
-    /^(?<level>LOG|WARN|ERROR|DEBUG|TRACE)\s{0,2}:\s+(?<channel>[A-Za-z]+)\s+f:(?<frame>\d+)(?:[,\s]+(?:t|st):[\d,]+)*(?:\s+at\s+(?<caller>[^>\r\n]+?)\s*)?>\s?(?<body>.*)$/;
+    /^(?<level>LOG|WARN|ERROR|DEBUG|TRACE|NOISE)\s{0,2}:\s+(?<channel>[A-Za-z]+)\s+f:(?<frame>\d+)(?:[,\s]+(?:t|st):[\d,]+)*(?:\s+at\s+(?<caller>[^>\r\n]+?)\s*)?>\s?(?<body>.*)$/;
 
 // Body-embedded caller promotion: `LuaManager.RunLuaInternal> Exception thrown`.
 const BODY_EMBEDDED_CALLER = /^([A-Za-z0-9_$.()]+)> (.*)$/;

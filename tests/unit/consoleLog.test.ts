@@ -639,6 +639,53 @@ describe('consoleLog analyzeConsoleLog live-log robustness', () => {
     });
 });
 
+describe('consoleLog analyzeConsoleLog trailing newline', () => {
+    it('pins totalLines to the visible line count when the log ends with a newline', async () => {
+        const fs = new FakeProjectFileSystem();
+        const lines = [SESSION_START_LINE, LOADING_ZUL_TEST, GAME_EXITED_LINE];
+        // A real console.txt ends with \n — the split's trailing empty
+        // element is not a visible line and must not inflate totalLines.
+        const logUri = 'mem://logs/console.txt';
+        await fs.writeText(logUri, lines.join('\n') + '\n');
+
+        const report = await analyzeConsoleLog(fs, logUri);
+
+        expect(report.log.totalLines).toBe(lines.length);
+    });
+});
+
+describe('consoleLog analyzeConsoleLog basename-index fail-soft', () => {
+    it('resolves findings unattributed instead of rejecting when the source walk throws', async () => {
+        const fs = new FakeProjectFileSystem();
+        const logUri = await writeLog(fs, [
+            SESSION_START_LINE,
+            LOADING_ZUL_TEST,
+            ...ERROR_BLOCK,
+            GAME_EXITED_LINE,
+        ]);
+        fs.list = async (): Promise<DirectoryEntry[]> => {
+            throw new Error('EPERM: source walk refused');
+        };
+
+        const report = await analyzeConsoleLog(fs, logUri, {
+            mods: [
+                {
+                    modId: 'zul_test_dev',
+                    sourceRootUri: 'file:///proj/zul_test_dev',
+                },
+            ],
+        });
+
+        const syntax = report.findings.find(
+            (finding) => finding.category === 'lua-syntax-error',
+        );
+        expect(syntax).toBeDefined();
+        // The tier-3 lookup degraded: unattributed, never a throw.
+        expect(syntax?.modId).toBeUndefined();
+        expect(syntax?.sourceFile).toBeUndefined();
+    });
+});
+
 describe('consoleLog analyzeConsoleLog includeDebug threading', () => {
     it('keeps DEBUG lines finding-free in both modes but re-enables their session tables', async () => {
         const fs = new FakeProjectFileSystem();

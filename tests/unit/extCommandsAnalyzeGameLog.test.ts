@@ -264,6 +264,52 @@ describe('pzstudio.analyzeGameLog', () => {
         expect(diagnostics[0].source).toBe('pzstudio');
     });
 
+    it('groups two attributed findings on the same source file into one set call', async () => {
+        asMock(analyze).mockResolvedValue(
+            makeReport([
+                {
+                    category: 'lua-syntax-error',
+                    severity: 'error',
+                    message: 'unexpected symbol near <eof>',
+                    modId: 'zul_test_dev',
+                    sourceFile: ATTRIBUTED_URI,
+                    line: 43,
+                    count: 1,
+                    firstLine: 40,
+                    lastLine: 43,
+                },
+                {
+                    category: 'translation',
+                    severity: 'info',
+                    message: 'missing translation key',
+                    modId: 'zul_test_dev',
+                    sourceFile: ATTRIBUTED_URI,
+                    count: 3,
+                    firstLine: 10,
+                    lastLine: 12,
+                },
+            ]),
+        );
+        const { handler } = await setupHandler(analyze);
+
+        await handler();
+
+        const collection = createdCollection('pzstudio-game-log');
+        const setCalls = asMock(collection.set).mock.calls as Array<
+            [vscode.Uri, Array<Record<string, unknown>>]
+        >;
+        expect(setCalls).toHaveLength(1);
+        const [uri, diagnostics] = setCalls[0];
+        expect(String(uri.toString())).toBe(ATTRIBUTED_URI);
+        expect(diagnostics).toHaveLength(2);
+        expect(diagnostics[0].message).toBe(
+            'lua-syntax-error: unexpected symbol near <eof>',
+        );
+        expect(diagnostics[1].message).toBe(
+            'translation: missing translation key',
+        );
+    });
+
     it('the unattributed finding produces no diagnostic', async () => {
         asMock(analyze).mockResolvedValue(
             makeReport([

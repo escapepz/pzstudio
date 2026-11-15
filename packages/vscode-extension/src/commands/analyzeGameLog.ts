@@ -107,16 +107,20 @@ function renderReport(
 
 /**
  * Pins attributed findings as diagnostics; unattributed ones stay out.
- * sourceFile arrives in two shapes: `file://` URIs (the extension wiring
- * remaps each context mod root through vscode.Uri.file) and plain
- * filesystem paths (a context built without the remap — the CLI host emits
- * paths). Only the URI shape is parseable; paths must materialize through
- * Uri.file or a real host rejects the string as a malformed URI.
+ * Findings are grouped per sourceFile into one set() call per URI, so
+ * multiple attributed findings on one file all survive (a per-finding set
+ * would replace the previous array and keep only the last). sourceFile
+ * arrives in two shapes: `file://` URIs (the extension wiring remaps each
+ * context mod root through vscode.Uri.file) and plain filesystem paths (a
+ * context built without the remap — the CLI host emits paths). Only the URI
+ * shape is parseable; paths must materialize through Uri.file or a real
+ * host rejects the string as a malformed URI.
  */
 function publishDiagnostics(
     collection: vscode.DiagnosticCollection,
     report: ConsoleLogReport,
 ): void {
+    const bySourceFile = new Map<string, vscode.Diagnostic[]>();
     for (const finding of report.findings) {
         if (!finding.sourceFile) {
             continue;
@@ -128,7 +132,15 @@ function publishDiagnostics(
             diagnosticSeverity(finding.severity),
         );
         diagnostic.source = 'pzstudio';
-        collection.set(sourceFileUri(finding.sourceFile), [diagnostic]);
+        const bucket = bySourceFile.get(finding.sourceFile);
+        if (bucket) {
+            bucket.push(diagnostic);
+        } else {
+            bySourceFile.set(finding.sourceFile, [diagnostic]);
+        }
+    }
+    for (const [sourceFile, diagnostics] of bySourceFile) {
+        collection.set(sourceFileUri(sourceFile), diagnostics);
     }
 }
 
