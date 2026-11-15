@@ -10,6 +10,7 @@ import {
 import fs, { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir, homedir } from 'os';
+import type { TemplateTransport } from '@pzstudio/platform';
 import * as logger from '../../packages/cli/src/lib/logger';
 
 vi.mock('../../packages/cli/src/lib/logger');
@@ -476,6 +477,164 @@ describe('templateManager - config and resolution', () => {
             expect(written.templates.mod).toBeDefined(); // Filled default
             expect(written.outdir).toBe('backup-outdir'); // Migration stamp
         });
+    });
+});
+
+describe('templateManager - cache replacement data safety (sweep d15-B5)', () => {
+    const fakeHome = () => (globalThis as any).__PZSTUDIO_FAKE_HOME as string;
+
+    let actualFs: any;
+
+    beforeEach(async () => {
+        // These tests verify real filesystem behavior through the module
+        // under test (the same pattern the refreshLegacyTemplates suite
+        // uses): drop every mock this file or an earlier describe left
+        // installed, then re-prime the file-level vi.fn(actual.X) factory
+        // wrappers — Vitest 4's restoreAllMocks resets them to NO
+        // implementation, and earlier describes' spy values would otherwise
+        // leak into the fixtures below.
+        vi.restoreAllMocks();
+        actualFs = await vi.importActual('fs');
+        vi.mocked(fs.existsSync).mockImplementation(actualFs.existsSync as any);
+        vi.mocked(fs.readFileSync).mockImplementation(
+            actualFs.readFileSync as any,
+        );
+        vi.mocked(fs.lstatSync).mockImplementation(actualFs.lstatSync as any);
+        vi.mocked(fs.readdirSync).mockImplementation(
+            actualFs.readdirSync as any,
+        );
+        vi.mocked(fs.mkdirSync).mockImplementation(actualFs.mkdirSync as any);
+        vi.mocked(fs.writeFileSync).mockImplementation(
+            actualFs.writeFileSync as any,
+        );
+        vi.mocked(fs.rmSync).mockImplementation(actualFs.rmSync as any);
+        vi.mocked(fs.cpSync).mockImplementation(actualFs.cpSync as any);
+    });
+
+    const modCacheDir = () =>
+        join(
+            fakeHome(),
+            '.pzstudio',
+            'templates',
+            'escapepz',
+            'pzstudio-template-mod',
+        );
+
+    /** A transport whose cache/refresh/clone behavior the test controls. */
+    const fakeTransport = (behavior: {
+        valid: boolean;
+        refresh: boolean;
+        download?: (url: string, ref: string | undefined, dest: string) => void;
+    }): TemplateTransport => ({
+        name: 'git',
+        isCacheValid: () => behavior.valid,
+        refresh: () => behavior.refresh,
+        download: behavior.download ?? (() => {}),
+    });
+
+    it('a failed replacement clone leaves the previous cache untouched', () => {
+        const cacheDir = modCacheDir();
+        mkdirSync(cacheDir, { recursive: true });
+        writeFileSync(join(cacheDir, 'seeded.txt'), 'cache');
+
+        const downloadTargets: string[] = [];
+        const transport = fakeTransport({
+            valid: true,
+            refresh: false, // the d15 leg-C shape: refresh refuses/fails
+            download: (_url, _ref, dest) => {
+                downloadTargets.push(dest);
+                throw new Error('download 404');
+            },
+        });
+
+        let result: string | undefined;
+        let threw: unknown;
+        try {
+            result = resolveTemplateDir('mod', {
+                forceUpdate: true,
+                templateTransport: transport,
+            });
+        } catch (e) {
+            threw = e;
+        }
+
+        // The clone attempt went to the STAGING sibling, never the live cache.
+        expect(downloadTargets).toEqual([`${cacheDir}.replacing`]);
+        // Either the legacy fallback resolved or resolution threw — but the
+        // machine is exactly as it was before the update.
+        expect(fs.existsSync(cacheDir)).toBe(true);
+        expect(fs.readFileSync(join(cacheDir, 'seeded.txt'), 'utf8')).toBe(
+            'cache',
+        );
+        expect(fs.existsSync(`${cacheDir}.replacing`)).toBe(false);
+        if (result !== undefined) {
+            expect(result).toContain('.template-mod');
+        } else {
+            expect(String(threw)).toContain('no legacy fallback');
+        }
+    });
+
+    /** A download stub that mimics a real git clone: the replacement
+     * validation runs against the DEFAULT transport (git), so the staged
+     * clone must carry .git to be accepted. */
+    const fakeCloneDownload = (dest: string): void => {
+        mkdirSync(join(dest, '.git'), { recursive: true });
+        writeFileSync(join(dest, 'fresh.txt'), 'new');
+    };
+
+    it('a successful replacement clone swaps the cache only after staging is secured', () => {
+        const cacheDir = modCacheDir();
+        mkdirSync(cacheDir, { recursive: true });
+        writeFileSync(join(cacheDir, 'stale.txt'), 'old');
+
+        const transport = fakeTransport({
+            valid: true,
+            refresh: false,
+            download: (_url, _ref, dest) => fakeCloneDownload(dest),
+        });
+
+        const result = resolveTemplateDir('mod', {
+            forceUpdate: true,
+            templateTransport: transport,
+        });
+        expect(result).toBe(cacheDir);
+        expect(fs.readFileSync(join(cacheDir, 'fresh.txt'), 'utf8')).toBe(
+            'new',
+        );
+        expect(fs.existsSync(join(cacheDir, 'stale.txt'))).toBe(false);
+        expect(fs.existsSync(`${cacheDir}.replacing`)).toBe(false);
+    });
+
+    it('an invalid cache is replaced through the same staging swap (never deleted first)', () => {
+        const cacheDir = modCacheDir();
+        mkdirSync(cacheDir, { recursive: true });
+        writeFileSync(join(cacheDir, 'junk.txt'), 'invalid');
+
+        const downloadTargets: string[] = [];
+        const transport = fakeTransport({
+            valid: false,
+            refresh: false,
+            download: (_url, _ref, dest) => {
+                downloadTargets.push(dest);
+                // The (invalid) previous cache must still exist while the
+                // replacement downloads — deletion happens after the swap
+                // is secured.
+                expect(fs.existsSync(cacheDir)).toBe(true);
+                fakeCloneDownload(dest);
+            },
+        });
+
+        const result = resolveTemplateDir('mod', {
+            forceUpdate: true,
+            templateTransport: transport,
+        });
+        expect(downloadTargets).toEqual([`${cacheDir}.replacing`]);
+        expect(result).toBe(cacheDir);
+        expect(fs.readFileSync(join(cacheDir, 'fresh.txt'), 'utf8')).toBe(
+            'new',
+        );
+        expect(fs.existsSync(join(cacheDir, 'junk.txt'))).toBe(false);
+        expect(fs.existsSync(`${cacheDir}.replacing`)).toBe(false);
     });
 });
 

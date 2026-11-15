@@ -6,6 +6,7 @@ import {
     mkdirSync,
     readFileSync,
     readdirSync,
+    renameSync,
     rmSync,
     writeFileSync,
     cpSync,
@@ -881,7 +882,14 @@ function resolveTemplateDirWithIo(
         );
     }
 
-    // Online mode: use cache if valid and not forcing update
+    // Online mode: use cache if valid and not forcing update. Data safety
+    // (sweep d15-B5): an existing cache — valid or invalid — is NEVER deleted
+    // before its replacement is secured. The old code rmSync'd the cache and
+    // only then re-cloned, so a transient clone failure (a 404, a timeout)
+    // left the machine with NO template path at all — worse than before the
+    // update. The replacement now stages into a sibling directory and swaps
+    // in only after it is fully on disk; on failure the previous cache stays.
+    let replacingExistingCache = false;
     if (isCacheValid(cacheDir, transport)) {
         if (force) {
             if (
@@ -890,14 +898,13 @@ function resolveTemplateDirWithIo(
                 return cacheDir;
             }
             emitWarn(io, `Failed to refresh template cache. Re-cloning...`);
-            rmSync(cacheDir, { recursive: true, force: true });
+            replacingExistingCache = true;
         } else {
             return cacheDir;
         }
     } else if (existsSync(cacheDir)) {
-        // Invalid cache: clean up before re-clone
         emitWarn(io, `Template cache at ${cacheDir} is invalid. Re-cloning...`);
-        rmSync(cacheDir, { recursive: true, force: true });
+        replacingExistingCache = true;
     }
 
     // Re-clone or initial clone
@@ -910,20 +917,55 @@ function resolveTemplateDirWithIo(
 
     mkdirSync(dirname(cacheDir), { recursive: true });
 
-    if (
-        cloneRemoteTemplateWithIo(
-            templateConfig.url,
-            cacheDir,
-            templateConfig.ref,
-            transport,
-            io,
-        )
-    ) {
-        if (validateTemplateManifest(cacheDir, category)) {
+    if (replacingExistingCache) {
+        const stagingDir = `${cacheDir}.replacing`;
+        rmSync(stagingDir, { recursive: true, force: true });
+        let secured = false;
+        try {
+            secured =
+                cloneRemoteTemplateWithIo(
+                    templateConfig.url,
+                    stagingDir,
+                    templateConfig.ref,
+                    transport,
+                    io,
+                ) && validateTemplateManifest(stagingDir, category);
+        } finally {
+            // A failed clone leaves no half-download behind.
+            if (!secured) {
+                rmSync(stagingDir, { recursive: true, force: true });
+            }
+        }
+        if (secured) {
+            // Replacement secured — only now remove the old cache and swap.
+            rmSync(cacheDir, { recursive: true, force: true });
+            renameSync(stagingDir, cacheDir);
             return cacheDir;
         }
+        emitWarn(
+            io,
+            `Failed to clone template from '${templateConfig.url}'. The previous template cache at ${cacheDir} was left untouched.`,
+        );
     } else {
-        emitWarn(io, `Failed to clone template from '${templateConfig.url}'.`);
+        // Initial clone: no existing cache to protect — clone into place.
+        if (
+            cloneRemoteTemplateWithIo(
+                templateConfig.url,
+                cacheDir,
+                templateConfig.ref,
+                transport,
+                io,
+            )
+        ) {
+            if (validateTemplateManifest(cacheDir, category)) {
+                return cacheDir;
+            }
+        } else {
+            emitWarn(
+                io,
+                `Failed to clone template from '${templateConfig.url}'.`,
+            );
+        }
     }
 
     // Fallback to legacy for official templates only if clone/cache failed

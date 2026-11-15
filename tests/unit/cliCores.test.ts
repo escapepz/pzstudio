@@ -1284,6 +1284,64 @@ describe('commit 6 transport constructor sinks (Appendix C)', () => {
             ),
         ).toBe(true);
     });
+
+    // Sweep d15-B5: refresh used to rmSync the cache BEFORE the re-download,
+    // so a failed download left the machine with NO cache at all. The
+    // replacement must stage into a sibling and swap only after it lands.
+    it('FetchTransport.refresh swaps the cache only after the staged re-download succeeds (d15-B5)', () => {
+        const cacheDir = makeTempDir();
+        fs.writeFileSync(path.join(cacheDir, 'old.txt'), 'old');
+        fs.writeFileSync(
+            path.join(cacheDir, '.pzstudio-fetch.json'),
+            JSON.stringify({ url: 'https://github.com/owner/repo.git' }),
+        );
+        const t = new FetchTransport({ logger: recordingLogger().logger });
+        vi.spyOn(t as any, 'fetchArchive').mockReturnValue(new Uint8Array());
+        vi.spyOn(t as any, 'extract').mockImplementation(
+            (_zip: unknown, destDir: string) => {
+                // The real extract mkdirs the destination (the staging dir
+                // does not exist yet) — mirror that before writing.
+                fs.mkdirSync(destDir, { recursive: true });
+                fs.writeFileSync(path.join(destDir, 'fresh.txt'), 'new');
+            },
+        );
+
+        expect(t.refresh(cacheDir, undefined)).toBe(true);
+        expect(fs.readFileSync(path.join(cacheDir, 'fresh.txt'), 'utf8')).toBe(
+            'new',
+        );
+        expect(fs.existsSync(path.join(cacheDir, 'old.txt'))).toBe(false);
+        expect(fs.existsSync(`${cacheDir}.replacing`)).toBe(false);
+    });
+
+    it('FetchTransport.refresh keeps the previous cache when the re-download fails (d15-B5)', () => {
+        const cacheDir = makeTempDir();
+        fs.writeFileSync(path.join(cacheDir, 'old.txt'), 'old');
+        fs.writeFileSync(
+            path.join(cacheDir, '.pzstudio-fetch.json'),
+            JSON.stringify({ url: 'https://github.com/owner/repo.git' }),
+        );
+        const { calls, logger } = recordingLogger();
+        const t = new FetchTransport({ logger });
+        // The empty archive makes the real extract throw — a re-download
+        // failure after the old code would have already deleted the cache.
+        vi.spyOn(t as any, 'fetchArchive').mockReturnValue(new Uint8Array());
+
+        expect(t.refresh(cacheDir, undefined)).toBe(false);
+        // The previous cache survived, the staging dir left no debris, and
+        // the warn names the preserved cache (clear error, d15-B5 contract).
+        expect(fs.existsSync(path.join(cacheDir, 'old.txt'))).toBe(true);
+        expect(fs.existsSync(`${cacheDir}.replacing`)).toBe(false);
+        expect(
+            calls.some(
+                (c) =>
+                    c.method === 'warn' &&
+                    String(c.message).includes(
+                        `the previous cache at ${cacheDir} was left untouched`,
+                    ),
+            ),
+        ).toBe(true);
+    });
 });
 
 /* ------------------------------------------------------------------ */

@@ -4,6 +4,7 @@ import {
     mkdirSync,
     readdirSync,
     readFileSync,
+    renameSync,
     rmSync,
     writeFileSync,
 } from 'fs';
@@ -340,17 +341,25 @@ export class FetchTransport implements TemplateTransport {
             );
             return false;
         }
-        rmSync(cacheDir, { recursive: true, force: true });
+        // Sweep d15-B5 data-safety: re-download into a staging sibling and
+        // swap only after the replacement is fully on disk. Deleting the
+        // cache BEFORE the download turned a failed re-download (a 404, a
+        // timeout) into a machine with no template cache at all.
+        const stagingDir = `${cacheDir}.replacing`;
+        rmSync(stagingDir, { recursive: true, force: true });
         try {
-            this.download(url, ref, cacheDir);
-            return true;
+            this.download(url, ref, stagingDir);
         } catch (err) {
+            rmSync(stagingDir, { recursive: true, force: true });
             emitWarn(
                 this.io,
-                `- Re-download failed: ${(err as Error).message}`,
+                `- Re-download failed: ${(err as Error).message} — the previous cache at ${cacheDir} was left untouched.`,
             );
             return false;
         }
+        rmSync(cacheDir, { recursive: true, force: true });
+        renameSync(stagingDir, cacheDir);
+        return true;
     }
 
     isCacheValid(dir: string): boolean {

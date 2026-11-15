@@ -97,7 +97,15 @@ if (templateLegacySource) {
         `Stamped legacy templates (${version}, ${today}) in ${stampPath}`,
     );
 } else {
-    console.warn(
-        'No populated .template-legacy found (submodules not checked out?) — the built binary will not be able to bootstrap templates offline.',
+    // Sweep d15-B5 (a): a hollow fallback is worse than none — an artifact
+    // packed without populated templates fails every offline `pzstudio new`
+    // with "No valid cached or legacy template found". That must never ship
+    // quietly: the build (and every artifact pipeline that runs it) dies
+    // here instead. RELEASE.md Preflight item: submodules populated.
+    throw new Error(
+        'No populated .template-legacy found (submodules not checked out?) — ' +
+            'refusing to build: the artifact would not be able to bootstrap ' +
+            'templates offline. Initialize the submodule first: ' +
+            'git submodule update --init --depth 1',
     );
 }

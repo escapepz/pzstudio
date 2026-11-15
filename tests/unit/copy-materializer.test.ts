@@ -561,8 +561,11 @@ describe('copy materializer (real fs fixtures)', () => {
         expect(result.prunedPaths).toHaveLength(2);
         expect(result.prunedPaths).toContain(orphanFile);
         expect(result.prunedPaths).toContain(nestedOrphan);
-        // The prune itself still ran — the slot mirrors dist again.
-        expect(await fsp.readdir(slotDir)).toEqual(['workshop.txt']);
+        // The prune itself still ran — the slot mirrors dist again (the
+        // copy marker is the slot's own ownership trace and stays).
+        expect((await fsp.readdir(slotDir)).sort()).toEqual(
+            ['.pzstudio-copy.json', 'workshop.txt'].sort(),
+        );
     });
 
     it('reconcile: a converged pass prunes nothing (empty prunedPaths)', async () => {
