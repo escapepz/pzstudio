@@ -8,6 +8,7 @@ import { hasFlag } from '../args';
 import { log, verbose } from '../logger';
 import {
     generateModInfoText,
+    projectDir,
     resolveProjectConfig,
     resolveModInfoTargets,
 } from '../helper';
@@ -39,11 +40,22 @@ export async function modinfoCmd(action: string, modId?: string) {
         throw new CliError('No pzstudio project found.');
     }
 
+    // The mod-folder walk must use THIS invocation's project root — the
+    // same ctx-aware discovery resolveProjectConfig just used. The helper's
+    // implicit default (legacyProjectDir) reads the raw legacy anchor
+    // slots, which embedded hosts never write (doc 11 §8.0 R0/R1: the v2
+    // runtime stores nothing in the facade slots) — it would fall back to
+    // the host process's cwd and fail with "No pzstudio project found."
+    // even though the project was passed in explicitly (sweep d08-B5: the
+    // VS Code extension anchors every run through the invocation context).
+    // Inject the root through the whole command instead.
+    const projectRoot = projectDir();
+
     if (action === 'generate') {
         if (modId) {
-            await generateForMod(modId, projectConfig);
+            await generateForMod(modId, projectConfig, projectRoot);
         } else {
-            await generateForAll(projectConfig);
+            await generateForAll(projectConfig, projectRoot);
         }
     } else {
         throw new Error(`Unknown modinfo action [${action}]`);
@@ -54,8 +66,15 @@ export async function modinfoCmd(action: string, modId?: string) {
  * Generate mod.info for a specific mod.
  * @param modId The mod id
  * @param projectConfig The project config
+ * @param projectRoot The invocation-resolved project root the mod folder
+ *   lives under (same discovery resolveProjectConfig used — never the
+ *   legacy ambient default).
  */
-async function generateForMod(modId: string, projectConfig: any) {
+async function generateForMod(
+    modId: string,
+    projectConfig: any,
+    projectRoot: string,
+) {
     const mod = projectConfig.mods[modId];
     if (!mod) {
         throw new Error(`Mod [${modId}] not found in project.json`);
@@ -71,7 +90,7 @@ async function generateForMod(modId: string, projectConfig: any) {
     }
 
     verbose(`Resolving mod.info targets for mod '${modId}'...`);
-    const targets = resolveModInfoTargets(modId);
+    const targets = resolveModInfoTargets(modId, projectRoot);
     if (targets.length === 0) {
         verbose(`No Build 42 targets found for mod '${modId}'.`);
         log(
@@ -107,8 +126,9 @@ async function generateForMod(modId: string, projectConfig: any) {
 /**
  * Generate mod.info for all eligible mods.
  * @param projectConfig The project config
+ * @param projectRoot The invocation-resolved project root
  */
-async function generateForAll(projectConfig: any) {
+async function generateForAll(projectConfig: any, projectRoot: string) {
     log('Generating mod.info for all eligible mods...');
     const mods = Object.keys(projectConfig.mods).filter((id) => {
         const isExcluded = projectConfig.excludes.includes(id);
@@ -121,7 +141,7 @@ async function generateForAll(projectConfig: any) {
     verbose(`Eligible mods for mod.info: ${mods.join(', ')}`);
 
     for (const modId of mods) {
-        await generateForMod(modId, projectConfig);
+        await generateForMod(modId, projectConfig, projectRoot);
     }
 }
 
