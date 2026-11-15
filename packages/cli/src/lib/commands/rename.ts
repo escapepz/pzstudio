@@ -1,5 +1,12 @@
 import { join, extname } from 'path';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import {
+    existsSync,
+    readdirSync,
+    readFileSync,
+    renameSync,
+    rmSync,
+    writeFileSync,
+} from 'fs';
 import { expect } from '../expect';
 import { CliError } from '../errors';
 import { addHelp } from '../help';
@@ -28,6 +35,80 @@ addHelp(
         pzstudio rename <oldModId> <newModId> --yes - Skip the confirmation prompt (required in non-interactive sessions).
         pzstudio rename <oldModId> <newModId> --dry-run - Preview what would be renamed without changing anything.`,
 );
+
+/** One planned subdirectory rename: `<from>` carries the old mod id. */
+interface SubdirectoryRenamePlan {
+    from: string;
+    to: string;
+}
+
+/**
+ * Walks the mod tree and collects every directory whose NAME carries the
+ * old mod id (sweep d14-B5). The PZ lua convention names the per-context
+ * folders under `media/lua/{server,client,shared}/` after the mod id, so a
+ * rename that only rewrites file contents leaves `server/<old-id>/` behind
+ * and the built mod silently loses its server init. Replacement uses the
+ * same replaceAll semantics as the file-content rewrite, so nested
+ * occurrences (`<old-id>_patch`) rename too. Link entries are never
+ * touched. The plan comes back deepest-first: a child renames before its
+ * parent, so no collected path goes stale mid-execution.
+ */
+function planSubdirectoryRenames(
+    root: string,
+    oldModId: string,
+    newModId: string,
+): SubdirectoryRenamePlan[] {
+    const plan: SubdirectoryRenamePlan[] = [];
+    const walk = (dir: string): void => {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+            // Links are user state (a junction/symlink entry is never a
+            // directory to move): renaming a link would retarget it.
+            if (entry.isSymbolicLink() || !entry.isDirectory()) {
+                continue;
+            }
+            const childPath = join(dir, entry.name);
+            walk(childPath);
+            if (entry.name.includes(oldModId)) {
+                plan.push({
+                    from: childPath,
+                    to: join(dir, entry.name.replaceAll(oldModId, newModId)),
+                });
+            }
+        }
+    };
+    walk(root);
+    // Children first — every descendant path is longer than its ancestor's,
+    // so descending length is exactly a children-before-parents order.
+    plan.sort((a, b) => b.from.length - a.from.length);
+    return plan;
+}
+
+/**
+ * Fail-closed plan validation (d14-B5 edge): a destination that already
+ * exists means two trees would silently merge under one name. The whole
+ * rename refuses BEFORE any directory moves.
+ */
+function assertSubdirectoryTargetsFree(plan: SubdirectoryRenamePlan[]): void {
+    for (const step of plan) {
+        if (existsSync(step.to)) {
+            throw new CliError(
+                `Cannot rename mod id: directory '${step.to}' already exists. ` +
+                    `Renaming would silently merge the two directories.`,
+                {
+                    tryHint: `Rename or remove '${step.to}' by hand, then run the rename again.`,
+                },
+            );
+        }
+    }
+}
+
+/** Executes one validated subdirectory rename plan, logging each move. */
+function applySubdirectoryRenames(plan: SubdirectoryRenamePlan[]): void {
+    for (const step of plan) {
+        renameSync(step.from, step.to);
+        info(`- Renamed subdirectory '${step.from}' to '${step.to}'`);
+    }
+}
 
 export function renameCmd(oldModId: string, newModId: string) {
     const projectPath = projectDir();
@@ -75,6 +156,15 @@ export function renameCmd(oldModId: string, newModId: string) {
             log(
                 `Would: rewrite occurrences of '${oldModId}' in the folder's text files with '${newModId}'`,
             );
+            for (const step of planSubdirectoryRenames(
+                oldPath,
+                oldModId,
+                newModId,
+            )) {
+                log(
+                    `Would: rename subdirectory '${step.from}' to '${step.to}'`,
+                );
+            }
         }
         log(
             `Would: rename the project.json mods key '${oldModId}' to '${newModId}'`,
@@ -116,6 +206,19 @@ export function renameCmd(oldModId: string, newModId: string) {
             log(`- Updated file ${file} with new mod id '${newModId}'`);
         }
     });
+
+    // Sweep d14-B5: directory NAMES carry the mod id too (the PZ lua
+    // convention names media/lua/{server,client,shared}/<modId>/ after the
+    // mod). The content rewrite above cannot move a directory, so walk the
+    // renamed tree and move every directory still carrying the old id —
+    // planned first, validated fail-closed (no silent merges), then applied.
+    const subdirectoryPlan = planSubdirectoryRenames(
+        newPath,
+        oldModId,
+        newModId,
+    );
+    assertSubdirectoryTargetsFree(subdirectoryPlan);
+    applySubdirectoryRenames(subdirectoryPlan);
 
     // Update config
     projectConfig.mods[newModId] = projectConfig.mods[oldModId];
