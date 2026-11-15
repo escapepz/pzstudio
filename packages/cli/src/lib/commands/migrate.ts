@@ -125,12 +125,19 @@ export async function migrateCmd() {
                 const modConfig = project.mods[modId];
                 let modModified = false;
 
-                // Sync fields from mod.info to project.json if missing or different
+                // Sync fields from mod.info to project.json. A field is
+                // imported when the config does not carry a value yet — and
+                // an EMPTY STRING counts as "not carried" (d08-B4): new/add
+                // write `description: ''` (and similar placeholders) into
+                // fresh mod configs, and that placeholder must not swallow
+                // the authored legacy content. (The '' does NOT come from
+                // the parser — parseModInfoText drops empty collections.)
                 for (const key in parsedModInfo) {
                     if (key === 'id') continue; // Don't sync ID as it's the key in project.json
 
                     const value = (parsedModInfo as any)[key];
-                    if (modConfig[key] === undefined) {
+                    const existing = (modConfig as any)[key];
+                    if (existing === undefined || existing === '') {
                         verbose(
                             `  + Importing '${key}' from mod.info into project.json`,
                         );

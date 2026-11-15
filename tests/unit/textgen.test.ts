@@ -121,6 +121,52 @@ describe('modInfoText (pure)', () => {
         expect(modInfoText('my_mod', config)).toContain('require=ModA,ModB');
     });
 
+    it('should emit an empty-string description (d08-B4: only undefined/null omits)', () => {
+        const config = {
+            ...baseConfig,
+            mods: { my_mod: { name: 'My Mod', description: '' } },
+        } as unknown as IProjectConfig;
+
+        const lines = modInfoTextLines('my_mod', config);
+        expect(lines).toContain('description=');
+    });
+
+    it('should emit every description line verbatim (multi-line legacy description)', () => {
+        const config = {
+            ...baseConfig,
+            mods: {
+                my_mod: {
+                    name: 'My Mod',
+                    description: ['Line one', 'Line two'],
+                },
+            },
+        } as unknown as IProjectConfig;
+
+        const lines = modInfoTextLines('my_mod', config);
+        expect(lines).toContain('description=Line one');
+        expect(lines).toContain('description=Line two');
+    });
+
+    it('should emit no description line when the mod never had one', () => {
+        const config = {
+            ...baseConfig,
+            mods: { my_mod: { name: 'My Mod' } },
+        } as unknown as IProjectConfig;
+
+        const lines = modInfoTextLines('my_mod', config);
+        expect(lines.some((l) => l.startsWith('description='))).toBe(false);
+    });
+
+    it('should emit no description line for an empty array', () => {
+        const config = {
+            ...baseConfig,
+            mods: { my_mod: { name: 'My Mod', description: [] } },
+        } as unknown as IProjectConfig;
+
+        const lines = modInfoTextLines('my_mod', config);
+        expect(lines.some((l) => l.startsWith('description='))).toBe(false);
+    });
+
     it('should return an empty string for an unknown mod', () => {
         expect(modInfoText('nope', baseConfig)).toBe('');
     });

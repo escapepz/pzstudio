@@ -5,6 +5,7 @@ import { migrateCmd } from '../../packages/cli/src/lib/commands/migrate';
 import * as logger from '../../packages/cli/src/lib/logger';
 import {
     findProjectDir,
+    generateModInfoText,
     resolveModInfoTargets,
     updateProjectConfig,
 } from '../../packages/cli/src/lib/helper';
@@ -286,6 +287,41 @@ describe('migrateCmd', () => {
             expect(updated.mods.m1.name).toBe('Old Name');
             expect(updated.mods.m1.description).toBe('Existing');
             expect(updated.mods.m1.author).toBe('Someone');
+        });
+
+        it('should import the legacy description over the empty-string placeholder (d08-B4)', async () => {
+            mockFiles(
+                {
+                    'config.json': upToDateConfig,
+                    'project.json': JSON.stringify({
+                        workshop: { title: 'T' },
+                        mods: {
+                            m1: { name: 'Legacy Bridge', description: '' },
+                        },
+                        excludes: [],
+                    }),
+                    'mod.info':
+                        'id=m1\nname=Legacy Bridge\ndescription=Line one\ndescription=Line two\nauthor=Someone',
+                },
+                [CONFIG_PATH, PROJECT_PATH, '/m1/mod.info'],
+            );
+
+            await migrateCmd();
+
+            expect(updateProjectConfig).toHaveBeenCalledTimes(1);
+            const [, migrated] = vi.mocked(updateProjectConfig).mock
+                .calls[0] as any[];
+            // The '' placeholder did not swallow the authored content.
+            expect(migrated.mods.m1.description).toEqual([
+                'Line one',
+                'Line two',
+            ]);
+
+            // Full migrate → generate chain: the built mod.info carries the
+            // legacy description verbatim (d08-B4).
+            const text = generateModInfoText('m1', migrated);
+            expect(text).toContain('description=Line one');
+            expect(text).toContain('description=Line two');
         });
 
         it('should prefer the root mod.info over branch folders', async () => {

@@ -69,8 +69,11 @@ export function modInfoTextLines(
         // name
         if (mod.name) lines.push(`name=${mod.name}`);
 
-        // description
-        if (mod.description) {
+        // description — emitted whenever the field EXISTS in project.json,
+        // even when it is an empty string (d08-B4): '' is a real value here
+        // (an empty description), not an absence. Only undefined/null omits
+        // the line, so a user who never had a description still gets none.
+        if (mod.description !== undefined && mod.description !== null) {
             const descLines = Array.isArray(mod.description)
                 ? mod.description
                 : [mod.description];
