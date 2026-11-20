@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { join } from 'path';
 import { updateCmd } from '../../packages/cli/src/lib/commands/update';
 import * as logger from '../../packages/cli/src/lib/logger';
 import { CliError } from '../../packages/cli/src/lib/errors';
 import {
+    getConfigDir,
     refreshLegacyTemplates,
     resolveTemplateDirForEngine,
 } from '../../packages/cli/src/lib/templateManager';
@@ -13,6 +15,8 @@ vi.mock('../../packages/cli/src/lib/templateManager');
 describe('updateCmd — aggregate failure semantics (CLI-6)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // The output now names the cache roots via getConfigDir (d15-F2).
+        vi.mocked(getConfigDir).mockReturnValue('/fake-home/.pzstudio');
     });
 
     it('succeeds with the success summary when every category refreshes', async () => {
@@ -60,6 +64,7 @@ describe('updateCmd — aggregate failure semantics (CLI-6)', () => {
 describe('updateCmd — legacy template cache refresh', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(getConfigDir).mockReturnValue('/fake-home/.pzstudio');
     });
 
     it('U1 - up-to-date: the legacy step runs and its line reaches the output', async () => {
@@ -142,5 +147,94 @@ describe('updateCmd — legacy template cache refresh', () => {
                 ),
             );
         expect(successLines).toHaveLength(1);
+    });
+});
+
+describe('updateCmd — output names the cache dirs and end states (d15-F2)', () => {
+    const home = '/fake-home/.pzstudio';
+    // Expected fragments are built with the same join() the command uses,
+    // so the separator style matches on every platform.
+    const cacheDir = `${home}/templates/escapepz/pzstudio-template-project`;
+    const legacyDir = join(home, '.template-legacy', '.template-project');
+    const legacyRoot = join(home, '.template-legacy');
+    const templatesRoot = join(home, 'templates');
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(getConfigDir).mockReturnValue(home);
+        vi.mocked(resolveTemplateDirForEngine).mockReturnValue(cacheDir);
+        vi.mocked(refreshLegacyTemplates).mockReturnValue('up-to-date');
+    });
+
+    it('per-category line names the resolved cache dir + updated end state', async () => {
+        await updateCmd();
+
+        expect(logger.info).toHaveBeenCalledWith(
+            expect.stringContaining(
+                `- 'project' templates updated at: ${cacheDir}`,
+            ),
+        );
+        expect(logger.info).toHaveBeenCalledWith(
+            expect.stringContaining(
+                `- 'language' templates updated at: ${cacheDir}`,
+            ),
+        );
+    });
+
+    it('per-category line names the legacy dir + fell-back end state when the cache did not answer', async () => {
+        vi.mocked(resolveTemplateDirForEngine).mockReturnValue(legacyDir);
+
+        await updateCmd();
+
+        expect(logger.info).toHaveBeenCalledWith(
+            expect.stringContaining(
+                `- 'project' templates fell back to legacy at: ${legacyDir}`,
+            ),
+        );
+        // The fallback still counts as a refreshed cache for the aggregate.
+        expect(logger.info).toHaveBeenCalledWith(
+            expect.stringContaining(
+                'All template caches refreshed successfully!',
+            ),
+        );
+    });
+
+    it('legacy leg names the global legacy root for every refresh end state', async () => {
+        vi.mocked(refreshLegacyTemplates).mockReturnValue('refreshed');
+        await updateCmd();
+        expect(logger.info).toHaveBeenCalledWith(
+            expect.stringContaining(
+                `- Legacy fallback templates refreshed at: ${legacyRoot}`,
+            ),
+        );
+
+        vi.mocked(refreshLegacyTemplates).mockReturnValue('up-to-date');
+        await updateCmd();
+        expect(logger.info).toHaveBeenCalledWith(
+            expect.stringContaining(
+                `- Legacy fallback templates already up to date at: ${legacyRoot}`,
+            ),
+        );
+
+        vi.mocked(refreshLegacyTemplates).mockReturnValue('skipped');
+        await updateCmd();
+        expect(logger.info).toHaveBeenCalledWith(
+            expect.stringContaining(
+                `- Legacy fallback templates skipped; global copy left at: ${legacyRoot}`,
+            ),
+        );
+    });
+
+    it('the success line names both cache roots', async () => {
+        await updateCmd();
+
+        const successLine = vi
+            .mocked(logger.info)
+            .mock.calls.map((call) => String(call[0]))
+            .find((message) =>
+                message.includes('All template caches refreshed successfully!'),
+            );
+        expect(successLine).toContain(templatesRoot);
+        expect(successLine).toContain(legacyRoot);
     });
 });

@@ -1,3 +1,4 @@
+import { join } from 'path';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { CliError } from '../errors';
@@ -9,6 +10,7 @@ import {
 } from '../outcome';
 import { engineIo, info, verbose, warn } from '../logger';
 import {
+    getConfigDir,
     refreshLegacyTemplates,
     resolveTemplateDirForEngine,
     TemplateCategory,
@@ -47,6 +49,19 @@ export async function updateCmd() {
             info(`- Updating '${category}' templates...`);
             verbose(`Requesting template resolution for category: ${category}`);
             const path = resolveTemplateDirForEngine(category, false, true);
+            // The resolved path IS the directory the update left in place:
+            // the category's cache when the cache answered, the bundled
+            // legacy copy otherwise (d15-F2 — name the dir + the end state).
+            const legacyDir = join(
+                getConfigDir(),
+                '.template-legacy',
+                `.template-${category}`,
+            );
+            info(
+                `- '${category}' templates ${
+                    path === legacyDir ? 'fell back to legacy' : 'updated'
+                } at: ${path}`,
+            );
             verbose(`Templates for '${category}' updated at: ${path}`);
             outcomes.push(OUTCOME_SUCCESS);
         } catch (e: any) {
@@ -65,7 +80,21 @@ export async function updateCmd() {
     let legacyFailed = false;
     info('- Updating legacy fallback templates...');
     try {
-        refreshLegacyTemplates(engineIo());
+        // The refresh owns its own status line; this one names the global
+        // dir and the END state the returned status describes (d15-F2).
+        const status = refreshLegacyTemplates(engineIo());
+        const legacyRoot = join(getConfigDir(), '.template-legacy');
+        if (status === 'refreshed') {
+            info(`- Legacy fallback templates refreshed at: ${legacyRoot}`);
+        } else if (status === 'up-to-date') {
+            info(
+                `- Legacy fallback templates already up to date at: ${legacyRoot}`,
+            );
+        } else {
+            info(
+                `- Legacy fallback templates skipped; global copy left at: ${legacyRoot}`,
+            );
+        }
     } catch (e: any) {
         warn(`Failed to refresh legacy templates: ${e.message}`);
         legacyFailed = true;
@@ -82,7 +111,9 @@ export async function updateCmd() {
                 : `All ${categories.length} template caches refreshed — the legacy template refresh failed. Fix the reported cause and run 'pzstudio update' again.`,
         );
     }
-    info('\nAll template caches refreshed successfully!');
+    info(
+        `\nAll template caches refreshed successfully! Template caches live under ${join(getConfigDir(), 'templates')}; the bundled legacy fallback lives in ${join(getConfigDir(), '.template-legacy')}.`,
+    );
 }
 
 registerCommand({
