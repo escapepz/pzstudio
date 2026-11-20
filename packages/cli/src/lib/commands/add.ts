@@ -89,6 +89,10 @@ export function addCmd(modName: string, modId?: string) {
 
     // Prepare mod id (D1): an omitted or confirmed-empty mod id derives
     // from the mod name; an explicit non-empty id keeps its normalization.
+    // The typed spelling is kept aside: the duplicate refusal below names
+    // it, so 'Case_Probe' never meets an unexplained error about
+    // 'case_probe' (d19-U1).
+    const typedModId = modId;
     modId = formatTitleToId(modId || modName);
 
     // An id that normalizes to empty must never fall through to the
@@ -110,7 +114,16 @@ export function addCmd(modName: string, modId?: string) {
         // plain Error here made the refusal ride the 'Unexpected error:'
         // wrapper (d20-F2). CliError keeps the message and the exit code (1)
         // but renders as the clean [ERROR] line.
-        throw new CliError(`A mod with id '${modId}' already exists!`);
+        // d19-U1: when the user typed a different spelling, the refusal
+        // names it — an error about 'case_probe' alone reads like a mistake
+        // to a user who typed 'Case_Probe'.
+        const typedNote =
+            typedModId && typedModId !== modId
+                ? ` (you typed '${typedModId}' — ids are normalized to lowercase with underscores)`
+                : '';
+        throw new CliError(
+            `A mod with id '${modId}' already exists!${typedNote}`,
+        );
     }
 
     // D3-a fail-closed: snapshot the RAW configured outdir BEFORE any

@@ -175,4 +175,26 @@ describe('addCmd duplicate-id refusal (d20-F2)', () => {
         expect(scaffoldProject).not.toHaveBeenCalled();
         expect(vi.mocked(removeDirRecursive)).not.toHaveBeenCalled();
     });
+
+    it('names the typed id and the normalization when the spellings differ (d19-U1)', () => {
+        vi.mocked(resolveProjectConfig).mockReturnValue(
+            configWithMod('case_probe'),
+        );
+
+        expect(() => addCmd('Case Probe', 'Case_Probe')).toThrow(
+            "A mod with id 'case_probe' already exists! (you typed 'Case_Probe' — ids are normalized to lowercase with underscores)",
+        );
+    });
+
+    it('adds no typed-id note when the id derives from the mod name (d19-U1)', () => {
+        // No explicit id: 'Case Probe' derives 'case_probe'. There is no
+        // typed id to quote — the refusal stays the bare conflict message.
+        vi.mocked(resolveProjectConfig).mockReturnValue(
+            configWithMod('case_probe'),
+        );
+
+        expect(() => addCmd('Case Probe')).toThrow(
+            "A mod with id 'case_probe' already exists!",
+        );
+    });
 });
