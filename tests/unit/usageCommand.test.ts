@@ -127,6 +127,14 @@ const loggedData = (): string =>
         .map((c) => String(c.message))
         .join('\n');
 
+/** The parsed v1 envelopes on stdout (pretty-printed, one log call each). */
+const jsonEnvelopes = (): any[] =>
+    logCalls
+        .filter((c) => c.method === 'log')
+        .map((c) => String(c.message))
+        .filter((t) => t.trim().startsWith('{'))
+        .map((t) => JSON.parse(t));
+
 const localDateStamp = (): string => {
     const now = new Date();
     return (
@@ -294,12 +302,65 @@ describe('pzstudio usage command', () => {
         expect(fs.existsSync(badOut)).toBe(false);
     });
 
+    it('7c. export --json: one v1 envelope on stdout, zip still written (d17-F1)', () => {
+        seedStore([
+            eventLine('a'.repeat(32), '2026-11-08T10:00:00.000Z'),
+            eventLine('b'.repeat(32), '2026-11-08T12:00:00.000Z'),
+            '{ not json',
+        ]);
+        writeJsonConfig({ templates: {} });
+        const tmpReal = fs.mkdtempSync(join(os.tmpdir(), 'pz-usage-export-'));
+        tmpRealDirs.push(tmpReal);
+        const outPath = join(tmpReal, 'bundle.zip');
+
+        runUsage(['export'], { out: outPath, json: true });
+
+        // The zip is still written exactly as the human path writes it
+        // (the --out decision mirrors logs --json: paths live INSIDE the
+        // envelope; the domain artifact is unchanged).
+        expect(fs.existsSync(outPath)).toBe(true);
+        const zipped = unzipSync(new Uint8Array(fs.readFileSync(outPath)));
+        expect(Object.keys(zipped)).toContain('manifest.json');
+
+        // Exactly one envelope on stdout, parsed as the v1 family.
+        const envelopes = jsonEnvelopes();
+        expect(envelopes).toHaveLength(1);
+        const envelope = envelopes[0];
+        expect(envelope.schemaVersion).toBe(1);
+        expect(envelope.command).toBe('usage');
+        expect(envelope.result).toMatchObject({
+            action: 'export',
+            outPath,
+            fileCount: 1,
+            eventCount: 2,
+            sessionCount: 2,
+            skippedLines: 1,
+            dateRange: {
+                from: '2026-11-08T10:00:00.000Z',
+                to: '2026-11-08T12:00:00.000Z',
+            },
+        });
+
+        // The envelope is the ONLY stdout content — no human prose.
+        expect(loggedData()).toBe(JSON.stringify(envelope, null, 2));
+    });
+
     it('8. export with empty store: CliError, message says there are no usage logs', () => {
         writeJsonConfig({ templates: {} });
         expect(fs.existsSync(usageDir())).toBe(false);
 
         expect(() => runUsage(['export'])).toThrow(CliError);
         expect(() => runUsage(['export'])).toThrow(/no usage logs/i);
+    });
+
+    it('8b. export --json with empty store: CliError and no envelope on stdout (d17-F1)', () => {
+        // CLI-8 failure semantics: a runtime failure before a result exists
+        // leaves stdout EMPTY — the error goes to stderr only.
+        writeJsonConfig({ templates: {} });
+        expect(fs.existsSync(usageDir())).toBe(false);
+
+        expect(() => runUsage(['export'], { json: true })).toThrow(CliError);
+        expect(loggedData()).toBe('');
     });
 
     it('9. unknown action: CliUsageError naming the valid action set (exit 2, d11-F8)', () => {

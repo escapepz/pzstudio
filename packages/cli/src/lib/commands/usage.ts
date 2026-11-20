@@ -14,6 +14,7 @@ import { CliUsageError } from '../parser';
 import { addHelp } from '../help';
 import { registerCommand, type CommandContext } from '../registry';
 import { engineIo, info, log, verbose } from '../logger';
+import { printJsonEnvelope } from '../json';
 import {
     getConfigDir,
     readGlobalConfig,
@@ -33,10 +34,12 @@ addHelp(
         pzstudio usage off [--purge]         - Disable local usage logging; add --purge to also delete the log directory.
         pzstudio usage status                - Show where the logs live and what they contain.
         pzstudio usage export [--out <file>] - Bundle the logs into a zip for inspection or sharing.
+        pzstudio usage export --json         - Print a machine-readable envelope instead of the human report.
 
     Flags:
         --purge        - With 'off' only: delete ~/.pzstudio/usage entirely (ignored with the other actions).
-        --out <value>  - With 'export': write the zip to this path instead of pzstudio-usage-<date>.zip in the current directory.`,
+        --out <value>  - With 'export': write the zip to this path instead of pzstudio-usage-<date>.zip in the current directory.
+        --json         - With 'export': print the v1 JSON envelope (schemaVersion/command/result) on stdout; the zip is still written (--out honored).`,
 );
 
 const USAGE_DIR_NAME = 'usage';
@@ -211,6 +214,26 @@ function usageExport(options: CommandContext['options']): void {
                 'Check that the directory exists and that the path is writable.',
         });
     }
+    // Machine output (CLI-8, d17-F1): the envelope is the ONLY stdout
+    // content — no human header, no counts prose. The bundle is still
+    // written exactly as the human path writes it (--out honored); the
+    // envelope reports where it went and the store facts the manifest
+    // carries, mirroring how logs --json reports its log path. A failed
+    // export never reaches this point: stdout stays empty and the error
+    // goes to stderr (CLI-8 failure semantics).
+    if (options.json === true) {
+        printJsonEnvelope('usage', {
+            action: 'export',
+            outPath,
+            fileCount: summary.fileCount,
+            totalBytes: summary.totalBytes,
+            eventCount: summary.eventCount,
+            sessionCount: summary.sessionCount,
+            skippedLines: summary.skippedLines,
+            dateRange: summary.dateRange,
+        });
+        return;
+    }
     log(
         `Exported ${summary.eventCount} event(s) across ${summary.sessionCount} session(s) from ${summary.fileCount} file(s) to ${outPath}`,
     );
@@ -269,6 +292,10 @@ registerCommand({
     name: 'usage',
     summary: 'Manage local usage logs (on | off | status | export).',
     positionals: [{ name: 'action', required: true }],
-    flags: [{ name: 'purge' }, { name: 'out', takesValue: true }],
+    flags: [
+        { name: 'purge' },
+        { name: 'out', takesValue: true },
+        { name: 'json' },
+    ],
     run: (ctx) => usageCmd(ctx.positionals[0], ctx.options),
 });
