@@ -328,6 +328,53 @@ describe('pzstudio usage command', () => {
         expect(fs.existsSync(eventsFile())).toBe(true);
     });
 
+    it('10b. --purge outside off is acknowledged (d17-U1): export names the ignored flag', () => {
+        seedStore([eventLine('a'.repeat(32), '2026-11-08T10:00:00.000Z')]);
+        writeJsonConfig({ templates: {} });
+
+        runUsage(['export'], { purge: true });
+
+        const infoLines = logCalls
+            .filter((c) => c.method === 'info')
+            .map((c) => String(c.message));
+        expect(
+            infoLines.some((line) =>
+                line.includes(
+                    "--purge is ignored unless the action is 'off' (this export does not purge).",
+                ),
+            ),
+        ).toBe(true);
+        // Acknowledgement only: the export itself still ran normally.
+        expect(loggedData()).toContain('Exported 1 event(s)');
+    });
+
+    it('10c. --purge with status is acknowledged too; off --purge is not (d17-U1)', () => {
+        writeJsonConfig({ templates: {} });
+
+        runUsage(['status'], { purge: true });
+        expect(
+            logCalls
+                .filter((c) => c.method === 'info')
+                .map((c) => String(c.message))
+                .some((line) =>
+                    line.includes(
+                        "--purge is ignored unless the action is 'off' (this status does not purge).",
+                    ),
+                ),
+        ).toBe(true);
+
+        logCalls = [];
+        seedStore([eventLine('a'.repeat(32), '2026-11-08T10:00:00.000Z')]);
+        runUsage(['off'], { purge: true });
+        // The honored combination never prints the acknowledgement.
+        expect(
+            logCalls
+                .filter((c) => c.method === 'info')
+                .map((c) => String(c.message))
+                .some((line) => line.includes('--purge is ignored')),
+        ).toBe(false);
+    });
+
     it('11. the usage command never records itself: runCLI usage status leaves the store unchanged', async () => {
         writeJsonConfig({ templates: {}, usageLog: { enabled: true } });
         seedStore([

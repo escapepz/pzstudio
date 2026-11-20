@@ -13,7 +13,7 @@ import { CliError } from '../errors';
 import { CliUsageError } from '../parser';
 import { addHelp } from '../help';
 import { registerCommand, type CommandContext } from '../registry';
-import { engineIo, log, verbose } from '../logger';
+import { engineIo, info, log, verbose } from '../logger';
 import {
     getConfigDir,
     readGlobalConfig,
@@ -232,6 +232,15 @@ export function usageCmd(
     expect('param [action]', action, 'string');
 
     verbose(`Managing usage logs: ${action}`);
+
+    // --purge is honored only by 'off' (usageOff); everywhere else the flag
+    // is silently dropped — acknowledge it instead of leaving a
+    // normal-looking output that implies the store was purged (d17-U1).
+    if (options.purge === true && action !== 'off') {
+        info(
+            `- --purge is ignored unless the action is 'off' (this ${action} does not purge).`,
+        );
+    }
 
     switch (action) {
         case 'on':
