@@ -231,6 +231,35 @@ and surfaced as a warning; `pzstudio doctor` reports the full state per item. Th
 junction/copy slot is outward-facing only: the engine always mutates `dist/`
 directly, never through the deployment.
 
+### The deploy stale window — what delete/rename leave behind
+
+The deployment root only ever changes through the materialize step of a build:
+`<outdir>/<Item>` is a junction (symlink mode) or a marker-gated real copy
+(copy mode) mirroring that item's `dist/<Item>`. A build **reconciles** the copy
+slots of the items it built in that run — changed files are copied in and every
+slot entry the fresh build manifest no longer carries is **pruned** (a dangling
+junction re-attaches the same way); nothing else ever writes into the deployment
+root (`packages/cli/src/lib/linkStep.ts:893`,
+`packages/platform-node/src/link/copyMaterializer.ts:579`).
+
+`delete` and `rename` mutate the **source** only (mod folder + project.json).
+The built outputs survive both commands: `dist/<OldItem>` AND the deployment
+slot `<outdir>/<OldItem>` — in copy mode a real folder the game still scans
+(the deleted mod still ships), in symlink mode a junction that still resolves
+because `dist/<OldItem>` persists. Neither command's output mentions the
+deployed copies, and no command removes them — pzstudio never deletes inside
+the deployment root by design (fail-closed ownership: auto-deleting in the
+user's game directory is more dangerous than stale files). `pzstudio doctor`
+cannot point at the old slot either — it reports the project's current items
+only.
+
+Guidance: run `pzstudio build` after deleting or renaming so the surviving
+items' deployments reconcile before launching the game — and after
+`delete`/`rename` also remove the old id's outputs **by hand**: the deployment
+slot `<outdir>/<OldItem>` and `dist/<OldItem>` (`pzstudio clean` resets every
+dist output in one go). Skipping the hand cleanup ships the deleted mod to the
+game — after a `rename` the game can even see the mod twice (old + new id).
+
 ---
 
 ## pzstudio watch
@@ -349,7 +378,8 @@ does not skip the dev output cleanup; failures are collected and thrown together
 (`packages/cli/src/lib/commands/clean.ts:42-78`). Dist-always: clean removes the
 canonical `dist/<Item>` outputs only — the deployment root never has artifacts deleted
 from it (a dangling junction or a stale copy slot heals on the next build's materialize
-step).
+step). Deploy-side cleanup of items the project no longer builds is a by-hand
+operation — see The deploy stale window above.
 
 ---
 
@@ -379,6 +409,8 @@ Ordering matters (CLI-9, `packages/cli/src/lib/commands/delete.ts:51-66`):
 validation failures keep exit 1; `--dry-run` wins over `--yes` and runs **before** the
 gate; the consent gate is the last step before the first mutation.
 See `08-mechanics.md` → Destructive consent gate for the full policy.
+The mod's built outputs (`dist/<modId>` + its deployment slot) are NOT touched —
+see The deploy stale window above.
 
 ---
 
@@ -424,6 +456,8 @@ the mod's `name` field is untouched, and an excluded mod stays excluded under it
 Binary extensions are skipped to avoid corruption. A config-only entry (no folder on
 disk) can be renamed: only the project.json key moves
 (`packages/cli/src/lib/commands/rename.ts:60-131`).
+The old id's built outputs (`dist/<oldModId>` + its deployment slot) are NOT
+touched — see The deploy stale window above.
 
 ---
 
