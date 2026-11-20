@@ -21,6 +21,7 @@ import {
     setProjectDir,
 } from '../../packages/cli/src/lib/helper';
 import { readGlobalConfig } from '../../packages/cli/src/lib/templateManager';
+import { createRequire } from 'node:module';
 import { createTempDir, deleteDir } from '../helpers/test-fixtures';
 
 // The watch-command suite drives watchCmd() with the same seams build.test.ts
@@ -78,6 +79,14 @@ vi.mock('../../packages/cli/src/lib/devsync', async (importOriginal) => {
         createDevSyncForEngine: vi.fn(),
     };
 });
+
+// watch.ts loads the native watcher lazily via a bare require() — vitest's
+// vi.mock only intercepts ESM/dynamic imports, not CJS require — so the
+// command-path seam is patched on the CJS module itself: Node's require
+// cache hands watch.ts the same object this spy touches. The DevSync
+// integration suite below drives the engine directly and never subscribes,
+// so restoring in afterEach costs it nothing.
+const nodeRequire = createRequire(path.join(process.cwd(), '/'));
 
 describe('resolveWatchVariants (pure)', () => {
     it('defaults to syncing both outputs', () => {
@@ -616,5 +625,81 @@ describe('watchCmd — banner names the variant source', () => {
         expect(bannerLine()).toBe(
             "Syncing 'Test Project' (main + development) — press Ctrl+C to stop.",
         );
+    });
+});
+
+/**
+ * d12-U4: the command owns its interruption (CLI-6) and its SIGINT handler
+ * sets exit 130 — but the stop line never said so, so scripts wrapping
+ * `pzstudio watch` kept guessing at the exit convention (d18-U2 recurrence).
+ */
+describe('watchCmd — the stop line names the exit convention (d12-U4)', () => {
+    let subscribeSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(projectDir).mockReturnValue('/proj' as any);
+        vi.mocked(resolveProjectConfig).mockReturnValue({
+            workshop: { title: 'Test Project', visibility: 'public', tags: [] },
+            mods: { my_mod: { name: 'My Mod', description: 'A mod.' } },
+            excludes: [],
+        } as any);
+        vi.mocked(readGlobalConfig).mockReturnValue(undefined as any);
+        vi.mocked(hasFlag).mockReturnValue(false);
+        vi.mocked(createDevSyncForEngine).mockReturnValue({
+            // The full session: start resolves (no rejected banner stop
+            // here — the command must reach its SIGINT handler), stop and
+            // apply are silent no-ops for shutdown().
+            start: vi.fn().mockResolvedValue(undefined),
+            apply: vi.fn().mockResolvedValue(undefined),
+            stop: vi.fn().mockResolvedValue(undefined),
+        } as any);
+        // The native watcher is never started: subscribe resolves to a
+        // subscription whose unsubscribe shutdown() can await.
+        const watcher = nodeRequire('@parcel/watcher') as {
+            subscribe: (...args: any[]) => any;
+        };
+        subscribeSpy = vi.spyOn(watcher, 'subscribe').mockResolvedValue({
+            unsubscribe: vi.fn().mockResolvedValue(undefined),
+        } as any);
+    });
+
+    afterEach(() => {
+        subscribeSpy.mockRestore();
+    });
+
+    it('stops on SIGINT with exit 130 and says so in the stop line', async () => {
+        const previousExitCode = process.exitCode;
+        const baseline = process.listenerCount('SIGINT');
+        try {
+            const stopped = watchCmd();
+            // The SIGINT handler is installed only after the (mocked)
+            // subscribe hop resolves — wait for the registration instead of
+            // racing it, then deliver the signal in-process.
+            const deadline = Date.now() + 5000;
+            while (process.listenerCount('SIGINT') <= baseline) {
+                if (Date.now() > deadline) {
+                    throw new Error(
+                        'watchCmd never installed its SIGINT handler',
+                    );
+                }
+                await new Promise((resolve) => setTimeout(resolve, 5));
+            }
+
+            process.emit('SIGINT');
+            await stopped;
+
+            expect(process.exitCode).toBe(130);
+            expect(
+                vi
+                    .mocked(logger.info)
+                    .mock.calls.map((call) => String(call[0])),
+            ).toContain(
+                'Development sync stopped. (exit 130 — Ctrl+C/SIGINT convention)',
+            );
+        } finally {
+            // The worker's exit code must not leak a 130 into vitest.
+            process.exitCode = previousExitCode;
+        }
     });
 });

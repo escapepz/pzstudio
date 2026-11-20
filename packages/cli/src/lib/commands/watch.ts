@@ -319,7 +319,10 @@ export async function watchCmd() {
     });
 
     await stopped;
-    info(`Development sync stopped.`);
+    // d12-U4: name the exit convention in the stop line itself. The SIGINT
+    // handler above sets exit 130, but nothing told the user the number —
+    // scripts wrapping pzstudio watch kept guessing (d18-U2 recurrence).
+    info(`Development sync stopped. (exit 130 — Ctrl+C/SIGINT convention)`);
 }
 
 registerCommand({
