@@ -200,6 +200,24 @@ describe('v2 destructive consent (embedded contract unchanged)', () => {
 });
 
 /* ------------------------------------------------------------------ */
+/* 1b. add refuses the no-op --yes flag (d14-F1)                       */
+/* ------------------------------------------------------------------ */
+
+describe('add refuses the no-op --yes flag (d14-F1)', () => {
+    it('v2 door: add with --yes is a usage error (exit 2 class), never a silent no-op', async () => {
+        captureIO();
+        const studio = createPzStudio();
+
+        await expect(
+            studio.run('add', ['Yes Mod', 'yes_mod'], { flags: ['--yes'] }),
+        ).rejects.toBeInstanceOf(CliUsageError);
+        await expect(
+            studio.run('add', ['Yes Mod', 'yes_mod'], { flags: ['--yes'] }),
+        ).rejects.toThrow(/--yes flag is not applicable to command \[add\]/);
+    });
+});
+
+/* ------------------------------------------------------------------ */
 /* 2. No process.exit, no process.argv mutation on any v2 path         */
 /* ------------------------------------------------------------------ */
 

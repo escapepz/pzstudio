@@ -15,6 +15,7 @@ import {
 import { log, verbose, warn } from '../logger';
 import { hasFlag } from '../args';
 import { CliError } from '../errors';
+import { CliUsageError } from '../parser';
 import {
     resolveTemplateDirForEngine,
     scaffoldProject,
@@ -32,10 +33,24 @@ addHelp(
     --offline        - Bypass network updates and use local cache or legacy templates.
     --force-update   - Force refresh of cached templates from remote.
     --transport <git|fetch> - Template download method (default: git when available, else fetch).
-    --verbose        - Enable diagnostic output.`,
+    --verbose        - Enable diagnostic output.
+
+    Note:
+    --yes is not applicable to add (nothing to confirm; only delete and rename use it).`,
 );
 
 export function addCmd(modName: string, modId?: string) {
+    // d14-F1: --yes is parsed for every command (it is the consent flag of
+    // the destructive delete/rename gates) but add has nothing to confirm
+    // and never read it — `pzstudio add ... --yes` was a silent no-op.
+    // Refuse it with the invalid-flag usage error (exit 2) instead of
+    // ignoring it; delete/rename keep consuming it unchanged.
+    if (hasFlag('yes')) {
+        throw new CliUsageError(
+            'The --yes flag is not applicable to command [add]: add is not destructive, so there is nothing to confirm (only delete and rename use it).',
+        );
+    }
+
     // Validate params
     expect('param [modName]', modName, 'string');
     expect('param [modId]', modId, 'string|undefined');
