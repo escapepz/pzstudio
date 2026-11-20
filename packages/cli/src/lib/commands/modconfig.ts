@@ -1,6 +1,7 @@
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { CliError } from '../errors';
+import { CliUsageError } from '../parser';
 import { info, log, verbose } from '../logger';
 import { projectDir, updateProjectConfig } from '../helper';
 import { validateProject, ValidationContext } from '@pzstudio/core';
@@ -182,15 +183,17 @@ function applySet(
     rawValue: string,
 ): string | string[] | undefined {
     if (!KNOWN_KEYS.has(key)) {
-        throw new Error(
-            `Unknown mod config key '${key}'. Known keys: ${[...KNOWN_KEYS].join(', ')}`,
+        // Invalid enum value on the handler path: usage error, exit 2
+        // (d11-F8 review — same semantics as the parse-stage enum check).
+        throw new CliUsageError(
+            `Unknown mod config key '${key}' (expected one of: ${[...KNOWN_KEYS].join(', ')}).`,
         );
     }
 
     if (key === 'modInfo') {
         if (!MODINFO_VALUES.has(rawValue)) {
-            throw new Error(
-                `Invalid modInfo value '${rawValue}'. Expected one of: ${[...MODINFO_VALUES].join(', ')}`,
+            throw new CliUsageError(
+                `Invalid modInfo value '${rawValue}' (expected one of: ${[...MODINFO_VALUES].join(', ')}).`,
             );
         }
         if (!mod.build) {
@@ -221,8 +224,10 @@ function applyUnset(
     key: string,
 ): string | string[] | undefined {
     if (!KNOWN_KEYS.has(key)) {
-        throw new Error(
-            `Unknown mod config key '${key}'. Known keys: ${[...KNOWN_KEYS].join(', ')}`,
+        // Invalid enum value on the handler path: usage error, exit 2
+        // (d11-F8 review — same semantics as the parse-stage enum check).
+        throw new CliUsageError(
+            `Unknown mod config key '${key}' (expected one of: ${[...KNOWN_KEYS].join(', ')}).`,
         );
     }
     if (REQUIRED_KEYS.has(key)) {
@@ -333,8 +338,10 @@ export async function modconfigCmd(positionals: string[]) {
             break;
         }
         default:
-            throw new Error(
-                `Unknown modconfig action '${action}'. Expected: include, devonly, exclude, set, unset (or no action to show).`,
+            // Invalid enum value on the handler path: usage error, exit 2
+            // (d11-F8 review — same semantics as the parse-stage enum check).
+            throw new CliUsageError(
+                `Unknown modconfig action '${action}' (expected one of: include, devonly, exclude, set, unset).`,
             );
     }
 

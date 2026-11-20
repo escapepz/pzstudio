@@ -4,6 +4,7 @@ import { expect } from '../expect';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { CliError } from '../errors';
+import { CliUsageError } from '../parser';
 import { hasFlag } from '../args';
 import { log, verbose } from '../logger';
 import {
@@ -58,7 +59,12 @@ export async function modinfoCmd(action: string, modId?: string) {
             await generateForAll(projectConfig, projectRoot);
         }
     } else {
-        throw new Error(`Unknown modinfo action [${action}]`);
+        // Invalid enum value on the handler path: same usage-error semantics
+        // (exit 2) and message style as the parse-stage enum check on
+        // --transport (d11-F8 review).
+        throw new CliUsageError(
+            `Unknown modinfo action '${action}' (expected one of: generate).`,
+        );
     }
 }
 

@@ -12,6 +12,7 @@ import type {
     ProjectBuildTarget,
 } from '@pzstudio/core';
 import { CliError } from './errors';
+import { CliUsageError } from './parser';
 import type { MaterializationResolution } from './linkStep';
 
 /** How long file-system events are collected before one sync pass runs. */
@@ -24,17 +25,19 @@ export const ERR_WATCH_COPY_MODE_UNSUPPORTED =
 /**
  * Parses the shared `--materialize=<symlink|copy>` value flag. `undefined`
  * passes through (no per-invocation override); anything else is a usage
- * error naming the flag. Shared by build and watch.
+ * error naming the flag — same exit-2 semantics and message style as the
+ * parse-stage enum check on --transport (d11-F8: the handler path must not
+ * downgrade an invalid enum value to a runtime error). Shared by build and
+ * watch.
  */
 export function parseMaterializeFlag(
     raw: string | undefined,
 ): MaterializeMode | undefined {
     if (raw === undefined) return undefined;
     if (raw !== 'symlink' && raw !== 'copy') {
-        throw new CliError(`Invalid --materialize value "${raw}".`, {
-            tryHint:
-                'Use --materialize=symlink (junction, default) or --materialize=copy (reconciled real copy).',
-        });
+        throw new CliUsageError(
+            `Invalid --materialize value '${raw}' (expected one of: symlink, copy).`,
+        );
     }
     return raw;
 }

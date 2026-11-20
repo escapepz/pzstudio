@@ -10,6 +10,8 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { generateWorkshopVdf } from '../../packages/cli/src/lib/commands/workshop-vdf';
+import { CliUsageError } from '../../packages/cli/src/lib/parser';
+import { CliError } from '../../packages/cli/src/lib/errors';
 
 let root: string;
 let itemDir: string;
@@ -110,6 +112,42 @@ describe('generateWorkshopVdf', () => {
         );
         const res = await generateWorkshopVdf({ itemDir, outPath });
         expect(res.publishedfileid).toBe('123456');
+    });
+
+    // d11-F8: an invalid --visibility FLAG value is a usage error (exit 2,
+    // parse-stage message style), while a bad visibility inside workshop.txt
+    // is a project-data problem (exit 1) — two different error classes for
+    // two different layers, pinned here (reviewer-identified test gap).
+    it('--visibility flag path: invalid value is a CliUsageError (exit 2) with the parse-stage message', async () => {
+        await expect(
+            generateWorkshopVdf({
+                itemDir,
+                outPath: join(root, 'o.vdf'),
+                visibility: 'bogus',
+            }),
+        ).rejects.toThrow(CliUsageError);
+        await expect(
+            generateWorkshopVdf({
+                itemDir,
+                outPath: join(root, 'o.vdf'),
+                visibility: 'bogus',
+            }),
+        ).rejects.toThrow(
+            "Invalid --visibility value 'bogus' (expected one of: public, friends, private, unlisted, or 0-3).",
+        );
+    });
+
+    it('workshop.txt data path: bad visibility is a CliError (exit 1), not a usage error', async () => {
+        writeFileSync(
+            join(itemDir, 'workshop.txt'),
+            'title=Item\nvisibility=bogus\n',
+        );
+        await expect(
+            generateWorkshopVdf({ itemDir, outPath: join(root, 'o.vdf') }),
+        ).rejects.toThrow(CliError);
+        await expect(
+            generateWorkshopVdf({ itemDir, outPath: join(root, 'o.vdf') }),
+        ).rejects.toThrow(/unknown visibility "bogus" in workshop\.txt/);
     });
 
     it('the command module never spawns a process (product boundary)', () => {

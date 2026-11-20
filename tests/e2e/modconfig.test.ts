@@ -130,8 +130,12 @@ describe('modconfig command (E2E)', () => {
             'modInfo',
             'sometimes',
         ]);
-        workspace.assertFailure(bad);
-        workspace.assertStderr(bad, "Invalid modInfo value 'sometimes'");
+        // d11-F8: invalid enum values exit 2 on the handler path too.
+        workspace.assertFailure(bad, 2);
+        workspace.assertStderr(
+            bad,
+            "Invalid modInfo value 'sometimes' (expected one of: auto, skip, auto-if-missing)",
+        );
 
         const good = await workspace.run('modconfig', [
             'mod_a',
@@ -152,8 +156,12 @@ describe('modconfig command (E2E)', () => {
             'naem',
             'Typo',
         ]);
-        workspace.assertFailure(unknown);
-        workspace.assertStderr(unknown, "Unknown mod config key 'naem'");
+        // d11-F8: invalid enum values exit 2 on the handler path too.
+        workspace.assertFailure(unknown, 2);
+        workspace.assertStderr(
+            unknown,
+            "Unknown mod config key 'naem' (expected one of:",
+        );
 
         const required = await workspace.run('modconfig', [
             'mod_a',

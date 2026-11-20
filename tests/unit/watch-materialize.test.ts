@@ -14,6 +14,7 @@ import {
     resolveMaterialization,
 } from '../../packages/cli/src/lib/linkStep';
 import type { MaterializationResolution } from '../../packages/cli/src/lib/linkStep';
+import { CliUsageError } from '../../packages/cli/src/lib/parser';
 import { NodeFileSystem } from '@pzstudio/platform-node';
 import {
     resolveBuildOutputPath,
@@ -42,9 +43,10 @@ describe('watch materialize helpers (dist-always amendment §7)', () => {
             expect(parseMaterializeFlag('copy')).toBe('copy');
         });
 
-        it('rejects none — never an enum value', () => {
+        it('rejects none — never an enum value, as a usage error (exit 2, d11-F8)', () => {
+            expect(() => parseMaterializeFlag('none')).toThrow(CliUsageError);
             expect(() => parseMaterializeFlag('none')).toThrow(
-                'Invalid --materialize value "none"',
+                "Invalid --materialize value 'none' (expected one of: symlink, copy).",
             );
         });
 

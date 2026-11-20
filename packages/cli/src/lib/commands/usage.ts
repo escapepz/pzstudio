@@ -10,6 +10,7 @@ import {
 import { strToU8, zipSync } from 'fflate';
 import { expect } from '../expect';
 import { CliError } from '../errors';
+import { CliUsageError } from '../parser';
 import { addHelp } from '../help';
 import { registerCommand, type CommandContext } from '../registry';
 import { engineIo, log, verbose } from '../logger';
@@ -246,9 +247,12 @@ export function usageCmd(
             usageExport(options);
             return;
         default:
-            throw new CliError(`Unknown usage action "${action}".`, {
-                tryHint: 'Valid actions: on | off | status | export.',
-            });
+            // Invalid enum value on the handler path: same usage-error
+            // semantics (exit 2) and message style as the parse-stage enum
+            // check on --transport (d11-F8).
+            throw new CliUsageError(
+                `Unknown usage action '${action}' (expected one of: on, off, status, export).`,
+            );
     }
 }
 

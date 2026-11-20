@@ -269,6 +269,37 @@ describe('golden equivalence: runCLI ≡ studio.run (captured output)', () => {
         expect(legacyErr.join('')).toContain("Unknown option '--wat'");
     });
 
+    it('invalid enum flag value (d11-F8): the handler path rejects with parse-stage usage semantics on both doors', async () => {
+        const proj = makeProjectDir('EnumFlag');
+        const studio = createPzStudio();
+
+        preseedNoticeMarker();
+
+        const legacy = captureIO();
+        await expect(
+            runCLI('build', [], {
+                flags: ['--project', proj, '--materialize=bogus'],
+            }),
+        ).rejects.toBeInstanceOf(CliUsageError);
+        const legacyErr = [...legacy.stderr];
+
+        setCliIO(undefined);
+        const v2 = captureIO();
+        await expect(
+            studio.run('build', [], {
+                flags: ['--project', proj, '--materialize=bogus'],
+            }),
+        ).rejects.toBeInstanceOf(CliUsageError);
+
+        expect(v2.stderr).toEqual(legacyErr);
+        // The message carries the parse-stage enum-check style (d11-F8):
+        // the bin maps CliUsageError to exit 2, so this is the same contract
+        // `--transport=bogus` has always had.
+        expect(legacyErr.join('')).toContain(
+            "Invalid --materialize value 'bogus' (expected one of: symlink, copy)",
+        );
+    });
+
     it('throwing command: identical error report and same rejection kind', async () => {
         const emptyDir = makeTempDir();
         const studio = createPzStudio();

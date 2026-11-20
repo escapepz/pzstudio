@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises';
 import { basename, join, relative, resolve } from 'path';
 import { CliError } from '../errors';
 import { addHelp } from '../help';
+import { CliUsageError } from '../parser';
 import { registerCommand } from '../registry';
 import { info } from '../logger';
 import { extractFlag } from '../args';
@@ -163,6 +164,15 @@ function resolveVisibility(raw: string, where: string): string {
     const key = String(raw).trim().toLowerCase();
     if (key in VISIBILITY_TO_CODE) return VISIBILITY_TO_CODE[key];
     if (/^[0-3]$/.test(key)) return key;
+    if (where === '--visibility') {
+        // The CLI flag value is a usage error — same exit-2 semantics and
+        // message style as the parse-stage enum check on --transport (d11-F8).
+        throw new CliUsageError(
+            `Invalid --visibility value '${raw}' (expected one of: public, friends, private, unlisted, or 0-3).`,
+        );
+    }
+    // A bad visibility inside workshop.txt is a project-data problem,
+    // not a usage error (exit 1).
     throw new CliError(
         `unknown visibility "${raw}" in ${where} (use: ${Object.keys(VISIBILITY_TO_CODE).join(', ')} or 0-3)`,
     );

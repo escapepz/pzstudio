@@ -19,7 +19,7 @@ import {
     resetUsageRecorder,
 } from '../../packages/cli/src/lib/usage';
 import { setLogger } from '../../packages/cli/src/lib/logger';
-import { setCliIO } from '../../packages/cli/src/lib/parser';
+import { CliUsageError, setCliIO } from '../../packages/cli/src/lib/parser';
 import { CliError } from '../../packages/cli/src/lib/errors';
 
 // NO module mocks: every case asserts real files/config/zip contents through
@@ -302,7 +302,7 @@ describe('pzstudio usage command', () => {
         expect(() => runUsage(['export'])).toThrow(/no usage logs/i);
     });
 
-    it('9. unknown action: CliError with tryHint listing on | off | status | export', () => {
+    it('9. unknown action: CliUsageError naming the valid action set (exit 2, d11-F8)', () => {
         writeJsonConfig({ templates: {} });
 
         let caught: unknown;
@@ -311,9 +311,11 @@ describe('pzstudio usage command', () => {
         } catch (e) {
             caught = e;
         }
-        expect(caught).toBeInstanceOf(CliError);
-        const cliError = caught as CliError;
-        expect(cliError.tryHint).toContain('on | off | status | export');
+        expect(caught).toBeInstanceOf(CliUsageError);
+        expect(caught as Error).toHaveProperty(
+            'message',
+            "Unknown usage action 'bogus' (expected one of: on, off, status, export).",
+        );
     });
 
     it('10. --purge outside off is ignored: on --purge does not throw, keeps store', () => {

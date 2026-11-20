@@ -223,8 +223,12 @@ describe('modinfo command e2e', () => {
         );
 
         const result = await workspace.run('modinfo', ['invalid']);
-        workspace.assertFailure(result);
-        workspace.assertStderr(result, 'Unknown modinfo action [invalid]');
+        // d11-F8: invalid enum values exit 2 on the handler path too.
+        workspace.assertFailure(result, 2);
+        workspace.assertStderr(
+            result,
+            "Unknown modinfo action 'invalid' (expected one of: generate)",
+        );
     });
 
     it('should honor build.modInfo: "skip"', async () => {

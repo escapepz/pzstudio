@@ -352,4 +352,39 @@ describe('real env: project lifecycle commands', () => {
             expect(result.stderr).toContain('does not exist');
         });
     });
+
+    // d11-F8: invalid enum values exit 2 wherever they are rejected — the
+    // handler path now carries the same usage-error semantics (and message
+    // style) as the parse-stage enum check.
+    describe('invalid enum values exit 2 (d11-F8)', () => {
+        it('build --materialize=bogus exits 2 with the parse-stage message style', async () => {
+            writeProjectFixture(workspace);
+
+            const result = await workspace.run([
+                'build',
+                '--materialize=bogus',
+            ]);
+            expect(result.exitCode).toBe(2);
+            expect(result.stderr).toContain(
+                "Invalid --materialize value 'bogus' (expected one of: symlink, copy)",
+            );
+        });
+
+        it('build --transport=bogus keeps the parse-stage enum rejection (exit 2, contrast pin)', async () => {
+            // Rejected before any lifecycle side effect (Commander choice
+            // check on the bin door; the embedded door words it through
+            // validateInvocation) — only the exit code is shared contract.
+            const result = await workspace.run(['build', '--transport=bogus']);
+            expect(result.exitCode).toBe(2);
+            expect(result.stderr).toContain('--transport');
+        });
+
+        it('usage <unknown-action> exits 2 with the valid action set', async () => {
+            const result = await workspace.run(['usage', 'bogus']);
+            expect(result.exitCode).toBe(2);
+            expect(result.stderr).toContain(
+                "Unknown usage action 'bogus' (expected one of: on, off, status, export)",
+            );
+        });
+    });
 });
