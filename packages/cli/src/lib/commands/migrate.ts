@@ -15,10 +15,20 @@ import path, { join } from 'path';
 addHelp(
     'migrate',
     `Upgrade legacy project.json and config.json files to the current shape without losing unknown fields.
-    
+
     Usage:
         pzstudio migrate`,
 );
+
+/**
+ * The mod fields the tool's own contract requires of every mod — mirrored
+ * from the validator's mod checks (`packages/core/src/validation.ts`: name
+ * must be a string, description a string or array) and the project schema's
+ * mod definition (`"required": ["name", "description"]`). The id is
+ * deliberately NOT in this list: it is the project.json key, never synced
+ * from mod.info (d08-U6).
+ */
+const REQUIRED_MOD_INFO_FIELDS = ['name', 'description'] as const;
 
 /**
  * Handles the migrate command.
@@ -144,6 +154,21 @@ export async function migrateCmd() {
                         modConfig[key] = value;
                         modModified = true;
                     }
+                }
+
+                // d16-U5: a legacy mod.info that lacks the fields the tool's
+                // own contract requires of every mod must not import
+                // silently — a typo'd or gutted file would otherwise be
+                // indistinguishable from a complete one, with "Synced data
+                // from ..." as the only signal. Import stays identical: what
+                // the file carries still syncs and the command still exits 0.
+                const missingRequired = REQUIRED_MOD_INFO_FIELDS.filter(
+                    (field) => (parsedModInfo as any)[field] === undefined,
+                );
+                if (missingRequired.length > 0) {
+                    warn(
+                        `Legacy mod.info at '${modInfoPath}' is missing required field(s): ${missingRequired.join(', ')}. Fix the file and run 'pzstudio migrate' again.`,
+                    );
                 }
 
                 if (modModified) {

@@ -324,6 +324,51 @@ describe('migrateCmd', () => {
             expect(text).toContain('description=Line two');
         });
 
+        it('should warn when a bare legacy mod.info lacks the required fields (d16-U5)', async () => {
+            mockFiles(
+                {
+                    'config.json': upToDateConfig,
+                    'project.json': JSON.stringify({
+                        workshop: { title: 'T' },
+                        mods: { m1: {} },
+                        excludes: [],
+                    }),
+                    'mod.info': 'url=https://example.com',
+                },
+                [CONFIG_PATH, PROJECT_PATH, '/m1/mod.info'],
+            );
+
+            // Import behavior stays identical: what the file carries still
+            // syncs and the command still succeeds (exit 0).
+            await migrateCmd();
+
+            expect(updateProjectConfig).toHaveBeenCalledTimes(1);
+            const [, migrated] = vi.mocked(updateProjectConfig).mock
+                .calls[0] as any[];
+            expect(migrated.mods.m1.url).toBe('https://example.com');
+
+            // ... and the missing required fields are named on stderr,
+            // with the offending file.
+            expect(logger.warn).toHaveBeenCalledTimes(1);
+            expect(logger.warn).toHaveBeenCalledWith(
+                expect.stringContaining(
+                    'missing required field(s): name, description',
+                ),
+            );
+            expect(logger.warn).toHaveBeenCalledWith(
+                expect.stringContaining("Legacy mod.info at '"),
+            );
+        });
+
+        it('should not warn when the legacy mod.info carries every required field (d16-U5)', async () => {
+            // Shared mock: mod.info carries name + description.
+            await migrateCmd();
+
+            expect(logger.warn).not.toHaveBeenCalled();
+            // The healthy file still syncs its new fields (author).
+            expect(updateProjectConfig).toHaveBeenCalledTimes(1);
+        });
+
         it('should prefer the root mod.info over branch folders', async () => {
             vi.mocked(resolveModInfoTargets).mockReturnValue([
                 '/proj/m1/42_branch',
