@@ -340,8 +340,10 @@ export async function modconfigCmd(positionals: string[]) {
         default:
             // Invalid enum value on the handler path: usage error, exit 2
             // (d11-F8 review — same semantics as the parse-stage enum check).
+            // 'show' is listed too (bf4-n08): it is a real action (and the
+            // implicit default), not just the fallback this message guards.
             throw new CliUsageError(
-                `Unknown modconfig action '${action}' (expected one of: include, devonly, exclude, set, unset).`,
+                `Unknown modconfig action '${action}' (expected one of: show, include, devonly, exclude, set, unset).`,
             );
     }
 

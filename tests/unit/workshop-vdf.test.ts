@@ -133,7 +133,7 @@ describe('generateWorkshopVdf', () => {
                 visibility: 'bogus',
             }),
         ).rejects.toThrow(
-            "Invalid --visibility value 'bogus' (expected one of: public, friends, private, unlisted, or 0-3).",
+            "Invalid --visibility value 'bogus' (expected one of: public, friends (friends only, friends-only), private, unlisted, or 0-3).",
         );
     });
 

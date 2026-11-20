@@ -167,8 +167,11 @@ function resolveVisibility(raw: string, where: string): string {
     if (where === '--visibility') {
         // The CLI flag value is a usage error — same exit-2 semantics and
         // message style as the parse-stage enum check on --transport (d11-F8).
+        // The accepted aliases are named inline (bf4-n08): a user rejected
+        // for 'friends' must not have to guess that 'friends only' and
+        // 'friends-only' are equally valid.
         throw new CliUsageError(
-            `Invalid --visibility value '${raw}' (expected one of: public, friends, private, unlisted, or 0-3).`,
+            `Invalid --visibility value '${raw}' (expected one of: public, friends (friends only, friends-only), private, unlisted, or 0-3).`,
         );
     }
     // A bad visibility inside workshop.txt is a project-data problem,

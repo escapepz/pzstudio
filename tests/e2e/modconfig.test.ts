@@ -175,6 +175,16 @@ describe('modconfig command (E2E)', () => {
         );
     });
 
+    it('should reject an unknown action, naming show with the rest (bf4-n08)', async () => {
+        const unknown = await workspace.run('modconfig', ['mod_a', 'bogus']);
+        // d11-F8: invalid enum values exit 2 on the handler path too.
+        workspace.assertFailure(unknown, 2);
+        workspace.assertStderr(
+            unknown,
+            "Unknown modconfig action 'bogus' (expected one of: show, include, devonly, exclude, set, unset).",
+        );
+    });
+
     it('should unset an optional field', async () => {
         const project = workspace.readJson('project.json');
         project.mods.mod_a.author = 'To Remove';
