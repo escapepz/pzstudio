@@ -1,5 +1,5 @@
-import { mkdirSync, writeFileSync, cpSync } from 'fs';
-import { basename, resolve } from 'path';
+import { existsSync, mkdirSync, writeFileSync, cpSync } from 'fs';
+import { basename, join, resolve } from 'path';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { CliError } from '../errors';
@@ -30,7 +30,7 @@ import {
     assertNoAliasRouteSync,
     type CliMutationRouteOptions,
 } from '../mutation-route-guard';
-import { info, verbose, warn } from '../logger';
+import { error, info, verbose, warn } from '../logger';
 import { isStandaloneBin } from '../runtime-context';
 import { maybePrintFirstBuildUrl } from '../first-run';
 import {
@@ -223,6 +223,22 @@ export async function buildCmd() {
     }
     verbose(`Targets: main=${buildMain}, development=${buildDev}`);
 
+    // d13-U3: a build that runs BOTH workshop outputs is the aggregate of
+    // two variant outcomes (CLI-6); it gets a per-mod outcome summary line
+    // after each variant's copy phase.
+    const isAggregateBuild = buildMain && buildDev;
+    // Mod folders live directly under the project root (planModOperations
+    // copies `<projectDir>/<modId>`). The pre-check runs on the host side —
+    // the pure planner cannot probe the disk.
+    const modFolderMissing = (modId: string) =>
+        !existsSync(join(projectPath, modId));
+    const missingOnDiskSuffix = (missingMods: string[]) =>
+        missingMods.length > 0
+            ? ` (${missingMods
+                  .map((modId) => `${modId}: missing on disk`)
+                  .join(', ')})`
+            : '';
+
     const templateWorkshopPath = resolveTemplateDirForEngine('workshop');
     const planInput = gatherPlanInput(
         projectPath,
@@ -262,36 +278,90 @@ export async function buildCmd() {
                     );
                 }
                 info(`\nBuilding main workshop...`);
-                executeBuildPlan(planBuild({ ...planInput, variant: 'main' }), {
-                    outputRoot: distRoot,
-                });
-                variantOutcomes.push(OUTCOME_SUCCESS);
-                builtItems.push({
-                    // The ANCHORED plan config carries the dist output root
-                    // (the raw project config's outdir is the deployment
-                    // target and may be unset — pure build mode).
-                    name: basename(
-                        resolveBuildOutputPath(planInput.config, 'main'),
-                    ),
-                    variant: 'main',
-                });
-                // The dist-side ownership marker is written on EVERY
-                // successful variant build (dist-always: there is no
-                // legacy mode left to gate it). A failure never fails the
-                // variant — fail-closed downstream (a missing marker
-                // surfaces as UNOWNED_TARGET).
-                try {
-                    await writeBuiltItemMarker(
-                        planInput.config,
-                        'main',
-                        projectPath,
-                        distRoot,
+                // d13-U3: pre-check every scheduled mod folder before the
+                // copy phase. A missing folder used to die mid-plan as a
+                // raw ENOENT ('...scandir .../<modId>'), naming the mod
+                // only as a filesystem path inside the error and leaving
+                // the user guessing which mods were copied. Now each
+                // missing folder is a named, per-mod error that fails THIS
+                // mod while the survivors proceed; the variant still fails
+                // and the run still exits non-zero — the existing
+                // aggregate-partial semantics, unchanged.
+                const missingMods = mainModIds.filter(modFolderMissing);
+                for (const modId of missingMods) {
+                    error(
+                        new CliError(
+                            `mod ${modId} is missing on disk: ${join(
+                                projectPath,
+                                modId,
+                            )}`,
+                        ),
                     );
-                } catch (e) {
-                    warn(
-                        `Output ownership marker for the main item failed: ${
-                            e instanceof Error ? e.message : String(e)
-                        }`,
+                }
+                const survivorModIds = mainModIds.filter(
+                    (modId) => !missingMods.includes(modId),
+                );
+                const variantPlanConfig = {
+                    ...planInput.config,
+                    mods: Object.fromEntries(
+                        survivorModIds.map((modId) => [
+                            modId,
+                            planInput.config.mods[modId],
+                        ]),
+                    ),
+                };
+                executeBuildPlan(
+                    planBuild({
+                        ...planInput,
+                        config: variantPlanConfig,
+                        variant: 'main',
+                    }),
+                    { outputRoot: distRoot },
+                );
+                if (missingMods.length > 0) {
+                    for (const modId of missingMods) {
+                        variantErrors.push(
+                            `mod ${modId} is missing on disk: ${join(
+                                projectPath,
+                                modId,
+                            )}`,
+                        );
+                    }
+                    variantOutcomes.push(OUTCOME_FAILURE);
+                } else {
+                    variantOutcomes.push(OUTCOME_SUCCESS);
+                    builtItems.push({
+                        // The ANCHORED plan config carries the dist output root
+                        // (the raw project config's outdir is the deployment
+                        // target and may be unset — pure build mode).
+                        name: basename(
+                            resolveBuildOutputPath(planInput.config, 'main'),
+                        ),
+                        variant: 'main',
+                    });
+                    // The dist-side ownership marker is written on EVERY
+                    // successful variant build (dist-always: there is no
+                    // legacy mode left to gate it). A failure never fails the
+                    // variant — fail-closed downstream (a missing marker
+                    // surfaces as UNOWNED_TARGET).
+                    try {
+                        await writeBuiltItemMarker(
+                            planInput.config,
+                            'main',
+                            projectPath,
+                            distRoot,
+                        );
+                    } catch (e) {
+                        warn(
+                            `Output ownership marker for the main item failed: ${
+                                e instanceof Error ? e.message : String(e)
+                            }`,
+                        );
+                    }
+                }
+                if (isAggregateBuild) {
+                    info(
+                        `Build summary (main): ${survivorModIds.length} ok, ${missingMods.length} failed${missingOnDiskSuffix(missingMods)}`,
                     );
                 }
             }
@@ -315,29 +385,79 @@ export async function buildCmd() {
                 variantOutcomes.push(OUTCOME_WARNING);
             } else {
                 info(`\nBuilding dev_branch workshop...`);
+                // d13-U3: the same per-mod pre-check as the main variant —
+                // a missing folder is a named error whose mod fails while
+                // the survivors proceed (see the main block above).
+                const missingMods = devModIds.filter(modFolderMissing);
+                for (const modId of missingMods) {
+                    error(
+                        new CliError(
+                            `mod ${modId} is missing on disk: ${join(
+                                projectPath,
+                                modId,
+                            )}`,
+                        ),
+                    );
+                }
+                const survivorModIds = devModIds.filter(
+                    (modId) => !missingMods.includes(modId),
+                );
+                const variantPlanConfig = {
+                    ...planInput.config,
+                    mods: Object.fromEntries(
+                        survivorModIds.map((modId) => [
+                            modId,
+                            planInput.config.mods[modId],
+                        ]),
+                    ),
+                };
                 executeBuildPlan(
-                    planBuild({ ...planInput, variant: 'development' }),
+                    planBuild({
+                        ...planInput,
+                        config: variantPlanConfig,
+                        variant: 'development',
+                    }),
                     { outputRoot: distRoot },
                 );
-                variantOutcomes.push(OUTCOME_SUCCESS);
-                builtItems.push({
-                    name: basename(
-                        resolveBuildOutputPath(planInput.config, 'development'),
-                    ),
-                    variant: 'development',
-                });
-                try {
-                    await writeBuiltItemMarker(
-                        planInput.config,
-                        'development',
-                        projectPath,
-                        distRoot,
-                    );
-                } catch (e) {
-                    warn(
-                        `Output ownership marker for the dev_branch item failed: ${
-                            e instanceof Error ? e.message : String(e)
-                        }`,
+                if (missingMods.length > 0) {
+                    for (const modId of missingMods) {
+                        variantErrors.push(
+                            `mod ${modId} is missing on disk: ${join(
+                                projectPath,
+                                modId,
+                            )}`,
+                        );
+                    }
+                    variantOutcomes.push(OUTCOME_FAILURE);
+                } else {
+                    variantOutcomes.push(OUTCOME_SUCCESS);
+                    builtItems.push({
+                        name: basename(
+                            resolveBuildOutputPath(
+                                planInput.config,
+                                'development',
+                            ),
+                        ),
+                        variant: 'development',
+                    });
+                    try {
+                        await writeBuiltItemMarker(
+                            planInput.config,
+                            'development',
+                            projectPath,
+                            distRoot,
+                        );
+                    } catch (e) {
+                        warn(
+                            `Output ownership marker for the dev_branch item failed: ${
+                                e instanceof Error ? e.message : String(e)
+                            }`,
+                        );
+                    }
+                }
+                if (isAggregateBuild) {
+                    info(
+                        `Build summary (dev_branch): ${survivorModIds.length} ok, ${missingMods.length} failed${missingOnDiskSuffix(missingMods)}`,
                     );
                 }
             }

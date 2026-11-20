@@ -89,12 +89,16 @@ describe('buildCmd', () => {
         // directory — fresh-creation authorization, the first-build shape.
         vi.mocked(fs.readdirSync).mockReturnValue([] as any);
 
-        // Only workshop/preview.png exists in the project root (normalize
-        // separators: join() produces backslashes on Windows)
+        // workshop/preview.png and every scheduled mod folder exist in the
+        // project root (d13-U3 pre-check: a mod folder whose existsSync
+        // probe fails is named and fails the variant). Normalize
+        // separators: join() produces backslashes on Windows.
         vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-            return String(p)
-                .replace(/\\/g, '/')
-                .endsWith('/workshop/preview.png');
+            const normalized = String(p).replace(/\\/g, '/');
+            return (
+                normalized.endsWith('/workshop/preview.png') ||
+                /(^|\/)proj\/[^/]+$/.test(normalized)
+            );
         });
     });
 
@@ -263,6 +267,7 @@ describe('buildCmd', () => {
             const normalized = String(p).replace(/\\/g, '/');
             return (
                 normalized.endsWith('/workshop/preview.png') ||
+                normalized.endsWith('/proj/my_mod') ||
                 normalized.endsWith('/my_mod/mod.info')
             );
         });
@@ -289,6 +294,7 @@ describe('buildCmd', () => {
             const normalized = String(p).replace(/\\/g, '/');
             return (
                 normalized.endsWith('/workshop/preview.png') ||
+                normalized.endsWith('/proj/my_mod') ||
                 normalized.endsWith('/my_mod/mod.info')
             );
         });
@@ -526,5 +532,130 @@ describe('buildCmd', () => {
                 join(fakeHome, '.pzstudio', '.first-build-url-shown'),
             ),
         ).toBe(false);
+    });
+
+    describe('missing mod folder pre-check (d13-U3)', () => {
+        /** A 3-mod project whose middle mod's folder is broken (absent). */
+        const threeModProject = {
+            workshop: {
+                id: 12345,
+                title: 'Test Project',
+                visibility: 'public',
+                tags: [],
+            },
+            mods: {
+                mod_ok1: { name: 'Ok One', description: 'd' },
+                mod_broken: { name: 'Broken', description: 'd' },
+                mod_ok2: { name: 'Ok Two', description: 'd' },
+            },
+            excludes: [],
+        };
+
+        beforeEach(() => {
+            vi.mocked(resolveProjectConfig).mockImplementation(
+                () => JSON.parse(JSON.stringify(threeModProject)) as any,
+            );
+            // Only the two healthy mod folders exist on the mocked disk.
+            vi.mocked(fs.existsSync).mockImplementation((p: any) => {
+                const normalized = String(p).replace(/\\/g, '/');
+                return (
+                    normalized.endsWith('/workshop/preview.png') ||
+                    normalized.endsWith('/proj/mod_ok1') ||
+                    normalized.endsWith('/proj/mod_ok2')
+                );
+            });
+        });
+
+        it('names the missing mod and still copies the survivors (--both)', async () => {
+            vi.mocked(hasFlag).mockImplementation(
+                (name: string) => name === 'both',
+            );
+
+            // The whole run still exits non-zero after the survivors were
+            // copied (the existing aggregate-partial semantics).
+            await expect(buildCmd()).rejects.toThrow(
+                /mod mod_broken is missing on disk/,
+            );
+
+            // The missing folder is named as a per-mod diagnosis, not a
+            // raw ENOENT — once per variant.
+            expect(logger.error).toHaveBeenCalledTimes(2);
+            for (const call of vi.mocked(logger.error).mock.calls) {
+                expect((call[0] as Error).message).toMatch(
+                    /^mod mod_broken is missing on disk: /,
+                );
+            }
+
+            // The survivors still copied — including mod_ok2, which the
+            // old mid-plan ENOENT abort lost. No copy names the broken mod.
+            const copiedFroms = vi
+                .mocked(scaffoldProject)
+                .mock.calls.map((call) => String(call[0]));
+            expect(copiedFroms.some((from) => from.endsWith('mod_ok1'))).toBe(
+                true,
+            );
+            expect(copiedFroms.some((from) => from.endsWith('mod_ok2'))).toBe(
+                true,
+            );
+            expect(
+                copiedFroms.some((from) => from.endsWith('mod_broken')),
+            ).toBe(false);
+
+            // Per-mod outcome summary on the aggregate (--both) build.
+            const infoLines = vi
+                .mocked(logger.info)
+                .mock.calls.map((call) => String(call[0]));
+            expect(infoLines).toContain(
+                'Build summary (main): 2 ok, 1 failed (mod_broken: missing on disk)',
+            );
+            expect(infoLines).toContain(
+                'Build summary (dev_branch): 2 ok, 1 failed (mod_broken: missing on disk)',
+            );
+        });
+
+        it('adds no summary line to a single-variant build (d13-U3 aggregate-only)', async () => {
+            // Every scheduled mod folder exists — the healthy shape.
+            vi.mocked(fs.existsSync).mockImplementation((p: any) => {
+                const normalized = String(p).replace(/\\/g, '/');
+                return (
+                    normalized.endsWith('/workshop/preview.png') ||
+                    /(^|\/)proj\/[^/]+$/.test(normalized)
+                );
+            });
+
+            await buildCmd();
+
+            const infoLines = vi
+                .mocked(logger.info)
+                .mock.calls.map((call) => String(call[0]));
+            expect(
+                infoLines.some((line) => line.includes('Build summary')),
+            ).toBe(false);
+            expect(logger.error).not.toHaveBeenCalled();
+        });
+
+        it('summarizes a healthy aggregate build with zero failures (d13-U3)', async () => {
+            vi.mocked(hasFlag).mockImplementation(
+                (name: string) => name === 'both',
+            );
+            // Every scheduled mod folder exists — the healthy shape.
+            vi.mocked(fs.existsSync).mockImplementation((p: any) => {
+                const normalized = String(p).replace(/\\/g, '/');
+                return (
+                    normalized.endsWith('/workshop/preview.png') ||
+                    /(^|\/)proj\/[^/]+$/.test(normalized)
+                );
+            });
+
+            await buildCmd();
+
+            const infoLines = vi
+                .mocked(logger.info)
+                .mock.calls.map((call) => String(call[0]));
+            expect(infoLines).toContain('Build summary (main): 3 ok, 0 failed');
+            expect(infoLines).toContain(
+                'Build summary (dev_branch): 3 ok, 0 failed',
+            );
+        });
     });
 });
