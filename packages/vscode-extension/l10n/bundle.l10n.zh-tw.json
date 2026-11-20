@@ -29,6 +29,7 @@
     "Build": "建置",
     "Clean": "清理",
     "Delete": "刪除",
+    "Rename": "重新命名",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "要為專案 '{0}' 執行建置嗎？\n\n在遊戲執行中建置可能使輸出處於損壞狀態。",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "要清理專案 '{0}' 的建置輸出嗎？\n\n這將刪除已產生的創意工坊輸出資料夾。",
     "Don't Ask Again": "不要再詢問",

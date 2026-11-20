@@ -29,6 +29,7 @@
     "Build": "Compilar",
     "Clean": "Limpar",
     "Delete": "Excluir",
+    "Rename": "Renomear",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Executar a compilação para o projeto '{0}'?\n\nCompilar enquanto o jogo está em execução pode deixar a saída em estado corrompido.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Limpar a saída de compilação do projeto '{0}'?\n\nIsso exclui a pasta de saída do workshop gerada.",
     "Don't Ask Again": "Não perguntar novamente",

@@ -29,6 +29,7 @@
     "Build": "Build",
     "Clean": "Clean",
     "Delete": "Xóa",
+    "Rename": "Đổi tên",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Chạy build cho project '{0}'?\n\nBuild khi game đang chạy có thể làm hỏng output.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Dọn output build của project '{0}'?\n\nThao tác này xoá thư mục output workshop đã sinh ra.",
     "Don't Ask Again": "Đừng hỏi lại",

@@ -29,6 +29,7 @@
     "Build": "Derle",
     "Clean": "Temizle",
     "Delete": "Sil",
+    "Rename": "Yeniden Adlandır",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "'{0}' projesi için derleme çalıştırılsın mı?\n\nOyun çalışırken derleme yapmak çıktıyı bozuk durumda bırakabilir.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "'{0}' projesinin derleme çıktısı temizlensin mi?\n\nBu, oluşturulan atölye çıktı klasörünü siler.",
     "Don't Ask Again": "Bir daha sorma",

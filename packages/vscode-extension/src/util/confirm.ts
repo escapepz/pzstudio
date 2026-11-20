@@ -6,13 +6,15 @@ export type ConfirmDecision = 'yes' | 'never' | 'cancel';
 /**
  * Modal confirmation before running a destructive or disruptive command
  * (build/clean can clobber the output the game is currently loading when
- * debugging; delete removes a mod for good). Honors the
+ * debugging; delete removes a mod for good; rename rewrites the mod's
+ * folder name and its project.json key). Honors the
  * pzstudio.confirmBeforeRun setting; "Don't Ask Again" is applied by the
  * caller writing that setting for the project.
  */
 export async function confirmBeforeRun(
-    action: 'build' | 'clean' | 'delete',
+    action: 'build' | 'clean' | 'delete' | 'rename',
     subject: string,
+    target?: string,
 ): Promise<ConfirmDecision> {
     const enabled = vscode.workspace
         .getConfiguration('pzstudio')
@@ -26,7 +28,9 @@ export async function confirmBeforeRun(
             ? t('Build')
             : action === 'clean'
               ? t('Clean')
-              : t('Delete');
+              : action === 'rename'
+                ? t('Rename')
+                : t('Delete');
     const message =
         action === 'build'
             ? t(
@@ -38,10 +42,12 @@ export async function confirmBeforeRun(
                     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.",
                     subject,
                 )
-              : t(
-                    "Are you sure you want to delete mod '{0}'? This cannot be undone.",
-                    subject,
-                );
+              : action === 'rename'
+                ? t("Rename mod '{0}' to '{1}'?", subject, target ?? '')
+                : t(
+                      "Are you sure you want to delete mod '{0}'? This cannot be undone.",
+                      subject,
+                  );
 
     const choice = await vscode.window.showWarningMessage(
         message,

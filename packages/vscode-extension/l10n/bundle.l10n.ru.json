@@ -29,6 +29,7 @@
     "Build": "Собрать",
     "Clean": "Очистить",
     "Delete": "Удалить",
+    "Rename": "Переименовать",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Запустить сборку для проекта '{0}'?\n\nСборка во время работы игры может оставить вывод в повреждённом состоянии.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Очистить вывод сборки проекта '{0}'?\n\nЭто удалит сгенерированную папку вывода мастерской.",
     "Don't Ask Again": "Больше не спрашивать",

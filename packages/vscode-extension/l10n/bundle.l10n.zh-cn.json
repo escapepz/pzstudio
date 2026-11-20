@@ -29,6 +29,7 @@
     "Build": "构建",
     "Clean": "清理",
     "Delete": "删除",
+    "Rename": "重命名",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "是否为项目 '{0}' 运行构建？\n\n在游戏运行时构建可能使输出处于损坏状态。",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "是否清理项目 '{0}' 的构建输出？\n\n这将删除已生成的创意工坊输出文件夹。",
     "Don't Ask Again": "不再询问",

@@ -29,6 +29,7 @@
     "Build": "ビルド",
     "Clean": "クリーン",
     "Delete": "削除",
+    "Rename": "名前変更",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "プロジェクト '{0}' のビルドを実行しますか？\n\nゲームの実行中にビルドすると、出力が壊れた状態になる可能性があります。",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "プロジェクト '{0}' のビルド出力をクリーンしますか？\n\n生成されたワークショップ出力フォルダーを削除します。",
     "Don't Ask Again": "今後確認しない",

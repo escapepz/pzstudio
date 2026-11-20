@@ -29,6 +29,7 @@
     "Build": "Зібрати",
     "Clean": "Очистити",
     "Delete": "Видалити",
+    "Rename": "Перейменувати",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Запустити збірку для проєкту '{0}'?\n\nЗбірка під час роботи гри може залишити вивід у пошкодженому стані.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Очистити вивід збірки проєкту '{0}'?\n\nЦе видалить згенеровану папку виводу майстерні.",
     "Don't Ask Again": "Не питати знову",

@@ -29,6 +29,7 @@
     "Build": "Käännä",
     "Clean": "Siivoa",
     "Delete": "Poista",
+    "Rename": "Nimeä uudelleen",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Suoritetaanko modin '{0}' käännös?\n\nKääntäminen pelin ollessa käynnissä voi jättää tulosteen rikkoutuneeseen tilaan.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Siivotaanko projektin '{0}' käännöstuloste?\n\nTämä poistaa luodun workshop-tulostekansion.",
     "Don't Ask Again": "Älä kysy uudelleen",

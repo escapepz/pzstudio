@@ -29,6 +29,7 @@
     "Build": "Build",
     "Clean": "Clean",
     "Delete": "Törlés",
+    "Rename": "Átnevezés",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Build futtatása a(z) '{0}' projekthez?\n\nA buildelés a játék futása közben sérült állapotban hagyhatja a kimenetet.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Törli a(z) '{0}' projekt build-kimenetét?\n\nEz törli a generált workshop-kimeneti mappát.",
     "Don't Ask Again": "Ne kérdezze többet",

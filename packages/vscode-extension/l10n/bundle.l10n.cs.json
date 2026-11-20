@@ -29,6 +29,7 @@
     "Build": "Buildovat",
     "Clean": "Vyčistit",
     "Delete": "Smazat",
+    "Rename": "Přejmenovat",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Spustit build pro projekt '{0}'?\n\nBuildování při běhu hry může ponechat výstup v poškozeném stavu.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Vyčistit výstup buildu projektu '{0}'?\n\nTím se smaže vygenerovaná výstupní složka workshopu.",
     "Don't Ask Again": "Znovu se nedotazovat",

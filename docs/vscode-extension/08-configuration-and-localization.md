@@ -24,7 +24,7 @@ localization layers.
 | `pzstudio.offline` | resource | `false` | flags `--offline` | `new`, `add` only (`flags.ts:11-14`) |
 | `pzstudio.forceUpdate` | resource | `false` | flags `--force-update` | `new`, `add` only (`flags.ts:15-18`) |
 | `pzstudio.build.target` | resource | `default` | flag `--production`/`--development`/`--both` | `build` command and (leaking, UX-01) tasks |
-| `pzstudio.confirmBeforeRun` | resource | `true` | extension only | modal gate for build/clean/delete; "Don't Ask Again" writes `false` |
+| `pzstudio.confirmBeforeRun` | resource | `true` | extension only | modal gate for build/clean/delete/rename; "Don't Ask Again" writes `false` |
 | `pzstudio.language` | window | `auto` | extension only | l10n override (below) |
 | `pzstudio.newProject.defaultLocation` | machine | `""` | extension only | New Project picker initial location only; cancelling the picker aborts (never a fallback destination) |
 

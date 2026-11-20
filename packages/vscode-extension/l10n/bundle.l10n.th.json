@@ -29,6 +29,7 @@
     "Build": "บิลด์",
     "Clean": "ล้าง",
     "Delete": "ลบ",
+    "Rename": "เปลี่ยนชื่อ",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "รันบิลด์สำหรับโปรเจกต์ '{0}' หรือไม่?\n\nการบิลด์ขณะเกมกำลังรันอาจทำให้เอาต์พุตเสียหาย",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "ล้างเอาต์พุตการบิลด์ของโปรเจกต์ '{0}' หรือไม่?\n\nการนี้จะลบโฟลเดอร์เอาต์พุตเวิร์กช็อปที่สร้างไว้",
     "Don't Ask Again": "ไม่ต้องถามอีก",

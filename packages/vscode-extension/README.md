@@ -65,7 +65,7 @@ You can configure PZ Studio directly through VS Code settings (`settings.json`).
 | `pzstudio.forceUpdate` | Force refresh of cached templates (`--force-update`). Applies to New Project and Add Mod. |
 | `pzstudio.build.target` | Build target mode — `default`, `production`, `development` or `both`. Controls whether the main or dev_branch workshop output is built. An explicit task target replaces this setting. |
 | `pzstudio.gameBuild` | Game build the diagnostics compatibility check compares the project's `pzBuildCompatibility` against (e.g. `42.20.1`). Leave empty to disable the check. |
-| `pzstudio.confirmBeforeRun` | Ask for confirmation before running Build, Clean, or Delete (protects against misclicks while the game is debugging the output). |
+| `pzstudio.confirmBeforeRun` | Ask for confirmation before running Build, Clean, Delete, or Rename (protects against misclicks while the game is debugging the output). |
 | `pzstudio.templates.project.url` | Repository URL for the default project template (overrides global config). |
 | `pzstudio.templates.project.ref` | Git ref (branch, tag, or commit) for the project template. |
 | `pzstudio.templates.mod.url` | Repository URL for the default mod template (overrides global config). |

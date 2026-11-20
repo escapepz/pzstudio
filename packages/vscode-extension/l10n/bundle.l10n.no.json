@@ -29,6 +29,7 @@
     "Build": "Build",
     "Clean": "Clean",
     "Delete": "Slett",
+    "Rename": "Gi nytt navn",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Kjøre bygging for prosjektet '{0}'?\n\nÅ bygge mens spillet kjører kan etterlate utdataene i ødelagt tilstand.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Rydde byggeutdata for prosjektet '{0}'?\n\nDette sletter den genererte workshop-utdatamappen.",
     "Don't Ask Again": "Ikke spør igjen",

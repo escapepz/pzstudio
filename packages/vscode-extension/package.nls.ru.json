@@ -24,7 +24,7 @@
     "config.build.target.enumDescriptions.production": "Собирать главный вывод мастерской (--production)",
     "config.build.target.enumDescriptions.development": "Собирать вывод мастерской dev_branch (--development)",
     "config.build.target.enumDescriptions.both": "Собрать сразу основную и dev_branch-версии сборки Workshop (--both).",
-    "config.confirmBeforeRun.description": "Запрашивать подтверждение перед Build, Clean или удалением (защита от случайных кликов, пока игра читает вывод).",
+    "config.confirmBeforeRun.description": "Запрашивать подтверждение перед Build, Clean, удалением или переименованием (защита от случайных кликов, пока игра читает вывод).",
     "config.language.description": "Язык отображения интерфейса PZ Studio (дерево проводника, запросы и уведомления). Значение 'auto' следует языку отображения VS Code. Заголовки команд и описания параметров, отображаемые самим VS Code, всегда следуют языку отображения VS Code.",
     "command.new.title": "PZStudio: Новый проект",
     "command.add.title": "PZStudio: Добавить мод",

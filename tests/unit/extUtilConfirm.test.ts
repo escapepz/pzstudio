@@ -124,6 +124,40 @@ describe('confirmBeforeRun', () => {
         await expect(confirmBeforeRun('delete', 'my_mod')).resolves.toBe('yes');
         expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
     });
+
+    it('asks modally about the rename and resolves yes on the Rename button', async () => {
+        asMock(vscode.window.showWarningMessage).mockResolvedValue(
+            vscode.l10n.t('Rename'),
+        );
+
+        await expect(
+            confirmBeforeRun('rename', 'my_mod', 'new_id'),
+        ).resolves.toBe('yes');
+
+        expect(asMock(vscode.window.showWarningMessage)).toHaveBeenCalledWith(
+            expect.stringContaining("Rename mod 'my_mod' to 'new_id'?"),
+            { modal: true },
+            vscode.l10n.t('Rename'),
+            vscode.l10n.t("Don't Ask Again"),
+        );
+    });
+
+    it('resolves never on the Dont-Ask-Again button for rename', async () => {
+        asMock(vscode.window.showWarningMessage).mockResolvedValue(
+            vscode.l10n.t("Don't Ask Again"),
+        );
+        await expect(
+            confirmBeforeRun('rename', 'my_mod', 'new_id'),
+        ).resolves.toBe('never');
+    });
+
+    it('skips the rename modal when the setting is disabled', async () => {
+        withConfirmSetting(false);
+        await expect(
+            confirmBeforeRun('rename', 'my_mod', 'new_id'),
+        ).resolves.toBe('yes');
+        expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
+    });
 });
 
 describe('disableConfirmBeforeRun', () => {

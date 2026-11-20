@@ -29,6 +29,7 @@
     "Build": "Kompiluj",
     "Clean": "Czyść",
     "Delete": "Usuń",
+    "Rename": "Zmień nazwę",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Uruchomić kompilację dla projektu '{0}'?\n\nKompilowanie podczas działania gry może pozostawić wynik w uszkodzonym stanie.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Wyczyścić wynik kompilacji projektu '{0}'?\n\nSpowoduje to usunięcie wygenerowanego folderu wynikowego warsztatu.",
     "Don't Ask Again": "Nie pytaj ponownie",

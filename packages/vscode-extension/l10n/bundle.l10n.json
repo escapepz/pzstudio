@@ -29,6 +29,7 @@
     "Build": "Build",
     "Clean": "Clean",
     "Delete": "Delete",
+    "Rename": "Rename",
     "Update": "Update",
     "New Project": "New Project",
     "Add Mod": "Add Mod",
