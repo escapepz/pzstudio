@@ -317,7 +317,13 @@ export class UsageRecorder {
             dur_ms: Math.max(0, Math.floor(input.durMs)),
             status: input.status,
             err: input.err,
-            meta: input.flags ? { flags: input.flags } : undefined,
+            // Empty flags arrays are treated as absent (d17-U6): a flag-less
+            // CLI span then emits NO meta, matching the api facade spans —
+            // meta stays optional in the NDJSON contract.
+            meta:
+                input.flags && input.flags.length > 0
+                    ? { flags: input.flags }
+                    : undefined,
         };
     }
 }

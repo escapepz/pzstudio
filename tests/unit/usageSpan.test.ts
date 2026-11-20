@@ -125,6 +125,20 @@ describe('usage spans', () => {
         expect(raw).not.toContain('D:\\mods\\x');
     });
 
+    it('3b. flag-less CLI span emits NO meta — empty flags are absent (d17-U6)', async () => {
+        await recordUsageSpan(
+            'build',
+            ctx({ interactionMode: 'interactive' }),
+            ok,
+        );
+        const event = singleEvent();
+        expect(event.host).toBe('cli');
+        expect('meta' in event).toBe(false);
+        // The api facade spans never carried meta; both hosts now agree.
+        await recordApiSpan('api.op', 'D:\\proj', async () => 42);
+        expect('meta' in lastEvent()).toBe(false);
+    });
+
     it('4. error path: one error event (code/where mapped), original error rethrown', async () => {
         const boom = new CliError('boom');
         await expect(

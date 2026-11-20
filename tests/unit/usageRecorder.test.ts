@@ -158,6 +158,29 @@ describe('UsageRecorder', () => {
         expect(JSON.parse(linesAfterSecond[1]).seq).toBe(2);
     });
 
+    it('3b. empty flags array emits NO meta; non-empty flags keep meta (d17-U6)', () => {
+        const recorder = new UsageRecorder();
+        recorder.recordOp({
+            op: 'build',
+            host: 'cli',
+            durMs: 1,
+            status: 'ok',
+            flags: [],
+        });
+        expect('meta' in JSON.parse(eventLines(eventsFile())[0])).toBe(false);
+
+        recorder.recordOp({
+            op: 'build',
+            host: 'cli',
+            durMs: 1,
+            status: 'ok',
+            flags: ['out'],
+        });
+        const lines = eventLines(eventsFile());
+        expect(lines).toHaveLength(2);
+        expect(JSON.parse(lines[1]).meta).toEqual({ flags: ['out'] });
+    });
+
     it('4. salt created once, hash stable across instances, distinct per key', () => {
         const first = new UsageRecorder();
         first.recordOp({ op: 'build', host: 'cli', durMs: 1, status: 'ok' });
