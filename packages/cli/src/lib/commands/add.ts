@@ -106,7 +106,11 @@ export function addCmd(modName: string, modId?: string) {
 
     // Check if mod already exists
     if (projectConfig.mods[modId] || existsSync(join(projectPath, modId))) {
-        throw new Error(`A mod with id '${modId}' already exists!`);
+        // A duplicate id is an expected conflict, not a crash: throwing the
+        // plain Error here made the refusal ride the 'Unexpected error:'
+        // wrapper (d20-F2). CliError keeps the message and the exit code (1)
+        // but renders as the clean [ERROR] line.
+        throw new CliError(`A mod with id '${modId}' already exists!`);
     }
 
     // D3-a fail-closed: snapshot the RAW configured outdir BEFORE any

@@ -15,6 +15,7 @@ import {
     scaffoldProject,
 } from '../../packages/cli/src/lib/templateManager';
 import { hasFlag } from '../../packages/cli/src/lib/args';
+import { CliError } from '../../packages/cli/src/lib/errors';
 
 vi.mock('fs');
 vi.mock('../../packages/cli/src/lib/logger');
@@ -123,5 +124,55 @@ describe('addCmd rollback ownership guard', () => {
         expect(() => addCmd('Rollback Mod', 'rb_mod')).toThrow(
             'the original failure',
         );
+    });
+});
+
+/**
+ * d20-F2: a duplicate id is an expected data conflict, not a crash. The
+ * refusal used to throw a plain Error, so the '[ERROR] A mod with id ...'
+ * wording rode the 'Unexpected error:' lifecycle wrapper. It is now a
+ * CliError — same message, still exit 1 (not a usage error), but rendered
+ * as the bare problem text.
+ */
+describe('addCmd duplicate-id refusal (d20-F2)', () => {
+    const configWithMod = (modId: string) =>
+        ({
+            workshop: { title: 'T', visibility: 'public', tags: [] },
+            mods: { [modId]: { name: 'Existing Mod', description: '' } },
+            excludes: [],
+        }) as any;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(hasFlag).mockReturnValue(false);
+        vi.mocked(projectDir).mockReturnValue('/project' as any);
+        vi.mocked(readRawProjectOutdir).mockReturnValue(undefined as any);
+        vi.mocked(resolveProjectConfig).mockReturnValue(undefined as any);
+        vi.mocked(scaffoldProject).mockReturnValue(undefined as any);
+        vi.mocked(updateProjectConfig).mockReturnValue(undefined as any);
+    });
+
+    it('refuses a duplicate id with the exact message, as a planned CliError', () => {
+        vi.mocked(resolveProjectConfig).mockReturnValue(
+            configWithMod('case_probe'),
+        );
+
+        let thrown: unknown;
+        try {
+            addCmd('Case Probe', 'case_probe');
+        } catch (e) {
+            thrown = e;
+        }
+
+        expect(thrown).toBeInstanceOf(CliError);
+        expect((thrown as CliError).message).toBe(
+            "A mod with id 'case_probe' already exists!",
+        );
+        // The point of d20-F2: the message never rides the unexpected-error
+        // wrapper ('Unexpected error: ...' + the --debug hint line).
+        expect((thrown as CliError).message).not.toContain('Unexpected error');
+        // Nothing was scaffolded and nothing needed rolling back.
+        expect(scaffoldProject).not.toHaveBeenCalled();
+        expect(vi.mocked(removeDirRecursive)).not.toHaveBeenCalled();
     });
 });
