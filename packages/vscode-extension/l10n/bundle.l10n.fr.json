@@ -67,5 +67,8 @@
     "Configure Mod": "Modifier la configuration du mod",
     "Show Details": "Afficher les détails",
     "First successful build with PZ Studio!": "Premier build réussi avec PZ Studio !",
-    "See tips & updates": "Voir les astuces et les nouveautés"
+    "See tips & updates": "Voir les astuces et les nouveautés",
+    "PZStudio: project created.": "PZStudio : projet créé.",
+    "PZStudio: mod added.": "PZStudio : mod ajouté.",
+    "PZStudio: output cleaned.": "PZStudio : sortie nettoyée."
 }

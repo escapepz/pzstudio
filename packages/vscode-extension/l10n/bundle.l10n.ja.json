@@ -67,5 +67,8 @@
     "Configure Mod": "Mod 設定を編集",
     "Show Details": "詳細を表示",
     "First successful build with PZ Studio!": "PZ Studioで最初のビルドに成功しました！",
-    "See tips & updates": "ヒントと更新情報を見る"
+    "See tips & updates": "ヒントと更新情報を見る",
+    "PZStudio: project created.": "PZStudio: プロジェクトを作成しました。",
+    "PZStudio: mod added.": "PZStudio: Mod を追加しました。",
+    "PZStudio: output cleaned.": "PZStudio: 出力をクリーンしました。"
 }

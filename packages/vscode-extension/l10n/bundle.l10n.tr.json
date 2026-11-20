@@ -67,5 +67,8 @@
     "Configure Mod": "Mod Yapılandırmasını Düzenle",
     "Show Details": "Ayrıntıları göster",
     "First successful build with PZ Studio!": "PZ Studio ile ilk başarılı build!",
-    "See tips & updates": "İpuçları ve güncellemeleri gör"
+    "See tips & updates": "İpuçları ve güncellemeleri gör",
+    "PZStudio: project created.": "PZStudio: proje oluşturuldu.",
+    "PZStudio: mod added.": "PZStudio: mod eklendi.",
+    "PZStudio: output cleaned.": "PZStudio: çıktı temizlendi."
 }

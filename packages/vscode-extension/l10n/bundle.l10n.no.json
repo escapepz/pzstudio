@@ -67,5 +67,8 @@
     "Configure Mod": "Rediger modkonfigurasjon",
     "Show Details": "Vis detaljer",
     "First successful build with PZ Studio!": "Første vellykkede build med PZ Studio!",
-    "See tips & updates": "Se tips og oppdateringer"
+    "See tips & updates": "Se tips og oppdateringer",
+    "PZStudio: project created.": "PZStudio: prosjekt opprettet.",
+    "PZStudio: mod added.": "PZStudio: mod lagt til.",
+    "PZStudio: output cleaned.": "PZStudio: utdata ryddet."
 }

@@ -67,5 +67,8 @@
     "Show Details": "Näytä tiedot",
     "Configure Mod": "Muokkaa modin asetuksia",
     "First successful build with PZ Studio!": "Ensimmäinen onnistunut build PZ Studiolla!",
-    "See tips & updates": "Katso vinkit ja päivitykset"
+    "See tips & updates": "Katso vinkit ja päivitykset",
+    "PZStudio: project created.": "PZStudio: projekti luotu.",
+    "PZStudio: mod added.": "PZStudio: modi lisätty.",
+    "PZStudio: output cleaned.": "PZStudio: tuloste siivottu."
 }

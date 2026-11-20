@@ -67,5 +67,8 @@
     "Configure Mod": "編輯模組設定",
     "Show Details": "顯示詳細資訊",
     "First successful build with PZ Studio!": "使用 PZ Studio 首次建置成功！",
-    "See tips & updates": "查看提示與更新"
+    "See tips & updates": "查看提示與更新",
+    "PZStudio: project created.": "PZStudio: 專案已建立。",
+    "PZStudio: mod added.": "PZStudio: 模組已新增。",
+    "PZStudio: output cleaned.": "PZStudio: 輸出已清理。"
 }

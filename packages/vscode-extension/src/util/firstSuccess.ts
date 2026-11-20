@@ -48,3 +48,26 @@ export function notifyFirstBuildSuccess(
         }
     });
 }
+
+/**
+ * Terse completion toasts for the quiet commands (d01-U1/U2, d10-U3): new,
+ * add and clean used to end with only the transient progress toast, so a
+ * finished run was indistinguishable from a dismissed one. One informational
+ * popup per successful completion — the runner's onSuccess hook is the only
+ * point success is knowable (execute.ts swallows engine errors), so this
+ * never fires on a failure and stays silent for every other command.
+ */
+export function notifyActionSuccess(command: string): void {
+    const message =
+        command === 'new'
+            ? t('PZStudio: project created.')
+            : command === 'add'
+              ? t('PZStudio: mod added.')
+              : command === 'clean'
+                ? t('PZStudio: output cleaned.')
+                : undefined;
+    if (message === undefined) {
+        return;
+    }
+    vscode.window.showInformationMessage(message);
+}

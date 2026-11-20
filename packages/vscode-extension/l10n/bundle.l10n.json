@@ -67,5 +67,8 @@
     "Diagnostics for '{0}'": "Diagnostics for '{0}'",
     "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed": "{0} error(s), {1} warning(s), {2} info(s) — nothing was changed",
     "First successful build with PZ Studio!": "First successful build with PZ Studio!",
-    "See tips & updates": "See tips & updates"
+    "See tips & updates": "See tips & updates",
+    "PZStudio: project created.": "PZStudio: project created.",
+    "PZStudio: mod added.": "PZStudio: mod added.",
+    "PZStudio: output cleaned.": "PZStudio: output cleaned."
 }

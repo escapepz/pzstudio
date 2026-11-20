@@ -67,5 +67,8 @@
     "Configure Mod": "Mod beállításainak szerkesztése",
     "Show Details": "Részletek megjelenítése",
     "First successful build with PZ Studio!": "Első sikeres build a PZ Studióval!",
-    "See tips & updates": "Tippek és frissítések megtekintése"
+    "See tips & updates": "Tippek és frissítések megtekintése",
+    "PZStudio: project created.": "PZStudio: projekt létrehozva.",
+    "PZStudio: mod added.": "PZStudio: mod hozzáadva.",
+    "PZStudio: output cleaned.": "PZStudio: kimenet megtisztítva."
 }

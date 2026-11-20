@@ -67,5 +67,8 @@
     "Configure Mod": "Edit Konfigurasi Mod",
     "Show Details": "Tampilkan detail",
     "First successful build with PZ Studio!": "Build pertama berhasil dengan PZ Studio!",
-    "See tips & updates": "Lihat tips dan pembaruan"
+    "See tips & updates": "Lihat tips dan pembaruan",
+    "PZStudio: project created.": "PZStudio: proyek dibuat.",
+    "PZStudio: mod added.": "PZStudio: mod ditambahkan.",
+    "PZStudio: output cleaned.": "PZStudio: keluaran dibersihkan."
 }

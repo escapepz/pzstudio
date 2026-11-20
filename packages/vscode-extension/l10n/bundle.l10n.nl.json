@@ -67,5 +67,8 @@
     "Configure Mod": "Modconfiguratie bewerken",
     "Show Details": "Details weergeven",
     "First successful build with PZ Studio!": "Eerste succesvolle build met PZ Studio!",
-    "See tips & updates": "Tips en updates bekijken"
+    "See tips & updates": "Tips en updates bekijken",
+    "PZStudio: project created.": "PZStudio: project aangemaakt.",
+    "PZStudio: mod added.": "PZStudio: mod toegevoegd.",
+    "PZStudio: output cleaned.": "PZStudio: uitvoer opgeschoond."
 }

@@ -9,7 +9,10 @@ import { createPZLogger, type PZLoggerErrorAction } from './util/logger';
 import { initExtensionL10n, t } from './util/l10n';
 import { readPzStudioHostSettings } from './util/settings';
 import { createCommandRunner } from './util/execute';
-import { notifyFirstBuildSuccess } from './util/firstSuccess';
+import {
+    notifyActionSuccess,
+    notifyFirstBuildSuccess,
+} from './util/firstSuccess';
 import { DevSyncController } from './util/devsync';
 import {
     DevSyncManager,
@@ -247,7 +250,13 @@ export async function activate(context: vscode.ExtensionContext) {
         studio,
         outputChannel,
         () => projectExplorer.requestRefresh(),
-        (cmd) => notifyFirstBuildSuccess(context, cmd),
+        // The runner's onSuccess hook is the only point success is knowable:
+        // the one-time first-build popup plus the per-completion toasts for
+        // the quiet commands (new/add/clean — d01-U1/U2, d10-U3).
+        (cmd) => {
+            notifyFirstBuildSuccess(context, cmd);
+            notifyActionSuccess(cmd);
+        },
     );
 
     // UX-16: user-invoked failures route through the host logger (one

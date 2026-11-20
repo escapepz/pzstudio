@@ -9,6 +9,7 @@ vi.mock('vscode', async () => {
 
 import * as vscode from 'vscode';
 import {
+    notifyActionSuccess,
     notifyFirstBuildSuccess,
     FIRST_SUCCESS_KEY,
 } from '../../packages/vscode-extension/src/util/firstSuccess';
@@ -138,5 +139,55 @@ describe('notifyFirstBuildSuccess', () => {
             FIRST_SUCCESS_KEY,
             true,
         );
+    });
+});
+
+// d01-U1/U2, d10-U3: new/add/clean completions used to be silent (only the
+// transient progress toast). notifyActionSuccess adds one terse localized
+// popup per successful completion — gated to exactly those commands, so
+// build keeps its own one-time popup and delete/rename stay as they are.
+describe('notifyActionSuccess', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it.each([
+        ['new', 'PZStudio: project created.'],
+        ['add', 'PZStudio: mod added.'],
+        ['clean', 'PZStudio: output cleaned.'],
+    ])("toasts '%s' completions", (command, expected) => {
+        notifyActionSuccess(command);
+
+        expect(
+            asMock(vscode.window.showInformationMessage),
+        ).toHaveBeenCalledTimes(1);
+        expect(
+            asMock(vscode.window.showInformationMessage),
+        ).toHaveBeenCalledWith(expected);
+    });
+
+    it('stays silent for every other command', () => {
+        for (const command of [
+            'build',
+            'delete',
+            'rename',
+            'update',
+            'watch',
+        ]) {
+            notifyActionSuccess(command);
+        }
+
+        expect(
+            asMock(vscode.window.showInformationMessage),
+        ).not.toHaveBeenCalled();
+    });
+
+    it('fires on every completion, not once per profile', () => {
+        notifyActionSuccess('clean');
+        notifyActionSuccess('clean');
+
+        expect(
+            asMock(vscode.window.showInformationMessage),
+        ).toHaveBeenCalledTimes(2);
     });
 });

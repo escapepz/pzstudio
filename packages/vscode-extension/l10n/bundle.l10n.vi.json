@@ -67,5 +67,8 @@
     "Configure Mod": "Sửa cấu hình Mod",
     "Show Details": "Hiển thị chi tiết",
     "First successful build with PZ Studio!": "Build đầu tiên thành công với PZ Studio!",
-    "See tips & updates": "Xem mẹo và cập nhật"
+    "See tips & updates": "Xem mẹo và cập nhật",
+    "PZStudio: project created.": "PZStudio: đã tạo dự án.",
+    "PZStudio: mod added.": "PZStudio: đã thêm mod.",
+    "PZStudio: output cleaned.": "PZStudio: đã dọn output."
 }

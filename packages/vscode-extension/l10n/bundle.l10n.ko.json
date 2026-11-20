@@ -67,5 +67,8 @@
     "Configure Mod": "모드 설정 편집",
     "Show Details": "세부 정보 표시",
     "First successful build with PZ Studio!": "PZ Studio로 첫 빌드에 성공했습니다!",
-    "See tips & updates": "팁과 업데이트 보기"
+    "See tips & updates": "팁과 업데이트 보기",
+    "PZStudio: project created.": "PZStudio: 프로젝트가 생성되었습니다.",
+    "PZStudio: mod added.": "PZStudio: 모드가 추가되었습니다.",
+    "PZStudio: output cleaned.": "PZStudio: 출력이 정리되었습니다."
 }
