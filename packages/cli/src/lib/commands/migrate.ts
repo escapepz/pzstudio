@@ -7,7 +7,7 @@ import {
     resolveModInfoTargets,
     migrationHostOptions,
 } from '../helper';
-import { migration } from '@pzstudio/core';
+import { migration, validateProject, ValidationContext } from '@pzstudio/core';
 import { writeGlobalConfig, getConfigPath } from '../templateManager';
 import { existsSync, readFileSync } from 'fs';
 import path, { join } from 'path';
@@ -93,6 +93,9 @@ export async function migrateCmd() {
 
     if (project) {
         let projectModified = false;
+        // Whether the legacy-shape upgrade ran for this file — only then is
+        // the written project.json "migrate's own output" (d16-F1).
+        let wasUpgraded = false;
         const projectCheck = migration.checkProject(project);
         if (projectCheck.needsMigration) {
             info(`- Migrating project.json: ${projectCheck.reason}`);
@@ -103,6 +106,7 @@ export async function migrateCmd() {
                 onNotice: (message, level) =>
                     level === 'warn' ? warn(message) : info(`- ${message}`),
             });
+            wasUpgraded = true;
             projectModified = true;
         }
 
@@ -189,6 +193,31 @@ export async function migrateCmd() {
             info('  → project.json upgraded and synced successfully.');
         } else {
             log('- project.json is already up to date.');
+        }
+
+        // d16-F1: migrate must not certify output it would itself reject.
+        // A legacy slug root id, for example, moves verbatim to
+        // workshop.id and then bricks every later command ("Field \"id\"
+        // must be a number", doctor exit 1) behind a silent "Migration
+        // complete.". When the upgrade ran, the final shape goes through
+        // the SAME validator every later command uses
+        // (readProjectConfig / loadProject); an invalid result is a [WARN]
+        // naming the failing field(s) with the validator's own message.
+        // The file stays written and the exit stays 0 — the d15-B5 owner
+        // decision on migrate's exit semantics is untouched.
+        if (wasUpgraded) {
+            const context = new ValidationContext(path.basename(projectPath));
+            validateProject(project, context);
+            if (context.hasErrors()) {
+                warn(
+                    `Migrated project.json still fails validation: ${context
+                        .getErrors()
+                        .map((error) => `${error.location} — ${error.problem}`)
+                        .join(
+                            '; ',
+                        )}. Edit project.json manually or re-run with a numeric id — other commands will keep rejecting this project until it validates.`,
+                );
+            }
         }
     } else {
         log('- No project.json found.');

@@ -249,6 +249,81 @@ describe('migrateCmd', () => {
         });
     });
 
+    describe('migrated output self-validation (d16-F1)', () => {
+        const upToDateConfig = JSON.stringify({
+            useSymlinks: true,
+            templates: {},
+            outdir: '/games',
+        });
+
+        it('warns exactly once naming the id field when the migrated output fails validation (d16-F1)', async () => {
+            // A legacy SLUG root id moves verbatim to workshop.id and then
+            // bricks every later command ("Field \"id\" must be a number").
+            // Everything else in the fixture is validator-clean so the
+            // warning names exactly the id failure.
+            mockFiles(
+                {
+                    'config.json': upToDateConfig,
+                    'project.json': JSON.stringify({
+                        id: 'ground_rest_legacy_slug',
+                        title: 'Ground Rest',
+                        workshop: { visibility: 'public', tags: ['Map'] },
+                        mods: {
+                            ground_rest_legacy_slug: {
+                                name: 'Ground Rest',
+                                description: 'A bridge map.',
+                            },
+                        },
+                    }),
+                },
+                [CONFIG_PATH, PROJECT_PATH],
+            );
+
+            // Exit semantics unchanged: the command still completes (exit
+            // 0) and the migrated file is still written.
+            await migrateCmd();
+            expect(updateProjectConfig).toHaveBeenCalledTimes(1);
+
+            // Exactly one [WARN], naming the failing field with the
+            // validator's own message plus the fix hint.
+            expect(logger.warn).toHaveBeenCalledTimes(1);
+            expect(logger.warn).toHaveBeenCalledWith(
+                expect.stringContaining('workshop.id'),
+            );
+            expect(logger.warn).toHaveBeenCalledWith(
+                expect.stringContaining('must be a number'),
+            );
+            expect(logger.warn).toHaveBeenCalledWith(
+                expect.stringContaining('Edit project.json manually'),
+            );
+        });
+
+        it('adds no extra output when the migrated output validates (d16-F1)', async () => {
+            mockFiles(
+                {
+                    'config.json': upToDateConfig,
+                    'project.json': JSON.stringify({
+                        id: 12345,
+                        title: 'Ground Rest',
+                        workshop: { visibility: 'public', tags: ['Map'] },
+                        mods: {
+                            m1: {
+                                name: 'Ground Rest',
+                                description: 'A bridge map.',
+                            },
+                        },
+                    }),
+                },
+                [CONFIG_PATH, PROJECT_PATH],
+            );
+
+            await migrateCmd();
+
+            expect(updateProjectConfig).toHaveBeenCalledTimes(1);
+            expect(logger.warn).not.toHaveBeenCalled();
+        });
+    });
+
     describe('mod.info sync', () => {
         const upToDateConfig = JSON.stringify({
             useSymlinks: true,
