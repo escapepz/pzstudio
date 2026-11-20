@@ -28,6 +28,7 @@
     "New value for '{0}' of mod '{1}' (array fields are comma-separated; clear the input to remove the field)": "New value for '{0}' of mod '{1}' (array fields are comma-separated; clear the input to remove the field)",
     "Build": "Build",
     "Clean": "Clean",
+    "Delete": "Delete",
     "Update": "Update",
     "New Project": "New Project",
     "Add Mod": "Add Mod",

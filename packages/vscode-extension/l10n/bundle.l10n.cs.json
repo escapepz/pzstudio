@@ -28,6 +28,7 @@
     "New value for '{0}' of mod '{1}' (array fields are comma-separated; clear the input to remove the field)": "Nová hodnota pro '{0}' modu '{1}' (pole typu pole se oddělují čárkami; vymazáním vstupu pole odstraníte)",
     "Build": "Buildovat",
     "Clean": "Vyčistit",
+    "Delete": "Smazat",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Spustit build pro projekt '{0}'?\n\nBuildování při běhu hry může ponechat výstup v poškozeném stavu.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Vyčistit výstup buildu projektu '{0}'?\n\nTím se smaže vygenerovaná výstupní složka workshopu.",
     "Don't Ask Again": "Znovu se nedotazovat",

@@ -28,6 +28,7 @@
     "New value for '{0}' of mod '{1}' (array fields are comma-separated; clear the input to remove the field)": "Нове значення для '{0}' моду '{1}' (поля масивів розділяються комами; очистіть поле, щоб видалити його)",
     "Build": "Зібрати",
     "Clean": "Очистити",
+    "Delete": "Видалити",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Запустити збірку для проєкту '{0}'?\n\nЗбірка під час роботи гри може залишити вивід у пошкодженому стані.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Очистити вивід збірки проєкту '{0}'?\n\nЦе видалить згенеровану папку виводу майстерні.",
     "Don't Ask Again": "Не питати знову",

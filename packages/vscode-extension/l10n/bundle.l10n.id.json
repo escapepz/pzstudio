@@ -28,6 +28,7 @@
     "New value for '{0}' of mod '{1}' (array fields are comma-separated; clear the input to remove the field)": "Nilai baru untuk '{0}' milik mod '{1}' (bidang larik dipisahkan koma; kosongkan masukan untuk menghapus bidang)",
     "Build": "Bangun",
     "Clean": "Bersihkan",
+    "Delete": "Hapus",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Jalankan build untuk proyek '{0}'?\n\nMembangun saat permainan berjalan dapat meninggalkan keluaran dalam keadaan rusak.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Bersihkan keluaran build proyek '{0}'?\n\nIni menghapus folder keluaran workshop yang dihasilkan.",
     "Don't Ask Again": "Jangan Tanya Lagi",

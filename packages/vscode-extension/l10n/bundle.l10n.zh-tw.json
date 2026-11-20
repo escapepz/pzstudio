@@ -28,6 +28,7 @@
     "New value for '{0}' of mod '{1}' (array fields are comma-separated; clear the input to remove the field)": "模組 '{1}' 的 '{0}' 新值（陣列欄位以逗號分隔；清空輸入以移除該欄位）",
     "Build": "建置",
     "Clean": "清理",
+    "Delete": "刪除",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "要為專案 '{0}' 執行建置嗎？\n\n在遊戲執行中建置可能使輸出處於損壞狀態。",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "要清理專案 '{0}' 的建置輸出嗎？\n\n這將刪除已產生的創意工坊輸出資料夾。",
     "Don't Ask Again": "不要再詢問",

@@ -28,6 +28,7 @@
     "New value for '{0}' of mod '{1}' (array fields are comma-separated; clear the input to remove the field)": "Uusi arvo modin '{1}' kentälle '{0}' (taulukkokentät erotetaan pilkulla; tyhjennä kenttä poistaaksesi sen)",
     "Build": "Käännä",
     "Clean": "Siivoa",
+    "Delete": "Poista",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Suoritetaanko modin '{0}' käännös?\n\nKääntäminen pelin ollessa käynnissä voi jättää tulosteen rikkoutuneeseen tilaan.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Siivotaanko projektin '{0}' käännöstuloste?\n\nTämä poistaa luodun workshop-tulostekansion.",
     "Don't Ask Again": "Älä kysy uudelleen",

@@ -81,6 +81,49 @@ describe('confirmBeforeRun', () => {
             expect.any(String),
         );
     });
+
+    it('asks modally about the mod and resolves yes on the Delete button', async () => {
+        asMock(vscode.window.showWarningMessage).mockResolvedValue(
+            vscode.l10n.t('Delete'),
+        );
+
+        await expect(confirmBeforeRun('delete', 'my_mod')).resolves.toBe('yes');
+
+        expect(asMock(vscode.window.showWarningMessage)).toHaveBeenCalledWith(
+            expect.stringContaining(
+                "Are you sure you want to delete mod 'my_mod'?",
+            ),
+            { modal: true },
+            vscode.l10n.t('Delete'),
+            vscode.l10n.t("Don't Ask Again"),
+        );
+    });
+
+    it('delete modal states the action cannot be undone', async () => {
+        asMock(vscode.window.showWarningMessage).mockResolvedValue(undefined);
+        await confirmBeforeRun('delete', 'my_mod');
+        expect(asMock(vscode.window.showWarningMessage)).toHaveBeenCalledWith(
+            expect.stringContaining('This cannot be undone.'),
+            { modal: true },
+            expect.any(String),
+            expect.any(String),
+        );
+    });
+
+    it('resolves never on the Dont-Ask-Again button for delete', async () => {
+        asMock(vscode.window.showWarningMessage).mockResolvedValue(
+            vscode.l10n.t("Don't Ask Again"),
+        );
+        await expect(confirmBeforeRun('delete', 'my_mod')).resolves.toBe(
+            'never',
+        );
+    });
+
+    it('skips the delete modal when the setting is disabled', async () => {
+        withConfirmSetting(false);
+        await expect(confirmBeforeRun('delete', 'my_mod')).resolves.toBe('yes');
+        expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
+    });
 });
 
 describe('disableConfirmBeforeRun', () => {

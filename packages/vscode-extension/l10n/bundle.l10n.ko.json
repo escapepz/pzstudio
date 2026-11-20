@@ -28,6 +28,7 @@
     "New value for '{0}' of mod '{1}' (array fields are comma-separated; clear the input to remove the field)": "모드 '{1}'의 '{0}' 새 값 (배열 필드는 쉼표로 구분; 필드를 제거하려면 입력을 비우세요)",
     "Build": "빌드",
     "Clean": "정리",
+    "Delete": "삭제",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "프로젝트 '{0}'의 빌드를 실행하시겠습니까?\n\n게임 실행 중 빌드하면 출력이 손상된 상태가 될 수 있습니다.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "프로젝트 '{0}'의 빌드 출력을 정리하시겠습니까?\n\n생성된 워크숍 출력 폴더가 삭제됩니다.",
     "Don't Ask Again": "다시 묻지 않기",

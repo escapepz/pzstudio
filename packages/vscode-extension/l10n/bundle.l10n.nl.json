@@ -28,6 +28,7 @@
     "New value for '{0}' of mod '{1}' (array fields are comma-separated; clear the input to remove the field)": "Nieuwe waarde voor '{0}' van mod '{1}' (arrayvelden zijn kommagescheiden; maak het veld leeg om het te verwijderen)",
     "Build": "Build",
     "Clean": "Clean",
+    "Delete": "Verwijderen",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Build voor project '{0}' uitvoeren?\n\nBouwen terwijl het spel draait kan de uitvoer in een kapotte toestand achterlaten.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Build-uitvoer van project '{0}' opschonen?\n\nDit verwijdert de gegenereerde workshop-uitvoermap.",
     "Don't Ask Again": "Niet meer vragen",

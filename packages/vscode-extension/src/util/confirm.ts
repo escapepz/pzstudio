@@ -6,12 +6,13 @@ export type ConfirmDecision = 'yes' | 'never' | 'cancel';
 /**
  * Modal confirmation before running a destructive or disruptive command
  * (build/clean can clobber the output the game is currently loading when
- * debugging). Honors the pzstudio.confirmBeforeRun setting; "Don't Ask
- * Again" is applied by the caller writing that setting for the project.
+ * debugging; delete removes a mod for good). Honors the
+ * pzstudio.confirmBeforeRun setting; "Don't Ask Again" is applied by the
+ * caller writing that setting for the project.
  */
 export async function confirmBeforeRun(
-    action: 'build' | 'clean',
-    projectName: string,
+    action: 'build' | 'clean' | 'delete',
+    subject: string,
 ): Promise<ConfirmDecision> {
     const enabled = vscode.workspace
         .getConfiguration('pzstudio')
@@ -20,17 +21,27 @@ export async function confirmBeforeRun(
         return 'yes';
     }
 
-    const verb = action === 'build' ? t('Build') : t('Clean');
+    const verb =
+        action === 'build'
+            ? t('Build')
+            : action === 'clean'
+              ? t('Clean')
+              : t('Delete');
     const message =
         action === 'build'
             ? t(
                   "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.",
-                  projectName,
+                  subject,
               )
-            : t(
-                  "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.",
-                  projectName,
-              );
+            : action === 'clean'
+              ? t(
+                    "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.",
+                    subject,
+                )
+              : t(
+                    "Are you sure you want to delete mod '{0}'? This cannot be undone.",
+                    subject,
+                );
 
     const choice = await vscode.window.showWarningMessage(
         message,

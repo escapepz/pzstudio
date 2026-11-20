@@ -28,6 +28,7 @@
     "New value for '{0}' of mod '{1}' (array fields are comma-separated; clear the input to remove the field)": "'{1}' modunun '{0}' alanı için yeni değer (dizi alanları virgülle ayrılır; alanı kaldırmak için girdiyi temizleyin)",
     "Build": "Derle",
     "Clean": "Temizle",
+    "Delete": "Sil",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "'{0}' projesi için derleme çalıştırılsın mı?\n\nOyun çalışırken derleme yapmak çıktıyı bozuk durumda bırakabilir.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "'{0}' projesinin derleme çıktısı temizlensin mi?\n\nBu, oluşturulan atölye çıktı klasörünü siler.",
     "Don't Ask Again": "Bir daha sorma",

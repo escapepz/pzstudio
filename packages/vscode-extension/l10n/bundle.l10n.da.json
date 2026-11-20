@@ -28,6 +28,7 @@
     "New value for '{0}' of mod '{1}' (array fields are comma-separated; clear the input to remove the field)": "Ny værdi for '{0}' i mod '{1}' (arrayfelter adskilles med kommaer; ryd feltet for at fjerne det)",
     "Build": "Build",
     "Clean": "Clean",
+    "Delete": "Slet",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Kør build for projektet '{0}'?\n\nAt bygge, mens spillet kører, kan efterlade outputtet i ødelagt tilstand.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Ryd buildoutput for projektet '{0}'?\n\nDette sletter den genererede workshop-outputmappe.",
     "Don't Ask Again": "Spørg ikke igen",

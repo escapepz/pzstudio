@@ -28,6 +28,7 @@
     "New value for '{0}' of mod '{1}' (array fields are comma-separated; clear the input to remove the field)": "Новое значение для '{0}' мода '{1}' (поля массивов разделяются запятыми; очистите поле, чтобы удалить его)",
     "Build": "Собрать",
     "Clean": "Очистить",
+    "Delete": "Удалить",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Запустить сборку для проекта '{0}'?\n\nСборка во время работы игры может оставить вывод в повреждённом состоянии.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Очистить вывод сборки проекта '{0}'?\n\nЭто удалит сгенерированную папку вывода мастерской.",
     "Don't Ask Again": "Больше не спрашивать",

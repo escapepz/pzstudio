@@ -28,6 +28,7 @@
     "New value for '{0}' of mod '{1}' (array fields are comma-separated; clear the input to remove the field)": "Novo valor para '{0}' do mod '{1}' (os campos de matriz são separados por vírgulas; limpe o campo para o remover)",
     "Build": "Compilar",
     "Clean": "Limpar",
+    "Delete": "Eliminar",
     "Run build for project '{0}'?\n\nBuilding while the game is running can leave the output in a broken state.": "Executar a compilação para o projeto '{0}'?\n\nCompilar enquanto o jogo está em execução pode deixar a saída num estado danificado.",
     "Clean build output of project '{0}'?\n\nThis deletes the generated workshop output folder.": "Limpar a saída de compilação do projeto '{0}'?\n\nIsto elimina a pasta de saída do workshop gerada.",
     "Don't Ask Again": "Não voltar a perguntar",

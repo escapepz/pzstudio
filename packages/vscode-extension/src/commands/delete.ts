@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ExecutePZCommand } from '../util/execute';
 import { asModNode } from '../providers/projectExplorer';
 import { pickModId } from '../util/project';
+import { confirmBeforeRun, disableConfirmBeforeRun } from '../util/confirm';
 import { t } from '../util/l10n';
 
 export function registerDeleteCommand(
@@ -19,18 +20,20 @@ export function registerDeleteCommand(
             if (!picked) return;
             const { modId, projectDir } = picked;
 
-            const confirm = await vscode.window.showWarningMessage(
-                t(
-                    "Are you sure you want to delete mod '{0}'? This cannot be undone.",
-                    modId,
-                ),
-                { modal: true },
-                t('Yes'),
-            );
-            if (confirm !== t('Yes')) return;
+            // Shared destructive consent (d05-F9): the same
+            // pzstudio.confirmBeforeRun modal gate build/clean use — a
+            // disabled setting skips the modal, "Don't Ask Again" persists
+            // the bypass on the project's workspace folder.
+            const decision = await confirmBeforeRun('delete', modId);
+            if (decision === 'cancel') {
+                return;
+            }
+            if (decision === 'never') {
+                await disableConfirmBeforeRun(projectDir.fsPath);
+            }
 
             // The embedded API refuses destructive commands without --yes
-            // (CLI-9): our modal above IS the confirmation, so forward it.
+            // (CLI-9): our confirm above IS the confirmation, so forward it.
             await execute('delete', [modId], ['--yes'], {
                 projectDir: projectDir.fsPath,
             });
