@@ -73,6 +73,46 @@ describe('cleanCmd', () => {
         );
     });
 
+    it('enumerates each removed output directory between the intent and completion lines (d13-U1)', () => {
+        vi.mocked(fs.existsSync).mockReturnValue(true as any);
+
+        cleanCmd();
+
+        const infoCalls = vi.mocked(logger.info).mock.calls;
+        const infoMessages = infoCalls.map((call) => String(call[0]));
+        const removedLines = infoMessages.filter((message) =>
+            message.includes('- Removed: '),
+        );
+        // One enumeration line per removed directory (the 2-target fixture:
+        // main + development dist outputs).
+        expect(removedLines).toHaveLength(2);
+        expect(removedLines[0]).toContain(mainOut);
+        expect(removedLines[1]).toContain(devOut);
+
+        // Ordering: each enumeration line lands AFTER its 'Cleaning ...'
+        // intent line, and the completion line comes last.
+        const infoOrder = (fragment: string): number => {
+            const idx = infoMessages.findIndex((message) =>
+                message.includes(fragment),
+            );
+            expect(idx).toBeGreaterThanOrEqual(0);
+            return vi.mocked(logger.info).mock.invocationCallOrder[idx];
+        };
+        const cleaningMain = infoOrder('Cleaning main output directory at');
+        const removedMain = infoOrder('- Removed: ');
+        const completeIdx = vi
+            .mocked(logger.log)
+            .mock.calls.findIndex((call) =>
+                String(call[0]).includes('Clean complete in'),
+            );
+        expect(completeIdx).toBeGreaterThanOrEqual(0);
+        const completeOrder = vi.mocked(logger.log).mock.invocationCallOrder[
+            completeIdx
+        ];
+        expect(removedMain).toBeGreaterThan(cleaningMain);
+        expect(removedMain).toBeLessThan(completeOrder);
+    });
+
     it('should remove only the output that exists', () => {
         vi.mocked(fs.existsSync).mockImplementation((p: any) => {
             return String(p).replace(/\\/g, '/').endsWith('/Test Project');
@@ -98,6 +138,14 @@ describe('cleanCmd', () => {
             `Cannot delete '${mainOut}' — the folder is in use by another program`,
         );
         expect(fs.rmSync).toHaveBeenCalledWith(devOut, rmOpts);
+        // Enumeration only counts what was actually removed: the failed
+        // main output gets no '- Removed:' line, the dev one does.
+        const removedLines = vi
+            .mocked(logger.info)
+            .mock.calls.map((call) => String(call[0]))
+            .filter((message) => message.includes('- Removed: '));
+        expect(removedLines).toHaveLength(1);
+        expect(removedLines[0]).toContain(devOut);
     });
 
     it('should report a combined error when both outputs are locked', () => {
@@ -122,5 +170,12 @@ describe('cleanCmd', () => {
         // Nothing to clean is a clean result: exit 0, no throw.
         cleanCmd();
         expect(logger.log).toHaveBeenCalledWith('Already clean.');
+        // And nothing was enumerated (d13-U1).
+        expect(
+            vi
+                .mocked(logger.info)
+                .mock.calls.map((call) => String(call[0]))
+                .some((message) => message.includes('- Removed: ')),
+        ).toBe(false);
     });
 });

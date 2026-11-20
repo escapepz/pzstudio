@@ -81,6 +81,10 @@ export function cleanCmd() {
         info(`Cleaning main output directory at '${mainOutPath}'...`);
         try {
             cleanOutputPath(outDir, mainOutPath);
+            // d13-U1: enumerate what was actually removed — clean's items
+            // are whole dist output directories, so one line per removed
+            // directory, between the intent line and the completion line.
+            info(`- Removed: ${mainOutPath}`);
             verbose(`Cleaned: ${mainOutPath}`);
             cleaned = true;
             outcomes.push(OUTCOME_SUCCESS);
@@ -96,6 +100,7 @@ export function cleanCmd() {
         info(`Cleaning development output directory at '${devOutPath}'...`);
         try {
             cleanOutputPath(outDir, devOutPath);
+            info(`- Removed: ${devOutPath}`);
             verbose(`Cleaned: ${devOutPath}`);
             cleaned = true;
             outcomes.push(OUTCOME_SUCCESS);
