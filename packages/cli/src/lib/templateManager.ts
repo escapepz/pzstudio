@@ -387,11 +387,14 @@ function legacyStampsEqual(a: unknown, b: unknown): boolean {
  * - no bundled copy, or a bundled copy without a usable stamp → 'skipped'
  *   (a bad stamp is data, never a crash — Review Focus 2),
  * - otherwise the cache is replaced wholesale with the bundled copy
- *   ('refreshed') — the remove also washes out stray .git gitfiles a
+ *   ('refreshed') — the swap also washes out stray .git gitfiles a
  *   pre-stamp install may hold (Review Focus 1). The bundled stamp never
  *   rides the copy: cpSync excludes it and the stamp is written only after
- *   the copy completes, so an interrupted refresh leaves a stamp-less
- *   cache that the next update refreshes instead of trusting.
+ *   the copy completes (into the staging dir), so a staged copy can never
+ *   strand a stamp. The replacement stages into a sibling
+ *   `<dir>.replacing` directory and swaps in only after it is fully on
+ *   disk (d15-U1, the ab045cdcd cache pattern): a failed staging pass
+ *   throws with the previous global dir left untouched.
  * `bundledDirOverride` pins the bundled source (test seam; Task 3's update
  * command stays on the probe). cpSync/remove failures throw — the caller
  * owns the catch. `io` (Appendix C) is the emission target; an omitted
@@ -426,25 +429,46 @@ export function refreshLegacyTemplates(
         return 'up-to-date';
     }
 
+    // Staging-swap (d15-U1, mirroring the ab045cdcd cache pattern): the
+    // bundled copy stages into a sibling directory and swaps in only after
+    // it is fully on disk. The old code removeDirRecursive'd the global dir
+    // and only THEN cpSync'd the bundled copy, so a failed copy (a locked
+    // file, a full disk) left the machine with NO legacy fallback at all —
+    // worse than before the refresh. Every staging failure now leaves the
+    // previous global dir untouched.
+    const stagingDir = `${globalLegacyDir}.replacing`;
+    rmSync(stagingDir, { recursive: true, force: true });
+    let secured = false;
+    try {
+        mkdirSync(dirname(stagingDir), { recursive: true });
+        // Stamp-last: the copy excludes the bundled stamp and the stamp is
+        // written only after the copy completes (into the staging dir). On
+        // NTFS the stamp sorts ahead of the category dirs, so a copy that
+        // rode the stamp along could strand it on an interrupted copy —
+        // leaving a cache that carries the current stamp but is missing
+        // category dirs, which every future update would then report
+        // "up to date" forever.
+        cpSync(bundledLegacyDir, stagingDir, {
+            recursive: true,
+            filter: (src) => basename(src) !== LEGACY_STAMP_FILE,
+        });
+        writeFileSync(
+            join(stagingDir, LEGACY_STAMP_FILE),
+            JSON.stringify(bundledStamp, null, 4) + '\n',
+            'utf8',
+        );
+        secured = true;
+    } finally {
+        // A failed staging pass leaves no half-copy behind.
+        if (!secured) {
+            rmSync(stagingDir, { recursive: true, force: true });
+        }
+    }
+    // Replacement secured — only now remove the old dir and swap in.
     if (existsSync(globalLegacyDir)) {
         removeDirRecursive(globalLegacyDir);
     }
-    mkdirSync(dirname(globalLegacyDir), { recursive: true });
-    // Stamp-last: the copy excludes the bundled stamp and the stamp is
-    // written only after the copy completes. On NTFS the stamp sorts ahead
-    // of the category dirs, so a copy that rode the stamp along could
-    // strand it on an interrupted copy — leaving a global cache that
-    // carries the current stamp but is missing category dirs, which every
-    // future update would then report "up to date" forever.
-    cpSync(bundledLegacyDir, globalLegacyDir, {
-        recursive: true,
-        filter: (src) => basename(src) !== LEGACY_STAMP_FILE,
-    });
-    writeFileSync(
-        join(globalLegacyDir, LEGACY_STAMP_FILE),
-        JSON.stringify(bundledStamp, null, 4) + '\n',
-        'utf8',
-    );
+    renameSync(stagingDir, globalLegacyDir);
     emitInfo(
         io,
         `Legacy templates refreshed (${bundledStamp.version}, ${bundledStamp.buildDate}).`,

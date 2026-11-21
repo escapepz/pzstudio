@@ -846,20 +846,23 @@ describe('templateManager - refreshLegacyTemplates', () => {
         expect(actualFs.existsSync(globalLegacyDir())).toBe(false);
     });
 
-    it('C7 - failed copy: throw propagates and no stamp is stranded', () => {
+    it('C7 - failed copy: throw propagates and the previous legacy dir stays intact (d15-U1)', () => {
         const bundled = makeBundledLegacyDir('a', 'd1');
         writeGlobalLegacyEntry('.pzstudio-templates.json', stamp('a', 'd0'));
+        writeGlobalLegacyEntry('old-only.txt', 'previous global content');
 
         // Simulate a copy that got part-way before failing: delegate to the
         // real cpSync with the implementation's own args (filter included)
-        // and throw afterwards. A plain-throwing mock would prove nothing —
-        // with nothing copied there is no stamp to strand under either
-        // ordering.
+        // and throw afterwards.
         vi.mocked(fs.cpSync).mockImplementation(((
             src: any,
             dest: any,
             opts: any,
         ) => {
+            // The copy runs against the STAGING sibling, never the live dir.
+            expect(String(dest).replace(/\\/g, '/')).toBe(
+                `${globalLegacyDir().replace(/\\/g, '/')}.replacing`,
+            );
             actualFs.cpSync(src, dest, opts);
             throw new Error('simulated cpSync failure');
         }) as any);
@@ -868,16 +871,66 @@ describe('templateManager - refreshLegacyTemplates', () => {
             templateManager.refreshLegacyTemplates(undefined, bundled),
         ).toThrow('simulated cpSync failure');
 
-        // The copy really ran — template content landed in the global cache
-        // — but the stamp did not: a failed refresh can never leave a stamp
-        // behind, or every future update would report "up to date" on a
-        // broken (missing categories) cache forever.
+        // The previous global dir is exactly as it was before the refresh —
+        // old stamp included: a failed refresh can never leave the machine
+        // with NO legacy fallback at all (d15-U1, the ab045cdcd invariant).
         expect(
-            actualFs.existsSync(
-                join(globalLegacyDir(), '.template-project', 'x.txt'),
-            ),
+            actualFs.readFileSync(stampPathIn(globalLegacyDir()), 'utf-8'),
+        ).toBe(stamp('a', 'd0'));
+        expect(
+            actualFs.existsSync(join(globalLegacyDir(), 'old-only.txt')),
         ).toBe(true);
-        expect(actualFs.existsSync(stampPathIn(globalLegacyDir()))).toBe(false);
+        // No half-copy is left staged behind.
+        expect(actualFs.existsSync(`${globalLegacyDir()}.replacing`)).toBe(
+            false,
+        );
+    });
+
+    it('C9 - the swap happens only after staging is secured (d15-U1)', () => {
+        const bundled = makeBundledLegacyDir('a', 'd1');
+        actualFs.writeFileSync(join(bundled, 'marker.txt'), 'from bundled');
+        writeGlobalLegacyEntry('.pzstudio-templates.json', stamp('a', 'd0'));
+        writeGlobalLegacyEntry('old-only.txt', 'old global content');
+
+        // While the bundled copy runs, the previous global dir must still
+        // exist with its old content — deletion happens only after the
+        // swap is secured (the ab045cdcd cache-swap assertion shape).
+        vi.mocked(fs.cpSync).mockImplementation(((
+            src: any,
+            dest: any,
+            opts: any,
+        ) => {
+            expect(actualFs.existsSync(globalLegacyDir())).toBe(true);
+            expect(
+                actualFs.existsSync(join(globalLegacyDir(), 'old-only.txt')),
+            ).toBe(true);
+            actualFs.cpSync(src, dest, opts);
+        }) as any);
+
+        const status = templateManager.refreshLegacyTemplates(
+            undefined,
+            bundled,
+        );
+
+        expect(status).toBe('refreshed');
+        expect(logger.emitInfo).toHaveBeenCalledWith(
+            undefined,
+            'Legacy templates refreshed (a, d1).',
+        );
+        // New content swapped in, old-only content washed out, stamp
+        // current, staging sibling gone.
+        expect(actualFs.existsSync(join(globalLegacyDir(), 'marker.txt'))).toBe(
+            true,
+        );
+        expect(
+            actualFs.existsSync(join(globalLegacyDir(), 'old-only.txt')),
+        ).toBe(false);
+        expect(
+            actualFs.readFileSync(stampPathIn(globalLegacyDir()), 'utf-8'),
+        ).toBe(stamp('a', 'd1'));
+        expect(actualFs.existsSync(`${globalLegacyDir()}.replacing`)).toBe(
+            false,
+        );
     });
 
     it('C8 - failed bootstrap copy: warn fires, no throw escapes, no stamp stranded', () => {
