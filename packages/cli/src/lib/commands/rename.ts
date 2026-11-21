@@ -35,7 +35,10 @@ addHelp(
         pzstudio rename <oldModId> <newModId> --dry-run - Preview what would be renamed without changing anything.`,
 );
 
-/** One planned subdirectory rename: `<from>` carries the old mod id. */
+/**
+ * One subdirectory the CLI warns about (never moved): `<from>` still
+ * carries the old mod id; `<to>` is only the name it would have taken.
+ */
 interface SubdirectoryRenamePlan {
     from: string;
     to: string;
@@ -43,14 +46,15 @@ interface SubdirectoryRenamePlan {
 
 /**
  * Walks the mod tree and collects every directory whose NAME carries the
- * old mod id (sweep d14-B5). The PZ lua convention names the per-context
- * folders under `media/lua/{server,client,shared}/` after the mod id, so a
- * rename that only rewrites file contents leaves `server/<old-id>/` behind
- * and the built mod silently loses its server init. Replacement uses the
- * same replaceAll semantics as the file-content rewrite, so nested
- * occurrences (`<old-id>_patch`) rename too. Link entries are never
- * touched. The plan comes back deepest-first: a child renames before its
- * parent, so no collected path goes stale mid-execution.
+ * old mod id (sweep d14-B5, owner re-decision). The PZ lua convention names
+ * the per-context folders under `media/lua/{server,client,shared}/` after
+ * the mod id, so a rename that only rewrites file contents leaves
+ * `server/<old-id>/` behind. Matching uses the same replaceAll semantics as
+ * the file-content rewrite, so nested occurrences (`<old-id>_patch`) are
+ * collected too. Link entries are never touched. The plan comes back
+ * deepest-first: children before parents. The CLI never moves any planned
+ * directory (user-designed skeleton dirs stay put) — it only warns, with
+ * the full path, for each entry.
  */
 function planSubdirectoryRenames(
     root: string,
