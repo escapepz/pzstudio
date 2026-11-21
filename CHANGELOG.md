@@ -13,101 +13,6 @@ tool-only releases. Game compatibility is declared separately in
 
 ## [Unreleased]
 
-### CLI (@pzstudio/cli)
-
-- **Ignore-rule semantics upgrade: `.gitignore` is now honored as a rule
-  source next to `.pzstudioignore` on every surface** (build copy, watch,
-  development sync, project explorer), through the unified engine in
-  `@pzstudio/core` (the `ignore` package behind `readIgnoreRulesForDir` /
-  `createIgnoreMatcher`). Within one directory, `.gitignore` entries apply
-  first and `.pzstudioignore` second — later rules win, so
-  **`.pzstudioignore` keeps the higher precedence at the same level**;
-  across directories, the **closest rule file to an entry decides** (the
-  deeper file wins, and the deciding level decides entirely).
-- **Wildcard entries are now active**: `*.log`, `**/temp/**` and friends get
-  their real gitignore meaning, matching at any depth below the rule file —
-  previously entries were compared literally, so a wildcard never matched
-  anything.
-- **Negation is now real**: `!keep.txt` re-includes what an earlier rule
-  ignored — previously a literal no-op.
-- **Leading-slash entries are now active**: `/old.lua` anchors at the rule
-  file's directory and matches there — under the old prefix matcher the
-  leading slash was part of the literal, so the entry was dead and never
-  matched anything.
-- **Plain entries are unchanged**: a bare `entry` still matches the file or
-  folder of that name at the rule file's own level — a folder with its whole
-  subtree (gitignore `entry` + `entry/**`, anchored at that level), never a
-  same-name basename deeper down (historical prefix semantics, pinned).
-- One documented realization, kept for backward-compat with existing
-  fixtures: trailing slashes are still stripped at parse, so a
-  trailing-slash entry (`build/`) also excludes a same-level **file** named
-  `build` — gitignore's dir-only semantics would not.
-- Safety rails unchanged: rules only ever hide or copy-filter — they can
-  never hide `mod.info` or the `.pzstudioignore`/`.gitignore` files
-  themselves.
-- Behavior notes: under the build copy's dot-file option
-  (`ignoreDotFiles`), `.pzstudioignore` is exempt from dot-file exclusion
-  but `.gitignore` is not — a `.gitignore` is still always **read** as
-  rules, it just may not be copied as a file. A changed `.gitignore`
-  re-steers ignore handling exactly like a changed `.pzstudioignore`:
-  the watch filter reloads its root rules, and a mod-scoped rule change
-  re-baselines the owning mod.
-- The watch/devsync output protection sits above the rules: events under
-  the build output tree (`dist/`) or a deployment root inside the project
-  are dropped by the watch layer's own rail before the rule matcher is ever
-  consulted — a `dist/**` rule can never own or break that protection.
-- No changes to the JSON contract, the exit-code matrix, or the stream
-  contract.
-- **Materialize boundary gate (data safety)**: an `outdir` equal to the
-  project root or lying inside the canonical `dist/` root is now refused
-  (`DEPLOY_ROOT_INVALID` — hard error in build/watch, error finding in
-  doctor) instead of writing links or copies into the source tree; an
-  `outdir` equal to `dist/` itself is pure-build mode (skip +
-  `OUTDIR_ALIAS_DIST` info). Watch no longer materializes variants with an
-  empty included-mod set (dangling junctions), a locked deployment slot no
-  longer erases the doctor's workshop findings (`INSPECT_FAILED` per item),
-  and generic copy-slot reconcile failures report `RECONCILE_FAILED` —
-  never the healthy `COPY_SLOT` label.
-
-### Extension (pzstudio42)
-
-- The PZ Project Explorer hides entries matched by ignore rules
-  (`.gitignore`/`.pzstudioignore`) — the same visual treatment as dot
-  entries — with rule-read failures failing open (every child shown). A
-  declared mod folder hidden by rules stays "seen": it is hidden, not
-  reported as missing on disk.
-
-- **Behavior change: the Development Sync toggle no longer shows success
-  popups.** Both information messages — "Development sync started." and
-  "Development sync stopped." — are gone; the new status-bar item is the
-  run's source of truth. The start-failure toast is kept.
-- **New status-bar sync indicator**: a muted `$(circle-slash) DevSync off`
-  while off, `$(sync~spin) DevSync: <project folder>` while a run is in
-  flight, with a per-phase tooltip (and the last start failure while off).
-  Clicking it runs the existing `pzstudio.watch` toggle, gated by the run
-  phase — start only from idle, stop while syncing, queued stop while
-  starting, no-op while stopping.
-- **Queued-stop semantics**: stopping while the initial build is still
-  running is honored once the build settles — the just-started session is
-  stopped immediately and the indicator lands off (the session does not
-  survive the request); stopping while syncing tears the run down, and
-  stopping while already stopping or off is a no-op.
-- **Re-entrancy hardening**: the DevSyncManager holds the authoritative
-  atomic start gate — a start from a non-idle phase now fails honestly
-  instead of re-anchoring the in-flight run — and the toggle re-checks the
-  phase after the async project picker, so two stacked invocations can no
-  longer race into a phantom run.
-- **PZ Project Explorer badge** while a sync run is in flight: the view's
-  badge shows `1` with a per-phase tooltip naming the project; cleared
-  while off.
-- **Sync error notifications gain a 'Stop Sync' action** next to 'Show
-  Details', safe to click at any time (stops a syncing run, queues during
-  start, no-ops otherwise). Other error notifications (doctor, commands)
-  are unchanged.
-- New indicator strings ship English-only for now — the translation bundles
-  gain them (and drop the two retired popup strings) at the next
-  translation regen pass.
-
 ## [CLI 0.42220.1 / Extension 0.42220.1] - 2026-11-21
 
 ### CLI (@pzstudio/cli 0.42220.1) — notes: [`docs/releases/0.42220.1.md`](docs/releases/0.42220.1.md)
@@ -138,6 +43,42 @@ tool-only releases. Game compatibility is declared separately in
   `clean` enumerates every removed path, `migrate` warns on missing
   required fields, and the deploy docs explain the reconcile stale
   window.
+- **`.gitignore` is now honored as a rule source** next to
+  `.pzstudioignore` on every surface (build copy, watch, development
+  sync, project explorer), through the unified engine in
+  `@pzstudio/core`: within one directory `.gitignore` entries apply
+  first and `.pzstudioignore` second, so `.pzstudioignore` keeps the
+  higher precedence at the same level; across directories the closest
+  rule file to an entry decides.
+- **Wildcard, negation and leading-slash entries are now active**:
+  `*.log` / `**/temp/**` get their real gitignore meaning (matching at
+  any depth below the rule file), `!keep.txt` re-includes what an
+  earlier rule ignored, and `/old.lua` anchors at the rule file's
+  directory — all three were dead literals under the old prefix
+  matcher. Plain entries are unchanged (a bare `entry` still matches
+  the file or folder of that name at the rule file's own level, a
+  folder with its whole subtree, never a same-name basename deeper
+  down), and one realization is kept for backward-compat with existing
+  fixtures: trailing slashes are stripped at parse, so `build/` also
+  excludes a same-level **file** named `build`.
+- **Safety rails unchanged**: rules only ever hide or copy-filter —
+  they can never hide `mod.info` or the `.pzstudioignore`/`.gitignore`
+  files themselves; the watch/devsync output protection (events under
+  `dist/` or a deployment root) sits above the rule matcher; a
+  `.gitignore` is always read as rules even under the build copy's
+  dot-file option, and a changed `.gitignore` re-steers ignore handling
+  exactly like a changed `.pzstudioignore`. No changes to the JSON
+  contract, the exit-code matrix, or the stream contract.
+- **Materialize boundary gate (data safety)**: an `outdir` equal to the
+  project root or lying inside the canonical `dist/` root is refused
+  (`DEPLOY_ROOT_INVALID` — hard error in build/watch, error finding in
+  doctor) instead of writing links or copies into the source tree; an
+  `outdir` equal to `dist/` itself stays pure-build mode (skip +
+  `OUTDIR_ALIAS_DIST` info). Watch no longer materializes variants with
+  an empty included-mod set (dangling junctions), a locked deployment
+  slot no longer erases the doctor's workshop findings
+  (`INSPECT_FAILED` per item), and generic copy-slot reconcile failures
+  report `RECONCILE_FAILED` — never the healthy `COPY_SLOT` label.
 
 ### Extension (pzstudio42 0.42220.1) — changelog: [`packages/vscode-extension/CHANGELOG.md`](packages/vscode-extension/CHANGELOG.md)
 
@@ -147,6 +88,31 @@ tool-only releases. Game compatibility is declared separately in
   "No pzstudio project found" on generated targets); Development Sync's
   watcher gains a self-owned `fs.watch` leg — deliveries no longer stall
   at zero when the project tree appears after setup.
+- **Development Sync overhaul: the toggle's success popups are gone** —
+  "Development sync started." / "Development sync stopped." no longer
+  appear; the new status-bar indicator is the run's source of truth
+  (the start-failure toast is kept).
+- **New status-bar sync indicator**: a muted `$(circle-slash) DevSync
+  off` while off, `$(sync~spin) DevSync: <project folder>` while a run
+  is in flight, with a per-phase tooltip; clicking it runs the existing
+  `pzstudio.watch` toggle, gated by the run phase — start only from
+  idle, stop while syncing, queued stop while starting (honored once
+  the initial build settles — the just-started session does not
+  survive the request), no-op while stopping. The manager's atomic
+  start gate makes a start from a non-idle phase fail honestly instead
+  of re-anchoring the in-flight run (the toggle re-checks the phase
+  after the async project picker), and the Project Explorer view shows
+  a `1` badge with a per-phase tooltip while a run is in flight.
+- **Sync error notifications gain a 'Stop Sync' action** next to 'Show
+  Details', safe to click at any time (stops a syncing run, queues
+  during start, no-ops otherwise). Indicator strings ship English-only
+  for now — the translation bundles gain them (and drop the two retired
+  popup strings) at the next translation regen pass.
+- The **PZ Project Explorer hides entries matched by ignore rules**
+  (`.gitignore`/`.pzstudioignore`) — the same visual treatment as dot
+  entries — with rule-read failures failing open (every child shown); a
+  declared mod folder hidden by rules stays "seen": it is hidden, not
+  reported as missing on disk.
 
 ## [CLI 0.42210.3 / Extension 0.42210.3] - 2026-11-09
 

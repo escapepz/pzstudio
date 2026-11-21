@@ -15,10 +15,13 @@ All notable changes to the **PZ Studio** VSCode extension will be documented in 
 
 - **Success toasts for silent-success commands**: creating a project, adding a mod and cleaning output now confirm completion with a localized toast ("PZStudio: project created." / "mod added." / "output cleaned.") — fired only on actual success.
 - **`rename` honors `pzstudio.confirmBeforeRun`**: the same consent ladder as build/clean/delete (disabled → skip, dismissed → abort, never → persist and proceed); `--yes` still bypasses.
+- **Status-bar Development Sync indicator**: a muted `$(circle-slash) DevSync off` while off, `$(sync~spin) DevSync: <project folder>` while a run is in flight, with a per-phase tooltip; clicking it runs the `pzstudio.watch` toggle phase-gated — start only from idle, stop while syncing, queued stop while starting (honored once the initial build settles — the just-started session does not survive the request), no-op while stopping. The Project Explorer view shows a `1` badge with a per-phase tooltip while a run is in flight, and sync error notifications gain a 'Stop Sync' action next to 'Show Details', safe to click at any time (stops a syncing run, queues during start, no-ops otherwise).
+- **The PZ Project Explorer hides entries matched by ignore rules** (`.gitignore`/`.pzstudioignore`) — the same visual treatment as dot entries — with rule-read failures failing open (every child shown); a declared mod folder hidden by rules stays "seen": hidden, not reported as missing on disk.
 
 ### Changed
 
-- Bundles engine `@pzstudio/cli` 0.42220.1, which lands the e2e-sweep batch fixes (see the CLI release notes).
+- Bundles engine `@pzstudio/cli` 0.42220.1, which lands the e2e-sweep batch fixes and the `.gitignore` rule-source upgrade — `.gitignore` is honored next to `.pzstudioignore` on every surface with real gitignore semantics (see the CLI release notes).
+- **Development Sync success popups are gone** — "Development sync started." / "Development sync stopped." no longer appear; the status-bar indicator is the run's source of truth (the start-failure toast is kept), and a start from a non-idle phase fails honestly instead of re-anchoring the in-flight run (the toggle re-checks the phase after the async project picker, so stacked invocations cannot race into a phantom run). Indicator strings ship English-only for now — the translation bundles gain them (and drop the two retired popup strings) at the next translation regen pass.
 
 ### Fixed
 
