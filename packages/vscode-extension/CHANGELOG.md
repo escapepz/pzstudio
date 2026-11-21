@@ -9,6 +9,23 @@ All notable changes to the **PZ Studio** VSCode extension will be documented in 
 > nightly entries are archived — not carried in this codebase — at
 > [`project-zomboid-studio@42.17.0` · CHANGELOG.md](https://github.com/escapepz/project-zomboid-studio/blob/42.17.0/packages/vscode-extension/CHANGELOG.md).
 
+## [0.42220.1] - 2026-11-21
+
+### Added
+
+- **Success toasts for silent-success commands**: creating a project, adding a mod and cleaning output now confirm completion with a localized toast ("PZStudio: project created." / "mod added." / "output cleaned.") — fired only on actual success.
+- **`rename` honors `pzstudio.confirmBeforeRun`**: the same consent ladder as build/clean/delete (disabled → skip, dismissed → abort, never → persist and proceed); `--yes` still bypasses.
+
+### Changed
+
+- Bundles engine `@pzstudio/cli` 0.42220.1, which lands the e2e-sweep batch fixes (see the CLI release notes).
+
+### Fixed
+
+- **modinfoGenerate no longer fails with "No pzstudio project found"** — the target's project directory is injected context-aware through `generateForMod`/`generateForAll`.
+- **Development Sync delivers again**: the watcher runs a self-owned Node `fs.watch` recursive leg alongside `vscode.FileSystemWatcher`, which silently ignores trees that appear after its setup; watcher failures surface instead of stalling at zero delivery.
+- **Delete honors `pzstudio.confirmBeforeRun`** through the shared confirm helper (scope build/clean/delete), persisting the bypass like build and clean.
+
 ## [0.42210.3] - 2026-11-09
 
 ### Added

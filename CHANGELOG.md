@@ -108,6 +108,46 @@ tool-only releases. Game compatibility is declared separately in
   gain them (and drop the two retired popup strings) at the next
   translation regen pass.
 
+## [CLI 0.42220.1 / Extension 0.42220.1] - 2026-11-21
+
+### CLI (@pzstudio/cli 0.42220.1) — notes: [`docs/releases/0.42220.1.md`](docs/releases/0.42220.1.md)
+
+- **`--json` envelopes for `build`, `migrate` and `update`**, plus
+  `usage export --json` — machine-readable output for the everyday
+  commands.
+- **migrate hardening**: root-level `authors` are kept (a single
+  migrated mod adopts them, otherwise they stay verbatim with a notice)
+  and the migrated output is validated before success; `description`
+  survives migrate → generate.
+- **update hardening**: the legacy template cache and refresh use a
+  staged swap — the old copy is removed only after the replacement is
+  secured, so an interrupted update never poisons the cache.
+- **Copy-mode prune warns with full paths** per pruned file (plus a
+  total line) instead of silently deleting hand-edited files.
+- **Loud refusals and honest codes**: `add` duplicate refusals exit with
+  a typed `CliError`, invalid enum values exit 2 on every path (messages
+  name the accepted aliases), `add --yes` is refused, and buildplan
+  aggregates name the missing mod.
+- **`rename` no longer renames subdirectories carrying the old mod id**
+  — it warns with the full path (owner re-decision: user-designed
+  skeleton directories are the user's to manage; the game does not
+  require them to follow the id).
+- **CLI quick-wins**: the `watch` stop message notes the exit-130 path,
+  `usage export` acknowledges `--purge`, empty usage-event `meta` is
+  omitted, `update` output names the cache directories and end states,
+  `clean` enumerates every removed path, `migrate` warns on missing
+  required fields, and the deploy docs explain the reconcile stale
+  window.
+
+### Extension (pzstudio42 0.42220.1) — changelog: [`packages/vscode-extension/CHANGELOG.md`](packages/vscode-extension/CHANGELOG.md)
+
+- **Success toasts** for `new` / add / clean; `rename` and delete honor
+  `pzstudio.confirmBeforeRun` through the shared consent ladder.
+- modinfoGenerate injects the project directory context-aware (no more
+  "No pzstudio project found" on generated targets); Development Sync's
+  watcher gains a self-owned `fs.watch` leg — deliveries no longer stall
+  at zero when the project tree appears after setup.
+
 ## [CLI 0.42210.3 / Extension 0.42210.3] - 2026-11-09
 
 ### CLI (@pzstudio/cli 0.42210.3) — notes: [`docs/releases/0.42210.3.md`](docs/releases/0.42210.3.md)
