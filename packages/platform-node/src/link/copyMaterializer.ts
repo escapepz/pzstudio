@@ -329,9 +329,10 @@ async function assertNoLinksInside(
 export interface ReconcileCopySlotOptions extends InspectMaterializeSlotOptions {
     /**
      * Writes/refreshes the copy marker at the slot (the host's core-backed
-     * writer). Called once BEFORE the pass and once AFTER it — an
-     * interrupted copy leaves an owned slot the next run self-heals.
-     * Only the AFTER call carries the slot manifest.
+     * writer). Called to SEED a fresh slot right after its mkdir, once
+     * BEFORE the pass and once AFTER it — an interrupted copy leaves an
+     * owned slot the next run self-heals. Only the AFTER call carries the
+     * slot manifest.
      */
     writeCopyMarker?: (
         slotDir: string,
@@ -446,9 +447,28 @@ async function syncTree(
 ): Promise<void> {
     const distEntries = await copyFs.readdirEntries(distDir);
     const slotEntries = await copyFs.readdirEntries(slotDir);
-    const slotByName = new Map(
-        slotEntries.map((entry) => [entry.name, entry] as const),
-    );
+    const distNames = new Set(distEntries.map((entry) => entry.name));
+    // Prune slot-only entries BEFORE any copy: on a case-insensitive host
+    // a case-only rename leaves the old-cased name as a slot-only twin of
+    // a dist entry — copying first would write through that twin and then
+    // prune the just-copied content along with it.
+    const slotByName = new Map<string, CopyDirEntry>();
+    for (const slotEntry of slotEntries) {
+        if (
+            !distNames.has(slotEntry.name) &&
+            slotEntry.name !== COPY_MARKER_FILENAME
+        ) {
+            tally.filesPruned += await removeSlotEntry(
+                copyFs,
+                platform,
+                slotDir,
+                slotEntry,
+                tally.prunedPaths,
+            );
+            continue;
+        }
+        slotByName.set(slotEntry.name, slotEntry);
+    }
 
     for (const distEntry of distEntries) {
         if (distEntry.name === COPY_MARKER_FILENAME) {
@@ -518,22 +538,6 @@ async function syncTree(
             );
         }
     }
-
-    const distNames = new Set(distEntries.map((entry) => entry.name));
-    for (const slotEntry of slotEntries) {
-        if (
-            !distNames.has(slotEntry.name) &&
-            slotEntry.name !== COPY_MARKER_FILENAME
-        ) {
-            tally.filesPruned += await removeSlotEntry(
-                copyFs,
-                platform,
-                slotDir,
-                slotEntry,
-                tally.prunedPaths,
-            );
-        }
-    }
 }
 
 /**
@@ -557,6 +561,19 @@ export async function reconcileCopySlot(
             if (errnoOf(e) === 'ENOENT') {
                 await copyFs.mkdir(W);
                 entry = await copyFs.lstat(W);
+                // Seed the marker before anything can land in the fresh
+                // slot: an aborted pass must never leave a non-empty
+                // un-marked directory — the gate would refuse it as
+                // hand-made on every later build. Only when the gate could
+                // accept the seeded slot (the same reader + identity the
+                // refuse-gate requires) is the seed written.
+                if (
+                    opts.writeCopyMarker &&
+                    opts.readCopyMarker &&
+                    opts.copyIdentity
+                ) {
+                    await opts.writeCopyMarker(W);
+                }
             } else {
                 throw e;
             }

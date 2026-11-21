@@ -79,6 +79,10 @@ tool-only releases. Game compatibility is declared separately in
   slot no longer erases the doctor's workshop findings
   (`INSPECT_FAILED` per item), and generic copy-slot reconcile failures
   report `RECONCILE_FAILED` — never the healthy `COPY_SLOT` label.
+- **Copy-mode deployment survives a case-only mod id rename** (e.g. after
+  `pzstudio rename mymod MyMod`): the slot reconcile prunes slot-only
+  entries before copying, and a fresh slot's copy marker is seeded before
+  syncing — so an aborted pass cannot poison the slot.
 
 ### Extension (pzstudio42 0.42220.1) — changelog: [`packages/vscode-extension/CHANGELOG.md`](packages/vscode-extension/CHANGELOG.md)
 

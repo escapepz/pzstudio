@@ -670,6 +670,102 @@ describe('copy materializer (real fs fixtures)', () => {
         ).resolves.toBeDefined();
     });
 
+    it('syncTree prunes slot-only entries before copying, so a case-only renamed directory deploys', async () => {
+        await makeDist({ 'MyMod/a.lua': '-- new' });
+        await fsp.mkdir(path.join(slotDir, 'mymod'), { recursive: true });
+        await fsp.writeFile(path.join(slotDir, 'mymod', 'old.lua'), '-- old');
+        await writeMarker(slotDir);
+        const result = await materializeCopySlot(
+            nodeCopyFs,
+            nodeLinkFs,
+            nodeRealFs,
+            slotDir,
+            distItem,
+            { ...opts(), copyIdentity: await identity() },
+        );
+        expect(result.ok, result.detail).toBe(true);
+        const names = await fsp.readdir(slotDir);
+        expect(names).toContain('MyMod');
+        expect(names).not.toContain('mymod');
+        expect(
+            await fsp.readFile(path.join(slotDir, 'MyMod', 'a.lua'), 'utf8'),
+        ).toBe('-- new');
+        const marker = await readCopySlotMarker(
+            markerFs,
+            path.join(slotDir, COPY_MARKER_FILENAME),
+        );
+        expect(marker?.projectId).toBe((await identity()).projectId);
+        expect(marker?.itemId).toBe(ITEM);
+    });
+
+    it('syncTree prunes a case-only renamed file instead of pruning the just-copied copy', async () => {
+        await makeDist({ 'Foo.lua': '-- new content' });
+        await fsp.mkdir(slotDir, { recursive: true });
+        await fsp.writeFile(path.join(slotDir, 'foo.lua'), '-- old content');
+        await writeMarker(slotDir);
+        const result = await materializeCopySlot(
+            nodeCopyFs,
+            nodeLinkFs,
+            nodeRealFs,
+            slotDir,
+            distItem,
+            { ...opts(), copyIdentity: await identity() },
+        );
+        expect(result.ok, result.detail).toBe(true);
+        const names = await fsp.readdir(slotDir);
+        expect(names).toContain('Foo.lua');
+        expect(names).not.toContain('foo.lua');
+        expect(await fsp.readFile(path.join(slotDir, 'Foo.lua'), 'utf8')).toBe(
+            '-- new content',
+        );
+    });
+
+    it('reconcileCopySlot seeds the marker on a fresh slot so an aborted pass never poisons it', async () => {
+        await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
+        const eio: NodeJS.ErrnoException = new Error(
+            'EIO: i/o error, write',
+        ) as NodeJS.ErrnoException;
+        eio.code = 'EIO';
+        const failingCopyFs: CopyFs = {
+            ...nodeCopyFs,
+            writeFile: async (p, d) => {
+                if (
+                    typeof p === 'string' &&
+                    p.includes(path.join(slotDir, 'Contents'))
+                ) {
+                    throw eio;
+                }
+                return nodeCopyFs.writeFile(p, d);
+            },
+        };
+        const first = await reconcileCopySlot(
+            failingCopyFs,
+            distItem,
+            slotDir,
+            { ...opts(), copyIdentity: await identity() },
+        );
+        expect(first.ok).toBe(false);
+        expect(first.state).toBe('RECONCILE_FAILED');
+        const marker = await readCopySlotMarker(
+            markerFs,
+            path.join(slotDir, COPY_MARKER_FILENAME),
+        );
+        expect(marker?.projectId).toBe((await identity()).projectId);
+        expect(marker?.itemId).toBe(ITEM);
+        const second = await reconcileCopySlot(nodeCopyFs, distItem, slotDir, {
+            ...opts(),
+            copyIdentity: await identity(),
+        });
+        expect(second.ok, second.detail).toBe(true);
+        expect(second.state).toBe('COPY_SLOT');
+        expect(
+            await fsp.readFile(path.join(slotDir, 'workshop.txt'), 'utf8'),
+        ).toBe('id=1');
+        expect(
+            await fsp.readFile(path.join(slotDir, 'Contents/a.lua'), 'utf8'),
+        ).toBe('-- a');
+    });
+
     it('toggle: a proven-clean copy slot is removed (COPY_SLOT_REPLACED)', async () => {
         await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
         await copyPass();
