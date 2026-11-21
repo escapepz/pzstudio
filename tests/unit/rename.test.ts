@@ -36,11 +36,8 @@ describe('renameCmd', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        // Destructive gate (CLI-9): unit tests invoke the command directly
-        // in embedded mode — publish --yes as the confirmation intent.
         setInvocationOptions({ yes: true });
         vi.mocked(projectDir).mockReturnValue('/proj' as any);
-        // Fresh copy per call: renameCmd mutates the config it receives
         vi.mocked(readProjectConfig).mockImplementation(
             () => JSON.parse(JSON.stringify(project)) as any,
         );
@@ -52,18 +49,13 @@ describe('renameCmd', () => {
             '/proj/new_mod/media/texture.png',
         ] as any);
 
-        // Only the old mod directory "exists" (normalize separators: join()
-        // produces backslashes on Windows)
         vi.mocked(fs.existsSync).mockImplementation((p: any) => {
             return String(p).replace(/\\/g, '/').endsWith('/old_mod');
         });
 
-        // The d14-B5 subdirectory sweep walks the renamed tree; an empty
-        // tree keeps the pre-sweep tests focused on their own behavior.
         vi.mocked(fs.readdirSync).mockReturnValue([] as any);
     });
 
-    /** Builds a fake withFileTypes dirent for the readdirSync mock. */
     const dirent = (name: string, isDirectory = true) =>
         ({
             name,
@@ -138,10 +130,6 @@ describe('renameCmd', () => {
         );
     });
 
-    // d14-B5 (owner re-decision): the PZ lua convention names
-    // media/lua/{server,client,shared}/ folders after the mod id, but
-    // user-designed skeleton directories are NEVER moved — the CLI warns
-    // (full path) and the core rename proceeds exactly as before.
     it('warns for subdirectories carrying the old mod id (media/lua/<ctx>/<old-id>)', () => {
         vi.mocked(fs.readFileSync).mockReturnValue('old_mod says hi' as any);
         vi.mocked(fs.readdirSync).mockImplementation((dir: any) => {
@@ -159,7 +147,6 @@ describe('renameCmd', () => {
 
         renameCmd('old_mod', 'new_mod');
 
-        // Never moved: every planned dir still exists at its OLD path.
         expect(
             fs.existsSync(join('/proj', 'new_mod/media/lua/server/old_mod')),
         ).toBe(true);
@@ -168,7 +155,6 @@ describe('renameCmd', () => {
         ).toBe(true);
         expect(fs.renameSync).not.toHaveBeenCalled();
 
-        // One stderr warn per planned dir — full path, exact owner wording.
         const warned = vi
             .mocked(logger.warn)
             .mock.calls.map(([message]) => norm(message));
@@ -179,8 +165,6 @@ describe('renameCmd', () => {
             "subdirectory '/proj/new_mod/media/lua/client/old_mod' still carries the old mod id 'old_mod'",
         );
 
-        // The core rename is unaffected: folder renamed, text files
-        // rewritten, project.json entry moved.
         const scaffolded = vi
             .mocked(scaffoldProject)
             .mock.calls[0].slice(0, 2)
@@ -219,10 +203,8 @@ describe('renameCmd', () => {
             '/proj',
             'new_mod/42/media/lua/client/old_mod_patch',
         );
-        // Still at the old name — nothing was renamed...
         expect(fs.existsSync(nested)).toBe(true);
         expect(fs.renameSync).not.toHaveBeenCalled();
-        // ...and the warn names its full path.
         expect(
             vi.mocked(logger.warn).mock.calls.map(([message]) => norm(message)),
         ).toContain(
@@ -243,7 +225,6 @@ describe('renameCmd', () => {
         renameCmd('old_mod', 'new_mod');
 
         expect(fs.renameSync).not.toHaveBeenCalled();
-        // No warn line mentions the untouched directories either.
         const warned = vi
             .mocked(logger.warn)
             .mock.calls.map(([message]) => norm(message));
@@ -276,7 +257,6 @@ describe('renameCmd', () => {
 
         renameCmd('old_mod', 'new_mod');
 
-        // The link survives and is never planned, moved or warned about.
         expect(fs.existsSync(join('/proj', 'new_mod/media/lua/old_mod'))).toBe(
             true,
         );
@@ -304,7 +284,6 @@ describe('renameCmd', () => {
             return entries[norm(dir)] ?? [];
         });
 
-        // Runs to completion (the unit equivalent of exit 0).
         expect(() => renameCmd('old_mod', 'new_mod')).not.toThrow();
 
         expect(fs.renameSync).not.toHaveBeenCalled();
@@ -320,7 +299,6 @@ describe('renameCmd', () => {
         setInvocationOptions({ yes: true, 'dry-run': true });
         vi.mocked(fs.readFileSync).mockReturnValue('' as any);
         vi.mocked(fs.readdirSync).mockImplementation((dir: any) => {
-            // Dry run plans against the OLD tree, not the renamed one.
             const entries: Record<string, any[]> = {
                 '/proj/old_mod': [dirent('media')],
                 '/proj/old_mod/media': [dirent('lua')],
@@ -344,7 +322,6 @@ describe('renameCmd', () => {
                 message.includes('Would: rename subdirectory'),
             ),
         ).toEqual([]);
-        // Byte-identical to the seed: no renames, no writes, no moves.
         expect(fs.renameSync).not.toHaveBeenCalled();
         expect(fs.writeFileSync).not.toHaveBeenCalled();
         expect(fs.rmSync).not.toHaveBeenCalled();

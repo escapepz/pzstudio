@@ -35,65 +35,34 @@ addHelp(
         pzstudio rename <oldModId> <newModId> --dry-run - Preview what would be renamed without changing anything.`,
 );
 
-/**
- * One subdirectory the CLI warns about (never moved): `<from>` still
- * carries the old mod id; `<to>` is only the name it would have taken.
- */
-interface SubdirectoryRenamePlan {
-    from: string;
-    to: string;
-}
-
-/**
- * Walks the mod tree and collects every directory whose NAME carries the
- * old mod id (sweep d14-B5, owner re-decision). The PZ lua convention names
- * the per-context folders under `media/lua/{server,client,shared}/` after
- * the mod id, so a rename that only rewrites file contents leaves
- * `server/<old-id>/` behind. Matching uses the same replaceAll semantics as
- * the file-content rewrite, so nested occurrences (`<old-id>_patch`) are
- * collected too. Link entries are never touched. The plan comes back
- * deepest-first: children before parents. The CLI never moves any planned
- * directory (user-designed skeleton dirs stay put) — it only warns, with
- * the full path, for each entry.
- */
-function planSubdirectoryRenames(
+function collectSubdirectoriesCarryingOldId(
     root: string,
     oldModId: string,
-    newModId: string,
-): SubdirectoryRenamePlan[] {
-    const plan: SubdirectoryRenamePlan[] = [];
+): string[] {
+    const paths: string[] = [];
     const walk = (dir: string): void => {
         for (const entry of readdirSync(dir, { withFileTypes: true })) {
-            // Links are user state (a junction/symlink entry is never a
-            // directory to move): renaming a link would retarget it.
             if (entry.isSymbolicLink() || !entry.isDirectory()) {
                 continue;
             }
             const childPath = join(dir, entry.name);
             walk(childPath);
             if (entry.name.includes(oldModId)) {
-                plan.push({
-                    from: childPath,
-                    to: join(dir, entry.name.replaceAll(oldModId, newModId)),
-                });
+                paths.push(childPath);
             }
         }
     };
     walk(root);
-    // Children first — every descendant path is longer than its ancestor's,
-    // so descending length is exactly a children-before-parents order.
-    plan.sort((a, b) => b.from.length - a.from.length);
-    return plan;
+    return paths;
 }
 
-/** Warns (never moves) for each directory still carrying the old mod id. */
 function warnSubdirectoriesCarryingOldId(
-    plan: SubdirectoryRenamePlan[],
+    paths: string[],
     oldModId: string,
 ): void {
-    for (const step of plan) {
+    for (const path of paths) {
         warn(
-            `subdirectory '${step.from}' still carries the old mod id '${oldModId}'`,
+            `subdirectory '${path}' still carries the old mod id '${oldModId}'`,
         );
     }
 }
@@ -102,23 +71,19 @@ export function renameCmd(oldModId: string, newModId: string) {
     const projectPath = projectDir();
     const projectConfig = readProjectConfig(undefined, true, engineIo());
 
-    // Check if we are in a project directory
     if (!projectConfig) {
         throw new CliError('No pzstudio project found.');
     }
 
-    // Validate params
     expect('param [oldModId]', oldModId, 'string');
     expect('param [newModId]', newModId, 'string');
 
-    // Check if old mod id already exists
     if (!projectConfig.mods[oldModId]) {
         throw new CliError(`Mod '${oldModId}' does not exist!`, {
             tryHint: `Run 'pzstudio list' to see the mods of this project.`,
         });
     }
 
-    // Check if mod already exists
     if (
         projectConfig.mods[newModId] ||
         existsSync(join(projectPath, newModId))
@@ -126,8 +91,6 @@ export function renameCmd(oldModId: string, newModId: string) {
         throw new Error(`A mod with id '${newModId}' already exists!`);
     }
 
-    // The mod folder is required to rewrite occurrences of the old id in the
-    // mod's files; a config-only entry has nothing to rewrite.
     const oldPath = join(projectPath, oldModId);
     const newPath = join(projectPath, newModId);
     const folderExists = existsSync(oldPath);
@@ -137,20 +100,18 @@ export function renameCmd(oldModId: string, newModId: string) {
         );
     }
 
-    // Dry run (CLI-9): compute the plan, show it, change nothing.
     if (hasFlag('dry-run')) {
         if (folderExists) {
             log(`Would: rename folder '${oldPath}' to '${newPath}'`);
             log(
                 `Would: rewrite occurrences of '${oldModId}' in the folder's text files with '${newModId}'`,
             );
-            for (const step of planSubdirectoryRenames(
+            for (const path of collectSubdirectoriesCarryingOldId(
                 oldPath,
                 oldModId,
-                newModId,
             )) {
                 log(
-                    `Would warn: subdirectory '${step.from}' still carries the old mod id '${oldModId}'`,
+                    `Would warn: subdirectory '${path}' still carries the old mod id '${oldModId}'`,
                 );
             }
         }
@@ -161,16 +122,12 @@ export function renameCmd(oldModId: string, newModId: string) {
         return;
     }
 
-    // Destructive consent (CLI-9): prompts on a TTY unless --yes; refused
-    // with a usage error in non-interactive sessions without --yes; the
-    // embedded API never prompts (the host owns confirmation).
     confirmDestructive(
         'rename',
         [oldModId, newModId],
         `Rename mod '${oldModId}' to '${newModId}' (folder + project.json key)?`,
     );
 
-    // Rename mod
     if (folderExists) {
         info(`- Renaming mod '${oldModId}' to '${newModId}'...`);
         verbose(`Copying ${oldPath} to ${newPath}`);
@@ -179,9 +136,7 @@ export function renameCmd(oldModId: string, newModId: string) {
         rmSync(oldPath, { force: true, recursive: true });
     }
 
-    // Update code
     getFilesRecursively(newPath).forEach((file) => {
-        // Binary files would get corrupted by a utf-8 read/replace/write cycle
         if (BINARY_FILE_EXTENSIONS.has(extname(file).toLowerCase())) {
             verbose(`Skipping binary file: ${file}`);
             return;
@@ -195,23 +150,13 @@ export function renameCmd(oldModId: string, newModId: string) {
         }
     });
 
-    // Sweep d14-B5 (owner re-decision): directory NAMES carry the mod id too
-    // (the PZ lua convention names media/lua/{server,client,shared}/<modId>/
-    // after the mod), but user-designed skeleton directories must NEVER be
-    // moved — one stderr warn per directory still carrying the old id, and
-    // the core rename behaves exactly as before.
-    const subdirectoryPlan = planSubdirectoryRenames(
-        newPath,
+    warnSubdirectoriesCarryingOldId(
+        collectSubdirectoriesCarryingOldId(newPath, oldModId),
         oldModId,
-        newModId,
     );
-    warnSubdirectoriesCarryingOldId(subdirectoryPlan, oldModId);
 
-    // Update config
     projectConfig.mods[newModId] = projectConfig.mods[oldModId];
     delete projectConfig.mods[oldModId];
-    // Keep the build state consistent: an excluded mod stays excluded
-    // under its new id.
     if (projectConfig.excludes.includes(oldModId)) {
         projectConfig.excludes = projectConfig.excludes.map((id) =>
             id === oldModId ? newModId : id,
@@ -220,7 +165,6 @@ export function renameCmd(oldModId: string, newModId: string) {
     updateProjectConfig(join(projectPath, 'project.json'), projectConfig);
     log(`- Mod '${oldModId}' updated to '${newModId}' in project.json!`);
 
-    // Update experimental package scripts
     updateExperimentalScripts('renameMod', projectPath, oldModId, newModId);
 }
 
