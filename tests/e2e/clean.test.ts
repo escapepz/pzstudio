@@ -15,7 +15,6 @@ describe('clean command e2e', () => {
     });
 
     it('should clean the output directory', async () => {
-        // 1. Setup project and output dir
         const title = 'My Project';
         workspace.write(
             'project.json',
@@ -31,7 +30,6 @@ describe('clean command e2e', () => {
         fs.mkdirSync(outPath, { recursive: true });
         fs.writeFileSync(path.join(outPath, 'built_file.txt'), 'content');
 
-        // 2. Run clean command
         const result = await workspace.run('clean');
 
         try {
@@ -39,7 +37,6 @@ describe('clean command e2e', () => {
             workspace.assertStderr(result, 'Cleaning main output directory');
             workspace.assertStdout(result, 'Clean complete');
 
-            // 3. Verify filesystem
             expect(fs.existsSync(outPath)).toBe(false);
         } catch (e) {
             console.log('STDOUT:', result.stdout.join('\n'));
@@ -91,7 +88,6 @@ describe('clean command e2e', () => {
 
         expect(fs.existsSync(mainOutPath)).toBe(false);
         expect(fs.existsSync(devOutPath)).toBe(false);
-        // The deployment outdir is never a clean target.
         expect(fs.existsSync(path.join(workspace.dir, 'out'))).toBe(false);
     });
 

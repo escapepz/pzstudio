@@ -15,7 +15,6 @@ describe('migrate command e2e', () => {
     });
 
     it('should migrate legacy project.json', async () => {
-        // 1. Setup legacy project.json
         const legacyProject = {
             id: 'legacy_id',
             title: 'Legacy Title',
@@ -34,7 +33,6 @@ describe('migrate command e2e', () => {
         };
         workspace.write('project.json', JSON.stringify(legacyProject));
 
-        // 2. Run migrate command
         const result = await workspace.run('migrate');
 
         try {
@@ -45,23 +43,18 @@ describe('migrate command e2e', () => {
                 'project.json upgraded and synced successfully',
             );
 
-            // 3. Verify upgraded project.json
             const upgraded = workspace.readJson('project.json');
 
-            // root id/title/authors should be gone
             expect(upgraded.id).toBeUndefined();
             expect(upgraded.title).toBeUndefined();
             expect(upgraded.authors).toBeUndefined();
 
-            // workshop should have id/title
             expect(upgraded.workshop.id).toBe('legacy_id');
             expect(upgraded.workshop.title).toBe('Legacy Title');
 
-            // workshop.excludes should be moved to root excludes
             expect(upgraded.workshop.excludes).toBeUndefined();
             expect(upgraded.excludes).toContain('temp');
 
-            // mods should NOT have build.modInfo (omission is now the normal default)
             expect(upgraded.mods.my_mod.build?.modInfo).toBeUndefined();
         } catch (e) {
             console.log('STDOUT:', result.stdout.join('\n'));
@@ -71,10 +64,8 @@ describe('migrate command e2e', () => {
     });
 
     it('should migrate legacy config.json', async () => {
-        // 1. Setup legacy config.json in fake home
         const legacyConfig = {
             outdir: 'some/path',
-            // missing useSymlinks
         };
         const configPath = path.join(
             workspace.fakeHome,
@@ -86,14 +77,12 @@ describe('migrate command e2e', () => {
         }
         fs.writeFileSync(configPath, JSON.stringify(legacyConfig), 'utf8');
 
-        // 2. Run migrate command
         const result = await workspace.run('migrate');
 
         try {
             workspace.assertSuccess(result);
             workspace.assertStderr(result, 'Migrating config.json');
 
-            // 3. Verify upgraded config.json
             const upgraded = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             expect(upgraded.useSymlinks).toBe(true);
             expect(upgraded.outdir).toBe('some/path');
@@ -111,7 +100,6 @@ describe('migrate command e2e', () => {
     });
 
     it('should report if files are already up to date', async () => {
-        // Setup modern project.json
         workspace.write(
             'project.json',
             JSON.stringify({
@@ -138,7 +126,6 @@ describe('migrate command e2e', () => {
         const result = await workspace.run('migrate');
         workspace.assertFailure(result, 1);
 
-        // The error should mention a JSON parse issue
         const hasJsonError = result.stderr.some(
             (line) =>
                 line.includes('JSON') ||
@@ -229,7 +216,6 @@ describe('migrate command e2e', () => {
     });
 
     it('should fail cleanly when both config.json and project.json are corrupt', async () => {
-        // Corrupt config.json
         const configPath = path.join(
             workspace.fakeHome,
             '.pzstudio',
@@ -238,13 +224,11 @@ describe('migrate command e2e', () => {
         fs.mkdirSync(path.dirname(configPath), { recursive: true });
         fs.writeFileSync(configPath, '<<<invalid>>>', 'utf8');
 
-        // Corrupt project.json
         workspace.write('project.json', '[[[not an object]]]');
 
         const result = await workspace.run('migrate');
         workspace.assertFailure(result, 1);
 
-        // Should fail on the first corrupt file encountered (config.json is checked first)
         const hasError = result.stderr.some(
             (line) =>
                 line.includes('JSON') ||

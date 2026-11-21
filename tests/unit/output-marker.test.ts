@@ -44,13 +44,6 @@ function baseConfig(): IProjectConfig {
     } as unknown as IProjectConfig;
 }
 
-/**
- * A fake session host: getPlanInput() reads the same facts the CLI's build
- * command reads (mod.info presence/content, branch folders, workshop
- * metadata) — but through the injected memory filesystem. Mirrors the
- * host factory in buildsession.test.ts, plus the engineVersion seam the
- * output marker consumes.
- */
 function createHost(
     fs: MemoryFileSystem,
     config: IProjectConfig,
@@ -74,9 +67,7 @@ function createHost(
                         `${PROJECT_DIR}/${modId}/mod.info`,
                     );
                     state.modInfoExists[''] = true;
-                } catch {
-                    // no root mod.info
-                }
+                } catch {}
                 modSourceStates[modId] = state;
             }
             return {
@@ -114,7 +105,6 @@ async function seedProject(
     );
 }
 
-/** Wraps a fs so every write's target URI is recorded (order-preserving). */
 function recordingFs(fs: ProjectFileSystem): {
     fs: ProjectFileSystem;
     writes: string[];
@@ -224,7 +214,6 @@ describe('BuildSession writes the per-item output marker', () => {
         expect(main).toBeDefined();
         expect(dev).toBeDefined();
 
-        // Exact schema shape (Task 3 interface): 7 fields, fixed values.
         expect(Object.keys(main!).sort()).toEqual(
             [
                 'createdAt',
@@ -244,8 +233,6 @@ describe('BuildSession writes the per-item output marker', () => {
         expect(main!.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
         expect(Number.isNaN(Date.parse(main!.createdAt))).toBe(false);
 
-        // The development item carries the suffixed title and the suffixed
-        // mod ids (dev-only mod included, main-only mod excluded).
         expect(dev!.itemTitle).toBe('Sync Project - dev_branch');
         expect(dev!.mods).toEqual(['my_mod_dev', 'dev_mod_dev']);
         expect(dev!.schemaVersion).toBe(1);
@@ -289,7 +276,6 @@ describe('BuildSession writes the per-item output marker', () => {
         const tmpPath = `${finalPath}.tmp`;
         expect(writes).toContain(tmpPath);
         expect(writes).toContain(finalPath);
-        // The tmp copy never survives the completed write.
         await expect(fs.read(tmpPath)).rejects.toThrow();
     });
 
@@ -308,7 +294,6 @@ describe('BuildSession writes the per-item output marker', () => {
 
         await session.rebuild();
 
-        // The marker was rewritten for each item (one write per item build).
         const finalPath = markerPath(MAIN_OUT);
         expect(writes.filter((uri) => uri === finalPath).length).toBe(2);
 
@@ -339,8 +324,6 @@ describe('BuildSession writes the per-item output marker', () => {
         expect(result.errors).toEqual([]);
 
         const after = await readOutputMarker(fs, MAIN_MARKER);
-        // Byte-identical INCLUDING createdAt: the incremental path does not
-        // rewrite the marker ("once per item build").
         expect(after).toEqual(before);
     });
 });

@@ -1,17 +1,5 @@
 import * as vscode from 'vscode';
 
-/**
- * `explicitBuildTarget` (a VS Code task target) replaces — never extends —
- * the pzstudio.build.target setting for `build`: the CLI rejects
- * conflicting target flags (UX-01), so a task asking for development while
- * the setting says production must resolve to exactly `--development`.
- * Only the `build` command reads it; `clean` never emits a target flag.
- *
- * `projectDir` (UX-05) scopes every flag read to the operated project's
- * folder resource, so folder-scoped values apply per project. Without a
- * project context (global update) no resource is passed and no opened
- * folder's values can be borrowed.
- */
 export function resolveFlags(
     command: string,
     explicitBuildTarget?: string,
@@ -36,9 +24,6 @@ export function resolveFlags(
         }
     }
 
-    // --symlinks only exists on `new` (junction shared template folders);
-    // `add` dropped the no-op flag (ee0855a) and the parser now rejects
-    // unknown options, so it must not be sent for other commands.
     if (command === 'new' && config.get<boolean>('useSymlinks')) {
         flags.push('--symlinks');
     }

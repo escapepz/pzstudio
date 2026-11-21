@@ -42,7 +42,6 @@ describe('templateManager - createIgnoreFilter', () => {
 
     beforeEach(async () => {
         vi.restoreAllMocks();
-        // createIgnoreFilter needs a real directory for relative() and dirname()
         actualFs = await vi.importActual('fs');
         tmpRoot = actualFs.mkdtempSync(join(tmpdir(), 'pzstudio-test-'));
 
@@ -196,13 +195,10 @@ describe('templateManager - createIgnoreFilter', () => {
 
         const filter = createIgnoreFilter(tmpRoot);
 
-        // At root
         expect(filter(join(tmpRoot, 'root-ignored'), '')).toBe(false);
-        // At subfolder (since subfolder/.pzstudioignore doesn't ignore 'root-ignored')
         expect(filter(join(tmpRoot, 'subfolder', 'root-ignored'), '')).toBe(
             true,
         );
-        // At subfolder, ignored by subfolder
         expect(filter(join(tmpRoot, 'subfolder', 'sub-ignored'), '')).toBe(
             false,
         );
@@ -249,8 +245,6 @@ describe('templateManager - createIgnoreFilter', () => {
         const filter = createIgnoreFilter(tmpRoot);
 
         expect(filter(join(tmpRoot, 'other.log'), '')).toBe(false);
-        // The closest directory carrying rules decides entirely: media's
-        // '!keep.log' is its only rule there, so media's other.log is kept.
         expect(filter(join(tmpRoot, 'media', 'keep.log'), '')).toBe(true);
         expect(filter(join(tmpRoot, 'media', 'other.log'), '')).toBe(true);
     });
@@ -272,12 +266,10 @@ describe('templateManager - createIgnoreFilter', () => {
 
         const filter = createIgnoreFilter(tmpRoot);
 
-        // Rails: always included whatever the rules say.
         expect(filter(join(tmpRoot, 'mod.info'), '')).toBe(true);
         expect(filter(join(tmpRoot, '.gitignore'), '')).toBe(true);
         expect(filter(join(tmpRoot, '.pzstudioignore'), '')).toBe(true);
         expect(filter(join(tmpRoot, 'nested', '.gitignore'), '')).toBe(true);
-        // The rules still bite everything that is not a rail.
         expect(filter(join(tmpRoot, 'nested', 'media.log'), '')).toBe(false);
         expect(filter(join(tmpRoot, 'nested', 'media.lua'), '')).toBe(true);
     });
@@ -294,8 +286,6 @@ describe('templateManager - config and resolution', () => {
             const config = readGlobalConfig();
             expect(config.templates).toBeDefined();
             expect(config.useSymlinks).toBe(true);
-            // The factory-default outdir tier is removed: an unconfigured
-            // global config carries no outdir (pure build mode).
             expect(config.outdir).toBeUndefined();
         });
 
@@ -342,7 +332,7 @@ describe('templateManager - config and resolution', () => {
             expect(config.templates.project?.url).toBe('custom-url');
             expect(config.templates.mod?.url).toContain(
                 'pzstudio-template-mod',
-            ); // Filled default
+            );
             expect(config.useSymlinks).toBe(false);
             expect(config.outdir).toBe('/custom/out');
         });
@@ -350,9 +340,6 @@ describe('templateManager - config and resolution', () => {
 
     describe('resolveTemplateDir', () => {
         it('should resolve built-in workshop template', () => {
-            // Cache-hit on the DEFAULT template url. The online path with
-            // an empty cache would perform a real network clone, which a
-            // unit test must never do.
             vi.spyOn(fs, 'existsSync').mockReturnValue(true);
             vi.spyOn(fs, 'lstatSync').mockReturnValue({
                 isDirectory: () => true,
@@ -390,7 +377,7 @@ describe('templateManager - config and resolution', () => {
 
         it('should throw if template cannot be resolved offline', () => {
             vi.spyOn(fs, 'existsSync').mockReturnValue(false);
-            vi.spyOn(fs, 'readdirSync').mockReturnValue([] as any); // To make isDirNonEmpty return false for legacy
+            vi.spyOn(fs, 'readdirSync').mockReturnValue([] as any);
             expect(() => resolveTemplateDir('mod', true)).toThrow(
                 'No valid cached or legacy template found',
             );
@@ -398,7 +385,6 @@ describe('templateManager - config and resolution', () => {
         it('should ignore project-level template overrides and use global config', () => {
             const projectSpy = vi.spyOn(helper, 'resolveProjectConfig');
 
-            // Mock global config to return a specific URL
             vi.mocked(fs.existsSync).mockReturnValue(true);
             vi.mocked(fs.readFileSync).mockReturnValue(
                 JSON.stringify({
@@ -412,10 +398,8 @@ describe('templateManager - config and resolution', () => {
 
             const path = resolveTemplateDir('mod', true);
 
-            // Verify project config was never even consulted
             expect(projectSpy).not.toHaveBeenCalled();
 
-            // Verify global config URL was used
             expect(path).toContain('global-url');
             expect(path).not.toContain('project-url');
         });
@@ -428,7 +412,6 @@ describe('templateManager - config and resolution', () => {
                 if (typeof p !== 'string') return false;
                 return p.includes('config.json') || p.includes('.pzstudio');
             });
-            // Use different values for different files to avoid collision
             vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
                 if (String(p).includes('config.json'))
                     return JSON.stringify({ templates: {} });
@@ -455,10 +438,6 @@ describe('templateManager - config and resolution', () => {
             });
             vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
                 if (String(p).includes('config.json'))
-                    // A genuine v1 shape: useSymlinks missing (the migration
-                    // trigger). Dist-always: a missing outdir is NOT a
-                    // migration trigger anymore — but a migrating config
-                    // still receives the backup/default outdir stamp.
                     return JSON.stringify({
                         templates: { project: { url: 'old' } },
                     });
@@ -472,9 +451,9 @@ describe('templateManager - config and resolution', () => {
             const lastCall =
                 writeSpy.mock.calls[writeSpy.mock.calls.length - 1];
             const written = JSON.parse(lastCall[1] as string);
-            expect(written.useSymlinks).toBe(true); // Filled default
+            expect(written.useSymlinks).toBe(true);
             expect(written.templates.project.url).toBe('old');
-            expect(written.templates.mod).toBeDefined(); // Filled default
+            expect(written.templates.mod).toBeDefined();
             expect(written.outdir).toBe('backup-outdir'); // Migration stamp
         });
     });
@@ -486,13 +465,6 @@ describe('templateManager - cache replacement data safety (sweep d15-B5)', () =>
     let actualFs: any;
 
     beforeEach(async () => {
-        // These tests verify real filesystem behavior through the module
-        // under test (the same pattern the refreshLegacyTemplates suite
-        // uses): drop every mock this file or an earlier describe left
-        // installed, then re-prime the file-level vi.fn(actual.X) factory
-        // wrappers — Vitest 4's restoreAllMocks resets them to NO
-        // implementation, and earlier describes' spy values would otherwise
-        // leak into the fixtures below.
         vi.restoreAllMocks();
         actualFs = await vi.importActual('fs');
         vi.mocked(fs.existsSync).mockImplementation(actualFs.existsSync as any);
@@ -520,7 +492,6 @@ describe('templateManager - cache replacement data safety (sweep d15-B5)', () =>
             'pzstudio-template-mod',
         );
 
-    /** A transport whose cache/refresh/clone behavior the test controls. */
     const fakeTransport = (behavior: {
         valid: boolean;
         refresh: boolean;
@@ -540,7 +511,7 @@ describe('templateManager - cache replacement data safety (sweep d15-B5)', () =>
         const downloadTargets: string[] = [];
         const transport = fakeTransport({
             valid: true,
-            refresh: false, // the d15 leg-C shape: refresh refuses/fails
+            refresh: false,
             download: (_url, _ref, dest) => {
                 downloadTargets.push(dest);
                 throw new Error('download 404');
@@ -558,10 +529,7 @@ describe('templateManager - cache replacement data safety (sweep d15-B5)', () =>
             threw = e;
         }
 
-        // The clone attempt went to the STAGING sibling, never the live cache.
         expect(downloadTargets).toEqual([`${cacheDir}.replacing`]);
-        // Either the legacy fallback resolved or resolution threw — but the
-        // machine is exactly as it was before the update.
         expect(fs.existsSync(cacheDir)).toBe(true);
         expect(fs.readFileSync(join(cacheDir, 'seeded.txt'), 'utf8')).toBe(
             'cache',
@@ -574,9 +542,6 @@ describe('templateManager - cache replacement data safety (sweep d15-B5)', () =>
         }
     });
 
-    /** A download stub that mimics a real git clone: the replacement
-     * validation runs against the DEFAULT transport (git), so the staged
-     * clone must carry .git to be accepted. */
     const fakeCloneDownload = (dest: string): void => {
         mkdirSync(join(dest, '.git'), { recursive: true });
         writeFileSync(join(dest, 'fresh.txt'), 'new');
@@ -616,9 +581,6 @@ describe('templateManager - cache replacement data safety (sweep d15-B5)', () =>
             refresh: false,
             download: (_url, _ref, dest) => {
                 downloadTargets.push(dest);
-                // The (invalid) previous cache must still exist while the
-                // replacement downloads — deletion happens after the swap
-                // is secured.
                 expect(fs.existsSync(cacheDir)).toBe(true);
                 fakeCloneDownload(dest);
             },
@@ -649,16 +611,9 @@ describe('templateManager - refreshLegacyTemplates', () => {
     const stampPathIn = (dir: string): string =>
         join(dir, '.pzstudio-templates.json');
 
-    // Task 1's build script (scripts/update-build-date.js) writes the stamp
-    // as { version, buildDate } with a 4-space indent and trailing newline;
-    // fixtures use the same shape.
     const stamp = (version: string, buildDate: string): string =>
         JSON.stringify({ version, buildDate }, null, 4) + '\n';
 
-    /**
-     * Builds a bundled .template-legacy fixture: .template-project/x.txt is
-     * always present, the Task 1 stamp file when version+buildDate are.
-     */
     function makeBundledLegacyDir(
         version?: string,
         buildDate?: string,
@@ -687,10 +642,6 @@ describe('templateManager - refreshLegacyTemplates', () => {
         vi.restoreAllMocks();
         actualFs = await vi.importActual('fs');
         bundledDirs = [];
-        // Vitest 4's restoreAllMocks also resets the vi.fn(actual.*)
-        // wrappers this file's fs mock factory installed, so re-prime them:
-        // C1-C6 verify real filesystem behavior through the module under
-        // test, not mocks.
         vi.mocked(fs.existsSync).mockImplementation(actualFs.existsSync as any);
         vi.mocked(fs.readFileSync).mockImplementation(
             actualFs.readFileSync as any,
@@ -705,8 +656,6 @@ describe('templateManager - refreshLegacyTemplates', () => {
         );
         vi.mocked(fs.rmSync).mockImplementation(actualFs.rmSync as any);
         vi.mocked(fs.cpSync).mockImplementation(actualFs.cpSync as any);
-        // vi.restoreAllMocks leaves call records on the auto-mocked logger
-        // module fns (see helper.test.ts) — clear them for call isolation.
         vi.mocked(logger.emitInfo).mockClear();
         vi.mocked(logger.emitWarn).mockClear();
         vi.mocked(logger.emitVerbose).mockClear();
@@ -721,7 +670,6 @@ describe('templateManager - refreshLegacyTemplates', () => {
     it('C1 - equal stamps: up-to-date, global dir untouched', () => {
         const bundled = makeBundledLegacyDir('v', 'b');
         writeGlobalLegacyEntry('.pzstudio-templates.json', stamp('v', 'b'));
-        // The marker proves the up-to-date path never rewrites the cache.
         writeGlobalLegacyEntry('marker.txt', 'keep me');
 
         const status = templateManager.refreshLegacyTemplates(
@@ -741,7 +689,6 @@ describe('templateManager - refreshLegacyTemplates', () => {
 
     it('C2 - older global stamp: refreshed from the bundled copy', () => {
         const bundled = makeBundledLegacyDir('a', 'd1');
-        // The marker rides in the bundled copy and must land in the cache.
         actualFs.writeFileSync(join(bundled, 'marker.txt'), 'from bundled');
         writeGlobalLegacyEntry('.pzstudio-templates.json', stamp('a', 'd0'));
         writeGlobalLegacyEntry('stale-only.txt', 'old global content');
@@ -756,8 +703,6 @@ describe('templateManager - refreshLegacyTemplates', () => {
             undefined,
             'Legacy templates refreshed (a, d1).',
         );
-        // Global content now equals the bundled copy: marker copied in,
-        // global-only file washed out, stamp matches the bundled one.
         expect(actualFs.existsSync(join(globalLegacyDir(), 'marker.txt'))).toBe(
             true,
         );
@@ -776,8 +721,6 @@ describe('templateManager - refreshLegacyTemplates', () => {
 
     it('C3 - global without a stamp: refreshed, planted .git file removed', () => {
         const bundled = makeBundledLegacyDir('a', 'd1');
-        // A pre-stamp cache can carry a stray .git gitfile; the wholesale
-        // replace must wash it out together with the missing stamp.
         writeGlobalLegacyEntry('.git', 'gitdir: ../.git/modules/pzstudio');
 
         const status = templateManager.refreshLegacyTemplates(
@@ -798,7 +741,7 @@ describe('templateManager - refreshLegacyTemplates', () => {
     });
 
     it('C4 - bundled copy without a stamp: skipped, global dir untouched', () => {
-        const bundled = makeBundledLegacyDir(); // no stamp file
+        const bundled = makeBundledLegacyDir();
         writeGlobalLegacyEntry('marker.txt', 'untouched');
 
         const status = templateManager.refreshLegacyTemplates(
@@ -842,7 +785,6 @@ describe('templateManager - refreshLegacyTemplates', () => {
         );
 
         expect(status).toBe('skipped');
-        // A skip must not create or touch the global cache.
         expect(actualFs.existsSync(globalLegacyDir())).toBe(false);
     });
 
@@ -851,15 +793,11 @@ describe('templateManager - refreshLegacyTemplates', () => {
         writeGlobalLegacyEntry('.pzstudio-templates.json', stamp('a', 'd0'));
         writeGlobalLegacyEntry('old-only.txt', 'previous global content');
 
-        // Simulate a copy that got part-way before failing: delegate to the
-        // real cpSync with the implementation's own args (filter included)
-        // and throw afterwards.
         vi.mocked(fs.cpSync).mockImplementation(((
             src: any,
             dest: any,
             opts: any,
         ) => {
-            // The copy runs against the STAGING sibling, never the live dir.
             expect(String(dest).replace(/\\/g, '/')).toBe(
                 `${globalLegacyDir().replace(/\\/g, '/')}.replacing`,
             );
@@ -871,16 +809,12 @@ describe('templateManager - refreshLegacyTemplates', () => {
             templateManager.refreshLegacyTemplates(undefined, bundled),
         ).toThrow('simulated cpSync failure');
 
-        // The previous global dir is exactly as it was before the refresh —
-        // old stamp included: a failed refresh can never leave the machine
-        // with NO legacy fallback at all (d15-U1, the ab045cdcd invariant).
         expect(
             actualFs.readFileSync(stampPathIn(globalLegacyDir()), 'utf-8'),
         ).toBe(stamp('a', 'd0'));
         expect(
             actualFs.existsSync(join(globalLegacyDir(), 'old-only.txt')),
         ).toBe(true);
-        // No half-copy is left staged behind.
         expect(actualFs.existsSync(`${globalLegacyDir()}.replacing`)).toBe(
             false,
         );
@@ -892,9 +826,6 @@ describe('templateManager - refreshLegacyTemplates', () => {
         writeGlobalLegacyEntry('.pzstudio-templates.json', stamp('a', 'd0'));
         writeGlobalLegacyEntry('old-only.txt', 'old global content');
 
-        // While the bundled copy runs, the previous global dir must still
-        // exist with its old content — deletion happens only after the
-        // swap is secured (the ab045cdcd cache-swap assertion shape).
         vi.mocked(fs.cpSync).mockImplementation(((
             src: any,
             dest: any,
@@ -917,8 +848,6 @@ describe('templateManager - refreshLegacyTemplates', () => {
             undefined,
             'Legacy templates refreshed (a, d1).',
         );
-        // New content swapped in, old-only content washed out, stamp
-        // current, staging sibling gone.
         expect(actualFs.existsSync(join(globalLegacyDir(), 'marker.txt'))).toBe(
             true,
         );
@@ -934,11 +863,6 @@ describe('templateManager - refreshLegacyTemplates', () => {
     });
 
     it('C8 - failed bootstrap copy: warn fires, no throw escapes, no stamp stranded', () => {
-        // bootstrapLegacyTemplates has no bundledDirOverride seam: pin the
-        // bundled source through the cwd probe (the __dirname probes miss
-        // under vitest). The fixture must carry a stamp — an unstamped dev
-        // source could never strand one, so without it this test could not
-        // tell the two orderings apart.
         const prevCwd = process.cwd();
         const cwdRoot = actualFs.mkdtempSync(join(tmpdir(), 'pzstudio-cwd-'));
         bundledDirs.push(cwdRoot);
@@ -952,8 +876,6 @@ describe('templateManager - refreshLegacyTemplates', () => {
         );
         actualFs.writeFileSync(stampPathIn(bundled), stamp('a', 'd1'));
 
-        // Same simulate-a-part-way-copy shape as C7: real copy first (the
-        // implementation's own args, filter included), failure afterwards.
         vi.mocked(fs.cpSync).mockImplementation(((
             src: any,
             dest: any,
@@ -966,14 +888,10 @@ describe('templateManager - refreshLegacyTemplates', () => {
         try {
             process.chdir(cwdRoot);
 
-            // The offline path keeps this off the network; the fresh fake
-            // home is cold, so the one-time bootstrap runs its copy first
-            // and its failure leaves nothing for the resolution to use.
             expect(() => resolveTemplateDir('mod', true)).toThrow(
                 'No valid cached or legacy template found',
             );
 
-            // Bootstrap started and took the warn path (it never throws).
             expect(logger.emitInfo).toHaveBeenCalledWith(
                 undefined,
                 expect.stringContaining('Bootstrapping legacy templates'),
@@ -983,9 +901,6 @@ describe('templateManager - refreshLegacyTemplates', () => {
                 expect.stringContaining('Failed to bootstrap legacy templates'),
             );
 
-            // The copy really ran — but no stamp: a failed bootstrap copy
-            // can never strand a stamp that pins a partial cache as
-            // current (same invariant as C7, at the second site).
             expect(
                 actualFs.existsSync(
                     join(globalLegacyDir(), '.template-project', 'x.txt'),

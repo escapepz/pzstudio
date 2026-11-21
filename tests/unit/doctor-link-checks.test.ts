@@ -41,7 +41,6 @@ function makeConfig(distDir: string): unknown {
 describe('workshopLinkDiagnostics (core mapping)', () => {
     it('maps every state to its code, severity, and action text', () => {
         const rows: Array<[string, string, string, string?]> = [
-            // [state, expected code, expected severity, hint token]
             ['ATTACHED_OK', 'workshop-link.attached', 'info', undefined],
             [
                 'MISSING_LINK',
@@ -94,10 +93,6 @@ describe('workshopLinkDiagnostics (core mapping)', () => {
                 'info',
                 undefined,
             ],
-            // Not an inspector state — the host's per-item catch-all for a
-            // slot read that failed outright (EPERM/EBUSY: the game holds
-            // the junction open). Must render as its own finding, never
-            // drop out of the report.
             [
                 'INSPECT_FAILED',
                 'workshop-link.inspect-failed',
@@ -130,10 +125,6 @@ describe('workshopLinkDiagnostics (core mapping)', () => {
     });
 
     it('HAND_MADE_DIR advice sends the user OUT of the deployment root', () => {
-        // A renamed folder INSIDE the deployment root still registers as a
-        // duplicate mod (the game scans that folder), and in copy mode the
-        // backup flag is inert — so the advice must say "out of the root"
-        // and scope the flag to symlink mode.
         const [d] = workshopLinkDiagnostics([
             entry({ state: 'HAND_MADE_DIR' }),
         ]);
@@ -163,8 +154,6 @@ describe('runDoctor materialization inputs (core rendering)', () => {
     let root: string;
     beforeEach(() => {
         root = mkdtempSync(join(tmpdir(), 'pz-doc-core-'));
-        // A loadable project: without it runDoctor early-returns the
-        // "you are not in a project" fact and renders nothing else.
         writeFileSync(
             join(root, 'project.json'),
             JSON.stringify({
@@ -354,7 +343,6 @@ describe('resolveDoctorWorkshopInputs (CLI host computation)', () => {
     it('missing slot reports MISSING_LINK; a hand-made real dir reports HAND_MADE_DIR', async () => {
         const config = makeConfig(dist);
         const itemDir = await seedBuiltMain();
-        // No slot at all: MISSING_LINK.
         const missing = await resolveDoctorWorkshopInputs(
             root,
             config as never,
@@ -362,7 +350,6 @@ describe('resolveDoctorWorkshopInputs (CLI host computation)', () => {
         );
         expect(missing.workshopLinks?.[0]?.state).toBe('MISSING_LINK');
 
-        // A real non-empty dir without a copy marker: HAND_MADE_DIR.
         const slot = join(workshop, basename(itemDir));
         await fsp.mkdir(slot, { recursive: true });
         writeFileSync(join(slot, 'handmade.txt'), 'x');
@@ -379,8 +366,6 @@ describe('resolveDoctorWorkshopInputs (CLI host computation)', () => {
             typeof resolveBuildOutputPath
         >[0];
         const itemDir = await seedBuiltMain();
-        // A real directory with a matching copy marker: the copy
-        // materializer's healthy state.
         const slot = join(workshop, basename(itemDir));
         await fsp.mkdir(slot, { recursive: true });
         writeFileSync(join(slot, 'workshop.txt'), 'title=Item\n');
@@ -420,16 +405,11 @@ describe('resolveDoctorWorkshopInputs (CLI host computation)', () => {
     });
 
     it('the machine-level flat materialize key wins over the symlink default (copy mode)', async () => {
-        // The doctor reads the global config SILENTLY (R1) — this only
-        // proves the value flows; the hard 'symlink' default applies when
-        // the key is absent.
         const config = makeConfig(dist) as never as Parameters<
             typeof resolveBuildOutputPath
         >[0];
         const itemDir = await seedBuiltMain();
         const { writeCopySlotMarker } = await import('@pzstudio/core');
-        // A copy-mode doctor sees a marker-owned slot where symlink mode
-        // would see nothing: seed the slot as a copy slot.
         const slot = join(workshop, basename(itemDir));
         await fsp.mkdir(slot, { recursive: true });
         writeFileSync(join(slot, 'workshop.txt'), 'title=Item\n');
@@ -445,7 +425,6 @@ describe('resolveDoctorWorkshopInputs (CLI host computation)', () => {
         );
         expect(inputs.materialization.mode).toBe('copy');
         expect(inputs.workshopLinks?.[0]?.state).toBe('COPY_SLOT');
-        // Sanity: the read marker helper stays shared with the build path.
         expect(workshopReadMarker).toBeTypeOf('function');
     });
 });

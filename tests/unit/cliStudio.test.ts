@@ -8,9 +8,6 @@ const spawnSyncCalls = vi.hoisted(
     () => [] as Array<{ command: string; args?: readonly string[] }>,
 );
 
-// Counting spy over the REAL spawnSync: the probe-timing tests below assert
-// that v2 invocations which need no template transport never probe git
-// availability. Everything delegates to the original — no behavior masked.
 vi.mock('child_process', async (importOriginal) => {
     const original = await importOriginal<typeof import('child_process')>();
     return {
@@ -22,8 +19,6 @@ vi.mock('child_process', async (importOriginal) => {
     };
 });
 
-// Importing the legacy dispatcher registers every command into the registry
-// (studio.run dispatches through the same registry).
 import { runCLI } from '../../packages/cli/src/lib/cli';
 import { createPzStudio } from '../../packages/cli/src/lib/studio';
 import {
@@ -72,10 +67,6 @@ import {
 import * as helperModule from '../../packages/cli/src/lib/helper';
 import * as loggerModule from '../../packages/cli/src/lib/logger';
 import * as transportModule from '../../packages/cli/src/lib/transport';
-
-/* ------------------------------------------------------------------ */
-/* Fixtures and capture helpers                                        */
-/* ------------------------------------------------------------------ */
 
 interface LogCall {
     method: string;
@@ -139,7 +130,6 @@ function sentinelTransport(name: 'git' | 'fetch' = 'git'): TemplateTransport {
     };
 }
 
-/** Temporarily replaces a registered command's run (test-only swap). */
 function withCommandRun(
     name: string,
     swapped: () => Promise<void>,
@@ -152,19 +142,12 @@ function withCommandRun(
     };
 }
 
-/**
- * Pre-seeds the usage recorder's .notice-shown marker. Tests that compare
- * BOTH doors' captured output inside one fake HOME would otherwise see the
- * one-time disclosure notice on the first door only; the notice's emission
- * and routing are pinned in the usage suites and the lifecycle goldens.
- */
 function preseedNoticeMarker(): void {
     const dir = path.join(getConfigDir(), 'usage');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, '.notice-shown'), '', 'utf-8');
 }
 
-/** Namespace handles for spying on the raw legacy accessors (R0 proofs). */
 const helperNs = helperModule as unknown as Record<string, any>;
 const loggerNs = loggerModule as unknown as Record<string, any>;
 const transportNs = transportModule as unknown as Record<string, any>;
@@ -197,11 +180,6 @@ afterEach(() => {
     tempDirs = [];
 });
 
-/* ------------------------------------------------------------------ */
-/* 1. Golden equivalence: legacy runCLI ≡ v2 studio.run                */
-/*    (same captured output, same thrown error kinds)                  */
-/* ------------------------------------------------------------------ */
-
 describe('golden equivalence: runCLI ≡ studio.run (captured output)', () => {
     it('normal success: identical stdout/stderr sequences', async () => {
         const proj = makeProjectDir('Golden');
@@ -222,8 +200,6 @@ describe('golden equivalence: runCLI ≡ studio.run (captured output)', () => {
 
         expect(v2.stdout).toEqual(legacyOut.stdout);
         expect(v2.stderr).toEqual(legacyOut.stderr);
-        // Sanity: the golden actually captured the full command rhythm
-        // (pre-command blank line, list output, completion info, blank line).
         expect(legacyOut.stdout).toEqual([
             '\n',
             "No mods in project 'Golden'.\n",
@@ -292,9 +268,6 @@ describe('golden equivalence: runCLI ≡ studio.run (captured output)', () => {
         ).rejects.toBeInstanceOf(CliUsageError);
 
         expect(v2.stderr).toEqual(legacyErr);
-        // The message carries the parse-stage enum-check style (d11-F8):
-        // the bin maps CliUsageError to exit 2, so this is the same contract
-        // `--transport=bogus` has always had.
         expect(legacyErr.join('')).toContain(
             "Invalid --materialize value 'bogus' (expected one of: symlink, copy)",
         );
@@ -326,11 +299,6 @@ describe('golden equivalence: runCLI ≡ studio.run (captured output)', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 2. R0 acceptance: an omitted v2 field never consumes the            */
-/*    corresponding legacy facade value                                */
-/* ------------------------------------------------------------------ */
-
 describe('R0 legacy-blindness (v2 never falls through to the facade)', () => {
     it('with every legacy setter populated, a v2 instance with all fields omitted consumes none of them', async () => {
         const projA = makeProjectDir('ProjA');
@@ -345,7 +313,6 @@ describe('R0 legacy-blindness (v2 never falls through to the facade)', () => {
         const spies = spyRawAccessors();
         const captured = captureIO();
 
-        // Control: the same spies DO fire on the legacy path (spy validity).
         await runCLI('help');
         expect(spies.legacyLogger).toHaveBeenCalled();
         expect(spies.legacyTransport).toHaveBeenCalled();
@@ -354,10 +321,8 @@ describe('R0 legacy-blindness (v2 never falls through to the facade)', () => {
         for (const spy of Object.values(spies)) spy.mockClear();
         L1.calls.length = 0;
 
-        // v2 instance with every field omitted.
         const studio = createPzStudio();
 
-        // (a) during-run reads: no legacy logger/settings/transport/discovery.
         let during:
             | {
                   settings: ReturnType<typeof getVsCodeSettings>;
@@ -387,18 +352,14 @@ describe('R0 legacy-blindness (v2 never falls through to the facade)', () => {
         expect(during!.start).toBe(process.cwd());
         expect(during!.start).not.toBe(projA);
 
-        // (b) end-to-end discovery: the error cause names the cwd start.
         const err = await studio.run('list').catch((e) => e);
         expect(err).toBeInstanceOf(CliError);
         expect(String(err.cause)).toContain(process.cwd());
         expect(String(err.cause)).not.toContain(projA);
 
-        // The legacy logger received NOTHING — the default engine logger
-        // emitted through the CliIO sink instead.
         expect(L1.calls).toEqual([]);
         expect(captured.stderr.join('')).toContain('[ERROR]');
 
-        // Zero reads of the raw legacy accessors across both v2 runs.
         expect(spies.legacyLogger).not.toHaveBeenCalled();
         expect(spies.legacySettings).not.toHaveBeenCalled();
         expect(spies.legacyTransport).not.toHaveBeenCalled();
@@ -436,10 +397,6 @@ describe('R0 legacy-blindness (v2 never falls through to the facade)', () => {
             restore();
         }
 
-        // Outputs and dependencies come exclusively from the instance.
-        // (The swapped command body is empty: pre-command blank line,
-        // completion info, usage notice, trailing blank line — the notice
-        // routes through the context logger like every engine emission.)
         expect(L1.calls).toEqual([]);
         expect(L2.calls.map((c) => c.method)).toEqual([
             'log',
@@ -456,10 +413,6 @@ describe('R0 legacy-blindness (v2 never falls through to the facade)', () => {
         expect(spies.legacyDiscoveryStart).not.toHaveBeenCalled();
     });
 });
-
-/* ------------------------------------------------------------------ */
-/* 3. v2 writes nothing to the legacy state (§13.1 mirror)             */
-/* ------------------------------------------------------------------ */
 
 describe('v2 writes nothing to the legacy slots (§13.1 mirror)', () => {
     it('after an aggressive v2 run, the persisted legacy fields keep their pre-run values', async () => {
@@ -492,24 +445,15 @@ describe('v2 writes nothing to the legacy slots (§13.1 mirror)', () => {
             ],
         });
 
-        // anchor: not overwritten with --project, not cleared.
         expect(legacyDiscoveryStart()).toBe(projAnchor);
-        // external project dir: never written.
         expect(getExternalProjectDir()).toBe(projExternal);
-        // sticky transport: the v2 --transport did not persist.
         expect(legacyTransport()).toBe(T1);
         expect(getTemplateTransport()).toBe(T1);
-        // interaction mode: untouched.
         expect(getInteractionMode()).toBe('non-interactive');
-        // invocation options: pre-existing marker survives; nothing leaked.
         expect(hasFlag('marker')).toBe(true);
         expect(hasFlag('verbose')).toBe(false);
         expect(hasFlag('project')).toBe(false);
         expect(hasFlag('transport')).toBe(false);
-        // verbosity flags: verbose still enabled (published verbose emits),
-        // quiet still disabled (the run's own --quiet does not gate
-        // published info), debug still enabled (the unexpected-error report
-        // keeps its stack instead of the hint line).
         rawVerbose('post-v2-verbose');
         expect(captured.stderr.join('')).toContain('[DEBUG] post-v2-verbose');
         rawInfo('post-v2-info');
@@ -517,7 +461,6 @@ describe('v2 writes nothing to the legacy slots (§13.1 mirror)', () => {
         engineError(new Error('boom'));
         expect(captured.stderr.join('')).toContain('Unexpected error: boom');
         expect(captured.stderr.join('')).not.toContain('Run with --debug');
-        // settings slots: untouched.
         expect(getVsCodeSettings()).toEqual({
             templates: undefined,
             outdir: 'C:/legacy-ws-out',
@@ -544,24 +487,16 @@ describe('v2 writes nothing to the legacy slots (§13.1 mirror)', () => {
             flags: ['--project', projFlag, '--verbose', '--transport', 'fetch'],
         });
 
-        // The v2 run emitted through its default engine logger (the CliIO
-        // sink), never through the legacy slot.
         expect(L1.calls).toEqual([]);
         expect(captured.stdout.join('')).toContain('Available commands:');
 
-        // ...and the slot still routes for published calls afterwards —
-        // it was not cleared by the v2 run.
         rawLog('still-legacy');
         expect(L1.calls).toEqual([{ method: 'log', message: 'still-legacy' }]);
 
-        // The v2 run's --verbose did not persist into the legacy gate:
-        // the published verbose stays disabled (verboseEnabled untouched
-        // false) and emits nowhere.
         rawVerbose('still-gated');
         expect(L1.calls).toEqual([{ method: 'log', message: 'still-legacy' }]);
         expect(captured.stderr.join('')).not.toContain('still-gated');
 
-        // Remaining slots: unchanged by the run.
         expect(legacyDiscoveryStart()).toBe(projAnchor);
         expect(getExternalProjectDir()).toBe(projExternal);
         expect(legacyTransport()).toBe(T1);
@@ -583,11 +518,6 @@ describe('v2 writes nothing to the legacy slots (§13.1 mirror)', () => {
         expect(legacyDiscoveryStart()).toBe(projAnchor);
     });
 });
-
-/* ------------------------------------------------------------------ */
-/* 4. Settings provider: once per operation, post-parse, effective     */
-/*    project                                                          */
-/* ------------------------------------------------------------------ */
 
 describe('v2 settings provider', () => {
     it('is called exactly once per operation — success, help and usage-error runs alike', async () => {
@@ -674,10 +604,6 @@ describe('v2 settings provider', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 5. Project precedence matrix: --project > per-call > factory > cwd  */
-/* ------------------------------------------------------------------ */
-
 describe('project precedence matrix (§11)', () => {
     it('--project A > per-call C > factory B: the run targets A and the provider receives A', async () => {
         const captured = captureIO();
@@ -753,10 +679,6 @@ describe('project precedence matrix (§11)', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 6. Transport: instance value, host default, invocation-scoped flag  */
-/* ------------------------------------------------------------------ */
-
 describe('v2 transport model (§12)', () => {
     it('instance transport is used when supplied', async () => {
         captureIO();
@@ -800,11 +722,8 @@ describe('v2 transport model (§12)', () => {
         }
 
         expect(during).not.toBe(T1);
-        // No template use happened: the lazy host default must not have
-        // probed git (the probe belongs to actual template acquisition).
         expect(spawnSyncCalls).toEqual([]);
 
-        // Help and usage-error runs are transport-free as well.
         restore = withCommandRun('help', async () => {});
         try {
             await studio.run('help');
@@ -842,11 +761,8 @@ describe('v2 transport model (§12)', () => {
             restore();
         }
 
-        // Run 1: the flag won for that invocation; run 2: the instance
-        // transport again.
         expect(duringRuns[0]).toBeInstanceOf(FetchTransport);
         expect(duringRuns[1]).toBe(T2);
-        // The legacy sticky slot was never written.
         expect(legacyTransport()).toBe(T1);
         expect(getTemplateTransport()).toBe(T1);
     });
@@ -869,10 +785,6 @@ describe('v2 transport model (§12)', () => {
         expect(during).toBeInstanceOf(GitTransport);
     });
 });
-
-/* ------------------------------------------------------------------ */
-/* 7. Lifecycle cleanup / isolation                                    */
-/* ------------------------------------------------------------------ */
 
 describe('v2 lifecycle isolation', () => {
     it('context restored and lock released on success, help, usage error and throwing command', async () => {
@@ -897,7 +809,6 @@ describe('v2 lifecycle isolation', () => {
         ).rejects.toBeInstanceOf(CliError);
         expect(getActiveInvocationContext()).toBeUndefined();
 
-        // The lock is released on every path: a later invocation still runs.
         await expect(studio.run('help')).resolves.toBeUndefined();
         expect(getActiveInvocationContext()).toBeUndefined();
     });
@@ -911,8 +822,6 @@ describe('v2 lifecycle isolation', () => {
         await createPzStudio({ logger: success.logger }).run('list', [], {
             flags: ['--project', proj],
         });
-        // The usage notice is an engine emission too (span settle runs
-        // inside the lifecycle): instance logger, after the completion info.
         expect(success.calls.map((c) => c.method)).toEqual([
             'log',
             'log',
@@ -926,8 +835,6 @@ describe('v2 lifecycle isolation', () => {
 
         const help = recordingLogger();
         await createPzStudio({ logger: help.logger }).run('help');
-        // The disclosure notice fired once on the success run above (one
-        // marker per fake HOME), so this run records without emitting.
         expect(help.calls.map((c) => c.method)).toEqual(['log', 'log']);
         expect(String(help.calls[0].message)).toContain('Available commands:');
 
@@ -969,7 +876,6 @@ describe('v2 lifecycle isolation', () => {
         try {
             pA = studio.run('list', [], { flags: ['--project', proj] });
 
-            // A dispatches first (FIFO) and parks inside its command run.
             restore = withCommandRun('list', async () => {
                 events.push('a:start');
                 await gateA;
@@ -977,9 +883,6 @@ describe('v2 lifecycle isolation', () => {
             });
             await vi.waitFor(() => expect(events).toContain('a:start'));
 
-            // B (legacy door) is queued behind the same lock: swapping the
-            // command run now can only be observed by B, which has not
-            // started.
             restore();
             restore = withCommandRun('list', async () => {
                 events.push('b:start');
@@ -990,27 +893,19 @@ describe('v2 lifecycle isolation', () => {
             releaseA();
             await Promise.all([pA, pB]);
         } finally {
-            // Never leave a parked invocation holding the lock.
             releaseA();
             restore();
             await Promise.allSettled([pA, pB]);
         }
 
-        // No interleave: A's whole execution precedes B's.
         expect(events).toEqual(['a:start', 'a:end', 'b:start', 'b:end']);
         expect(getActiveInvocationContext()).toBeUndefined();
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 8. studio.resolveOutDir (doc 13 §10-A): the engine's canonical       */
-/*    dist-root reader (dist-always amendment)                          */
-/* ------------------------------------------------------------------ */
-
 describe('studio.resolveOutDir (doc 13 §10-A): the canonical dist-root reader', () => {
     const fakeHome = () => (globalThis as any).__PZSTUDIO_FAKE_HOME as string;
 
-    /** A valid project.json fixture, optionally carrying an outdir. */
     function makeProject(title: string, outdir?: string): string {
         const dir = makeTempDir();
         fs.writeFileSync(
@@ -1025,13 +920,11 @@ describe('studio.resolveOutDir (doc 13 §10-A): the canonical dist-root reader',
         return dir;
     }
 
-    /** Writes the tier-4 global CLI config into the fake home. */
     function writeGlobalConfig(outdir: string): void {
         fs.mkdirSync(path.dirname(getConfigPath()), { recursive: true });
         fs.writeFileSync(getConfigPath(), JSON.stringify({ outdir }));
     }
 
-    /** Captures the thrown value of a sync call (undefined when none). */
     function caught(fn: () => unknown): unknown {
         try {
             fn();
@@ -1042,9 +935,6 @@ describe('studio.resolveOutDir (doc 13 §10-A): the canonical dist-root reader',
     }
 
     it('returns the project dist root regardless of which outdir tiers are configured', () => {
-        // Dist-always: every tier (project outdir, workspace/user host
-        // layers, global config) is a DEPLOYMENT target — the engine's
-        // output root is the canonical dist root in all combinations.
         const combos: Array<() => PzStudioInstance> = [
             () => createPzStudio({ settings: () => undefined }),
             () =>
@@ -1156,9 +1046,6 @@ describe('studio.resolveOutDir (doc 13 §10-A): the canonical dist-root reader',
             settings: () => ({ user: { outdir: 'C:/instance-out' } }),
         });
 
-        // The instance resolves its own project's dist root through its own
-        // provider — not the anchored project's outdir tier, not the legacy
-        // settings slot; the value never depends on any tier.
         expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
         expect(spies.legacyLogger).not.toHaveBeenCalled();
         expect(spies.legacySettings).not.toHaveBeenCalled();
@@ -1186,8 +1073,6 @@ describe('studio.resolveOutDir (doc 13 §10-A): the canonical dist-root reader',
 
         expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
         provider.mockReturnValue({ user: { outdir: 'C:/after-out' } });
-        // The value is the dist root either way — but the provider is
-        // re-consulted, never memoized.
         expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
         expect(provider).toHaveBeenCalledTimes(2);
     });
@@ -1204,8 +1089,6 @@ describe('studio.resolveOutDir (doc 13 §10-A): the canonical dist-root reader',
         raw.outdir = 'edited-out';
         fs.writeFileSync(path.join(proj, 'project.json'), JSON.stringify(raw));
 
-        // Dist-always: the edited outdir is a deployment target; the
-        // engine's root stays put.
         expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
     });
 
@@ -1233,11 +1116,8 @@ describe('studio.resolveOutDir (doc 13 §10-A): the canonical dist-root reader',
             });
             await vi.waitFor(() => expect(events).toContain('a:start'));
 
-            // The engine lock is HELD by the parked run here: the reader is
-            // synchronous and lock-free, so this call cannot queue behind it.
             expect(studio.resolveOutDir(proj)).toBe(path.join(proj, 'dist'));
 
-            // The reader neither released nor advanced the engine.
             expect(events).not.toContain('a:end');
         } finally {
             releaseA();

@@ -28,17 +28,6 @@ addHelp(
         pzstudio clean - Clean your output directory from the current built project.`,
 );
 
-/**
- * Removes one clean target below the configured output root — the clean
- * tier of the F23-WRITE P0 CLI guard (doc 17 §11.4, the same invariant the
- * build executor applies to its removeDir operations): the target must sit
- * inside the configured root and its route is authorized before anything
- * is deleted, while the root itself stays un-inspected (INV-A — a
- * user-configured junction outdir keeps cleaning). The delete leaf is
- * link-safe by the guard's B1 semantics: a junction at the target is
- * removed as a link, never followed. Exported so the clean guard is
- * testable in parity with executeBuildPlan.
- */
 export function cleanOutputPath(
     outputRoot: string | undefined,
     targetPath: string,
@@ -55,17 +44,12 @@ export function cleanOutputPath(
 export function cleanCmd() {
     const projectConfig = resolveProjectConfig();
 
-    // Check if we are in a project directory
     if (!projectConfig) {
         throw new CliError('No pzstudio project found.');
     }
 
     const startTime = performance.now();
 
-    // Dist-always: clean removes the canonical dist output items; the
-    // deployment target never has artifacts deleted from it (a dangling
-    // junction or stale copy slot heals on the next build's materialize
-    // step).
     const projectPath = resolve(projectDir());
     const outDir = distRootOf(projectPath);
     const cleanConfig = { ...projectConfig, outdir: outDir };
@@ -76,14 +60,10 @@ export function cleanCmd() {
     const outcomes: OperationOutcome[] = [];
     const failures: string[] = [];
 
-    // Clean main output
     if (existsSync(mainOutPath)) {
         info(`Cleaning main output directory at '${mainOutPath}'...`);
         try {
             cleanOutputPath(outDir, mainOutPath);
-            // d13-U1: enumerate what was actually removed — clean's items
-            // are whole dist output directories, so one line per removed
-            // directory, between the intent line and the completion line.
             info(`- Removed: ${mainOutPath}`);
             verbose(`Cleaned: ${mainOutPath}`);
             cleaned = true;
@@ -94,8 +74,6 @@ export function cleanCmd() {
         }
     }
 
-    // Clean development output — always attempted, even when the main
-    // output could not be deleted.
     if (existsSync(devOutPath)) {
         info(`Cleaning development output directory at '${devOutPath}'...`);
         try {
@@ -110,8 +88,6 @@ export function cleanCmd() {
         }
     }
 
-    // Nothing to do is a clean result, not a failure (CLI-6): the output
-    // directories are exactly what the command promises.
     if (!cleaned && failures.length === 0) {
         verbose(`Checked '${mainOutPath}' and '${devOutPath}'.`);
         log('Already clean.');

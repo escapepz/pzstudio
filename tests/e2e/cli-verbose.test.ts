@@ -13,7 +13,6 @@ vi.mock('child_process', async (importOriginal) => {
                 const argsList = (args ?? []) as string[];
                 if (argsList[0] === 'clone') {
                     const dest = argsList[argsList.length - 1];
-                    // Mock success: create a .git dir and a dummy file
                     fs.mkdirSync(dest, { recursive: true });
                     fs.mkdirSync(path.join(dest, '.git'), { recursive: true });
                     fs.writeFileSync(path.join(dest, 'project.json'), '{}');
@@ -49,7 +48,6 @@ describe('Global --verbose flag behavior (E2E)', () => {
         try {
             workspace.assertSuccess(result);
 
-            // Assert verbose output is present
             const hasVerbose = result.stderr.some(
                 (line) =>
                     line.includes('Executing command [new]') ||
@@ -64,7 +62,6 @@ describe('Global --verbose flag behavior (E2E)', () => {
     });
 
     it('should emit verbose output for add command', async () => {
-        // Setup minimal project
         workspace.write(
             'project.json',
             JSON.stringify({
@@ -117,7 +114,6 @@ describe('Global --verbose flag behavior (E2E)', () => {
     });
 
     it('should emit verbose output for build command', async () => {
-        // Setup a minimal valid project for building
         workspace.write(
             'project.json',
             JSON.stringify({
@@ -150,7 +146,6 @@ describe('Global --verbose flag behavior (E2E)', () => {
     });
 
     it('should emit verbose output for outdir command', async () => {
-        // Create a dummy outdir
         const outDirPath = path.join(workspace.dir, 'dummy_out');
         fs.mkdirSync(outDirPath, { recursive: true });
 

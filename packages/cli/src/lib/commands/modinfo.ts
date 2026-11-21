@@ -27,11 +27,6 @@ addHelp(
         --verbose        - Enable diagnostic output.`,
 );
 
-/**
- * Handle the modinfo command.
- * @param action The action to perform (e.g., 'generate').
- * @param modId The ID of the mod to process (optional).
- */
 export async function modinfoCmd(action: string, modId?: string) {
     expect('param [action]', action, 'string');
     expect('param [modId]', modId, 'string|undefined');
@@ -41,15 +36,6 @@ export async function modinfoCmd(action: string, modId?: string) {
         throw new CliError('No pzstudio project found.');
     }
 
-    // The mod-folder walk must use THIS invocation's project root — the
-    // same ctx-aware discovery resolveProjectConfig just used. The helper's
-    // implicit default (legacyProjectDir) reads the raw legacy anchor
-    // slots, which embedded hosts never write (doc 11 §8.0 R0/R1: the v2
-    // runtime stores nothing in the facade slots) — it would fall back to
-    // the host process's cwd and fail with "No pzstudio project found."
-    // even though the project was passed in explicitly (sweep d08-B5: the
-    // VS Code extension anchors every run through the invocation context).
-    // Inject the root through the whole command instead.
     const projectRoot = projectDir();
 
     if (action === 'generate') {
@@ -59,23 +45,12 @@ export async function modinfoCmd(action: string, modId?: string) {
             await generateForAll(projectConfig, projectRoot);
         }
     } else {
-        // Invalid enum value on the handler path: same usage-error semantics
-        // (exit 2) and message style as the parse-stage enum check on
-        // --transport (d11-F8 review).
         throw new CliUsageError(
             `Unknown modinfo action '${action}' (expected one of: generate).`,
         );
     }
 }
 
-/**
- * Generate mod.info for a specific mod.
- * @param modId The mod id
- * @param projectConfig The project config
- * @param projectRoot The invocation-resolved project root the mod folder
- *   lives under (same discovery resolveProjectConfig used — never the
- *   legacy ambient default).
- */
 async function generateForMod(
     modId: string,
     projectConfig: any,
@@ -106,8 +81,6 @@ async function generateForMod(
     }
 
     verbose(`Found targets for '${modId}': ${targets.join(', ')}`);
-    // --force overwrites existing files regardless of the auto-if-missing
-    // default; build.modInfo "auto" already means overwrite.
     const overwrite = hasFlag('force') || modInfoFlag === 'auto';
     for (const targetDir of targets) {
         const modInfoPath = join(targetDir, 'mod.info');
@@ -129,11 +102,6 @@ async function generateForMod(
     }
 }
 
-/**
- * Generate mod.info for all eligible mods.
- * @param projectConfig The project config
- * @param projectRoot The invocation-resolved project root
- */
 async function generateForAll(projectConfig: any, projectRoot: string) {
     log('Generating mod.info for all eligible mods...');
     const mods = Object.keys(projectConfig.mods).filter((id) => {

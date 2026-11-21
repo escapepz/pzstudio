@@ -40,8 +40,6 @@ unknown_field=some value
 
         const generated = generateModInfoText('test_mod', projectConfig);
 
-        // Check if all fields are present.
-        // Note: Order might differ, so we check line by line (sorted)
         const originalLines = originalModInfo
             .split('\n')
             .map((l) => l.trim())
@@ -52,10 +50,6 @@ unknown_field=some value
             .map((l) => l.trim())
             .filter((l) => l)
             .sort();
-
-        // Wait, my parseModInfoText preserves unknown fields.
-        // But generateModInfoText only writes KNOWN fields.
-        // I should update generateModInfoText to also write unknown fields if we want lossless round-trip.
 
         expect(generatedLines).toEqual(originalLines);
     });

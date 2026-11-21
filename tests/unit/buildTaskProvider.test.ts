@@ -20,9 +20,6 @@ import {
     configurationStore,
     defaultGetConfiguration,
 } from '../helpers/vscode-mock';
-// The REAL engine lock primitive (side-effect-free module): the queued-task
-// test below models the host instance's studio.run faithfully —
-// createPzStudio.run wraps its whole lifecycle in withEngineLock (doc 11 §9).
 import { withEngineLock } from '../../packages/cli/src/lib/invocation';
 import {
     BuildTaskProvider,
@@ -31,7 +28,6 @@ import {
 
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 
-/** Minimal PzStudio stub: the task terminal only ever calls studio.run. */
 interface StudioStub {
     run: import('vitest').Mock;
 }
@@ -70,9 +66,6 @@ describe('BuildTaskProvider', () => {
             async (_o: unknown, task: () => unknown) => task(),
         );
         asMock(vscode.workspace.fs.readDirectory).mockResolvedValue([]);
-        // Fresh default configuration per test: resolveFlags reads
-        // pzstudio.* settings, and a target pinned by one test must not
-        // leak into the next.
         asMock(vscode.workspace.getConfiguration).mockImplementation(
             () =>
                 ({
@@ -127,7 +120,6 @@ describe('BuildTaskProvider', () => {
         ).toBeUndefined();
     });
 
-    /** Opens the terminal for one task and starts capturing its writes. */
     async function startTask(
         target: string,
         studio: StudioStub,
@@ -135,7 +127,6 @@ describe('BuildTaskProvider', () => {
     ) {
         const provider = new BuildTaskProvider(studio as never, onBuildSuccess);
         provider.provideTasks();
-        // createTask is internal — go through resolveTask to reach it.
         const task = new TaskCtor(
             { type: PZ_TASK_TYPE, target },
             vscode.TaskScope.Workspace,
@@ -149,7 +140,6 @@ describe('BuildTaskProvider', () => {
         const terminal = (await resolved.execution.callback()) as {
             open: () => void;
         };
-        // The terminal fires writes through its EventEmitter; capture them.
         const writes: string[] = [];
         const emitterInstance = (
             terminal as unknown as {
@@ -191,7 +181,6 @@ describe('BuildTaskProvider', () => {
             flags: ['--production'],
             projectDir: path.sep + path.join('proj'),
         });
-        // The legacy engine doors left the task provider with the v2 cutover.
         const { runCLI, setProjectDir } =
             (await import('@pzstudio/cli/api')) as {
                 runCLI: import('vitest').Mock;
@@ -236,10 +225,6 @@ describe('BuildTaskProvider', () => {
         expect(writes.join('')).toContain('pzstudio clean completed.');
     });
 
-    // UX-01: the task target must OVERRIDE pzstudio.build.target — every
-    // configured × task combination resolves to exactly one target flag
-    // (never the setting flag layered under the task flag, which the CLI
-    // rejects as conflicting options).
     const CONFIGURED_TARGETS = [
         'default',
         'production',
@@ -253,7 +238,6 @@ describe('BuildTaskProvider', () => {
         both: '--both',
     };
 
-    /** Pins pzstudio.build.target (verbose stays unset unless asked). */
     function withConfiguredTarget(target: string, verbose = false) {
         asMock(vscode.workspace.getConfiguration).mockImplementation(
             () =>
@@ -284,9 +268,6 @@ describe('BuildTaskProvider', () => {
                     const studio = studioStub();
                     await runTask(taskTarget, studio);
 
-                    // Exact options match: exactly one explicit build-target
-                    // flag (the task's), no contradictory duplicate, and the
-                    // configured target is overridden, not appended to.
                     expect(studio.run).toHaveBeenCalledTimes(1);
                     expect(studio.run).toHaveBeenCalledWith('build', [], {
                         flags: [TARGET_FLAG[taskTarget]],
@@ -312,8 +293,6 @@ describe('BuildTaskProvider', () => {
         const studio = studioStub();
         await runTask('development', studio);
 
-        // The task target wins over the setting; non-target flags are
-        // untouched — exactly one target flag, verbose preserved.
         expect(studio.run).toHaveBeenCalledWith('build', [], {
             flags: ['--verbose', '--development'],
             projectDir: path.sep + path.join('proj'),
@@ -356,10 +335,6 @@ describe('BuildTaskProvider', () => {
         expect(writes.join('')).toContain('pzstudio clean completed.');
     });
 
-    // UX-05: the task resolves its flags for the resolved project's folder
-    // resource. Folder-scoped non-target flags (verbose) must reach the
-    // invocation, and the task target keeps beating the folder-level
-    // configured target (UX-01).
     describe('UX-05 resource-scoped flags', () => {
         const UriCtor = vscode.Uri as unknown as new (
             parts: string[],
@@ -414,8 +389,6 @@ describe('BuildTaskProvider', () => {
         const second = await startTask('production', studio);
         await Promise.all([first.done, second.done]);
 
-        // No refusal, no warning — both tasks reach the host instance (they
-        // serialize on the engine lock instead, doc 11 §9).
         expect(studio.run).toHaveBeenCalledTimes(2);
         expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
     });
@@ -427,7 +400,6 @@ describe('BuildTaskProvider', () => {
             releaseA = r;
         });
 
-        // Operation A acquires and holds the engine invocation.
         const opA = withEngineLock(async () => {
             events.push('a:start');
             await gateA;
@@ -436,9 +408,6 @@ describe('BuildTaskProvider', () => {
         try {
             await vi.waitFor(() => expect(events).toContain('a:start'));
 
-            // The task terminal runs through the host instance; the stub's
-            // run enters the same lock the real createPzStudio.run does, so
-            // the queued behavior asserted below is the engine's contract.
             const studio: StudioStub = {
                 run: vi.fn(() =>
                     withEngineLock(async () => {
@@ -450,9 +419,6 @@ describe('BuildTaskProvider', () => {
 
             const { writes, done } = await startTask('production', studio);
 
-            // The task dispatches but is QUEUED: it must not execute while A
-            // holds the lock (A's gate is still closed), and the terminal
-            // has reported the start but not the completion.
             await vi.waitFor(() => expect(studio.run).toHaveBeenCalledTimes(1));
             expect(events).toEqual(['a:start']);
             expect(writes.join('')).toContain('pzstudio build started...');
@@ -462,8 +428,6 @@ describe('BuildTaskProvider', () => {
             await done;
             await opA;
 
-            // FIFO: A ran to completion first, then the task — no interleave,
-            // no dropped task, no deadlock; terminal status lines unchanged.
             expect(events).toEqual([
                 'a:start',
                 'a:end',
@@ -472,7 +436,6 @@ describe('BuildTaskProvider', () => {
             ]);
             expect(writes.join('')).toContain('pzstudio build completed.');
         } finally {
-            // Never leave a parked invocation holding the lock.
             releaseA();
             await Promise.allSettled([opA]);
         }

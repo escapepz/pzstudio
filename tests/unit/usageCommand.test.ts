@@ -2,12 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import { join, resolve } from 'path';
-// fflate is a dependency of packages/cli only (pnpm layout): resolve it
-// through the package's own node_modules, like the CLI sources do.
 import { unzipSync } from '../../packages/cli/node_modules/fflate';
 import type { CommandContext } from '../../packages/cli/src/lib/registry';
 import { getCommand } from '../../packages/cli/src/lib/registry';
-// Importing the command module runs registerCommand + addHelp at import time.
 import '../../packages/cli/src/lib/commands/usage';
 import { runCLI } from '../../packages/cli/src/lib/cli';
 import {
@@ -21,10 +18,6 @@ import {
 import { setLogger } from '../../packages/cli/src/lib/logger';
 import { CliUsageError, setCliIO } from '../../packages/cli/src/lib/parser';
 import { CliError } from '../../packages/cli/src/lib/errors';
-
-// NO module mocks: every case asserts real files/config/zip contents through
-// the fake HOME (vitest.setup.ts). Output stays pristine via the recording
-// logger + capturing CliIO (cliLifecycle / usageWiring idiom).
 
 const fakeHome = (): string =>
     (globalThis as any).__PZSTUDIO_FAKE_HOME as string;
@@ -46,7 +39,6 @@ const writeJsonConfig = (config: unknown): void => {
     fs.writeFileSync(configPath(), JSON.stringify(config), 'utf-8');
 };
 
-/** Minimal valid NDJSON usage event (shape per packages/cli/src/lib/usage.ts). */
 const eventLine = (sid: string, ts: string): string =>
     JSON.stringify({
         v: 1,
@@ -64,7 +56,6 @@ const eventLine = (sid: string, ts: string): string =>
         status: 'ok',
     });
 
-/** Pre-creates the usage store with the given NDJSON lines. */
 const seedStore = (lines: string[]): void => {
     fs.mkdirSync(usageDir(), { recursive: true });
     fs.writeFileSync(eventsFile(), lines.join('\n') + '\n', 'utf-8');
@@ -107,8 +98,6 @@ afterEach(() => {
     setCliIO(undefined);
     logCalls = [];
     ioStderr = [];
-    // The default export path is the process cwd (the repo root during
-    // tests): always remove the bundle so the working tree stays clean.
     const now = new Date();
     const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
     fs.rmSync(join(process.cwd(), `pzstudio-usage-${stamp}.zip`), {
@@ -120,14 +109,12 @@ afterEach(() => {
     tmpRealDirs = [];
 });
 
-/** All stdout data lines the command printed (method 'log' only). */
 const loggedData = (): string =>
     logCalls
         .filter((c) => c.method === 'log')
         .map((c) => String(c.message))
         .join('\n');
 
-/** The parsed v1 envelopes on stdout (pretty-printed, one log call each). */
 const jsonEnvelopes = (): any[] =>
     logCalls
         .filter((c) => c.method === 'log')
@@ -227,7 +214,6 @@ describe('pzstudio usage command', () => {
         const names = Object.keys(zipped);
         expect(names).toContain('manifest.json');
         expect(names).toContain(`events-${todayUtc()}.ndjson`);
-        // Dotfiles (.salt, .notice-shown) never enter the bundle.
         expect(names.some((n) => n.startsWith('.'))).toBe(false);
 
         const manifest = JSON.parse(
@@ -243,7 +229,6 @@ describe('pzstudio usage command', () => {
         });
         expect(Number.isNaN(Date.parse(manifest.generatedAt))).toBe(false);
 
-        // The events file content round-trips untouched.
         const bundled = Buffer.from(
             zipped[`events-${todayUtc()}.ndjson`],
         ).toString('utf-8');
@@ -315,14 +300,10 @@ describe('pzstudio usage command', () => {
 
         runUsage(['export'], { out: outPath, json: true });
 
-        // The zip is still written exactly as the human path writes it
-        // (the --out decision mirrors logs --json: paths live INSIDE the
-        // envelope; the domain artifact is unchanged).
         expect(fs.existsSync(outPath)).toBe(true);
         const zipped = unzipSync(new Uint8Array(fs.readFileSync(outPath)));
         expect(Object.keys(zipped)).toContain('manifest.json');
 
-        // Exactly one envelope on stdout, parsed as the v1 family.
         const envelopes = jsonEnvelopes();
         expect(envelopes).toHaveLength(1);
         const envelope = envelopes[0];
@@ -341,7 +322,6 @@ describe('pzstudio usage command', () => {
             },
         });
 
-        // The envelope is the ONLY stdout content — no human prose.
         expect(loggedData()).toBe(JSON.stringify(envelope, null, 2));
     });
 
@@ -354,8 +334,6 @@ describe('pzstudio usage command', () => {
     });
 
     it('8b. export --json with empty store: CliError and no envelope on stdout (d17-F1)', () => {
-        // CLI-8 failure semantics: a runtime failure before a result exists
-        // leaves stdout EMPTY — the error goes to stderr only.
         writeJsonConfig({ templates: {} });
         expect(fs.existsSync(usageDir())).toBe(false);
 
@@ -405,7 +383,6 @@ describe('pzstudio usage command', () => {
                 ),
             ),
         ).toBe(true);
-        // Acknowledgement only: the export itself still ran normally.
         expect(loggedData()).toContain('Exported 1 event(s)');
     });
 
@@ -427,7 +404,6 @@ describe('pzstudio usage command', () => {
         logCalls = [];
         seedStore([eventLine('a'.repeat(32), '2026-11-08T10:00:00.000Z')]);
         runUsage(['off'], { purge: true });
-        // The honored combination never prints the acknowledgement.
         expect(
             logCalls
                 .filter((c) => c.method === 'info')
@@ -442,7 +418,6 @@ describe('pzstudio usage command', () => {
             eventLine('a'.repeat(32), '2026-11-08T10:00:00.000Z'),
             eventLine('b'.repeat(32), '2026-11-08T12:00:00.000Z'),
         ]);
-        // Fresh recorder so it reads the enabled config written above.
         resetUsageRecorder();
         const before = eventLines(eventsFile()).length;
         expect(before).toBe(2);
@@ -466,8 +441,6 @@ describe('pzstudio usage command', () => {
 
         runUsage(['off']);
 
-        // The pre-off recorder instance had enabled memoized; the command's
-        // reset forces the next getUsageRecorder() to re-read the config.
         getUsageRecorder().recordOp({
             op: 'build',
             host: 'cli',

@@ -15,16 +15,6 @@ import {
 } from '@pzstudio/core';
 import { resolveDoctorWorkshopInputs } from '../../packages/cli/src/lib/doctor';
 
-/**
- * The doctor's per-item slot read must survive a hard fs failure (the
- * game holds the junction open, an AV locks the marker — EPERM/EBUSY):
- * the finding belongs to THAT item, and the rest of the workshop-link
- * report must survive. Before the per-item catch, one locked slot
- * rejected the Promise.all into the outer invalid-project.json catch and
- * every workshop-link finding vanished from the report. The real
- * inspector is kept as the wrapper's default, so only the pinned call
- * (here: the EPERM throw) diverges from the unmocked suites.
- */
 const actualInspect = vi.hoisted(() => ({
     fn: undefined as
         | ((
@@ -110,10 +100,7 @@ describe('resolveDoctorWorkshopInputs: slot read failure resilience', () => {
             config,
             workshop,
         );
-        // The decision still flows (not swallowed into the outer
-        // invalid-project.json catch)...
         expect(inputs.materialization.action).toBe('materialize');
-        // ...and the locked slot is THIS item's finding, not a report-killer.
         const failed = inputs.workshopLinks?.find((w) => w.item === itemName);
         expect(failed?.state).toBe('INSPECT_FAILED');
         expect(failed?.detail).toContain('EPERM');

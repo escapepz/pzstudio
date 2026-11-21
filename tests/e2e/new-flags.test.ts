@@ -54,9 +54,7 @@ describe('new — templates (E2E Mocked)', () => {
     });
 
     it('should refresh the template cache when --force-update is provided', async () => {
-        // Run once to populate cache (mocked clone)
         await workspace.run('new', ['P1', 'p1', '--force-update']);
-        // Run again with force-update to trigger fetch (mocked fetch)
         const result2 = await workspace.run('new', [
             'P2',
             'p2',
@@ -74,7 +72,6 @@ describe('new — templates (E2E Mocked)', () => {
     });
 
     it('should fail when force-update refresh fails and re-clone fails', async () => {
-        // Set a custom template in global config to avoid legacy fallback
         const customUrl = 'https://github.com/custom/project.git';
         workspace.writeGlobalConfig({
             templates: { project: { url: customUrl } },
@@ -90,7 +87,6 @@ describe('new — templates (E2E Mocked)', () => {
             return { status: 0 } as any;
         });
 
-        // Populate an "invalid" cache to force refresh/re-clone
         const cacheDir = path.join(
             workspace.fakeHome,
             '.pzstudio',

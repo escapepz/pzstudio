@@ -1,20 +1,5 @@
-/**
- * Commander adapter — parser/help infrastructure ONLY.
- *
- * Layer contract (CLI-1):
- *   bin/index.ts          sets process.exitCode, nothing else
- *   this adapter          parse/help/usage validation -> ParsedInvocation
- *   lib/cli.ts            execution context, migrations, dispatch
- *   lib/commands/*        business logic (untouched by parsing)
- *
- * Commander MUST NOT own the process lifecycle: it never exits the process,
- * never writes without going through CliIO, and its action handlers are
- * capture-only (they never invoke command business logic).
- */
 import { Command, CommanderError, Option } from 'commander';
 
-// Re-exported so tests/embedders can classify without importing commander
-// directly (commander resolves from the cli package, not the repo root).
 export { CommanderError };
 import {
     allCommands,
@@ -25,7 +10,6 @@ import {
     PositionalSpec,
 } from './registry';
 
-/** Raw output sink. Commander output flows through here, never the logger. */
 export interface CliIO {
     stdout(text: string): void;
     stderr(text: string): void;
@@ -38,11 +22,6 @@ const processIO: CliIO = {
 
 let activeIO: CliIO = processIO;
 
-/**
- * Replaces the output sink (test hook). Pass undefined to restore the
- * process streams. Command output always goes through CliIO so tests and
- * embedders can capture usage output without touching the logger.
- */
 export function setCliIO(sink: CliIO | undefined): void {
     activeIO = sink ?? processIO;
 }
@@ -51,38 +30,19 @@ export function getCliIO(): CliIO {
     return activeIO;
 }
 
-/** An invocation produced by parsing, before semantic validation. */
 export interface ParsedInvocation {
-    /** Raw command name as typed (undefined when no command was given). */
     commandName?: string;
-    /** Resolved command definition (undefined when unknown or not given). */
     command?: CommandDef;
     positionals: string[];
-    /** Dash-case option name -> boolean flag or string value. */
     options: Record<string, string | boolean | undefined>;
-    /** Tokens rejected while structuring (legacy path); validated later. */
     unknownOptions?: string[];
-    /**
-     * Parse-layer evidence of which flags the user actually typed, keyed by
-     * dash-case declared name. Commander is last-wins on a shared attribute
-     * (`--materialize` / `--no-materialize` both write `materialize`), so the
-     * parsed VALUES cannot prove a contradictory pair. Handlers must never
-     * read this (R0) — it exists for validateInvocation's conflicts loop.
-     * Absent on the legacy embedded path, which has no Commander events.
-     */
     presence?: ReadonlySet<string>;
 }
 
-/** A ParsedInvocation that passed validateInvocation(). */
 export type ValidInvocation = ParsedInvocation & {
     command: CommandDef;
 };
 
-/**
- * Usage-level failure (bad syntax, unknown command/flag, arity). Exit code 2.
- * `alreadyReported` marks errors whose text was already printed by Commander;
- * the caller must not log them a second time.
- */
 export class CliUsageError extends Error {
     readonly alreadyReported: boolean;
 
@@ -95,14 +55,6 @@ export class CliUsageError extends Error {
 
 type ControlFlowKind = 'help' | 'version' | 'usage';
 
-/**
- * Maps a Commander control-flow error to CLI semantics by its `code` —
- * never by `err.exitCode` (that is Commander's own process-exit convention,
- * which we deliberately do not follow).
- *
- * Contract tests pin the codes emitted by the pinned commander version; a
- * library upgrade that changes codes must update this switch explicitly.
- */
 export function classifyCommanderError(err: unknown): {
     kind: ControlFlowKind;
     message?: string;
@@ -134,38 +86,20 @@ function addFlag(cmd: Command, flag: FlagSpec, seenFlags: Set<string>): void {
         opt.choices([...flag.choices]);
     }
     cmd.addOption(opt);
-    // Presence evidence: Commander emits `option:<declared name>` only for
-    // tokens it truly parsed as an option — never for an option-argument
-    // (`--path --no-materialize`) nor anything after `--`. This is the one
-    // place that knows a flag's declared spelling, so the hook lives here.
     cmd.on(`option:${flag.name}`, () => seenFlags.add(flag.name));
 }
 
 function addPositional(cmd: Command, spec: PositionalSpec): void {
-    // Declared optional on the Commander side ON PURPOSE: required/arity
-    // semantics are enforced by validateInvocation() so the executable and
-    // embedded paths share ONE validator (Commander only owns syntax).
-    // The --help option must short-circuit arity checks on both paths.
     const token = spec.variadic ? `[${spec.name}...]` : `[${spec.name}]`;
     cmd.argument(token);
 }
 
-/**
- * Builds the Commander program from the registry. Fresh instance per parse
- * (Commander keeps parse state on the instance). Action handlers are
- * capture-only: they normalize what Commander parsed into a
- * ParsedInvocation and never call business logic.
- */
 function buildProgram(version: string): {
     program: Command;
     getInvocation: () => ParsedInvocation | undefined;
 } {
     const program = new Command();
     let captured: ParsedInvocation | undefined;
-    // Per-parse presence evidence: which declared flags Commander actually
-    // parsed as options. Fresh set per program (Commander keeps parse state
-    // on the instance). See addFlag for why an event hook is the only
-    // reliable source.
     const seenFlags = new Set<string>();
 
     program
@@ -173,9 +107,6 @@ function buildProgram(version: string): {
         .version(`v${version}`)
         .exitOverride()
         .showSuggestionAfterError(true)
-        // Help display is ours: curated texts in lib/help.ts are printed by
-        // the dispatcher when the --help option is seen. Disabling
-        // Commander's help machinery keeps every output path explicit.
         .helpOption(false)
         .addHelpCommand(false)
         .configureOutput({
@@ -183,9 +114,6 @@ function buildProgram(version: string): {
             writeErr: (text) => activeIO.stderr(text),
         });
 
-    // Global flags must be declared on the program too, so they parse in
-    // every position (`pzstudio --verbose build` and `pzstudio build
-    // --verbose`); subcommand actions merge them via optsWithGlobals().
     for (const flag of GLOBAL_FLAGS) {
         addFlag(program, flag, seenFlags);
     }
@@ -214,10 +142,6 @@ function buildProgram(version: string): {
         }
         sub.action((...cbArgs: unknown[]) => {
             const cmd = cbArgs[cbArgs.length - 1] as Command;
-            // Global flags are declared on BOTH the program and the
-            // subcommand (so they parse in every position); with that
-            // shadowing, Commander keeps the parsed values on the parent
-            // store — optsWithGlobals() is the only reliable merged view.
             const options = cmd.optsWithGlobals() as Record<string, unknown>;
             // Commander passes undefined for unfilled optional arguments and
             // an array for a trailing variadic. Required positionals always
@@ -247,8 +171,6 @@ function toInvocation(
     positionals: string[],
     seenFlags: Set<string>,
 ): ParsedInvocation {
-    // Commander camelCases option names; our handlers read dash-case via
-    // hasFlag/extractFlag. Map every declared flag name back to its value.
     const declared: FlagSpec[] = [...GLOBAL_FLAGS, ...(def?.flags ?? [])];
     const options: Record<string, string | boolean | undefined> = {};
     for (const flag of declared) {
@@ -279,16 +201,8 @@ function toInvocation(
 
 export type ParseOutcome =
     | { kind: 'invocation'; invocation: ParsedInvocation }
-    /** Control flow already handled during parse (e.g. --version printed). */
     | { kind: 'terminal' };
 
-/**
- * Finds the first token Commander would treat as the command candidate —
- * value-aware: the value of a declared value-flag is skipped, never
- * mistaken for a command. With a root action handler registered, Commander
- * would otherwise report unknown commands as "too many arguments"; this
- * pre-check rejects them with our own usage error first.
- */
 function detectCommandCandidate(userArgs: string[]): string | undefined {
     const valueFlags = new Set(
         GLOBAL_FLAGS.filter((f) => f.takesValue).map((f) => f.name),
@@ -316,8 +230,6 @@ function detectCommandCandidate(userArgs: string[]): string | undefined {
             continue;
         }
         if (token.startsWith('-')) {
-            // Short flag: `-C dir` consumes the next token as its value;
-            // `-Cdir` / `-C=dir` carry it inline.
             const short = token[1];
             if (
                 valueShorts.has(short) &&
@@ -334,11 +246,6 @@ function detectCommandCandidate(userArgs: string[]): string | undefined {
     return undefined;
 }
 
-/**
- * Parses executable argv (user-space tokens, without node/script).
- * Pure: no side effects; output is only Commander's own usage/version
- * reporting through CliIO.
- */
 export async function parseArgv(
     userArgs: string[],
     version: string,
@@ -360,10 +267,8 @@ export async function parseArgv(
         if (flow.kind === 'version' || flow.kind === 'help') {
             return { kind: 'terminal' };
         }
-        // Commander already printed the error + usage to CliIO.
         throw new CliUsageError(flow.message ?? 'Invalid usage.', true);
     }
-    // The root action always captures when no subcommand matched.
     const invocation = getInvocation();
     if (!invocation) {
         throw new CliUsageError('No command parsed.', true);
@@ -371,16 +276,6 @@ export async function parseArgv(
     return { kind: 'invocation', invocation };
 }
 
-/**
- * Legacy embedded-API path: converts the pre-split runCLI(cmd, args, {flags})
- * shape into the same ParsedInvocation the executable path produces, using
- * the command schema to pair flag values. Pure structuring — every semantic
- * check lives in validateInvocation so both paths share one contract.
- *
- * `setProcessArgsOverride` compatibility shim note: the new parser never
- * depends on it; the shim is removed with this rewrite (API v2 will revisit
- * the whole embedded surface).
- */
 export function normalizeLegacyInvocation(
     cmdName: string | undefined,
     cmdArgs: string[] | undefined,
@@ -390,9 +285,6 @@ export function normalizeLegacyInvocation(
     const declared: FlagSpec[] = [...GLOBAL_FLAGS, ...(def?.flags ?? [])];
     const byName = new Map(declared.map((f) => [f.name, f]));
 
-    // Tokens may arrive mixed: cmdArgs can contain flag tokens too (the old
-    // splitArgs behavior), so structure them together, values consumed per
-    // the command schema.
     const tokens = [...(cmdArgs ?? []), ...(flagTokens ?? [])];
     const positionals: string[] = [];
     const options: Record<string, string | boolean | undefined> = {};
@@ -455,12 +347,6 @@ function suggestCommands(name: string): string {
 }
 export { suggestCommands };
 
-/**
- * Single semantic validation layer shared by the executable and embedded
- * paths: command existence, option names, option values, positional arity.
- * The executable path is pre-validated by Commander, but it still flows
- * through here so both hosts are guaranteed identical semantics.
- */
 export function validateInvocation(
     invocation: ParsedInvocation,
 ): ValidInvocation {
@@ -477,17 +363,13 @@ export function validateInvocation(
     }
 
     if (!command) {
-        // No command given: banner + help path. Nothing to validate.
         return invocation as ValidInvocation;
     }
 
-    // --help short-circuits every semantic check (pure control flow on both
-    // paths); unknown command/option above still take precedence.
     if (options['help'] === true) {
         return invocation as ValidInvocation;
     }
 
-    // Option values: choices for value flags.
     const declared: FlagSpec[] = [...GLOBAL_FLAGS, ...(command.flags ?? [])];
     for (const flag of declared) {
         const value = options[flag.name];
@@ -503,12 +385,6 @@ export function validateInvocation(
         }
     }
 
-    // Mutually exclusive options: declared per flag in the registry, so the
-    // executable and embedded hosts share one conflict semantics (exit 2).
-    // Presence (not truthiness) is the test: `--no-materialize` lands as
-    // `materialize: false`, which a truthiness check would read as absent.
-    // The legacy path carries no presence set — its options are built by
-    // direct token parsing, where a `true` value already means "typed".
     const presence = invocation.presence;
     const isPresent = (name: string): boolean =>
         presence
@@ -524,7 +400,6 @@ export function validateInvocation(
         }
     }
 
-    // Positional arity.
     const specs = command.positionals ?? [];
     const requiredCount = specs.filter((p) => p.required).length;
     const variadic = specs.some((p) => p.variadic);

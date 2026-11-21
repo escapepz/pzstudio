@@ -33,7 +33,6 @@ vi.mock('fs');
 vi.mock('../../packages/cli/src/lib/logger');
 vi.mock('../../packages/cli/src/lib/templateManager');
 
-// Real fs implementation for tests that need genuine existence probes.
 const actualFs = (await vi.importActual('fs')) as typeof import('fs');
 
 describe('Helper Library', () => {
@@ -101,8 +100,6 @@ describe('Helper Library', () => {
                 JSON.stringify({ title: 123 }),
             );
 
-            // Library code throws instead of process.exit (VS Code extension
-            // runs it in-process).
             expect(() => readProjectConfig()).toThrow(
                 /Validation failed for project\.json/,
             );
@@ -112,7 +109,6 @@ describe('Helper Library', () => {
             vi.mocked(fs.existsSync).mockReturnValue(true);
             vi.mocked(fs.readFileSync).mockReturnValue(
                 JSON.stringify({
-                    // root-level "title" is a legacy field that triggers migration
                     title: 'Old Title',
                     workshop: { title: 'Test', visibility: 'public', tags: [] },
                     mods: {},
@@ -121,9 +117,6 @@ describe('Helper Library', () => {
 
             const config = readProjectConfig();
             expect(config).toBeDefined();
-            // Migration commit 6 (Appendix C): the [MIGRATION] warning is a
-            // threaded non-engine emission — it routes through the emitWarn
-            // adapter (raw legacy by default), never the engine-tier warn.
             expect(logger.emitWarn).toHaveBeenCalledWith(
                 undefined,
                 expect.stringContaining('[MIGRATION]'),
@@ -136,12 +129,9 @@ describe('Helper Library', () => {
                 JSON.stringify({
                     workshop: { title: 'Test', visibility: 'public', tags: [] },
                     mods: { mod1: { name: 'Mod 1', description: 'Desc' } },
-                    // build.modInfo intentionally absent – this is the default
                 }),
             );
 
-            // Clear warn history from previous tests in this describe block
-            // (vi.restoreAllMocks does not reset call records on vi.mock() module fns)
             vi.mocked(logger.emitWarn).mockClear();
 
             const config = readProjectConfig();
@@ -150,7 +140,6 @@ describe('Helper Library', () => {
                 undefined,
                 expect.stringContaining('[MIGRATION]'),
             );
-            // applyProjectDefaults silently defaults modInfo to 'auto-if-missing'
             expect(config!.mods.mod1.build!.modInfo).toBe('auto-if-missing');
         });
 
@@ -170,8 +159,6 @@ describe('Helper Library', () => {
 
             const config = readProjectConfig();
             expect(config).toBeDefined();
-            // The in-memory upgrade kept the deprecated field (no single
-            // mod to move it onto) and said so — without failing the read.
             expect((config as any).authors).toEqual([
                 'OldAuthor',
                 'SecondAuthor',
@@ -215,7 +202,6 @@ describe('Helper Library', () => {
 
             atomicWriteJson(filePath, updated);
 
-            // The catch fallback calls writeFileSync again with the file path directly
             const fallbackCall = vi
                 .mocked(fs.writeFileSync)
                 .mock.calls.find(
@@ -267,7 +253,6 @@ describe('Helper Library', () => {
     describe('setProjectDir', () => {
         it('should set and clear the external project dir', () => {
             setProjectDir('/custom/path');
-            // Reset so it doesn't leak into other tests
             setProjectDir(undefined);
         });
     });
@@ -384,15 +369,11 @@ describe('Helper Library', () => {
             expect(result.mods).toBeUndefined();
         });
 
-        // Pin (watch-target spec 2026-11-13): the schema declares
-        // "default": "production" for build.target but no code enforces it.
-        // If this ever goes red, watch's unset-target branch is dead.
         it('should NOT default build.target (unset stays unset)', () => {
             const empty = applyProjectDefaults({});
             expect(empty.build?.target).toBeUndefined();
             const bareBuild = applyProjectDefaults({ build: {} });
             expect(bareBuild.build?.target).toBeUndefined();
-            // The function did run: existing defaults still fill.
             expect(empty.excludes).toEqual([]);
             expect(empty.workshop).toEqual({});
         });
@@ -662,7 +643,7 @@ describe('Helper Library', () => {
 
     describe('getOutDir', () => {
         it('should return undefined when no tier configures an outdir (no factory tier)', () => {
-            vi.mocked(fs.existsSync).mockReturnValue(false); // No config.json
+            vi.mocked(fs.existsSync).mockReturnValue(false);
             expect(getOutDir()).toBeUndefined();
         });
 
@@ -681,9 +662,6 @@ describe('Helper Library', () => {
                 outdir: '~/Zomboid/Workshop',
             } as any);
             expect(result?.toLowerCase()).toContain('zomboid');
-            // The tilde TOKEN is expanded: the result no longer starts with
-            // it. A blanket not.toContain('~') misfires where real paths
-            // carry 8.3 short names (GitHub's C:\Users\RUNNER~1\...).
             expect(result?.startsWith('~')).toBe(false);
         });
     });
@@ -736,7 +714,6 @@ describe('Helper Library', () => {
 
         it('should prioritize project.json outdir over VS Code settings', () => {
             setVsCodeSettings({ outdir: '/workspace/out' }, undefined);
-            // Discovery must succeed for projectDir() (fail-closed).
             vi.mocked(fs.existsSync).mockReturnValue(true);
             const project = { outdir: '/project/out' } as any;
             expect(getOutDir(project)).toContain('out');
@@ -815,7 +792,6 @@ describe('Helper Library', () => {
         } as any;
 
         it('should generate correct workshop text', () => {
-            // Only project.json exists: discovery succeeds, no description.txt.
             vi.mocked(fs.existsSync).mockImplementation((p) =>
                 String(p).endsWith('project.json'),
             );
@@ -854,7 +830,6 @@ describe('Helper Library', () => {
 
     describe('updateExperimentalScripts', () => {
         beforeEach(() => {
-            // Provide valid JSON so the internal functions don't throw when parsing package.json
             vi.mocked(fs.readFileSync).mockReturnValue('{}');
         });
 
@@ -866,10 +841,6 @@ describe('Helper Library', () => {
         });
 
         it('should run addProject dispatch without error when script exists', () => {
-            // Probe the real filesystem: the helper resolves the actual
-            // scripts/experimental-package-scripts.js from the package dir,
-            // so a blanket existsSync stub would select a candidate that
-            // never exists on disk and the require below would fail.
             vi.mocked(fs.existsSync).mockImplementation((p) =>
                 actualFs.existsSync(p),
             );
@@ -881,7 +852,6 @@ describe('Helper Library', () => {
             expect(() =>
                 updateExperimentalScripts('addProject', '/nonexistent/dir'),
             ).not.toThrow();
-            // Should not warn (meaning no exceptions were caught)
             expect(logger.warn).not.toHaveBeenCalled();
         });
 
@@ -956,8 +926,6 @@ describe('Helper Library', () => {
                 JSON.stringify({ experimental: { integration: true } }),
             );
 
-            // To truly test missing functions without it actually invoking the real ones,
-            // we could stub it. But simply calling an unknown action covers the default switch branch.
             expect(() =>
                 updateExperimentalScripts('unknownAction' as any, '/some/dir'),
             ).not.toThrow();
@@ -1072,7 +1040,6 @@ describe('Helper Library', () => {
         });
 
         it('should return needsMigration=false when build.modInfo is absent', () => {
-            // Omitting build.modInfo is the new default – not a migration trigger
             const result = migration.checkProject({
                 workshop: { title: 'Test', visibility: 'public', tags: [] },
                 mods: {
@@ -1116,12 +1083,6 @@ describe('Helper Library', () => {
     });
 
     describe('readRawProjectOutdir', () => {
-        // D3-a fail-closed contract: the raw reader may only return
-        // undefined when it can PROVE the config carries no string outdir.
-        // Any indeterminate state (missing file, read failure, parse
-        // failure, non-object JSON, non-string outdir) must throw — a
-        // silent undefined would authorize Add/Delete to rewrite
-        // project.json with the configured outdir discarded.
         function mockRawConfigRead(content: string) {
             vi.mocked(fs.existsSync).mockReturnValue(true);
             vi.mocked(fs.readFileSync).mockReturnValue(content as any);

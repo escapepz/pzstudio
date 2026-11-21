@@ -83,12 +83,10 @@ describe('modconfig command (E2E)', () => {
         workspace.assertSuccess(exclude);
         expect(workspace.readJson('project.json').excludes).toEqual(['mod_a']);
 
-        // Excluding again is a silent no-op
         const again = await workspace.run('modconfig', ['mod_a', 'exclude']);
         workspace.assertSuccess(again);
         expect(workspace.readJson('project.json').excludes).toEqual(['mod_a']);
 
-        // devonly removes the exclusion
         const devonly = await workspace.run('modconfig', ['mod_a', 'devonly']);
         workspace.assertSuccess(devonly);
         const config = workspace.readJson('project.json');
@@ -130,7 +128,6 @@ describe('modconfig command (E2E)', () => {
             'modInfo',
             'sometimes',
         ]);
-        // d11-F8: invalid enum values exit 2 on the handler path too.
         workspace.assertFailure(bad, 2);
         workspace.assertStderr(
             bad,
@@ -156,7 +153,6 @@ describe('modconfig command (E2E)', () => {
             'naem',
             'Typo',
         ]);
-        // d11-F8: invalid enum values exit 2 on the handler path too.
         workspace.assertFailure(unknown, 2);
         workspace.assertStderr(
             unknown,
@@ -177,7 +173,6 @@ describe('modconfig command (E2E)', () => {
 
     it('should reject an unknown action, naming show with the rest (bf4-n08)', async () => {
         const unknown = await workspace.run('modconfig', ['mod_a', 'bogus']);
-        // d11-F8: invalid enum values exit 2 on the handler path too.
         workspace.assertFailure(unknown, 2);
         workspace.assertStderr(
             unknown,

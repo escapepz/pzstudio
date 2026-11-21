@@ -66,13 +66,8 @@ export function modInfoTextLines(
         // id (MUST BE FIRST or near top for PZ)
         lines.push(`id=${prefixedId ?? modId}`);
 
-        // name
         if (mod.name) lines.push(`name=${mod.name}`);
 
-        // description — emitted whenever the field EXISTS in project.json,
-        // even when it is an empty string (d08-B4): '' is a real value here
-        // (an empty description), not an absence. Only undefined/null omits
-        // the line, so a user who never had a description still gets none.
         if (mod.description !== undefined && mod.description !== null) {
             const descLines = Array.isArray(mod.description)
                 ? mod.description
@@ -80,13 +75,10 @@ export function modInfoTextLines(
             descLines.forEach((d) => lines.push(`description=${d}`));
         }
 
-        // author
         if (mod.author) lines.push(`author=${mod.author}`);
 
-        // modversion
         if (mod.modversion) lines.push(`modversion=${mod.modversion}`);
 
-        // poster
         if (typeof mod.poster === 'object')
             (mod.poster as string[]).forEach((poster) =>
                 lines.push(`poster=${poster}`),
@@ -94,18 +86,15 @@ export function modInfoTextLines(
         else if (typeof mod.poster === 'string')
             lines.push(`poster=${mod.poster}`);
 
-        // icon
         if (mod.icon) {
             lines.push(`icon=${mod.icon}`);
         }
 
-        // require
         if (typeof mod.require === 'string')
             lines.push(`require=${mod.require}`);
         else if (typeof mod.require === 'object' && mod.require.length > 0)
             lines.push(`require=${(mod.require as string[]).join(',')}`);
 
-        // incompatible
         if (typeof mod.incompatible === 'string')
             lines.push(`incompatible=${mod.incompatible}`);
         else if (
@@ -116,7 +105,6 @@ export function modInfoTextLines(
                 `incompatible=${(mod.incompatible as string[]).join(',')}`,
             );
 
-        // loadModAfter
         if (typeof mod.loadModAfter === 'string')
             lines.push(`loadModAfter=${mod.loadModAfter}`);
         else if (
@@ -127,7 +115,6 @@ export function modInfoTextLines(
                 `loadModAfter=${(mod.loadModAfter as string[]).join(',')}`,
             );
 
-        // loadModBefore
         if (typeof mod.loadModBefore === 'string')
             lines.push(`loadModBefore=${mod.loadModBefore}`);
         else if (
@@ -138,7 +125,6 @@ export function modInfoTextLines(
                 `loadModBefore=${(mod.loadModBefore as string[]).join(',')}`,
             );
 
-        // pack
         if (mod.pack) {
             const packs = Array.isArray(mod.pack) ? mod.pack : [mod.pack];
             packs.forEach((p) => {
@@ -146,7 +132,6 @@ export function modInfoTextLines(
             });
         }
 
-        // tiledef
         if (mod.tiledef) {
             const tiledefs = Array.isArray(mod.tiledef)
                 ? mod.tiledef
@@ -156,18 +141,13 @@ export function modInfoTextLines(
             });
         }
 
-        // category
         if (mod.category) lines.push(`category=${mod.category}`);
 
-        // url
         if (mod.url) lines.push(`url=${mod.url}`);
 
-        // version
         if (mod.versionMin) lines.push(`versionMin=${mod.versionMin}`);
-        // version
         if (mod.versionMax) lines.push(`versionMax=${mod.versionMax}`);
 
-        // Unknown / Forward-compatible fields
         const knownFields = [
             'id',
             'name',

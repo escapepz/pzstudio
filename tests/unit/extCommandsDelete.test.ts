@@ -24,7 +24,6 @@ const fsPath = (parts: string[]) => new UriCtor(parts).fsPath;
 const projectJson = (mods: Record<string, unknown>) =>
     new TextEncoder().encode(JSON.stringify({ mods, excludes: [] }));
 
-/** readFile serves exactly one project.json at "/<root>/project.json". */
 function withProjectJson(root: string, mods: Record<string, unknown>) {
     asMock(vscode.workspace.fs.readFile).mockImplementation(
         async (uri: { path: string }) => {
@@ -38,10 +37,6 @@ function withProjectJson(root: string, mods: Record<string, unknown>) {
 
 let updateCalls: Array<[string, unknown, number?]>;
 
-/**
- * Records configuration.update calls while keeping the faithful
- * resource-aware configuration model for reads.
- */
 function spyConfigurationUpdates() {
     updateCalls = [];
     asMock(vscode.workspace.getConfiguration).mockImplementation(
@@ -62,11 +57,6 @@ interface Harness {
     handler: (node?: unknown) => Promise<void>;
 }
 
-/**
- * Registers delete on the REAL command runner wired to a studio stub, so
- * consent is judged by what actually reaches the engine (studio.run) —
- * not just by which modals opened.
- */
 function setup(): Harness {
     const studio = { run: vi.fn(async () => {}) };
     const output = vscode.window.createOutputChannel('test');
@@ -80,11 +70,6 @@ function setup(): Harness {
     return { studio, handler: entry![1] };
 }
 
-// d05-F9: the delete command used to show its own modal that ignored
-// pzstudio.confirmBeforeRun and had no persisted bypass. It must use the
-// shared confirmBeforeRun helper exactly like build/clean: the setting
-// disables the modal, dismissal aborts, and "Don't Ask Again" persists
-// confirmBeforeRun=false for the project's workspace folder.
 describe('pzstudio.delete command (d05-F9)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -95,7 +80,6 @@ describe('pzstudio.delete command (d05-F9)', () => {
         (
             vscode.window as unknown as { activeTextEditor: unknown }
         ).activeTextEditor = undefined;
-        // Pickers dismissed and modals closed unless a test opts in.
         asMock(vscode.window.showQuickPick).mockResolvedValue(undefined);
         asMock(vscode.window.showWarningMessage).mockResolvedValue(undefined);
     });
@@ -133,7 +117,6 @@ describe('pzstudio.delete command (d05-F9)', () => {
             projectDir: new UriCtor(['proj']),
         });
 
-        // The only warning message is the confirm modal itself.
         expect(asMock(vscode.window.showWarningMessage)).toHaveBeenCalledTimes(
             1,
         );
@@ -162,7 +145,6 @@ describe('pzstudio.delete command (d05-F9)', () => {
         (
             vscode.workspace as unknown as { workspaceFolders: unknown }
         ).workspaceFolders = [folder(['proj'])];
-        // The config mock resolves folder scope through the store's keys.
         vscode.workspace.configurationStore.folders[fsPath(['proj'])] = {};
         withProjectJson('proj', { my_mod: {} });
         const { studio, handler } = setup();
@@ -176,20 +158,16 @@ describe('pzstudio.delete command (d05-F9)', () => {
             projectDir: new UriCtor(['proj']),
         });
 
-        // Same persistence build/clean get: confirmBeforeRun=false written
-        // into the WorkspaceFolder scope of the operated project.
         expect(updateCalls).toContainEqual([
             'confirmBeforeRun',
             false,
             vscode.ConfigurationTarget.WorkspaceFolder,
         ]);
-        // The bypass was written for the project's folder resource.
         expect(
             vscode.workspace.configurationStore.folders[fsPath(['proj'])][
                 'pzstudio.confirmBeforeRun'
             ],
         ).toBe(false);
-        // "Don't Ask Again" is not a cancel: the delete still ran.
         expect(studio.run).toHaveBeenCalledWith('delete', ['my_mod'], {
             flags: ['--yes'],
             projectDir: fsPath(['proj']),
@@ -212,7 +190,6 @@ describe('pzstudio.delete command (d05-F9)', () => {
 
         await handler(undefined);
 
-        // Single project, single mod: no pickers at all.
         expect(asMock(vscode.window.showQuickPick)).not.toHaveBeenCalled();
         expect(asMock(vscode.window.showInputBox)).not.toHaveBeenCalled();
         expect(studio.run).toHaveBeenCalledWith('delete', ['my_mod'], {
@@ -234,7 +211,6 @@ describe('pzstudio.delete command (d05-F9)', () => {
 
         await handler(undefined);
 
-        // Dismissed mod quick-pick: no confirm modal, no run, no warning.
         expect(asMock(vscode.window.showQuickPick)).toHaveBeenCalledTimes(1);
         expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
         expect(studio.run).not.toHaveBeenCalled();

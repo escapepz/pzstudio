@@ -21,8 +21,6 @@ export function registerBuildCommand(
                 : await resolveProjectDirResult('build');
 
             if (resolved.status !== 'resolved') {
-                // Cancelled (UX-02): abort silently — no second prompt, no
-                // "no project" warning. Only a project-less workspace warns.
                 if (resolved.status === 'no-project') {
                     warnNoProject('build');
                 }
@@ -30,8 +28,6 @@ export function registerBuildCommand(
             }
             const dir = resolved.dir;
 
-            // Name the workshop in the confirm so a wrong-project pick
-            // is obvious before anything is written.
             const { title } = await readProjectSummary(dir);
             const decision = await confirmBeforeRun(
                 'build',

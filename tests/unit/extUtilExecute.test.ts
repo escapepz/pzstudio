@@ -25,7 +25,6 @@ import { createCommandRunner } from '../../packages/vscode-extension/src/util/ex
 
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 
-/** Minimal PzStudio stub: the runner only ever calls studio.run. */
 function studioStub(implementation?: () => Promise<void>) {
     return { run: vi.fn(implementation ?? (async () => {})) };
 }
@@ -55,9 +54,6 @@ function withSingleProject(root = 'proj') {
 describe('createCommandRunner', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        // Fresh default configuration per test: resolveFlags reads
-        // pzstudio.* settings, and implementations mocked by one test must
-        // not leak into the next.
         asMock(vscode.workspace.getConfiguration).mockImplementation(
             () =>
                 ({
@@ -102,7 +98,6 @@ describe('createCommandRunner', () => {
             flags: ['--extra'],
             projectDir: path.sep + path.join('proj'),
         });
-        // The legacy anchor write left the runner with the v2 cutover.
         const { setProjectDir, runCLI } =
             (await import('@pzstudio/cli/api')) as {
                 setProjectDir: import('vitest').Mock;
@@ -151,8 +146,6 @@ describe('createCommandRunner', () => {
 
         await runner('build');
 
-        // Normal Build semantics unchanged: the setting's flag, exactly
-        // once — the explicit-target override is task-only (UX-01).
         expect(studio.run).toHaveBeenCalledWith('build', [], {
             flags: ['--production'],
             projectDir: path.sep + path.join('proj'),
@@ -247,10 +240,9 @@ describe('createCommandRunner', () => {
 
         const first = runner('build');
         await vi.waitFor(() => {
-            // first run is inside the progress gate now
             expect(gate).toBeInstanceOf(Promise);
         });
-        await runner('build'); // second call while busy
+        await runner('build');
 
         expect(asMock(vscode.window.showWarningMessage)).toHaveBeenCalledWith(
             expect.stringContaining("command 'Build' is already running"),
@@ -277,11 +269,6 @@ describe('createCommandRunner', () => {
         expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
     });
 
-    // UX-03: `update` refreshes the GLOBAL template caches — the CLI never
-    // resolves a project for it, so the runner must not gate it on project
-    // resolution either (no picker, no "no project" warning, no projectDir
-    // passed to the engine). Every project-scoped command keeps the old
-    // requirement.
     describe('project-less global update (UX-03)', () => {
         function withFoldersButNoProject() {
             (
@@ -488,12 +475,6 @@ describe('createCommandRunner', () => {
     });
 });
 
-/**
- * UX-05: the runner resolves the project first, then the flags — so the
- * flag settings must be read for THAT project's folder resource. Two
- * projects in two folders get different flags; the project-less global
- * update stays resource-less and borrows nothing.
- */
 describe('createCommandRunner (UX-05 project-scoped flag resolution)', () => {
     const UriCtor = vscode.Uri as unknown as new (
         parts: string[],
@@ -593,8 +574,6 @@ describe('createCommandRunner (UX-05 project-scoped flag resolution)', () => {
         const studio = studioStub();
         const runner = createCommandRunner(studio as never, output as never);
 
-        // UX-03 + §6F: update runs without a project and without borrowing
-        // any opened folder's resource-scoped flags.
         await runner('update', [], [], { requiresProject: false });
 
         expect(asMock(studio.run)).toHaveBeenCalledWith('update', [], {
@@ -603,13 +582,6 @@ describe('createCommandRunner (UX-05 project-scoped flag resolution)', () => {
     });
 });
 
-/**
- * UX-17: progress titles and the "already running" warning show localized,
- * human-readable operation labels instead of the raw engine command ids.
- * The stable internal ids (studio.run, pzstudio.* registrations) never
- * change; unknown ids fall back to the raw id; and the labels localize
- * through the same l10n bundle as every other runtime string.
- */
 describe('createCommandRunner (UX-17 localized operation titles)', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
@@ -622,7 +594,6 @@ describe('createCommandRunner (UX-17 localized operation titles)', () => {
         );
     });
 
-    /** Reuses the l10n test pattern: a language override + a bundle file. */
     async function withOverrideBundle(entries: Record<string, string>) {
         asMock(vscode.workspace.getConfiguration).mockImplementation(
             () =>
@@ -708,8 +679,6 @@ describe('createCommandRunner (UX-17 localized operation titles)', () => {
                 expect.any(Function),
             );
         } finally {
-            // The bundle is module state — clear it so later tests stay on
-            // the vscode.l10n delegate.
             await backToAutoLanguage();
         }
     });
@@ -740,8 +709,6 @@ describe('createCommandRunner (UX-17 localized operation titles)', () => {
             await vi.waitFor(() => {
                 expect(asRunMock).toHaveBeenCalledTimes(1);
             });
-            // Second trigger while the first still runs → warning, and the
-            // label (not the raw id) is named.
             await runner('update', [], [], { requiresProject: false });
             expect(
                 asMock(vscode.window.showWarningMessage),
@@ -749,8 +716,6 @@ describe('createCommandRunner (UX-17 localized operation titles)', () => {
 
             release();
             await first;
-            // The engine run dispatched with the unchanged raw id, exactly
-            // once (the busy second trigger never reached the engine).
             expect(asRunMock).toHaveBeenCalledTimes(1);
             expect(asRunMock).toHaveBeenCalledWith(
                 'update',

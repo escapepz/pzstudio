@@ -13,19 +13,6 @@ const SEVERITY_ICONS: Record<string, string> = {
     info: '$(info)',
 };
 
-/**
- * Project diagnostics report: resolves the project like every other
- * command (or takes the tree-row context), runs the shared diagnostics
- * engine and lists the findings in a quick-pick. Findings themselves come
- * from @pzstudio/core — this command only renders them.
- *
- * UX-16/UX-11: an unexpected failure from a user-invoked run is routed
- * through the handed host-owned logger error sink (one notification,
- * full detail in the PZ Studio Output, localized Show Details, no
- * auto-open, cancellation stays silent) instead of rejecting raw from
- * the command handler. Automatic explorer diagnostics failures never
- * reach this handler.
- */
 export function registerDoctorCommand(
     runProjectDiagnostics: ProjectDiagnosticsRunner,
     onError?: (error: unknown) => void,

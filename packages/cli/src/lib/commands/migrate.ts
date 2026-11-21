@@ -23,25 +23,9 @@ addHelp(
         pzstudio migrate --json   - Print a machine-readable envelope instead.`,
 );
 
-/**
- * The mod fields the tool's own contract requires of every mod — mirrored
- * from the validator's mod checks (`packages/core/src/validation.ts`: name
- * must be a string, description a string or array) and the project schema's
- * mod definition (`"required": ["name", "description"]`). The id is
- * deliberately NOT in this list: it is the project.json key, never synced
- * from mod.info (d08-U6).
- */
 const REQUIRED_MOD_INFO_FIELDS = ['name', 'description'] as const;
 
-/**
- * Handles the migrate command.
- */
 export async function migrateCmd() {
-    // Machine output (CLI-8, d11-F1): with --json the envelope is the ONLY
-    // stdout content — the human report lines that ride stdout (log()) are
-    // suppressed; every stderr line (info/warn) still runs. The envelope
-    // carries the migration counts (config.json, project.json and the
-    // mod.info files synced into project.json).
     const json = hasFlag('json');
     if (!json) {
         log('\nChecking for legacy file shapes...\n');
@@ -62,8 +46,6 @@ export async function migrateCmd() {
         }
     };
 
-    // An empty project.json is NOT a valid project config (unlike an empty
-    // config.json), so it must fail loudly instead of parsing as {}.
     const readProjectJsonStrict = (filePath: string) => {
         const content = readFileSync(filePath, 'utf8');
         try {
@@ -76,7 +58,6 @@ export async function migrateCmd() {
         }
     };
 
-    // 1. Migrate config.json
     const configPath = getConfigPath();
     const config = existsSync(configPath)
         ? readConfigJsonOrEmpty(configPath)
@@ -95,8 +76,6 @@ export async function migrateCmd() {
         log('- config.json is already up to date.');
     }
 
-    // 2. Migrate project.json (if it exists). Non-throwing discovery: the
-    // migrate contract is to work outside a project (global config only).
     const projectRoot = findProjectDir();
     const projectPath = projectRoot
         ? join(projectRoot, 'project.json')
@@ -108,16 +87,11 @@ export async function migrateCmd() {
 
     if (project) {
         let projectModified = false;
-        // Whether the legacy-shape upgrade ran for this file — only then is
-        // the written project.json "migrate's own output" (d16-F1).
         let wasUpgraded = false;
         const projectCheck = migration.checkProject(project);
         if (projectCheck.needsMigration) {
             info(`- Migrating project.json: ${projectCheck.reason}`);
             project = migration.upgradeProject(project, {
-                // stderr, per the CLI-2 stream contract: every legacy value
-                // the upgrade moved (or deliberately kept) is announced —
-                // migration must never be silent about user data (d16-B2).
                 onNotice: (message, level) =>
                     level === 'warn' ? warn(message) : info(`- ${message}`),
             });
@@ -125,7 +99,6 @@ export async function migrateCmd() {
             projectModified = true;
         }
 
-        // 3. Migrate mod.info files into project.json
         const mods = project.mods || {};
         for (const modId in mods) {
             const rootModInfoPath = join(projectRoot!, modId, 'mod.info');
@@ -134,7 +107,6 @@ export async function migrateCmd() {
             if (existsSync(rootModInfoPath)) {
                 modInfoFiles.push(rootModInfoPath);
             } else {
-                // Check Build 42 branch folders
                 const targets = resolveModInfoTargets(modId, projectRoot);
                 for (const targetDir of targets) {
                     const branchModInfoPath = join(targetDir, 'mod.info');
@@ -154,15 +126,8 @@ export async function migrateCmd() {
                 const modConfig = project.mods[modId];
                 let modModified = false;
 
-                // Sync fields from mod.info to project.json. A field is
-                // imported when the config does not carry a value yet — and
-                // an EMPTY STRING counts as "not carried" (d08-B4): new/add
-                // write `description: ''` (and similar placeholders) into
-                // fresh mod configs, and that placeholder must not swallow
-                // the authored legacy content. (The '' does NOT come from
-                // the parser — parseModInfoText drops empty collections.)
                 for (const key in parsedModInfo) {
-                    if (key === 'id') continue; // Don't sync ID as it's the key in project.json
+                    if (key === 'id') continue;
 
                     const value = (parsedModInfo as any)[key];
                     const existing = (modConfig as any)[key];
@@ -175,12 +140,6 @@ export async function migrateCmd() {
                     }
                 }
 
-                // d16-U5: a legacy mod.info that lacks the fields the tool's
-                // own contract requires of every mod must not import
-                // silently — a typo'd or gutted file would otherwise be
-                // indistinguishable from a complete one, with "Synced data
-                // from ..." as the only signal. Import stays identical: what
-                // the file carries still syncs and the command still exits 0.
                 const missingRequired = REQUIRED_MOD_INFO_FIELDS.filter(
                     (field) => (parsedModInfo as any)[field] === undefined,
                 );
@@ -198,8 +157,6 @@ export async function migrateCmd() {
                     projectModified = true;
                 }
 
-                // If we found one and synced, we can skip other branch folders for the same mod
-                // since they are expected to be identical.
                 if (modModified) break;
             }
         }
@@ -212,16 +169,6 @@ export async function migrateCmd() {
         }
         projectMigrated = projectModified;
 
-        // d16-F1: migrate must not certify output it would itself reject.
-        // A legacy slug root id, for example, moves verbatim to
-        // workshop.id and then bricks every later command ("Field \"id\"
-        // must be a number", doctor exit 1) behind a silent "Migration
-        // complete.". When the upgrade ran, the final shape goes through
-        // the SAME validator every later command uses
-        // (readProjectConfig / loadProject); an invalid result is a [WARN]
-        // naming the failing field(s) with the validator's own message.
-        // The file stays written and the exit stays 0 — the d15-B5 owner
-        // decision on migrate's exit semantics is untouched.
         if (wasUpgraded) {
             const context = new ValidationContext(path.basename(projectPath));
             validateProject(project, context);
@@ -242,9 +189,6 @@ export async function migrateCmd() {
 
     info('\nMigration complete.');
 
-    // Machine output (CLI-8, d11-F1): the migration counts are the
-    // machine-relevant result — which files the run upgraded and how many
-    // mod.info files synced into project.json.
     if (json) {
         printJsonEnvelope('migrate', {
             configMigrated,

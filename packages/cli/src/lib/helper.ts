@@ -39,11 +39,6 @@ import {
     type MigrationHostOptions,
 } from '@pzstudio/core';
 
-/**
- * Host-provided fallbacks for config.json migration: the legacy backup file
- * under ~/.pzstudio and the platform default workshop outdir. The migration
- * logic in @pzstudio/core is pure; only the adapter knows the filesystem.
- */
 export function migrationHostOptions(): MigrationHostOptions {
     return {
         readBackupOutdir: () => {
@@ -185,12 +180,6 @@ export function getResolvedUseSymlinks(
     );
 }
 
-/**
- * Rule R1 (doc 11 §8.0): the two vscode settings slots, raw — ambient-blind
- * (never consults the active invocation context). undefined = no host
- * layer. Legacy non-engine wrappers (DevSync plan input, doctor, template
- * ops) compose their settings dependency from this.
- */
 export function legacySettings(): PzStudioHostSettings | undefined {
     if (!vscodeWorkspaceSettings && !vscodeUserSettings) return undefined;
     return {
@@ -199,14 +188,6 @@ export function legacySettings(): PzStudioHostSettings | undefined {
     };
 }
 
-/**
- * Merges one host settings snapshot the way the engine merges the context
- * layers (workspace over user), for the explicit-scope cores. undefined =
- * no host layer. Distinct from getVsCodeSettings(): that one is the
- * engine-scope presence-branched reader (and returns the empty merged
- * shape, never undefined, while a context is installed); this is the pure
- * layer merge the explicit cores apply to a caller-supplied snapshot.
- */
 export function mergeHostSettingsLayers(
     settings: PzStudioHostSettings | undefined,
 ): IVsCodeSettings | undefined {
@@ -234,12 +215,6 @@ export function mergeHostSettingsLayers(
     };
 }
 
-/**
- * Deletes a directory tree with retries. ENOTEMPTY/EBUSY/EPERM happen on
- * Windows when another program (the game, Steam, an editor or an antivirus)
- * briefly holds handles inside the folder — a bare rmSync gets exactly one
- * shot, so give transient locks time to clear before giving up.
- */
 export function removeDirRecursive(target: string): void {
     try {
         rmSync(target, {
@@ -265,11 +240,6 @@ export function removeDirRecursive(target: string): void {
     }
 }
 
-/**
- * Resolves the full project configuration by merging workspace and global settings.
- * Workspace (project.json) settings always take precedence.
- * @returns {IProjectConfig | undefined} The resolved configuration, or undefined if no project.json exists.
- */
 export function resolveProjectConfig(): IProjectConfig | undefined {
     const io = engineIo();
     const project = readProjectConfig(undefined, true, io);
@@ -283,17 +253,6 @@ export function resolveProjectConfig(): IProjectConfig | undefined {
     };
 }
 
-/**
- * Explicit-scope core of resolveProjectConfig() (doc 11 §17 commit 5, R1):
- * resolves the project config for ONE explicit directory — walking upward
- * from `dir` to the nearest project.json exactly like the engine's
- * projectDir() walk, fail-closed with the same structured error — with the
- * host settings layers supplied by the caller. Never reads an ambient
- * invocation context and never depends on the legacy project anchor;
- * non-engine operations (DevSync plan input) compose their config from
- * this. Emissions route through the supplied io scope's logger (commit 6,
- * Appendix C); an omitted scope means raw legacy routing.
- */
 export function resolveProjectConfigFor(
     dir: string,
     settings?: PzStudioHostSettings | undefined,
@@ -324,36 +283,18 @@ export function resolveProjectConfigFor(
 let externalProjectDir: string | undefined;
 let projectRootAnchor: string | undefined;
 
-/**
- * Sets the project working directory externally (e.g. from VS Code)
- * @param dir The directory path
- */
 export function setProjectDir(dir: string | undefined) {
     externalProjectDir = dir;
 }
 
-/**
- * Returns the externally anchored project directory, if any. Callers that
- * anchor temporarily (e.g. the doctor gatherer) restore the previous value.
- */
 export function getExternalProjectDir(): string | undefined {
     return externalProjectDir;
 }
 
-/**
- * Anchors project discovery to `-C/--project <dir>` (CLI-5): the anchor
- * replaces the working directory as the discovery start without ever
- * mutating process.cwd(). Cleared by passing undefined.
- */
 export function setProjectRootAnchor(dir: string | undefined) {
     projectRootAnchor = dir;
 }
 
-/**
- * The directory project discovery starts from: the `-C/--project` anchor,
- * then the externally anchored project dir (embedded hosts), then the
- * process working directory.
- */
 export function discoveryStartDir(): string {
     const ctx = getActiveInvocationContext();
     if (ctx) {
@@ -362,13 +303,6 @@ export function discoveryStartDir(): string {
     return projectRootAnchor ?? externalProjectDir ?? process.cwd();
 }
 
-/**
- * Searches for project.json in the given directory and its parents.
- * Fail-closed (CLI-5): returns undefined when no project is found instead
- * of pretending the start dir is one.
- * @param startDir The directory to start searching from
- * @returns The directory containing project.json, or undefined
- */
 export function findProjectRoot(startDir: string): string | undefined {
     let currentDir = startDir;
     while (true) {
@@ -377,30 +311,17 @@ export function findProjectRoot(startDir: string): string | undefined {
         }
         const parentDir = dirname(currentDir);
         if (parentDir === currentDir) {
-            break; // Reached filesystem root
+            break;
         }
         currentDir = parentDir;
     }
     return undefined;
 }
 
-/**
- * Non-throwing project discovery from the current discovery start
- * (anchor > external anchor > cwd). Commands that legitimately work
- * outside a project (`new`, `migrate`) use this; commands that require
- * a project go through projectDir().
- * @returns The directory containing project.json, or undefined
- */
 export function findProjectDir(): string | undefined {
     return findProjectRoot(discoveryStartDir());
 }
 
-/**
- * Returns the current project working directory. Fail-closed: throws a
- * structured CliError when no project.json exists at or above the
- * discovery start, instead of silently pretending the start dir is one.
- * @returns {string} The project working directory
- */
 export function projectDir(): string {
     const start = discoveryStartDir();
     const found = findProjectRoot(start);
@@ -413,24 +334,10 @@ export function projectDir(): string {
     return found;
 }
 
-/**
- * Rule R1 (doc 11 §8.0): the raw discovery START — `projectRootAnchor ??
- * externalProjectDir`, with NO cwd fallback. Ambient-blind (never consults
- * the active invocation context). Distinct from legacyProjectDir(): an
- * anchor may point inside a project; the start is only where a walk begins.
- */
 export function legacyDiscoveryStart(): string | undefined {
     return projectRootAnchor ?? externalProjectDir;
 }
 
-/**
- * Rule R1 (doc 11 §8.0): the existing projectDir() algorithm over raw state
- * ONLY — start from legacyDiscoveryStart() ?? process.cwd(), walk upward to
- * the nearest project.json, fail-closed with the same structured error.
- * Never the bare discovery start, never the presence-branched projectDir().
- * Legacy non-engine wrappers (resolveModInfoTargets' default arg, DevSync
- * plan input) compose their project root from this.
- */
 export function legacyProjectDir(): string {
     const start = legacyDiscoveryStart() ?? process.cwd();
     const found = findProjectRoot(start);
@@ -443,17 +350,6 @@ export function legacyProjectDir(): string {
     return found;
 }
 
-/**
- * Returns the current project config.
- * Uses atomic read (readFileSync) to avoid require cache issues.
- * @param path Optional path to the project config
- * @param validate Whether to validate the config (default: true)
- * @param io Optional explicit io scope (doc 11 §17 commit 6, Appendix C):
- *   the migration warning and the defaults verboses route to its logger;
- *   an omitted scope means raw legacy routing (R1 — ambient-blind, never
- *   the active invocation context).
- * @returns {IProjectConfig} The current project config
- */
 export function readProjectConfig(
     path?: string,
     validate: boolean = true,
@@ -467,8 +363,6 @@ export function readProjectConfig(
     try {
         config = JSON.parse(content);
     } catch (err) {
-        // A corrupt file is NOT the same as a missing file: surface it
-        // instead of letting callers report "not in a project directory".
         throw new Error(
             `Failed to parse '${basename(configPath)}': ${(err as Error).message}. Fix the JSON syntax and try again.`,
             { cause: err },
@@ -476,7 +370,6 @@ export function readProjectConfig(
     }
 
     if (validate) {
-        // Apply migration FIRST so we validate the modern shape
         const migrationCheck = migration.checkProject(config);
         if (migrationCheck.needsMigration) {
             emitWarn(
@@ -484,9 +377,6 @@ export function readProjectConfig(
                 `[MIGRATION] ${basename(configPath)} needs migration: ${migrationCheck.reason}`,
             );
             config = migration.upgradeProject(config, {
-                // Surface what the in-memory upgrade decided to do with
-                // legacy values (moved/kept) — the on-disk file still pays
-                // this tax on every read until `pzstudio migrate` writes it.
                 onNotice: (message) => emitWarn(io, `[MIGRATION] ${message}`),
             });
         }
@@ -494,8 +384,6 @@ export function readProjectConfig(
         const context = new ValidationContext(basename(configPath));
         validateProject(config, context);
         if (context.hasErrors()) {
-            // Throw instead of process.exit(): library code must not kill
-            // the host process (the VS Code extension runs it in-process).
             throw new Error(
                 `Validation failed for ${basename(configPath)}:\n${context.formatErrors()}`,
             );
@@ -505,15 +393,6 @@ export function readProjectConfig(
     return applyProjectDefaults(config, io);
 }
 
-/**
- * Applies safe defaults to a project config, reporting each defaulting
- * decision to the CLI logger. The pure logic lives in @pzstudio/core.
- * @param config The original project config
- * @param io Optional explicit io scope (doc 11 §17 commit 6): the
- *   defaulting verboses route to its logger; an omitted scope means raw
- *   legacy routing (R1).
- * @returns The config with defaults applied
- */
 export function applyProjectDefaults(
     config: any,
     io?: IoScope | undefined,
@@ -523,11 +402,6 @@ export function applyProjectDefaults(
     );
 }
 
-/**
- * Performs an atomic write to a JSON file, preserving unknown fields.
- * @param filePath Path to the file
- * @param updated Updated configuration object
- */
 export function atomicWriteJson(
     filePath: string,
     updated: any,
@@ -535,17 +409,13 @@ export function atomicWriteJson(
 ) {
     let finalContent = updated;
 
-    // Preserve unknown fields if file exists and we are not overwriting
     if (!overwrite && existsSync(filePath)) {
         try {
             const existing = JSON.parse(readFileSync(filePath, 'utf8'));
             finalContent = { ...existing, ...updated };
-        } catch (_e) {
-            // If existing is corrupt, we overwrite with updated
-        }
+        } catch (_e) {}
     }
 
-    // Strip useSymlinks from project.json if it exists (no longer supported in workspace)
     if (
         basename(filePath) === 'project.json' &&
         finalContent.useSymlinks !== undefined
@@ -564,31 +434,14 @@ export function atomicWriteJson(
             rmSync(filePath, { force: true });
             renameSync(tempPath, filePath);
         } catch (_e) {
-            // Cross-volume or locked target: fall back to a direct write
             rmSync(tempPath, { force: true });
             writeFileSync(filePath, content, 'utf8');
         }
     } catch (_e) {
-        // Fallback to direct write if atomic fails
         writeFileSync(filePath, content, 'utf8');
     }
 }
 
-/**
- * Reads the RAW on-disk project.json `outdir` — the value as configured,
- * before defaults or runtime resolution. Mutating commands that received a
- * config from resolveProjectConfig() restore this before write-back so the
- * runtime-resolved effective outdir is never persisted: a project.json
- * without `outdir` stays without one, and an explicitly configured value
- * survives the round-trip exactly.
- *
- * Fail-closed: `undefined` is returned ONLY when the config is readable and
- * demonstrably carries no string outdir. Any indeterminate state — missing
- * config file, read failure, parse failure, non-object JSON, or an outdir
- * key that is present but not a string — throws, so callers abort before
- * mutating anything instead of authorizing a write-back that would discard
- * a configured outdir they could not read.
- */
 export function readRawProjectOutdir(projectPath: string): string | undefined {
     const configPath = join(projectPath, 'project.json');
     if (!existsSync(configPath)) {
@@ -641,11 +494,6 @@ export function readRawProjectOutdir(projectPath: string): string | undefined {
     return parsed.outdir;
 }
 
-/**
- * Updates the a project config
- * @param {string} path The path to the project config
- * @param {IProjectConfig} updated The updated project config
- */
 export function updateProjectConfig(
     path: string,
     updatedConfig: IProjectConfig,
@@ -658,18 +506,8 @@ export function updateProjectConfig(
     atomicWriteJson(path, updatedConfig, overwrite);
 }
 
-/**
- * Format a title to a valid id (Unix-compatible for Windows and Linux).
- * Re-exported from @pzstudio/core.
- */
 export { formatTitleToId } from '@pzstudio/core';
 
-/**
- * Returns the files in a directory recursively
- * @param {string} dir The directory to search
- * @param {string[]} filelist The file list
- * @returns {string[]} The files in the directory
- */
 export function getFilesRecursively(dir: string, filelist: string[] = []) {
     readdirSync(dir).forEach((file) => {
         filelist = statSync(join(dir, file)).isDirectory()
@@ -679,31 +517,23 @@ export function getFilesRecursively(dir: string, filelist: string[] = []) {
     return filelist;
 }
 
-/**
- * Migrate legacy file-based store to directory-based store
- */
 export function migrateStoreDirIfNeeded() {
     const storeDir = join(homedir(), '.pzstudio');
 
-    // Check if legacy file exists
     if (existsSync(storeDir) && statSync(storeDir).isFile()) {
         try {
             const outDirContent = readFileSync(storeDir, 'utf8').trim();
 
-            // Remove file first and create directory
             rmSync(storeDir);
             mkdirSync(storeDir, { recursive: true });
 
-            // Backup old file content in new directory
             const backupPath = join(storeDir, '.pzstudio.bak');
             writeFileSync(backupPath, outDirContent);
 
-            // Save to config.json
             const config = readGlobalConfig(true, engineIo());
             config.outdir = outDirContent;
             writeGlobalConfig(config);
 
-            // Progress to stderr (CLI-2): keeps stdout pure for --json runs.
             info(`- Migrated legacy .pzstudio file to directory structure`);
         } catch (e) {
             warn(`Failed to migrate legacy store: ${e}`);
@@ -715,40 +545,18 @@ export function getStoreDir() {
     return join(homedir(), '.pzstudio');
 }
 
-/**
- * Explicit scope for getOutDir (doc 11 §17 commit 5, R1): the project root
- * a relative project outdir resolves against, and the host settings layers
- * for tiers 2/3. Supplied by the explicit-scope cores; the ambient-branched
- * 2-arg form is unchanged. `logger` (commit 6, Appendix C) is the emission
- * target of the default-path verbose; an omitted logger means raw legacy
- * routing (R1).
- */
 export interface OutDirScope {
     projectDir: string;
     settings?: PzStudioHostSettings | undefined;
     logger?: PzStudioLogger | undefined;
 }
 
-/**
- * The fixed name of the canonical build output root (dist-always amendment,
- * 2026-11-12): every build path writes `<projectRoot>/dist` and nothing
- * else. The user's `outdir` is the DEPLOYMENT target, resolved separately.
- */
 export const DIST_DIR_NAME = 'dist';
 
-/** The canonical build output root of one project: `<projectRoot>/dist`. */
 export function distRootOf(projectPath: string): string {
     return join(resolve(projectPath), DIST_DIR_NAME);
 }
 
-/**
- * Expands the portable `outdir` token form (dist-always amendment §4): a
- * leading `~/` or `~\` expands to the host home directory, so a committed
- * `project.json` can carry `"outdir": "~/Zomboid/Workshop"` without baking
- * one machine's absolute path into version control. Absolute and relative
- * values pass through unchanged (a relative value is resolved against the
- * project root by the caller, as before).
- */
 export function expandOutdirToken(raw: string): string {
     if (raw === '~' || raw.startsWith('~/') || raw.startsWith('~\\')) {
         return join(homedir(), raw.slice(1));
@@ -756,33 +564,6 @@ export function expandOutdirToken(raw: string): string {
     return raw;
 }
 
-/**
- * Returns the DEPLOYMENT TARGET following the hierarchy:
- * project.json > config.json > .pzstudio.bak > (nothing)
- *
- * Dist-always amendment (2026-11-12): the factory-default tier
- * (`~/Zomboid/Workshop`) is REMOVED — an unconfigured cascade yields
- * `undefined`, which means the build runs pure (dist only) and the
- * materialize step is skipped (doctor reports OUTDIR_UNSET as info). The
- * v1â†’v2 migration still stamps `~/Zomboid/Workshop` into the global
- * config, so every migrated user keeps a target. A leading `~/` token
- * expands at every tier; `pzstudio new` writes the token into fresh
- * project.json files.
- * @param project Optional project config to use
- * @param config Optional global config to use
- * @param scope Optional explicit scope (doc 11 commit 5): resolves the
- *   exact same tier order — project config > workspace host layer > user
- *   host layer > global config > undefined — from caller-supplied
- *   dependencies instead of the ambient context / legacy slots. Never
- *   reorders or drops a tier.
- * @param io Optional explicit io scope (doc 11 §17 commit 6) for the
- *   ambient-branched form's emissions: engine call sites pass engineIo()
- *   so the emission follows the active invocation logger; an omitted
- *   scope routes raw legacy (R1). Ignored when `scope` is supplied — the
- *   scope form carries its own logger.
- * @returns {string | undefined} The deployment target, or undefined when
- *   no tier configures one (pure build mode)
- */
 export function getOutDir(
     project?: IProjectConfig,
     config?: GlobalConfig,
@@ -794,50 +575,40 @@ export function getOutDir(
             ? { logger: scope.logger }
             : undefined;
 
-        // 1. Try project config (resolved against the scope's project root)
         if (project && project.outdir) {
             return resolve(scope.projectDir, expandOutdirToken(project.outdir));
         }
 
-        // 2. Try workspace settings
         if (scope.settings?.workspace?.outdir) {
             return resolve(expandOutdirToken(scope.settings.workspace.outdir));
         }
 
-        // 3. Try user settings
         if (scope.settings?.user?.outdir) {
             return resolve(expandOutdirToken(scope.settings.user.outdir));
         }
 
-        // 4. Try global config
         const global = config ?? readGlobalConfig(false, io);
         if (global.outdir) {
             return resolve(expandOutdirToken(global.outdir));
         }
 
-        // No factory tier (dist-always amendment): unconfigured = no
-        // deployment target, not `~/Zomboid/Workshop`.
         return undefined;
     }
 
     const ctx = getActiveInvocationContext();
     if (ctx) {
-        // 1. Try project config (projectDir() resolves from the context)
         if (project && project.outdir) {
             return resolve(projectDir(), expandOutdirToken(project.outdir));
         }
 
-        // 2. Try workspace settings
         if (ctx.settings?.workspace?.outdir) {
             return resolve(expandOutdirToken(ctx.settings.workspace.outdir));
         }
 
-        // 3. Try user settings
         if (ctx.settings?.user?.outdir) {
             return resolve(expandOutdirToken(ctx.settings.user.outdir));
         }
 
-        // 4. Try global config
         const global = config ?? readGlobalConfig(false, io);
         if (global.outdir) {
             return resolve(expandOutdirToken(global.outdir));
@@ -846,22 +617,18 @@ export function getOutDir(
         return undefined;
     }
 
-    // 1. Try project config
     if (project && project.outdir) {
         return resolve(projectDir(), expandOutdirToken(project.outdir));
     }
 
-    // 2. Try workspace settings
     if (vscodeWorkspaceSettings?.outdir) {
         return resolve(expandOutdirToken(vscodeWorkspaceSettings.outdir));
     }
 
-    // 3. Try user settings
     if (vscodeUserSettings?.outdir) {
         return resolve(expandOutdirToken(vscodeUserSettings.outdir));
     }
 
-    // 4. Try global config
     const global = config ?? readGlobalConfig(false, io);
     if (global.outdir) {
         return resolve(expandOutdirToken(global.outdir));
@@ -870,12 +637,6 @@ export function getOutDir(
     return undefined;
 }
 
-/**
- * Reads workshop/description.txt from the project and returns its lines
- * (CRLF-safe). Returns an empty array when the file does not exist.
- * @param projectPath The project root directory
- * @returns {string[]} The description lines
- */
 export function readWorkshopDescriptionLines(projectPath: string): string[] {
     const workshopDescriptionPath = join(
         projectPath,
@@ -883,18 +644,11 @@ export function readWorkshopDescriptionLines(projectPath: string): string[] {
         'description.txt',
     );
     if (!existsSync(workshopDescriptionPath)) return [];
-    // split(/\r?\n/) so CRLF files (Windows) don't leave trailing \r
     return readFileSync(workshopDescriptionPath, {
         encoding: 'utf-8',
     }).split(/\r?\n/);
 }
 
-/**
- * Snapshots the source tree of a mod so the planner can decide mod.info
- * targeting without touching the filesystem. Existing mod.info content is
- * snapshotted too so the planner can rewrite its id for the development
- * output. Shared by build and the Development Sync Engine (watch).
- */
 export function gatherModSourceState(
     projectPath: string,
     modId: string,
@@ -913,10 +667,7 @@ export function gatherModSourceState(
         }
         try {
             state.modInfoContent![target] = readFileSync(modInfoPath, 'utf8');
-        } catch {
-            // Unreadable mod.info: no content snapshot, so the planner falls
-            // back to copying the file verbatim.
-        }
+        } catch {}
     };
 
     snapshotTarget('', join(projectPath, modId));
@@ -928,36 +679,17 @@ export function gatherModSourceState(
     return state;
 }
 
-/**
- * Assembles the full plan input for the pure planner: resolved template,
- * per-mod source snapshots and the workshop metadata. This is the shared
- * host-side pre-planning work of `pzstudio build` and the sync engine.
- *
- * Dist-always anchor (2026-11-12 amendment §14.3): the returned plan
- * input's config carries `outdir = <projectRoot>/dist` — the engine builds
- * ONLY into the canonical dist root, on every consumer (CLI build, watch,
- * extension sessions) from this one choke point. The user's `outdir` (the
- * deployment target) is resolved separately by the materialize step and
- * never reaches the planner.
- *
- * @param projectPath The project root directory
- * @param config The fully-resolved project config (outdir absolute)
- */
 export function gatherPlanInput(
     projectPath: string,
     config: IProjectConfig,
     workshopTemplateDir: string,
 ): Omit<PlanBuildInput, 'variant'> {
-    // Snapshot the source tree once; every fs decision below is derived from
-    // it by the pure planner.
     const modSourceStates: Record<string, ModSourceState> = {};
     for (const modId of Object.keys(config.mods)) {
         modSourceStates[modId] = gatherModSourceState(projectPath, modId);
     }
 
     return {
-        // Dist-always anchor: the planner's output root is ALWAYS the
-        // canonical dist root, whatever the deployment target says.
         config: { ...config, outdir: distRootOf(projectPath) },
         workshopTemplateDir,
         projectDir: projectPath,
@@ -969,14 +701,6 @@ export function gatherPlanInput(
     };
 }
 
-/**
- * Generate the workshop text
- * @param config The project config
- * @param overrideVisibility Optional visibility override
- * @param excludeId Whether to exclude the id field
- * @param titleSuffix Optional suffix to append to title
- * @returns {string} The workshop text
- */
 export function generateWorkshopText(
     config: IProjectConfig,
     overrideVisibility?: string,
@@ -991,13 +715,6 @@ export function generateWorkshopText(
     });
 }
 
-/**
- * Generate the mod.info text
- * @param modId The mod id
- * @param config The project config
- * @param prefixedId Optional prefixed id to use in mod.info instead of modId
- * @returns {string} The mod.info text
- */
 export function generateModInfoText(
     modId: string,
     config: IProjectConfig,
@@ -1006,21 +723,9 @@ export function generateModInfoText(
     return modInfoText(modId, config, prefixedId);
 }
 
-/**
- * Parses mod.info text into a partial IModConfig.
- * Re-exported from modInfoParser.ts (single source of truth, shared with migration).
- */
 export { parseModInfoText } from '@pzstudio/core';
 import { workshopText, modInfoText } from '@pzstudio/core';
 
-/**
- * Returns the branch folders (direct subdirectories) of a mod.
- * @param modId The mod id
- * @param baseDir The directory containing the mod folder. The implicit
- *   default is the RAW resolved project root — `legacyProjectDir()` (R1:
- *   ambient-blind; never the context-aware `projectDir()`).
- * @returns {string[]} An array of absolute paths to branch folders
- */
 export function getModBranchFolders(
     modId: string,
     baseDir: string = legacyProjectDir(),
@@ -1037,21 +742,6 @@ export function getModBranchFolders(
     }
 }
 
-/**
- * Resolves the valid branch folders for a mod that should contain a mod.info file.
- * Following Build 42 rules:
- * 1. Only existing nested folders that contain a 'media' directory.
- * 2. Root-level mod.info is NOT a target for Build 42 generation.
- * @param modId The mod id (folder name inside baseDir)
- * @param baseDir The directory containing the mod folder. The implicit
- *   default is the RAW resolved project root — `legacyProjectDir()`
- *   (doc 11 §8.0/§13: the same walk-up + fail-closed algorithm over raw
- *   legacy state, ambient-blind; an anchor nested below a project root
- *   still resolves the project's real root). Never the context-aware
- *   `projectDir()` — a legacy non-engine default must not inherit an
- *   active v2 ambient (R1).
- * @returns {string[]} An array of absolute paths to valid branch folders
- */
 export function resolveModInfoTargets(
     modId: string,
     baseDir: string = legacyProjectDir(),
@@ -1063,12 +753,6 @@ export function resolveModInfoTargets(
     });
 }
 
-/**
- * Resolves the experimental integration opt-in (CLI-10, BREAKING: default
- * off). An explicit project.json setting wins over the global config's
- * explicit setting; absent in both layers means disabled — the CLI never
- * auto-enables experimental behaviour.
- */
 export function isExperimentalIntegrationEnabled(projectPath: string): boolean {
     const io = engineIo();
     const project = readProjectConfig(
@@ -1085,13 +769,6 @@ export function isExperimentalIntegrationEnabled(projectPath: string): boolean {
     return false;
 }
 
-/**
- * Update experimental package scripts
- * @param action The action to perform ('addProject', 'addMod', 'removeMod', 'renameMod')
- * @param projectDir The project directory
- * @param modId The mod id (optional)
- * @param newModId The new mod id (required for 'renameMod')
- */
 export function updateExperimentalScripts(
     action: 'addProject' | 'addMod' | 'removeMod' | 'renameMod',
     projectDir: string,
@@ -1099,9 +776,6 @@ export function updateExperimentalScripts(
     newModId?: string,
 ) {
     try {
-        // Experimental integration is opt-in only (CLI-10, BREAKING):
-        // without an explicit project.json or global config setting this
-        // is a silent no-op — no more unrequested script/junction setup.
         if (!isExperimentalIntegrationEnabled(projectDir)) {
             verbose(
                 'Experimental integration is disabled (default). Set experimental.integration = true in project.json (or the global config) to enable it.',
@@ -1109,9 +783,6 @@ export function updateExperimentalScripts(
             return;
         }
 
-        // experimental-package-scripts.js is copied into dist/scripts by the
-        // build. The esbuild bundle sits at dist/index.js (co-located); the
-        // tsc layout emits dist/lib/helper.js (scripts resolved via dist).
         const scriptCandidates = [
             resolve(__dirname, 'scripts/experimental-package-scripts.js'),
             resolve(__dirname, '../scripts/experimental-package-scripts.js'),

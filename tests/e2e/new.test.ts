@@ -26,7 +26,6 @@ describe('new command e2e', () => {
                 result,
                 "The project 'Test Project' has been created",
             );
-            // Golden path (CLI-7): next steps on stdout.
             workspace.assertStdout(result, 'Next:');
             workspace.assertStdout(result, 'pzstudio doctor');
             workspace.assertStdout(result, 'pzstudio watch');
@@ -40,8 +39,6 @@ describe('new command e2e', () => {
             );
             expect(config.workshop.title).toBe('Test Project');
             expect(config.mods.test_author.name).toBe('Test Project');
-            // Dist-always: fresh projects carry the portable tilde token as
-            // their deployment target (game-ready after init + build).
             expect(config.outdir).toBe('~/Zomboid/Workshop');
         } catch (e) {
             console.log('STDOUT:', result.stdout.join('\n'));
@@ -60,7 +57,6 @@ describe('new command e2e', () => {
     });
 
     it('should fail if already in a project directory', async () => {
-        // Create a valid project.json to avoid validation exit
         workspace.write(
             'project.json',
             JSON.stringify({
@@ -131,7 +127,6 @@ describe('new command e2e', () => {
                 "The project 'My Auto Project' has been created",
             );
 
-            // formatTitleToId('My Auto Project') → 'my_auto_project'
             const derivedModId = 'my_auto_project';
             expect(
                 workspace.exists(path.join(derivedModId, 'project.json')),

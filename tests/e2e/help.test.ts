@@ -71,7 +71,6 @@ describe('help — per-command help blocks (E2E)', () => {
             const result = await workspace.run('help', [cmd]);
             workspace.assertSuccess(result);
 
-            // Every registered help block includes 'pzstudio <cmd>' or 'Usage' text
             const hasContent = result.stdout.some(
                 (line) =>
                     line.includes(`pzstudio ${cmd}`) ||
@@ -95,14 +94,12 @@ describe('help — odd input shapes (E2E)', () => {
     });
 
     it('should fail for a numeric string argument (no matching help entry)', async () => {
-        // '123' is a valid string arg but has no matching help entry
         const result = await workspace.run('help', ['123']);
         workspace.assertFailure(result, 2);
         workspace.assertStderr(result, 'Unknown command [123]');
     });
 
     it('should fail for a boolean-like string argument', async () => {
-        // 'true' is a valid string arg but has no matching help entry
         const result = await workspace.run('help', ['true']);
         workspace.assertFailure(result, 2);
         workspace.assertStderr(result, 'Unknown command [true]');
@@ -121,8 +118,6 @@ describe('help — odd input shapes (E2E)', () => {
     });
 
     it('should reject extra positional args instead of ignoring them', async () => {
-        // The parser enforces positional arity: excess args are a usage error
-        // (exit 2), not silently ignored.
         const result = await workspace.run('help', ['build', 'extra', 'args']);
         workspace.assertFailure(result, 2);
         workspace.assertStderr(result, 'Too many arguments for command [help]');
@@ -152,8 +147,6 @@ describe('help — odd input shapes (E2E)', () => {
     });
 
     it('should not list hidden commands (lang) in general help output', async () => {
-        // lang is an unimplemented stub: registered and runnable, but not
-        // advertised (CLI-7).
         const result = await workspace.run('help');
         workspace.assertSuccess(result);
 
@@ -202,8 +195,6 @@ describe('help — registry behavior for unknown commands (E2E)', () => {
             const result = await workspace.run('help', [cmd]);
             workspace.assertSuccess(result);
 
-            // The output should NOT contain an undefined line — every registered
-            // command must return actual help text from the registry
             const hasOnlyUndefined = result.stdout.every(
                 (line) =>
                     line === undefined ||

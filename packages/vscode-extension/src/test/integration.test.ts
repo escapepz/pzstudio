@@ -6,13 +6,6 @@ import { runCLI, setProjectDir, createPzStudio } from '@pzstudio/cli/api';
 import type { PzStudioLogger } from '@pzstudio/cli/api';
 import { readPzStudioHostSettings } from '../util/settings';
 
-/**
- * Desktop integration tests running inside a real VS Code extension host
- * (launched by @vscode/test-electron via the .vscode-test.js config). This
- * complements the vitest suites, which run against a mocked vscode module:
- * here every vscode API call, command registration and the CLI api bridge
- * are the real thing.
- */
 describe('PZ Studio extension (real VS Code host)', () => {
     const projectDir = process.env.PZSTUDIO_TEST_PROJECT_DIR ?? '';
     const fakeHome = process.env.PZSTUDIO_TEST_FAKE_HOME ?? '';
@@ -76,8 +69,6 @@ describe('PZ Studio extension (real VS Code host)', () => {
         assert.ok(fakeHome, 'fixture fake home env is missing');
 
         setProjectDir(projectDir);
-        // Explicit empty flags: runCLI must not depend on the VS Code host's
-        // own process.argv (the C2 contract).
         await runCLI('build', [], { flags: [] });
 
         const workshopTxt = path.join(
@@ -125,9 +116,6 @@ describe('PZ Studio extension (real VS Code host)', () => {
         );
         fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
 
-        // Embedded contract (CLI-9): runCLI NEVER terminal-prompts, and it
-        // REQUIRES --yes for destructive commands — the host passes it once
-        // its own confirmation UI has accepted.
         await runCLI('rename', ['scratch_mod', 'renamed_scratch'], {
             flags: ['--yes'],
         });
@@ -149,14 +137,9 @@ describe('PZ Studio extension (real VS Code host)', () => {
     });
 
     it('isolates a second test-owned PzStudio instance from the migrated runner path under overlapping execution', async function () {
-        // The overlap runs a real build (template cache + engine lifecycle)
-        // next to a second instance's run; give it more than the default.
         this.timeout(120000);
         assert.ok(fakeHome, 'fixture fake home env is missing');
 
-        // The build command's modal confirmation would block the host: the
-        // scenario runs pzstudio.build through the migrated runner, so the
-        // setting is disabled for this test (and restored afterwards).
         const config = vscode.workspace.getConfiguration('pzstudio');
         await config.update(
             'confirmBeforeRun',
@@ -164,9 +147,6 @@ describe('PZ Studio extension (real VS Code host)', () => {
             vscode.ConfigurationTarget.Global,
         );
 
-        // A second project the workspace does NOT contain (the fixture
-        // project is the single workspace project, so the runner resolves
-        // it without a picker) with its OWN recording logger.
         const secondProject = path.join(fakeHome, 'iso-second-project');
         fs.mkdirSync(secondProject, { recursive: true });
         fs.writeFileSync(
@@ -193,20 +173,10 @@ describe('PZ Studio extension (real VS Code host)', () => {
             logger: secondLogger,
         });
 
-        // Meaningful disk assertion: remove the fixture's earlier build
-        // output so only THIS scenario's runner build can recreate it.
         const fixtureOut = path.join(projectDir, 'dist', PROJECT_TITLE);
         fs.rmSync(fixtureOut, { recursive: true, force: true });
 
         try {
-            // Overlap: the extension command (runner → the host-owned
-            // instance → engine) and the second instance's run are both in
-            // flight in this extension-host process. The engine lock is
-            // process-wide FIFO within the inlined api module (pinned by
-            // the vitest suites); this scenario proves what the unit tests
-            // cannot: the real runner path and an independently created
-            // instance keep their sinks and project identities apart in the
-            // real host.
             const runnerBuild =
                 vscode.commands.executeCommand('pzstudio.build');
             const secondRun = secondStudio.run('list');
@@ -219,8 +189,6 @@ describe('PZ Studio extension (real VS Code host)', () => {
             );
         }
 
-        // The second instance's sink: its own project only — never the
-        // fixture project the runner built.
         assert.ok(
             secondCalls.some((line) =>
                 line.includes("No mods in project 'Iso Second Project'."),
@@ -232,7 +200,6 @@ describe('PZ Studio extension (real VS Code host)', () => {
             'the runner project leaked into the second instance logger',
         );
 
-        // The runner's sink (project identity on disk).
         assert.ok(
             fs.existsSync(path.join(fixtureOut, 'workshop.txt')),
             `runner build output missing: ${path.join(fixtureOut, 'workshop.txt')}`,
@@ -245,11 +212,6 @@ describe('PZ Studio extension (real VS Code host)', () => {
         );
     });
 
-    // UX-05: resource-scoped settings must follow the operated project's
-    // folder. The multi-root fixture gives folder A (the fixture project)
-    // one folder-scoped setting and folder B (a plain folder with a
-    // depth-2 project) its own outdir; the workspace file sets a
-    // workspace-level value the folder tier must beat.
     it('resolves resource-scoped settings per workspace folder (UX-05)', async function () {
         this.timeout(60000);
         const secondDir = process.env.PZSTUDIO_TEST_SECOND_DIR ?? '';
@@ -257,12 +219,8 @@ describe('PZ Studio extension (real VS Code host)', () => {
         assert.ok(projectDir, 'fixture project dir env is missing');
         assert.ok(secondDir && outdirB, 'multi-root fixture env is missing');
 
-        // A depth-2 project under folder B: outside project discovery
-        // (root + depth-1) but its resource still belongs to folder B.
         const innerProjectB = path.join(secondDir, 'sub', 'inner');
 
-        // Real host configuration semantics first: the folder tier exists
-        // per folder, distinct from the workspace tier.
         const inspectA = vscode.workspace
             .getConfiguration('pzstudio', vscode.Uri.file(projectDir))
             .inspect<boolean>('useSymlinks');
@@ -273,23 +231,17 @@ describe('PZ Studio extension (real VS Code host)', () => {
             .inspect<string>('outdir');
         assert.strictEqual(inspectB?.workspaceFolderValue, outdirB);
 
-        // The extension adapter composes the layers per project resource.
         const forA = readPzStudioHostSettings({ projectDir });
-        assert.strictEqual(forA.workspace?.useSymlinks, false); // folder beats workspace
+        assert.strictEqual(forA.workspace?.useSymlinks, false);
         assert.strictEqual(forA.workspace?.outdir, undefined); // A sets no outdir
         const forB = readPzStudioHostSettings({ projectDir: innerProjectB });
-        assert.strictEqual(forB.workspace?.outdir, outdirB); // owning (nested) folder
+        assert.strictEqual(forB.workspace?.outdir, outdirB);
         assert.strictEqual(forB.workspace?.useSymlinks, true); // workspace fallback
 
-        // A resource-less (project-less global) resolution borrows no
-        // folder value.
         const resourceLess = readPzStudioHostSettings({});
         assert.strictEqual(resourceLess.workspace?.useSymlinks, true);
         assert.strictEqual(resourceLess.workspace?.outdir, undefined);
 
-        // End to end through the real engine: a doctor run for the
-        // depth-2 project consumes folder B's outdir — the outDirMissing
-        // finding names it.
         const studio = createPzStudio({
             settings: readPzStudioHostSettings,
         });

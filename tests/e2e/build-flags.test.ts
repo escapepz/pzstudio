@@ -3,7 +3,6 @@ import fs from 'fs';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createE2EWorkspace, E2ETestWorkspace } from '../helpers/e2e-fixtures';
 
-/** Minimal valid project fixture used across build flag tests */
 function writeMinimalProject(
     workspace: E2ETestWorkspace,
     {
@@ -32,7 +31,6 @@ function writeMinimalProject(
         }),
     );
 
-    // Each listed mod needs a source directory so scaffoldProject can copy it
     const allModIds = [modId, ...Object.keys(extraMods)];
     for (const id of allModIds) {
         workspace.write(`${id}/placeholder.txt`, `mod ${id}`);
@@ -83,7 +81,6 @@ describe('build --development flag (E2E)', () => {
         const result = await workspace.run('build', ['--development']);
         workspace.assertSuccess(result);
 
-        // Dev branch goes to "{title} - dev_branch/"
         const devDir = path.join(workspace.dir, 'out', `${title} - dev_branch`);
         expect(fs.existsSync(devDir)).toBe(true);
         expect(fs.existsSync(path.join(devDir, 'workshop.txt'))).toBe(true);
@@ -96,7 +93,6 @@ describe('build --development flag (E2E)', () => {
         const result = await workspace.run('build', ['--development']);
         workspace.assertSuccess(result);
 
-        // Main dir must NOT exist
         const mainDir = path.join(workspace.dir, 'out', title);
         expect(fs.existsSync(mainDir)).toBe(false);
     });
@@ -110,7 +106,6 @@ describe('build --development flag (E2E)', () => {
         workspace.assertSuccess(result);
 
         const devDir = path.join(workspace.dir, 'out', `${title} - dev_branch`);
-        // Mod directory should use the _dev-suffixed name
         const devModDir = path.join(devDir, 'Contents', 'mods', `${modId}_dev`);
         expect(fs.existsSync(devModDir)).toBe(true);
     });
@@ -134,7 +129,6 @@ describe('build --production --development conflict (E2E)', () => {
             '--production',
             '--development',
         ]);
-        // Mutually exclusive options are semantic validation (CLI-1) → exit 2
         workspace.assertFailure(result, 2);
         workspace.assertStderr(
             result,
@@ -165,17 +159,14 @@ describe('build modInfo: auto-if-missing (E2E)', () => {
             outdir: 'out',
         });
 
-        // Pre-populate mod.info in the mod source so it gets copied and then detected
         workspace.write(`${modId}/mod.info`, `id=${modId}\nname=Pre-existing`);
 
         const result = await workspace.run('build');
         workspace.assertSuccess(result);
 
-        // The build should log the "already exists" skip message
         workspace.assertStderr(result, 'Skipping');
         workspace.assertStderr(result, 'auto-if-missing');
 
-        // The pre-existing mod.info content should be preserved (not regenerated)
         const modInfoPath = path.join(
             workspace.dir,
             'out',
@@ -200,7 +191,6 @@ describe('build modInfo: auto-if-missing (E2E)', () => {
             modInfoMode: 'auto-if-missing',
             outdir: 'out',
         });
-        // No mod.info in source — should be generated
 
         const result = await workspace.run('build');
         workspace.assertSuccess(result);
@@ -232,7 +222,6 @@ describe('build missing workshop/preview.png warning (E2E)', () => {
     it('should emit a warning when workshop/preview.png is missing', async () => {
         const title = 'No Preview';
         writeMinimalProject(workspace, { title, outdir: 'out' });
-        // Intentionally NOT creating workshop/preview.png
 
         const result = await workspace.run('build');
         workspace.assertSuccess(result);
@@ -284,7 +273,6 @@ describe('build with all mods dev-only (E2E)', () => {
                 outdir: 'out',
             }),
         );
-        // A pre-existing production output must survive the skipped build.
         workspace.write(
             path.join('out', title, 'Contents', 'mods', 'keep.txt'),
             'keep me',
@@ -444,10 +432,8 @@ describe('build excludes array filters entire mods (E2E)', () => {
             'mods',
         );
 
-        // Included mod should be present
         expect(fs.existsSync(path.join(modsDir, includedMod))).toBe(true);
 
-        // Excluded mod must NOT appear in output
         expect(fs.existsSync(path.join(modsDir, excludedMod))).toBe(false);
     });
 });
@@ -490,7 +476,6 @@ describe('build.modInfo default-warning (E2E)', () => {
         const title = 'No ModInfo Config';
         const modId = 'no_modinfo_mod';
 
-        // Write project.json without build.modInfo
         workspace.write(
             'project.json',
             JSON.stringify({
@@ -510,7 +495,6 @@ describe('build.modInfo default-warning (E2E)', () => {
         const result = await workspace.run('build');
         workspace.assertSuccess(result);
 
-        // Should NOT contain the migration warning
         const hasMigrationWarning = result.stderr.some((line) =>
             line.includes('[MIGRATION]'),
         );

@@ -17,7 +17,6 @@ const PROJECT_JSON = JSON.stringify({
     mods: { m1: { name: 'Old Name', pack: ['a', 'b'] } },
 });
 
-/** Registers the command and returns its handler + the execute spy. */
 async function setupHandler() {
     const execute = vi.fn(async () => {});
     registerConfigureCommand(execute as never);
@@ -45,7 +44,7 @@ describe('pzstudio.modConfigure', () => {
     it('runs modconfig include/devonly/exclude through the inclusion menu', async () => {
         const { handler, execute } = await setupHandler();
         asMock(vscode.window.showQuickPick)
-            .mockImplementationOnce(async (items: unknown[]) => items[0]) // inclusion entry
+            .mockImplementationOnce(async (items: unknown[]) => items[0])
             .mockImplementationOnce(
                 async (choices: Array<{ action: string }>) =>
                     choices.find((c) => c.action === 'devonly'),
@@ -64,7 +63,7 @@ describe('pzstudio.modConfigure', () => {
     it('sets build.modInfo through the note menu', async () => {
         const { handler, execute } = await setupHandler();
         asMock(vscode.window.showQuickPick)
-            .mockImplementationOnce(async (items: unknown[]) => items[1]) // modInfo entry
+            .mockImplementationOnce(async (items: unknown[]) => items[1])
             .mockImplementationOnce(async (choices: string[]) =>
                 choices.find((c) => c === 'skip'),
             );
@@ -130,7 +129,6 @@ describe('pzstudio.modConfigure', () => {
 
         await handler(modNode);
 
-        // pack prefill is 'a, b' — unchanged input re-saves the same value.
         expect(asMock(vscode.window.showInputBox)).toHaveBeenCalledWith(
             expect.objectContaining({ value: 'a, b' }),
         );

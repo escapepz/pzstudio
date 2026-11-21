@@ -11,16 +11,6 @@ export interface PZTaskDefinition extends vscode.TaskDefinition {
     target: string;
 }
 
-/**
- * Runs a pzstudio command as a VS Code task so builds are available from
- * Terminal > Run Task and Ctrl+Shift+B (after configuring the default build
- * task). Execution is in-process through the host PzStudio instance
- * (studio.run), consistent with the commands: detailed logs go to the PZ
- * output channel, the task terminal shows the start/complete/failed status
- * lines. No busy guard: a task started while another command is in-flight
- * queues on the engine invocation lock and runs after it (intentional
- * serialization, doc 11 §9).
- */
 class PZTaskTerminal implements vscode.Pseudoterminal {
     private readonly writeEmitter = new vscode.EventEmitter<string>();
     readonly onDidWrite: vscode.Event<string> = this.writeEmitter.event;
@@ -37,9 +27,7 @@ class PZTaskTerminal implements vscode.Pseudoterminal {
         void this.run();
     }
 
-    close(): void {
-        // No interactive input; the run finishes on its own.
-    }
+    close(): void {}
 
     private async run() {
         const command = this.target === 'clean' ? 'clean' : 'build';
@@ -54,13 +42,6 @@ class PZTaskTerminal implements vscode.Pseudoterminal {
                 return;
             }
 
-            // The task target overrides the configured build target (UX-01):
-            // resolveFlags emits the setting's flag only when no explicit
-            // target is given, so the invocation carries exactly one target
-            // flag — the CLI rejects conflicting ones. `clean` is not a
-            // build target: it maps to the clean command, which never
-            // receives one. All flag settings read for the resolved
-            // project's folder resource (UX-05).
             const flags = resolveFlags(
                 command,
                 this.target === 'clean' ? undefined : this.target,

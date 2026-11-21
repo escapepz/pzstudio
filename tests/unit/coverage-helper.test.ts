@@ -2,9 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// We need to use doMock to control basename(__dirname) behavior inside helper.ts
-// and to mock the experimental scripts file.
-
 describe('Helper Coverage Gaps', () => {
     beforeEach(() => {
         vi.resetModules();
@@ -38,7 +35,6 @@ describe('Helper Coverage Gaps', () => {
         const { updateExperimentalScripts } =
             await import('../../packages/cli/src/lib/helper');
 
-        // This should not throw even if the require fails (it's caught)
         updateExperimentalScripts('addProject', '/some/dir');
     });
 
@@ -47,7 +43,7 @@ describe('Helper Coverage Gaps', () => {
             process.cwd(),
             'temp-empty-script.js',
         );
-        const scriptContent = 'module.exports = {};'; // Empty exports
+        const scriptContent = 'module.exports = {};';
 
         const fsReal = await vi.importActual<typeof import('fs')>('fs');
         fsReal.writeFileSync(tempScriptPath, scriptContent);
@@ -74,11 +70,9 @@ describe('Helper Coverage Gaps', () => {
             const { updateExperimentalScripts } =
                 await import('../../packages/cli/src/lib/helper');
 
-            // Call all actions to cover the 'if' branches being false
             updateExperimentalScripts('addProject', '/dir');
             updateExperimentalScripts('addMod', '/dir', 'mod1');
             updateExperimentalScripts('removeMod', '/dir', 'mod1');
-            // renameMod with modId but no newModId — covers the falsy `&& newModId` branch (helper.ts:699)
             updateExperimentalScripts('renameMod', '/dir', 'mod1', undefined);
         } finally {
             if (fsReal.existsSync(tempScriptPath)) {
@@ -88,7 +82,6 @@ describe('Helper Coverage Gaps', () => {
     });
 
     it('updateExperimentalScripts should call script functions when they exist', async () => {
-        // We use a real file to ensure require() finds it, as mocking absolute paths can be tricky
         const tempScriptPath = path.resolve(
             process.cwd(),
             'temp-experimental-script.js',
@@ -102,13 +95,10 @@ describe('Helper Coverage Gaps', () => {
             };
         `;
 
-        // Use real fs to write the file
         const fsReal = await vi.importActual<typeof import('fs')>('fs');
         fsReal.writeFileSync(tempScriptPath, scriptContent);
 
         try {
-            // CLI-10: the experimental gate must be open for the script to
-            // run — pretend the global config opted in.
             vi.doMock('../../packages/cli/src/lib/templateManager', () => ({
                 readGlobalConfig: () => ({
                     experimental: { integration: true },
@@ -119,7 +109,7 @@ describe('Helper Coverage Gaps', () => {
                 const actual = await importOriginal<typeof import('path')>();
                 return {
                     ...actual,
-                    basename: () => 'lib', // Force non-dist branch
+                    basename: () => 'lib',
                     resolve: () => tempScriptPath,
                 };
             });

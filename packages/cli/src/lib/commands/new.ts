@@ -40,23 +40,16 @@ addHelp(
 );
 
 export async function newCmd(projectTitle: string, modId?: string) {
-    // Validate params
     expect('param [projectTitle]', projectTitle, 'string');
     expect('param [modId]', modId, 'string|undefined');
 
     const isOffline = hasFlag('offline');
     const forceUpdate = hasFlag('force-update');
 
-    // Destination: --path wins over the discovery start (issue #43; -C also
-    // steers the default destination since it replaces the discovery start).
     const destFlag = extractFlag('path');
     const destDir = destFlag ? resolve(destFlag) : discoveryStartDir();
     verbose(`Project destination directory: ${destDir}`);
 
-    // The "inside a project" guard only applies to discovery-based creation;
-    // with an explicit --path the user already chose the destination. Use
-    // non-throwing discovery so creating a project OUTSIDE any project keeps
-    // working (fail-closed projectDir() would kill it).
     if (!destFlag) {
         const existingProject = findProjectDir()
             ? resolveProjectConfig()
@@ -77,7 +70,6 @@ export async function newCmd(projectTitle: string, modId?: string) {
         forceUpdate,
     );
 
-    // Prepare mod id
     modId = formatTitleToId(modId || projectTitle);
     if (!modId) {
         throw new Error(
@@ -85,7 +77,6 @@ export async function newCmd(projectTitle: string, modId?: string) {
         );
     }
 
-    // Check if project already exists
     const projectPath = join(destDir, modId);
     if (existsSync(projectPath)) {
         throw new Error(
@@ -93,7 +84,6 @@ export async function newCmd(projectTitle: string, modId?: string) {
         );
     }
 
-    // US2: Check for local templates in current working directory (parent of new project)
     const cwdTemplateModPath = join(process.cwd(), '.template-mod');
     const cwdTemplateWorkshopPath = join(process.cwd(), '.template-workshop');
 
@@ -135,9 +125,6 @@ export async function newCmd(projectTitle: string, modId?: string) {
 
     info(`- Creating project '${projectTitle}' dir '${modId}' ...`);
 
-    // PRE-COMMIT: everything is scaffolded into a staging directory next to
-    // the destination (same parent, same volume), so the commit below is an
-    // atomic rename. The destination path does not exist until the rename.
     const stagingPath = join(
         destDir,
         `.${modId}.staging-${Date.now().toString(36)}`,
@@ -148,11 +135,9 @@ export async function newCmd(projectTitle: string, modId?: string) {
             ignoreItems: ['.libraries'],
         });
 
-        // Copy mod template into the project mod folder
         info(`- Creating mod '${modId}'...`);
         scaffoldProject(templateModPath, join(stagingPath, modId), useSymlinks);
 
-        // Link or copy shared template folders
         info(`- Creating shared template folders...`);
 
         scaffoldTemplateFolder(
@@ -176,7 +161,6 @@ export async function newCmd(projectTitle: string, modId?: string) {
             );
         }
 
-        // Copy workshop template
         info(`- Creating workshop folder...`);
         scaffoldProject(
             templateWorkshopPath,
@@ -184,8 +168,6 @@ export async function newCmd(projectTitle: string, modId?: string) {
             useSymlinks,
         );
 
-        // Update config — validated inside the staging copy so an incomplete
-        // scaffold never reaches the commit.
         info(`- Updating project config...`);
         const newProjectConfigPath = join(stagingPath, 'project.json');
         const newProjectConfig = readProjectConfig(
@@ -203,21 +185,11 @@ export async function newCmd(projectTitle: string, modId?: string) {
             name: projectTitle,
             description: '',
         };
-        // Dist-always amendment (§4): fresh projects carry the PORTABLE
-        // tilde token as their deployment target — game-ready immediately
-        // after init + build (mode 'symlink' is the hard default). The
-        // token expands at materialize time, so a cloned repo never bakes
-        // one machine's absolute path into version control. Existing
-        // projects are never rewritten by pzstudio.
         newProjectConfig.outdir = '~/Zomboid/Workshop';
         updateProjectConfig(newProjectConfigPath, newProjectConfig);
 
-        // COMMIT: atomic same-volume rename — the destination only starts
-        // existing here.
         renameSync(stagingPath, projectPath);
     } catch (e) {
-        // PRE-COMMIT failure: the staging directory belongs to this
-        // invocation — remove it and leave the destination untouched.
         try {
             removeDirRecursive(stagingPath);
             verbose(`Removed staging directory: ${stagingPath}`);
@@ -230,19 +202,11 @@ export async function newCmd(projectTitle: string, modId?: string) {
         });
     }
 
-    // POST-COMMIT: hooks are non-fatal by policy (updateExperimentalScripts
-    // swallows script failures); a failure past the commit never claims
-    // rollback.
     updateExperimentalScripts('addProject', projectPath);
     updateExperimentalScripts('addMod', projectPath, modId);
 
-    // Done
     info(`The project '${projectTitle}' has been created at '${projectPath}'`);
 
-    // Golden path (CLI-7): tell the user what to do next — verify with
-    // doctor, then start the Development Sync Engine. Both install shapes
-    // are shown because the primary onboarding journey (npx) never
-    // installs the package globally.
     log(
         `Next: cd '${projectPath}'\n` +
             '\n' +

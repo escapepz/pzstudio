@@ -3,16 +3,11 @@ import { TextDecoder } from 'util';
 import path from 'path';
 import { t } from './l10n';
 
-/** A mod as declared in project.json: its id plus optional display name. */
 export interface ModSummary {
     id: string;
     name?: string;
 }
 
-/**
- * Reads the mods of ONE project from its project.json, tolerantly:
- * an empty list when the file is missing or unreadable.
- */
 export async function getModSummaries(
     projectDir: vscode.Uri,
 ): Promise<ModSummary[]> {
@@ -37,23 +32,16 @@ export async function getModSummaries(
     }
 }
 
-/** A mod pick bound to the project it belongs to. */
 export interface PickedMod {
     modId: string;
     projectDir: vscode.Uri;
 }
 
 export interface PickModIdOptions {
-    /** Project to pick from; resolved like every other command when omitted. */
     projectDir?: vscode.Uri;
-    /** Action phrase for the project picker: "Select the project to {0}". */
     action?: string;
 }
 
-/**
- * Friendly warning shown instead of running a command when the workspace
- * has no project at all; the caller aborts right after.
- */
 export function warnNoProject(action: string): void {
     vscode.window.showWarningMessage(
         t(
@@ -63,16 +51,6 @@ export function warnNoProject(action: string): void {
     );
 }
 
-/**
- * Asks for a mod id, always bound to one explicit project:
- * - a project passed in (tree node context) is used as-is,
- * - otherwise the project is resolved first (active editor → only project
- *   → quick-pick), so subfolder and multi-root workspaces work,
- * - a single mod is selected without asking, several mods quick-pick
- *   (label = id, description = display name), and a project without mods
- *   falls back to free text (fresh project).
- * Returns undefined when the user cancels or no project exists at all.
- */
 export async function pickModId(
     prompt: string,
     options: PickModIdOptions = {},
@@ -107,22 +85,13 @@ export async function pickModId(
     return typed ? { modId: typed, projectDir } : undefined;
 }
 
-/** Scan limits: keep the discovery cheap even in huge workspaces. */
 export const PROJECT_SCAN_LIMITS = {
-    /** Max projects found directly in a workspace root. */
     maxRootProjects: 10,
-    /** Max projects found in depth-1 subfolders (pzstudio new creates /root/<project_id>). */
     maxSubfolderProjects: 10,
 };
 
 const SKIPPED_DIR_NAMES = new Set(['node_modules', 'dist']);
 
-/**
- * Discovers project directories: every workspace root containing
- * project.json plus every direct subfolder containing one. The scan stops
- * early once the limits are reached to stay fast in huge workspaces;
- * `truncated` reports that more projects exist than were scanned.
- */
 export async function findProjectDirs(): Promise<{
     dirs: vscode.Uri[];
     truncated: boolean;
@@ -134,7 +103,6 @@ export async function findProjectDirs(): Promise<{
     let subfolderBudget = PROJECT_SCAN_LIMITS.maxSubfolderProjects;
 
     for (const folder of vscode.workspace.workspaceFolders ?? []) {
-        // Workspace roots themselves
         try {
             await vscode.workspace.fs.stat(
                 vscode.Uri.joinPath(folder.uri, 'project.json'),
@@ -145,11 +113,8 @@ export async function findProjectDirs(): Promise<{
             } else {
                 truncated = true;
             }
-        } catch {
-            // no project.json in this root
-        }
+        } catch {}
 
-        // Direct subfolders (pzstudio new creates <root>/<project_id>)
         let entries: [string, vscode.FileType][] = [];
         try {
             entries = await vscode.workspace.fs.readDirectory(folder.uri);
@@ -172,21 +137,13 @@ export async function findProjectDirs(): Promise<{
                 );
                 dirs.push(subUri);
                 subfolderBudget--;
-            } catch {
-                // no project.json in this subfolder
-            }
+            } catch {}
         }
     }
 
     return { dirs, truncated };
 }
 
-/**
- * Finds the nearest enclosing directory with a project.json, walking up
- * from the given path (e.g. the active editor's file) and stopping at
- * workspace roots. Returns undefined when no project.json is found on the
- * way up.
- */
 export async function findEnclosingProjectDir(
     startPath: string,
 ): Promise<vscode.Uri | undefined> {
@@ -203,9 +160,7 @@ export async function findEnclosingProjectDir(
                 vscode.Uri.joinPath(vscode.Uri.file(dir), 'project.json'),
             );
             return vscode.Uri.file(dir);
-        } catch {
-            // keep walking up
-        }
+        } catch {}
         const parent = path.dirname(dir);
         if (parent === dir) {
             break;
@@ -216,18 +171,11 @@ export async function findEnclosingProjectDir(
 }
 
 export interface ModConfigSnapshot {
-    /** Simple mod fields (string or string-array values) keyed by name. */
     fields: Record<string, string | string[]>;
-    /** build.modInfo value when set. */
     modInfo?: string;
-    /** Resolved build state (excluded > dev only > included). */
     state: 'included' | 'dev only' | 'excluded';
 }
 
-/**
- * Reads one mod's configuration from project.json tolerantly: returns
- * undefined when the project file or the mod entry is missing/unreadable.
- */
 export async function readModConfig(
     projectDir: vscode.Uri,
     modId: string,
@@ -278,16 +226,11 @@ export async function readModConfig(
     }
 }
 
-/** Workshop identity of a project, for labels. */
 export interface ProjectSummary {
     title?: string;
     id?: string;
 }
 
-/**
- * Reads workshop title/id from a project's project.json for labels,
- * tolerantly (both fields undefined when missing or unreadable).
- */
 export async function readProjectSummary(
     projectDir: vscode.Uri,
 ): Promise<ProjectSummary> {
@@ -309,31 +252,11 @@ export async function readProjectSummary(
     }
 }
 
-/**
- * Why a project resolution produced no directory. `resolveProjectDir`'s
- * `undefined` conflates the two cases that demand opposite feedback: a
- * dismissed picker must abort silently (spec §13 — cancel means no side
- * effects and no misleading "project not found" warning), while a
- * project-less workspace legitimately deserves the warnNoProject message.
- * Callers that need the distinction use resolveProjectDirResult; the rest
- * keep the plain undefined convention.
- */
 export type ProjectResolution =
     | { status: 'resolved'; dir: vscode.Uri }
     | { status: 'cancelled' }
     | { status: 'no-project' };
 
-/**
- * Resolves the project a command should run against, without the caller
- * having to know the workspace layout:
- * 1. the project containing the active editor's file (most intent, no UI),
- * 2. the only discovered project, auto-selected,
- * 3. a quick-pick of every discovered project (workspace roots and
- *    depth-1 subfolders — the same discovery the tree view uses), each
- *    labeled with its folder name and workshop title.
- * Reports 'cancelled' when the user dismisses that picker and
- * 'no-project' when the workspace has none at all.
- */
 export async function resolveProjectDirResult(
     action: string,
 ): Promise<ProjectResolution> {
@@ -376,10 +299,6 @@ export async function resolveProjectDirResult(
     return { status: 'no-project' };
 }
 
-/**
- * Convenience wrapper over resolveProjectDirResult preserving the plain
- * undefined convention (cancelled and no-project both map to undefined).
- */
 export async function resolveProjectDir(
     action: string,
 ): Promise<vscode.Uri | undefined> {

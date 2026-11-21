@@ -20,7 +20,6 @@ import type {
     RealFs,
 } from '../../packages/platform-node/src/link/linkManager';
 
-/** Thrown instead of a StatsLike / raw target in a fake-LinkFs scenario. */
 interface Errno {
     errno: string;
 }
@@ -55,28 +54,16 @@ function makeStats(spec: {
 const DEV = 100n;
 const INO = 4242n;
 
-/** lstat(W): the workshop entry itself is a link. */
 const linkEntry = () => makeStats({ directory: false, symlink: true });
 
-/**
- * stat(W) with bigint:true — following the link lands on the dist
- * directory, so the stats describe a real directory with the identity
- * every scenario shares.
- */
 const identityStats = () =>
     makeStats({ directory: true, symlink: false, dev: DEV, ino: INO });
 
-/** win32 scenario paths (as Task 4 passes them: absolute, mixed case). */
 const WIN_W = 'C:\\games\\Workshop\\Item';
 const WIN_D = 'd:\\PROJ\\dist\\item';
 const WIN_LONG_TARGET = '\\\\?\\D:\\proj\\dist\\Item';
 const WIN_FOREIGN_TARGET = '\\\\?\\D:\\other\\dist\\Other';
 
-/**
- * Fake LinkFs for one scenario. realpath/readdir belong to Task 2's
- * attach/detach maintenance — the inspection cascade must never call them,
- * so they fail loudly instead of returning fake data.
- */
 function makeFs(spec: {
     W: string;
     lstatW: StatsLike | Errno;
@@ -117,12 +104,6 @@ function makeFs(spec: {
     };
 }
 
-/**
- * Simulates the marker reader Task 3/4 will wire: reads the ownership
- * marker of `distDir` and returns it only when it belongs to the expected
- * project — a missing file and a foreign projectId both come back as
- * undefined, i.e. "not ours".
- */
 function markerReaderFor(
     files: Record<string, { projectId: string } | undefined>,
     expectedProjectId: string,
@@ -150,13 +131,10 @@ interface Row {
     statD?: StatsLike | Errno;
     readMarker?: (distDir: string) => Promise<unknown>;
     expected: LinkState;
-    /** Required when the cascade reads a link target. */
     rawTarget?: string;
-    /** Fragments that must appear in detail; omit when detail is absent. */
     detailContains?: string[];
 }
 
-// One scenario per cascade branch, in the brief's order.
 const rows: Row[] = [
     {
         name: 'ENOENT at W -> ATTACHABLE',
@@ -188,8 +166,6 @@ const rows: Row[] = [
         platform: 'win32',
         W: WIN_W,
         D: WIN_D,
-        // OneDrive cloud placeholders and AppExecLink entries report
-        // link-shaped metadata while readlink rejects them with EINVAL.
         lstatW: makeStats({ directory: false, symlink: true }),
         readlinkW: err('EINVAL'),
         expected: 'NOT_DIRECTORY',
@@ -271,9 +247,6 @@ const rows: Row[] = [
         D: WIN_D,
         lstatW: linkEntry(),
         readlinkW: WIN_LONG_TARGET,
-        // The seam may hand back plain-number stats (a stat impl ignoring
-        // the bigint option) while W reports bigints — identity must be
-        // compared numerically, never by reference.
         statW: identityStats(),
         statD: makeStats({
             directory: true,
@@ -294,7 +267,6 @@ const rows: Row[] = [
         readlinkW: WIN_LONG_TARGET,
         statW: identityStats(),
         statD: identityStats(),
-        // No marker file at D — the reader reports "not ours".
         readMarker: markerReaderFor({}, 'my-mod'),
         expected: 'UNOWNED_TARGET',
         rawTarget: WIN_LONG_TARGET,
@@ -326,8 +298,6 @@ const rows: Row[] = [
         readlinkW: WIN_LONG_TARGET,
         statW: identityStats(),
         statD: identityStats(),
-        // No readMarker injected: the default "marker absent" must classify
-        // UNOWNED_TARGET, never silently OK_LINK a target nobody owns.
         expected: 'UNOWNED_TARGET',
         rawTarget: WIN_LONG_TARGET,
         detailContains: [ERR_UNOWNED_DIST_TARGET],
@@ -352,8 +322,6 @@ const rows: Row[] = [
         readlinkW: '..\\..\\dist\\Item',
         statW: identityStats(),
         statD: identityStats(),
-        // Keyed by this row's D: the reader is probed with D as passed,
-        // which differs from WIN_D.
         readMarker: markerReaderFor(
             { 'C:\\Dist\\item': { projectId: 'my-mod' } },
             'my-mod',
@@ -410,20 +378,12 @@ describe('inspectWorkshopLink marker discipline', () => {
         );
 
         expect(result.state).toBe('OK_LINK');
-        // Exactly one probe, addressed to D as passed — never to W (which
-        // differs from D in every scenario by construction).
         expect(markerCalls).toEqual([WIN_D]);
     });
 });
 
 describe('inspectWorkshopLink reparse-tag blindness', () => {
     it('consults only isSymbolicLink/isDirectory and dev/ino on stats', async () => {
-        // The fake seam cannot express junction-vs-symlink metadata (Node
-        // reports junctions through the same isSymbolicLink() predicate as
-        // symlinks anyway). To pin the blindness contract, every stats
-        // object is a Proxy that records each property the cascade reads:
-        // a full OK_LINK pass must access nothing beyond the two
-        // predicates and the dev/ino identity fields.
         const accessed = new Set<string>();
         const recordingStats = (spec: {
             directory: boolean;
@@ -437,9 +397,6 @@ describe('inspectWorkshopLink reparse-tag blindness', () => {
             };
             return new Proxy(base, {
                 get(target, prop) {
-                    // The thenable check the promise machinery runs on the
-                    // fake's return value is not a cascade access; ignore
-                    // it so only real reads are recorded.
                     if (prop === 'then') return undefined;
                     accessed.add(String(prop));
                     return (target as Record<string | symbol, unknown>)[prop];
@@ -511,16 +468,6 @@ describe('normalizeLinkTarget', () => {
     });
 });
 
-// ---------------------------------------------------------------------------
-// attach / detach (Task 2) — real-fs fixtures under os.tmpdir(). The `fs`
-// (LinkFs) seam rides the real fs as well; `realFs` is the mutation seam
-// wrapped in a call spy so every row pins exactly which mutations ran. The
-// only mutations the manager may ever make at the workshop slot are
-// symlink(D, W, type), unlink(W), rmdir(W) on a verified-EMPTY dir and
-// rename(W, backup) — the seam itself has no rm/recursive operation.
-// ---------------------------------------------------------------------------
-
-/** fs.promises narrowed to the mutation slice the manager is allowed. */
 function realMutationFs(): RealFs {
     return {
         symlink: (target, linkPath, type) =>
@@ -532,7 +479,6 @@ function realMutationFs(): RealFs {
     };
 }
 
-/** The real fs as the LinkFs inspection seam (Task 1 contract, real host). */
 function realLinkFs(): LinkFs {
     return {
         lstat: (p) => fsp.lstat(p),
@@ -549,11 +495,6 @@ interface MutationCall {
     args: string[];
 }
 
-/**
- * Records every mutation call (symlink/rmdir/rename/unlink) with its
- * arguments; readFile passes through unlogged — diagnosis reads are not
- * mutations, and the no-mutation assertions must hold while they happen.
- */
 function spyMutations(inner: RealFs): {
     realFs: RealFs;
     calls: MutationCall[];
@@ -578,7 +519,6 @@ function spyMutations(inner: RealFs): {
     };
 }
 
-/** Fault-injection: make one mutation op reject with a coded errno error. */
 function withFault(
     inner: RealFs,
     op: 'rename' | 'symlink',
@@ -590,13 +530,6 @@ function withFault(
     return { ...inner, [op]: fail } as RealFs;
 }
 
-/**
- * TOCTOU swap simulation for the detach race: the manager's unlink first
- * swaps the junction for a real non-empty directory (the attacker's move,
- * via the real fs) and then rejects with ENOTEMPTY — the kernel refusing
- * the unlink against a non-empty real dir. The manager must surface the
- * refusal and attempt nothing else.
- */
 function withSwapOnUnlink(inner: RealFs): RealFs {
     return {
         ...inner,
@@ -624,11 +557,6 @@ interface AttachFixture {
     D: string;
 }
 
-/**
- * Workshop slot + dist item, both real directories under os.tmpdir(). The
- * slot `W` itself is left ABSENT (the attachable state) — rows that occupy
- * it mkdir it explicitly.
- */
 async function attachFixture(): Promise<AttachFixture> {
     const base = await fsp.mkdtemp(path.join(os.tmpdir(), 'pz-link-manager-'));
     fixtureRoots.push(base);
@@ -639,7 +567,6 @@ async function attachFixture(): Promise<AttachFixture> {
     return { base, W, D };
 }
 
-/** The marker reader Task 3/4 wires: the dist dir belongs to this project. */
 const ownedMarker = async (): Promise<unknown> => ({ projectId: 'my-mod' });
 
 async function pathExists(p: string): Promise<boolean> {
@@ -652,13 +579,6 @@ async function pathExists(p: string): Promise<boolean> {
 }
 
 let dirSymlinkSupported: boolean | undefined;
-/**
- * Real 'dir' symlinks need developer mode/admin on Windows; junctions do
- * not. Probed once so the posix-flavor row can fork its assertions: the
- * flavor contract (symlink called with 'dir' + absolute D) is pinned on
- * every host, the resolve-and-content assertions only where the OS allows
- * creating 'dir' symlinks.
- */
 async function canCreateDirSymlinks(): Promise<boolean> {
     if (dirSymlinkSupported === undefined) {
         const probe = await fsp.mkdtemp(
@@ -701,14 +621,12 @@ describe('attachWorkshopLink (real fs)', () => {
         expect(calls).toEqual([
             { op: 'symlink', args: [path.resolve(D), W, 'junction'] },
         ]);
-        // The junction resolves: stat through W lands on D's directory.
         const throughLink = await fsp.stat(W);
         const direct = await fsp.stat(D);
         expect(throughLink.isDirectory()).toBe(true);
         expect(throughLink.dev).toBe(direct.dev);
         expect(throughLink.ino).toBe(direct.ino);
         expect((await fsp.lstat(W)).isSymbolicLink()).toBe(true);
-        // The target keeps its content, readable through the link.
         expect(await fsp.readFile(path.join(W, 'workshop.txt'), 'utf8')).toBe(
             'version=1\nid=99999\n',
         );
@@ -727,7 +645,6 @@ describe('attachWorkshopLink (real fs)', () => {
             readMarker: ownedMarker,
         });
 
-        // The flavor contract is pinned on every host: 'dir', absolute D.
         expect(calls).toEqual([
             { op: 'symlink', args: [path.resolve(D), W, 'dir'] },
         ]);
@@ -741,9 +658,6 @@ describe('attachWorkshopLink (real fs)', () => {
                 await fsp.readFile(path.join(W, 'workshop.txt'), 'utf8'),
             ).toBe('version=1\nid=99999\n');
         } else {
-            // This machine has no dir-symlink privilege: the creation API
-            // itself is unsupported — attach must surface the OS refusal
-            // cleanly, leave the slot empty, and attempt nothing else.
             expect(result.ok).toBe(false);
             expect(result.state).toBe('ATTACHABLE');
             expect(result.detail).toContain('EPERM');
@@ -754,7 +668,7 @@ describe('attachWorkshopLink (real fs)', () => {
     it('empty real dir at W -> rmdir(W) then junction (auto-replace)', async () => {
         const { W, D } = await attachFixture();
         await fsp.writeFile(path.join(D, 'workshop.txt'), 'version=1\n');
-        await fsp.mkdir(W); // empty real dir occupies the slot
+        await fsp.mkdir(W);
         const { realFs, calls } = spyMutations(realMutationFs());
 
         const result = await attachWorkshopLink(realLinkFs(), realFs, W, D, {
@@ -780,7 +694,7 @@ describe('attachWorkshopLink (real fs)', () => {
             path.join(D, 'workshop.txt'),
             'version=1\nid=99999\n',
         );
-        await fsp.mkdir(W); // a real, non-empty dir occupies the slot
+        await fsp.mkdir(W);
         await fsp.writeFile(
             path.join(W, 'workshop.txt'),
             'version=1\nid=12345\n',
@@ -791,9 +705,6 @@ describe('attachWorkshopLink (real fs)', () => {
         const result = await attachWorkshopLink(realLinkFs(), realFs, W, D, {
             platform: 'win32',
             readMarker: ownedMarker,
-            // The source workshop.txt the host generates: no id= line — the
-            // built copy carries an id the source no longer knows (a lost
-            // id= would publish a duplicate item on the next upload).
             sourceWorkshopTxt: 'version=1\ntitle=Item\n',
         });
 
@@ -803,7 +714,7 @@ describe('attachWorkshopLink (real fs)', () => {
         expect(result.hasUnsyncedWorkshopId).toBe(true);
         expect(result.detail).toContain(ERR_WORKSHOP_DIR_EXISTS_REAL);
         expect(result.detail).toContain(W);
-        expect(calls).toEqual([]); // refuse = zero mutations, diagnosis reads only
+        expect(calls).toEqual([]);
         // Nothing at W was touched.
         expect(
             await fsp.readFile(path.join(W, 'workshop.txt'), 'utf8'),
@@ -835,7 +746,7 @@ describe('attachWorkshopLink (real fs)', () => {
     it('refuse diagnosis: W/workshop.txt missing -> hasUnsyncedWorkshopId undefined', async () => {
         const { W, D } = await attachFixture();
         await fsp.mkdir(W);
-        await fsp.writeFile(path.join(W, 'a.txt'), 'x'); // non-empty, no workshop.txt
+        await fsp.writeFile(path.join(W, 'a.txt'), 'x');
         const { realFs, calls } = spyMutations(realMutationFs());
 
         const result = await attachWorkshopLink(realLinkFs(), realFs, W, D, {
@@ -895,14 +806,12 @@ describe('attachWorkshopLink (real fs)', () => {
             { op: 'rename', args: [W, backupPath] },
             { op: 'symlink', args: [path.resolve(D), W, 'junction'] },
         ]);
-        // The backup preserves the displaced directory's content.
         expect(
             await fsp.readFile(path.join(backupPath, 'workshop.txt'), 'utf8'),
         ).toBe('id=12345\n');
         expect(
             await fsp.readFile(path.join(backupPath, 'data.txt'), 'utf8'),
         ).toBe('payload');
-        // W is now the junction; through it, D's content.
         expect((await fsp.lstat(W)).isSymbolicLink()).toBe(true);
         expect(await fsp.readFile(path.join(W, 'workshop.txt'), 'utf8')).toBe(
             'version=1\nid=99999\n',
@@ -929,8 +838,6 @@ describe('attachWorkshopLink (real fs)', () => {
         expect(calls).toEqual([
             { op: 'rename', args: [W, expect.any(String)] },
         ]);
-        // Nothing deleted, nothing created: W is still the real dir and the
-        // attempted backup path never came into existence.
         expect((await fsp.lstat(W)).isSymbolicLink()).toBe(false);
         expect(await fsp.readFile(path.join(W, 'data.txt'), 'utf8')).toBe(
             'payload',
@@ -955,11 +862,9 @@ describe('attachWorkshopLink (real fs)', () => {
         expect(result.detail).toContain('EPERM');
         expect(calls.map((c) => c.op)).toEqual(['rename', 'symlink']);
         const backupPath = calls[0].args[1];
-        // The displaced directory survives untouched in the backup...
         expect(
             await fsp.readFile(path.join(backupPath, 'workshop.txt'), 'utf8'),
         ).toBe('id=12345\n');
-        // ...and the slot is empty — an honest ATTACHABLE post-state.
         expect(await pathExists(W)).toBe(false);
         expect(result.state).toBe('ATTACHABLE');
         expect(result.backupPath).toBe(backupPath);
@@ -992,7 +897,6 @@ describe('attachWorkshopLink (real fs)', () => {
         expect(await fsp.readFile(path.join(W, 'workshop.txt'), 'utf8')).toBe(
             'version=1\nid=99999\n',
         );
-        // The displaced foreign target itself is untouched.
         expect(await fsp.readFile(path.join(foreign, 'keep.txt'), 'utf8')).toBe(
             'foreign',
         );
@@ -1015,7 +919,6 @@ describe('attachWorkshopLink (real fs)', () => {
         expect(result.state).toBe('FOREIGN_LINK');
         expect(result.detail).toContain(ERR_FOREIGN_WORKSHOP_LINK);
         expect(calls).toEqual([]);
-        // The foreign junction is still in place, still resolving to it.
         expect((await fsp.lstat(W)).isSymbolicLink()).toBe(true);
         const throughLink = await fsp.stat(W);
         const foreignStats = await fsp.stat(foreign);
@@ -1025,7 +928,7 @@ describe('attachWorkshopLink (real fs)', () => {
     it('UNOWNED_TARGET refuses even with forceLink', async () => {
         const { W, D } = await attachFixture();
         await fsp.writeFile(path.join(D, 'workshop.txt'), 'version=1\n');
-        await fsp.symlink(D, W, 'junction'); // link to D, but marker says not-ours
+        await fsp.symlink(D, W, 'junction');
         const { realFs, calls } = spyMutations(realMutationFs());
 
         const result = await attachWorkshopLink(realLinkFs(), realFs, W, D, {
@@ -1072,7 +975,7 @@ describe('attachWorkshopLink (real fs)', () => {
     it('DANGLING_LINK -> refuse: zero mutations (re-creating the link cannot fix a missing D)', async () => {
         const { W, D } = await attachFixture();
         await fsp.symlink(D, W, 'junction');
-        await fsp.rm(D, { recursive: true, force: true }); // target vanished
+        await fsp.rm(D, { recursive: true, force: true });
         const { realFs, calls } = spyMutations(realMutationFs());
 
         const result = await attachWorkshopLink(realLinkFs(), realFs, W, D, {
@@ -1113,7 +1016,7 @@ describe('attachWorkshopLink (real fs)', () => {
         const { realFs, calls } = spyMutations(realMutationFs());
 
         const result = await attachWorkshopLink(realLinkFs(), realFs, W, D, {
-            platform: 'win32', // no readMarker: default "marker absent"
+            platform: 'win32',
         });
 
         expect(result.ok).toBe(true);
@@ -1142,7 +1045,6 @@ describe('detachWorkshopLink (real fs)', () => {
         expect(result.state).toBe('ATTACHABLE');
         expect(calls).toEqual([{ op: 'unlink', args: [W] }]);
         expect(await pathExists(W)).toBe(false);
-        // The unlinked junction's target is untouched — no rm ever ran.
         expect(await fsp.readFile(path.join(D, 'workshop.txt'), 'utf8')).toBe(
             'version=1\nid=99999\n',
         );
@@ -1176,7 +1078,7 @@ describe('detachWorkshopLink (real fs)', () => {
         expect(result.ok).toBe(false);
         expect(result.state).toBe('CONFLICT_REAL_DIR');
         expect(result.detail).toContain('unlink-only');
-        expect(calls).toEqual([]); // never rmdir/rm — the dir survives
+        expect(calls).toEqual([]);
         expect(await fsp.readFile(path.join(W, 'user-file.txt'), 'utf8')).toBe(
             'precious',
         );
@@ -1215,7 +1117,7 @@ describe('detachWorkshopLink (real fs)', () => {
     it('TOCTOU: real non-empty dir swapped in during the race -> unlink rejects ENOTEMPTY -> clean error, zero deletions, no rm/rmdir in the log', async () => {
         const { W, D } = await attachFixture();
         await fsp.writeFile(path.join(D, 'workshop.txt'), 'version=1\n');
-        await fsp.symlink(D, W, 'junction'); // the gate will see a link
+        await fsp.symlink(D, W, 'junction');
         const swapping = withSwapOnUnlink(realMutationFs());
         const { realFs, calls } = spyMutations(swapping);
 
@@ -1227,15 +1129,11 @@ describe('detachWorkshopLink (real fs)', () => {
         expect(result.state).toBe('CONFLICT_REAL_DIR');
         expect(result.detail).toContain('ENOTEMPTY');
         expect(result.detail).toContain('nothing was deleted');
-        // The ONLY mutation the manager attempted is the single unlink(W);
-        // no rm/rmdir/rename ever appears in the log.
         expect(calls).toEqual([{ op: 'unlink', args: [W] }]);
-        // Zero deletions: the swapped-in dir and its file survive intact.
         expect((await fsp.lstat(W)).isSymbolicLink()).toBe(false);
         expect(await fsp.readFile(path.join(W, 'user-file.txt'), 'utf8')).toBe(
             'precious',
         );
-        // The original target was never touched either.
         expect(await fsp.readFile(path.join(D, 'workshop.txt'), 'utf8')).toBe(
             'version=1\n',
         );

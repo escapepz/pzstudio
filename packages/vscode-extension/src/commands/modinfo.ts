@@ -25,11 +25,6 @@ export function registerModinfoCommand(
             }
             const { modId, projectDir } = picked;
 
-            // Generation never overwrites silently: when a mod.info already
-            // exists in a branch folder, ask before passing --force. The
-            // target branches resolve through the host instance with the
-            // explicit project — no legacy project anchor write (doc 11 §17
-            // commit 10).
             let extraFlags: string[] | undefined;
             const existing = studio
                 .resolveModInfoTargets(modId, projectDir.fsPath)

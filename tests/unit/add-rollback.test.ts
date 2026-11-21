@@ -39,8 +39,6 @@ describe('addCmd rollback ownership guard', () => {
 
         vi.mocked(hasFlag).mockReturnValue(false);
         vi.mocked(projectDir).mockReturnValue('/project' as any);
-        // Default raw outdir snapshot: absence (the real fail-closed reader
-        // would throw under the unit fs mock's nonexistent config path).
         vi.mocked(readRawProjectOutdir).mockReturnValue(undefined as any);
         vi.mocked(resolveProjectConfig).mockReturnValue({
             workshop: { title: 'T', visibility: 'public', tags: [] },
@@ -55,8 +53,6 @@ describe('addCmd rollback ownership guard', () => {
     });
 
     it('rolls back exactly what this invocation created, newest first', () => {
-        // No local template anywhere: the mod dir AND the seeded
-        // .template-mod cache are both created by this invocation.
         vi.mocked(updateProjectConfig).mockImplementation(() => {
             throw new Error('EPERM: operation not permitted');
         });
@@ -69,15 +65,10 @@ describe('addCmd rollback ownership guard', () => {
             path.join('/project', '.template-mod'),
             path.join('/project', 'rb_mod'),
         ]);
-        // The post-mutation hooks never ran.
         expect(updateExperimentalScripts).not.toHaveBeenCalled();
     });
 
     it('fails closed before scaffolding when the raw outdir snapshot is unreadable (D3-a)', () => {
-        // The raw outdir snapshot must be captured BEFORE any filesystem
-        // mutation: an unreadable snapshot aborts addCmd before the mod
-        // directory is scaffolded and before any rollback bookkeeping is
-        // needed — never mid-try with dirs already created.
         vi.mocked(readRawProjectOutdir).mockImplementation(() => {
             throw new Error('snapshot unavailable');
         });
@@ -89,14 +80,10 @@ describe('addCmd rollback ownership guard', () => {
         expect(scaffoldProject).not.toHaveBeenCalled();
         expect(updateProjectConfig).not.toHaveBeenCalled();
         expect(updateExperimentalScripts).not.toHaveBeenCalled();
-        // Nothing was created, so nothing needed rolling back.
         expect(vi.mocked(removeDirRecursive)).not.toHaveBeenCalled();
     });
 
     it('never rolls back a pre-existing .template-mod it only seeded into', () => {
-        // The local template exists but is EMPTY: tier-0 rejects it, the
-        // remote template is scaffolded and seeded into the pre-existing
-        // (empty) cache directory — which this invocation did not create.
         vi.mocked(fs.existsSync).mockImplementation(
             (p: any) => String(p) === path.join('/project', '.template-mod'),
         );
@@ -120,20 +107,12 @@ describe('addCmd rollback ownership guard', () => {
             throw new Error('cleanup also failed');
         });
 
-        // The cleanup failure is reported but must not mask the original.
         expect(() => addCmd('Rollback Mod', 'rb_mod')).toThrow(
             'the original failure',
         );
     });
 });
 
-/**
- * d20-F2: a duplicate id is an expected data conflict, not a crash. The
- * refusal used to throw a plain Error, so the '[ERROR] A mod with id ...'
- * wording rode the 'Unexpected error:' lifecycle wrapper. It is now a
- * CliError — same message, still exit 1 (not a usage error), but rendered
- * as the bare problem text.
- */
 describe('addCmd duplicate-id refusal (d20-F2)', () => {
     const configWithMod = (modId: string) =>
         ({
@@ -168,10 +147,7 @@ describe('addCmd duplicate-id refusal (d20-F2)', () => {
         expect((thrown as CliError).message).toBe(
             "A mod with id 'case_probe' already exists!",
         );
-        // The point of d20-F2: the message never rides the unexpected-error
-        // wrapper ('Unexpected error: ...' + the --debug hint line).
         expect((thrown as CliError).message).not.toContain('Unexpected error');
-        // Nothing was scaffolded and nothing needed rolling back.
         expect(scaffoldProject).not.toHaveBeenCalled();
         expect(vi.mocked(removeDirRecursive)).not.toHaveBeenCalled();
     });
@@ -187,8 +163,6 @@ describe('addCmd duplicate-id refusal (d20-F2)', () => {
     });
 
     it('adds no typed-id note when the id derives from the mod name (d19-U1)', () => {
-        // No explicit id: 'Case Probe' derives 'case_probe'. There is no
-        // typed id to quote — the refusal stays the bare conflict message.
         vi.mocked(resolveProjectConfig).mockReturnValue(
             configWithMod('case_probe'),
         );

@@ -161,7 +161,6 @@ function lastName(uri: string): string {
     return slash === -1 ? uri : uri.substring(slash + 1);
 }
 
-/** Normalizes a URI/path for containment comparisons (separator, case, edges). */
 function normalizedPath(uri: string): string {
     return uri.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
@@ -346,15 +345,6 @@ async function outputDirDiagnostics(
     return diagnostics;
 }
 
-/**
- * `backupPathFor` (linkManager) renames a conflicting real folder to a
- * SIBLING whose name is `<Item>.backup-<ISO>` — inside the deployment
- * root. The game scans that folder, so a backup carrying a mod.info
- * registers as a duplicate mod. Warn only: pzstudio never deletes backups
- * (delayed silent data loss, owner decision) — the owner moves them out by
- * hand. A debris check must never fail the doctor, so every fs error
- * degrades to "no diagnostics".
- */
 async function backupDebrisDiagnostics(
     fs: ProjectFileSystem,
     input: DoctorInput,
@@ -398,11 +388,6 @@ async function templateDiagnostics(
     ];
 }
 
-/**
- * A Build 42 branch is a direct subfolder of the mod folder that contains a
- * media/ directory — the same rule resolveModInfoTargets applies.
- * Throws when the mod folder itself cannot be listed.
- */
 async function listBranchFolders(
     fs: ProjectFileSystem,
     modDirUri: string,
@@ -622,9 +607,6 @@ export async function runDoctor(
         input,
     );
 
-    // Outside a project the report is just that one fact — environment and
-    // filesystem notes would only bury the "you are in the wrong directory"
-    // message the user needs.
     if (!project && projectModule.some((d) => d.code === 'project.missing')) {
         return { projectDir: input.projectDir, diagnostics: projectModule };
     }
@@ -706,8 +688,6 @@ export function workshopLinkDiagnostics(
                     hint: steamcmdHint,
                 };
             case 'COPY_SLOT':
-                // A healthy engine-owned copy slot: reconciled on every
-                // build; drift heals with the next one.
                 return {
                     ...base,
                     severity: 'info',
@@ -766,12 +746,6 @@ export function workshopLinkDiagnostics(
     });
 }
 
-/**
- * Renders the materialize decision: an unset target is a legitimate pure
- * build state (CI/headless) — one INFO diagnostic, never a warning
- * (dist-always amendment §9). The MIGRATE_TO_DIST_MODEL diagnostic of the
- * 2026-11-11 design is gone: there is no legacy mode left to migrate.
- */
 function materializationDiagnostics(
     materialization: DoctorInput['materialization'],
 ): Diagnostic[] {

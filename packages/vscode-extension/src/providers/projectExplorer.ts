@@ -9,7 +9,6 @@ import { ruleFileFs } from '../util/ruleFs';
 
 export const PROJECT_EXPLORER_VIEW_ID = 'pzstudio.projectExplorer';
 
-/** Coalesce rapid refresh sources (watcher, command runs) into one rescan. */
 export const REFRESH_DEBOUNCE_MS = 500;
 
 interface ProjectConfig {
@@ -20,36 +19,20 @@ interface ProjectConfig {
 
 type ModBuildState = 'included' | 'devonly' | 'excluded';
 
-/**
- * Bundled icon shown for project folders in the explorer tree. Tree rows
- * render file icons as-is (no theme recoloring), so each theme variant
- * carries its own explicit color instead of currentColor.
- */
 export const PROJECT_FOLDER_ICON_LIGHT =
     'resources/icons/pzstudio-project-explorer-light.svg';
 export const PROJECT_FOLDER_ICON_DARK =
     'resources/icons/pzstudio-project-explorer-dark.svg';
 
-/** When-clause key exposing the show-all-files toggle state to menus. */
 export const SHOW_ALL_FILES_CONTEXT_KEY = 'pzstudioExplorer.showAllFiles';
 
-/**
- * A mod folder's icon comes from its first branch subfolder that both
- * looks like a mod branch (contains mod.info) and carries an icon.png.
- */
 export const MOD_BRANCH_INFO_FILE = 'mod.info';
 export const MOD_BRANCH_ICON_FILE = 'icon.png';
 
-/**
- * Supplies the shared diagnostics for one project. Wired from
- * extension.ts with the same engine `pzstudio doctor` runs; optional so
- * tests and lightweight embeddings can leave diagnostics off.
- */
 export type DiagnosticsSource = (
     projectDir: vscode.Uri,
 ) => Promise<ProjectDiagnosticsSummary | undefined>;
 
-/** A function so the state labels re-translate when the language changes. */
 function modStateDescription(state: ModBuildState): string {
     const descriptions: Record<ModBuildState, string> = {
         included: t('included'),
@@ -59,35 +42,15 @@ function modStateDescription(state: ModBuildState): string {
     return descriptions[state];
 }
 
-/**
- * Cached doctor summary for one project, valid for exactly one observed
- * project.json state. The fingerprint is captured BEFORE the run starts,
- * so a file changed mid-run never validates the stale result.
- */
 interface DiagnosticsCacheEntry {
     summary: ProjectDiagnosticsSummary | undefined;
     fingerprint: string;
 }
 
-/**
- * Stable identity for a project across tree renders. Discovery rebuilds
- * its URIs on every scan, so object identity is useless; the canonical
- * path string is the key. Real URIs carry fsPath (Windows-normalized);
- * the unit-test mock builds path-only URIs. Two workspace folders differing
- * only by drive-letter case would produce two entries (a duplicate scan at
- * worst — never a cross-project result leak).
- */
 function projectCacheKey(dir: vscode.Uri): string {
     return dir.fsPath || dir.path;
 }
 
-/**
- * Cheap project.json fingerprint for the diagnostics cache: one stat per
- * project per render (mtime + size), never a directory traversal. An
- * absent/unreadable file is its own stable state ('missing') so a broken
- * project renders the doctor's validation findings without rescanning
- * until the file reappears.
- */
 async function projectJsonFingerprint(dir: vscode.Uri): Promise<string> {
     try {
         const stat = await vscode.workspace.fs.stat(
@@ -99,11 +62,6 @@ async function projectJsonFingerprint(dir: vscode.Uri): Promise<string> {
     }
 }
 
-/**
- * Pure summary → badge/tooltip mapping. The UX contract (glyphs, severity
- * counts, tooltip listing) is unchanged by the caching layer — the same
- * doctor input renders the same output, it is just computed less often.
- */
 function renderDiagnosticsBadge(
     summary: ProjectDiagnosticsSummary | undefined,
 ): { badge: string; tooltip: string } | undefined {
@@ -129,10 +87,6 @@ function renderDiagnosticsBadge(
     return { badge: badgeParts.join(' '), tooltip };
 }
 
-/**
- * Resolves the mod's build state: excluded wins over dev-only, which wins
- * over included (same precedence as planBuild).
- */
 function modBuildState(
     project: ProjectConfig,
     modId: string,
@@ -147,11 +101,6 @@ function modBuildState(
     return 'included';
 }
 
-/**
- * Numeric-alphabet compare: digit runs compare by value ("9" before
- * "10"), everything else falls back to localeCompare ("42" before
- * "common").
- */
 export function naturalCompare(a: string, b: string): number {
     const chunksA = a.match(/\d+|\D+/g) ?? [];
     const chunksB = b.match(/\d+|\D+/g) ?? [];
@@ -169,13 +118,6 @@ export function naturalCompare(a: string, b: string): number {
     return chunksA.length - chunksB.length;
 }
 
-/**
- * Resolves a mod folder's display icon by scanning its level-1 subfolders
- * in numeric-alphabet order. A subfolder only qualifies when it holds a
- * mod.info (i.e. it is a real mod branch); the first such branch that
- * also carries an icon.png wins and the scan stops there. Folders that
- * never qualify yield undefined so the tree keeps the theme folder icon.
- */
 export async function resolveModFolderIcon(
     modDir: vscode.Uri,
     listDir: (dir: vscode.Uri) => PromiseLike<[string, vscode.FileType][]>,
@@ -213,26 +155,13 @@ export async function resolveModFolderIcon(
             if (icon.type & vscode.FileType.File) {
                 return iconUri;
             }
-        } catch {
-            // valid branch without an icon — keep scanning
-        }
+        } catch {}
     }
     return undefined;
 }
 
-/**
- * Files at the project root worth showing by default — everything the
- * tooling reads. Anything else is only listed after toggling "show all
- * files"; subfolders are never filtered.
- */
 const PROJECT_ROOT_FILES = new Set(['project.json', '.emmyrc.json']);
 
-/**
- * Path segments of `uri` relative to `base` (both tree URIs of one
- * project): [] when identical, undefined when `uri` sits outside `base`.
- * Compares the URIs' '/'-separated path form — the same space the ignore
- * matcher documents its keys in ('' is the root itself).
- */
 function relativeSegments(
     base: vscode.Uri,
     uri: vscode.Uri,
@@ -250,28 +179,17 @@ function relativeSegments(
 
 interface TreeElement {
     kind: 'project' | 'directory' | 'file' | 'missing-mod' | 'placeholder';
-    /** Directory or file this node mirrors; synthetic nodes reuse the parent. */
     uri: vscode.Uri;
-    /** The project this node belongs to (for context-menu commands). */
     projectDir: vscode.Uri;
     label: string;
     collapsible: vscode.TreeItemCollapsibleState;
     description?: string;
-    /** Plain-text hover for nodes with diagnostics (project rows). */
     tooltip?: string;
-    /** Set when this node is a mod folder known to project.json. */
     modId?: string;
-    /** Build state of a mod folder, mirrored into its contextValue. */
     modState?: ModBuildState;
-    /** icon.png of the mod's first qualifying branch subfolder. */
     iconUri?: vscode.Uri;
 }
 
-/**
- * Extracts the project context attached to a project tree item by
- * getTreeItem, so per-project buttons (build/clean) run against exactly the
- * row they sit on — no quick-pick, no ambiguity.
- */
 export function asProjectNode(
     node: unknown,
 ): { projectDir: vscode.Uri } | undefined {
@@ -285,11 +203,6 @@ export function asProjectNode(
     return undefined;
 }
 
-/**
- * Extracts the mod context attached to a tree item by getTreeItem, so
- * context-menu commands can run against the exact project folder + mod id
- * without any quick-pick.
- */
 export function asModNode(
     node: unknown,
 ): { modId: string; projectDir: vscode.Uri } | undefined {
@@ -306,14 +219,6 @@ export function asModNode(
     return undefined;
 }
 
-/**
- * Tree view mirroring the on-disk project layout (mods, Build 42 branch
- * folders, media/lua trees) and annotating mod folders with their workshop
- * build status from project.json.
- *
- * project.json is read tolerantly: unreadable or invalid files render a
- * placeholder row instead of throwing (unlike readProjectConfig).
- */
 export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElement> {
     private readonly _onDidChangeTreeData = new vscode.EventEmitter<
         TreeElement | undefined | void
@@ -326,30 +231,15 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         light: vscode.Uri;
         dark: vscode.Uri;
     };
-    /** Shared diagnostics provider; unset until extension.ts wires it. */
     private readonly diagnostics?: DiagnosticsSource;
-    /**
-     * Doctor summaries per project, bounded by discovery: entries exist
-     * only for projects a render actually queried, are evicted when the
-     * project disappears, and die with the provider (dispose). No disk
-     * persistence, no module-global state.
-     */
     private readonly diagnosticsCache = new Map<
         string,
         DiagnosticsCacheEntry
     >();
-    /** One in-flight doctor run per project — concurrent renders coalesce. */
     private readonly inFlightDiagnostics = new Map<
         string,
         Promise<ProjectDiagnosticsSummary | undefined>
     >();
-    /**
-     * Cache generation (UX-11): every full invalidation bumps it. An
-     * in-flight doctor run captured the generation it started under — a
-     * run a newer generation already abandoned must never repopulate the
-     * cache, so previously started findings cannot resurface as
-     * newly validated results after a configuration change.
-     */
     private diagnosticsGeneration = 0;
     private disposed = false;
 
@@ -361,17 +251,12 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         this.diagnostics = diagnostics;
     }
 
-    /**
-     * Whether the project root also shows non-essential files. Subfolders
-     * always list everything; the toggle only curates the project root.
-     */
     toggleShowAllFiles(): void {
         this.showAllFiles = !this.showAllFiles;
         this.syncShowAllFilesContext();
         this.refresh();
     }
 
-    /** Publishes the toggle state for the eye/eye-closed title button. */
     syncShowAllFilesContext(): void {
         void vscode.commands.executeCommand(
             'setContext',
@@ -380,13 +265,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         );
     }
 
-    /**
-     * Rebuilds the tree. Presentation refreshes (expansion, watcher
-     * debounce, command runs) reuse cached diagnostics — a doctor run
-     * happens only when a project.json fingerprint changed (UX-07). The
-     * explicit user refresh (title-bar command) passes
-     * invalidateDiagnostics to drop the cache and recompute every badge.
-     */
     refresh(options?: { invalidateDiagnostics?: boolean }): void {
         if (options?.invalidateDiagnostics) {
             this.invalidateDiagnostics();
@@ -394,33 +272,18 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         this._onDidChangeTreeData.fire();
     }
 
-    /**
-     * Full diagnostics invalidation (UX-11): called when configuration the
-     * doctor consumed changes (pzstudio.gameBuild) — a change the
-     * project.json fingerprint cannot observe. Drops every cached
-     * summary and severs all in-flight runs (nothing may join them as
-     * current results, and their resolutions cannot repopulate the
-     * cache), so the next render recomputes against the fresh
-     * configuration. Bounded: no new state, just the two existing maps
-     * plus a generation counter.
-     */
     invalidateDiagnostics(): void {
         this.diagnosticsGeneration++;
         this.diagnosticsCache.clear();
         this.inFlightDiagnostics.clear();
     }
 
-    /** Drops the diagnostics cache with the provider (extension teardown). */
     dispose(): void {
         this.disposed = true;
         this.diagnosticsCache.clear();
         this.inFlightDiagnostics.clear();
     }
 
-    /**
-     * Debounced refresh: bursts of change events (watcher, command runs)
-     * collapse into a single rescan instead of reloading continuously.
-     */
     requestRefresh(): void {
         if (this.refreshTimer) {
             return;
@@ -431,13 +294,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         }, REFRESH_DEBOUNCE_MS);
     }
 
-    /**
-     * Renders the project's diagnostics badge from the cache while the
-     * project.json fingerprint still matches, recomputing through the
-     * shared source only on a mismatch (first discovery, meaningful
-     * change, explicit invalidation). A failing source never breaks the
-     * tree — and is never cached, so a later render retries it.
-     */
     private async projectDiagnostics(
         dir: vscode.Uri,
     ): Promise<{ badge: string; tooltip: string } | undefined> {
@@ -462,14 +318,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         }
     }
 
-    /**
-     * Runs the diagnostics source once per project state: concurrent
-     * renders for the same project join the in-flight promise (one actual
-     * execution), the result is cached under the fingerprint observed
-     * BEFORE the run started, and a stale in-flight result (the project
-     * changed mid-run, or the joining render observed a newer state) is
-     * dropped instead of kept.
-     */
     private computeDiagnostics(
         key: string,
         dir: vscode.Uri,
@@ -480,9 +328,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
             return inFlight.then((summary) => {
                 const entry = this.diagnosticsCache.get(key);
                 if (entry && entry.fingerprint !== fingerprint) {
-                    // The run we joined started from an older project
-                    // state than this render observed: drop its result so
-                    // the next render recomputes instead of keeping it.
                     this.diagnosticsCache.delete(key);
                 }
                 return summary;
@@ -490,8 +335,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         }
         const runGeneration = this.diagnosticsGeneration;
         const promise = this.diagnostics!(dir);
-        // Keep a handled tail on the stored promise so a rejection can
-        // never surface as an unhandled rejection between renders.
         promise.catch(() => undefined);
         this.inFlightDiagnostics.set(key, promise);
         return promise.then(
@@ -499,10 +342,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                 if (this.inFlightDiagnostics.get(key) === promise) {
                     this.inFlightDiagnostics.delete(key);
                 }
-                // Only a still-current run may populate the cache: a run
-                // invalidated mid-flight (UX-11 configuration change,
-                // dispose) must not repopulate a cache that was already
-                // abandoned — its result stays decoration only.
                 if (
                     !this.disposed &&
                     runGeneration === this.diagnosticsGeneration
@@ -515,7 +354,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                 if (this.inFlightDiagnostics.get(key) === promise) {
                     this.inFlightDiagnostics.delete(key);
                 }
-                // Failures are never cached: a later render retries.
                 throw error;
             },
         );
@@ -532,8 +370,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         switch (element.kind) {
             case 'project':
                 item.iconPath = this.projectIcon;
-                // Inline build/clean buttons on the row target exactly this
-                // project; the attached context is read via asProjectNode().
                 (
                     item as vscode.TreeItem & {
                         projectDir?: vscode.Uri;
@@ -543,12 +379,8 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                 break;
             case 'directory':
                 if (element.modId) {
-                    // Mod folders show their first qualifying branch's
-                    // icon.png when one exists; other folders stay themed.
                     item.iconPath =
                         element.iconUri ?? new vscode.ThemeIcon('folder');
-                    // Context-menu commands receive this item back; the
-                    // attached mod context is read via asModNode().
                     (
                         item as vscode.TreeItem & {
                             modId?: string;
@@ -560,8 +392,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                             projectDir?: vscode.Uri;
                         }
                     ).projectDir = element.projectDir;
-                    // State-suffixed contextValue drives the per-state inline
-                    // buttons (include/dev-only/exclude toggles).
                     item.contextValue = element.modState
                         ? `mod-${element.modState}`
                         : 'mod';
@@ -579,8 +409,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                 ).projectDir = element.projectDir;
                 break;
             case 'file':
-                // No iconPath: with resourceUri set, the user's file icon
-                // theme renders the icon, matching the Explorer.
                 item.resourceUri = element.uri;
                 item.command = {
                     command: 'vscode.open',
@@ -615,9 +443,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
             return [infoNode(t('No project found in the workspace.'))];
         }
 
-        // Evict cached diagnostics for projects that are no longer
-        // discovered — removed projects must not linger, and a rediscovered
-        // one recomputes fresh instead of resurrecting an old result.
         const discovered = new Set(dirs.map(projectCacheKey));
         for (const key of [...this.diagnosticsCache.keys()]) {
             if (!discovered.has(key)) {
@@ -657,18 +482,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         return nodes;
     }
 
-    /**
-     * Builds the ignore predicate for the direct children of the directory
-     * being listed: rules load for that directory and every ancestor up to
-     * the project root, keyed project-root-relative — the exact key
-     * convention createIgnoreMatcher documents ('' is the root), so its own
-     * closest-wins walk decides each child against the deepest rule set
-     * (the listed directory's rules first; ancestor rules with wildcards
-     * still apply at depth). mod.info and the two rule files stay rails
-     * inside the matcher. Any failure — a directory whose rules cannot be
-     * read, an adapter error — fails open: the predicate stays undefined
-     * and every child is shown.
-     */
     private async childrenIgnoreFilter(
         element: TreeElement,
     ): Promise<((name: string) => boolean) | undefined> {
@@ -720,9 +533,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
             return [infoNode(t('Failed to read the project folder.'))];
         }
 
-        // Ignore rules (.gitignore/.pzstudioignore) hide entries entirely —
-        // the same visual treatment as dot entries (spec: hidden, not
-        // dimmed; no badges in v1). Loaded per listed directory, fail-open.
         const isRuleIgnored = await this.childrenIgnoreFilter(element);
 
         const directories: TreeElement[] = [];
@@ -736,8 +546,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
             const isMod =
                 type === vscode.FileType.Directory &&
                 project.mods?.[name] != null;
-            // A declared mod folder present on disk stays 'seen' even when
-            // the rules hide it — hidden is not missing-on-disk.
             if (isMod) {
                 seenModDirs.add(name);
             }
@@ -757,9 +565,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                     collapsible: vscode.TreeItemCollapsibleState.Collapsed,
                     modId: isMod ? name : undefined,
                     modState: state,
-                    // Mod rows carry the icon.png of their first qualifying
-                    // branch subfolder (mod.info + icon.png, natural order,
-                    // first hit wins); the tree item falls back to the theme.
                     iconUri: isMod
                         ? await resolveModFolderIcon(
                               childUri,
@@ -767,8 +572,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                               (fileUri) => vscode.workspace.fs.stat(fileUri),
                           )
                         : undefined,
-                    // 'included' is the unremarkable default — only annotate
-                    // the special states to keep rows clean.
                     description:
                         isMod && state && state !== 'included'
                             ? modStateDescription(state)
@@ -785,7 +588,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
             }
         }
 
-        // Mods declared in project.json but missing on disk
         const missingNodes = Object.keys(project.mods ?? {})
             .filter((modId) => !seenModDirs.has(modId))
             .map(
@@ -816,9 +618,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
         }
 
         const children: TreeElement[] = [];
-        // Ignore rules (.gitignore/.pzstudioignore) hide entries entirely —
-        // the same visual treatment as dot entries (spec: hidden, not
-        // dimmed; no badges in v1). Loaded per listed directory, fail-open.
         const isRuleIgnored = await this.childrenIgnoreFilter(element);
         for (const [name, type] of entries) {
             if (name.startsWith('.')) {
@@ -839,8 +638,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
                         : vscode.TreeItemCollapsibleState.None,
             });
         }
-        // VS Code Explorer convention: folders first, then files, each
-        // alphabetically (natural order so "9" precedes "10").
         const directories: TreeElement[] = [];
         const files: TreeElement[] = [];
         for (const child of children) {
@@ -856,10 +653,6 @@ export class ProjectExplorerProvider implements vscode.TreeDataProvider<TreeElem
     }
 }
 
-/**
- * Tolerant project.json read: returns undefined instead of throwing when
- * the file is missing or invalid.
- */
 async function readProjectConfig(
     projectDir: vscode.Uri,
 ): Promise<ProjectConfig | undefined> {

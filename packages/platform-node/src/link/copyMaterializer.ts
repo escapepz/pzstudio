@@ -116,7 +116,6 @@ export type CopySlotState =
     | 'UNOWNED_TARGET'
     | 'COPY_SLOT'
     | 'HAND_MADE_DIR'
-    /** Race-swap: the cascade re-lstat saw a real dir appear mid-inspection. */
     | 'CONFLICT_REAL_DIR'
     | 'NOT_DIRECTORY';
 
@@ -213,7 +212,6 @@ export async function buildSlotManifest(
     return manifest;
 }
 
-/** Does a parsed copy marker prove this identity's ownership of the slot? */
 function copyMarkerMatches(
     parsed: unknown,
     identity: CopySlotIdentity,
@@ -248,9 +246,6 @@ export async function inspectMaterializeSlot(
     try {
         entry = await fs.lstat(W);
     } catch (e) {
-        // ENOENT: nothing occupies the slot. ENOTDIR: a path component en
-        // route is a file (posix errno; win32 reports ENOENT here), so no
-        // slot can ever exist there either.
         if (errnoOf(e) === 'ENOENT' || errnoOf(e) === 'ENOTDIR') {
             return { state: 'ABSENT' };
         }
@@ -258,10 +253,6 @@ export async function inspectMaterializeSlot(
     }
 
     if (entry.isSymbolicLink()) {
-        // Delegate the full link cascade — target, identity, ownership.
-        // (A cascade re-lstat losing the race with a delete reports
-        // ATTACHABLE — from this caller's view the slot is simply absent
-        // again.)
         const link = await inspectWorkshopLink(fs, W, pathResolve(D), {
             platform: opts.platform,
             readMarker: opts.readMarker,
@@ -282,9 +273,6 @@ export async function inspectMaterializeSlot(
         if (copyMarkerMatches(parsed, opts.copyIdentity)) {
             return { state: 'COPY_SLOT' };
         }
-        // An EMPTY real dir is adoptable (the attachment table's
-        // auto-replace parity): reconcile re-verifies emptiness behind its
-        // own gate before writing anything.
         const contents = await fs.readdir(W);
         if (contents.length === 0) {
             return { state: 'COPY_SLOT' };
@@ -301,7 +289,6 @@ export async function inspectMaterializeSlot(
     };
 }
 
-/** Thrown by the tree walks on gate violations; surfaced, never fatal. */
 class CopyGateError extends Error {
     constructor(
         readonly code: string,
@@ -316,11 +303,6 @@ function joinUnder(platform: LinkPlatform, dir: string, name: string): string {
     return pathImpl.join(dir, name);
 }
 
-/**
- * Gate step 3: every entry in the slot tree must be a real file or
- * directory — one link anywhere inside means a prune could follow it
- * outside the deployment root, so the whole slot refuses.
- */
 async function assertNoLinksInside(
     copyFs: CopyFs,
     platform: LinkPlatform,
@@ -380,9 +362,6 @@ export type ReconcileResult = {
     detail?: string;
 };
 
-/** Recursively removes one slot entry bottom-up; refuses links on sight.
- * Returns the number of leaf files deleted (directories are structure) and
- * pushes every deleted leaf's full path onto `prunedPaths`. */
 async function removeSlotEntry(
     copyFs: CopyFs,
     platform: LinkPlatform,
@@ -417,8 +396,6 @@ async function removeSlotEntry(
     return 1;
 }
 
-/** Copies one dist entry (file or tree) into the slot, preserving mtimes.
- * Returns the number of leaf files written. */
 async function copyEntry(
     copyFs: CopyFs,
     platform: LinkPlatform,
@@ -429,8 +406,6 @@ async function copyEntry(
     const from = joinUnder(platform, distDir, entry.name);
     const to = joinUnder(platform, slotDir, entry.name);
     if (entry.isSymbolicLink()) {
-        // Model B keeps dist link-free (alias-route guard); a link here is
-        // a build-side violation — fail closed rather than deref it.
         throw new CopyGateError(
             ERR_COPY_SLOT_LINK_INSIDE,
             `${ERR_COPY_SLOT_LINK_INSIDE}: refusing to copy link entry ${from} (dist must be link-free)`,
@@ -458,7 +433,6 @@ async function copyEntry(
     return 1;
 }
 
-/** One reconciliation pass over one directory pair (mutual recursion). */
 async function syncTree(
     copyFs: CopyFs,
     platform: LinkPlatform,
@@ -477,9 +451,6 @@ async function syncTree(
     );
 
     for (const distEntry of distEntries) {
-        // The copy marker is the slot's own ownership trace — the host's
-        // writer places it before/after the pass; a sync pass neither
-        // copies nor prunes it.
         if (distEntry.name === COPY_MARKER_FILENAME) {
             continue;
         }
@@ -492,8 +463,6 @@ async function syncTree(
             !slotEntry.isSymbolicLink();
         if (distEntry.isDirectory()) {
             if (!slotIsRealDir) {
-                // Missing at the slot, or a file/link occupies the name —
-                // remove whatever is there and copy the tree fresh.
                 if (slotEntry) {
                     tally.filesPruned += await removeSlotEntry(
                         copyFs,
@@ -515,8 +484,6 @@ async function syncTree(
             await syncTree(copyFs, platform, from, to, tally);
             continue;
         }
-        // dist file: copy when missing, mistyped, or changed (size, or
-        // mtime beyond the 1 ms Date-projection tolerance).
         if (!slotEntry || slotIsRealDir || slotEntry.isSymbolicLink()) {
             if (slotEntry) {
                 tally.filesPruned += await removeSlotEntry(
@@ -602,7 +569,6 @@ export async function reconcileCopySlot(
             };
         }
 
-        // Gate steps 2-4 on a non-empty slot; an empty slot is adopted.
         const existing = await copyFs.readdirEntries(W);
         if (existing.length > 0) {
             if (!opts.readCopyMarker || !opts.copyIdentity) {
@@ -679,17 +645,6 @@ export async function materializeCopySlot(
         case 'OK_LINK':
         case 'DANGLING_LINK':
         case 'UNOWNED_TARGET': {
-            // Owner hard rule: unlink the junction FIRST — link-only
-            // removal (O(1) reparse-point deletion, dist untouched) —
-            // then reconcile into the vacated slot. Copying through the
-            // link is forbidden: it would write into dist from the
-            // deployment side. UNOWNED_TARGET joins the unlinkable rows:
-            // the link already resolves to D (cascade stages 2-3 proved
-            // it), unlinking a link destroys no data, and refusing here
-            // would strand the deployment on a missing dist marker.
-            // FOREIGN_LINK (points elsewhere) and IDENTITY_MISMATCH stay
-            // refused — recovery is the caller's flag surface
-            // (`--backup-existing-workshop`, `--relink`).
             try {
                 await realFs.unlink(W);
             } catch (e) {
@@ -714,8 +669,6 @@ export async function materializeCopySlot(
                 detail: inspection.detail,
             };
         default:
-            // FOREIGN_LINK / IDENTITY_MISMATCH / UNOWNED_TARGET: the link
-            // cascade's refusals carry their own codes — surface, don't fix.
             return {
                 ok: false,
                 state: inspection.state,
@@ -724,14 +677,10 @@ export async function materializeCopySlot(
     }
 }
 
-// ---------------------------------------------------------------------------
-// COPY_SLOT -> junction toggle (Batch B): drift-gated auto-replace
-// ---------------------------------------------------------------------------
-
 export type RemoveCleanResult = {
     ok: boolean;
     state:
-        | 'COPY_SLOT_REPLACED' // proven clean, slot deleted (W now absent)
+        | 'COPY_SLOT_REPLACED'
         | 'COPY_SLOT_DRIFT' // hand-edit / extra file / no manifest — refuse
         | 'RECONCILE_FAILED' // fs error, race, planted link — refuse
         | 'HAND_MADE_DIR' // marker absent/mismatched at toggle time
@@ -742,12 +691,6 @@ export type RemoveCleanResult = {
 const NO_SLOT_MANIFEST_DETAIL =
     'no slot manifest — pre-manifest marker; run a copy-mode build to upgrade it';
 
-/**
- * Strictly validates the marker's optional `files` field: a non-array
- * object whose every value is a `[number, number]` tuple. Anything else
- * (absent, arrays, strings, partial tuples) yields undefined — the toggle
- * then refuses rather than trusting an unproven cleanliness claim.
- */
 function readSlotManifest(parsed: unknown): SlotManifest | undefined {
     if (
         parsed === null ||
@@ -774,7 +717,6 @@ function readSlotManifest(parsed: unknown): SlotManifest | undefined {
     return manifest;
 }
 
-/** Joins an item-relative POSIX key under a root with the host separator. */
 function joinRelative(
     platform: LinkPlatform,
     root: string,
@@ -784,14 +726,6 @@ function joinRelative(
     return pathImpl.join(root, ...rel.split('/'));
 }
 
-/**
- * One current slot file against the manifest: the fast path is the same
- * size + mtime (1 ms Date tolerance) check `syncTree` uses. A manifest
- * mismatch falls to tier (iii) — dist's counterpart, size-matched and
- * byte-compared. dist is consulted ONLY here (materialize runs after the
- * build rewrote dist, so comparing against it wholesale would false-drift).
- * Any read error means unproven ⇒ not clean.
- */
 async function slotFileIsProvenClean(
     copyFs: CopyFs,
     platform: LinkPlatform,
@@ -824,12 +758,6 @@ async function slotFileIsProvenClean(
     }
 }
 
-/**
- * Tier (i): every CURRENT file must either match the manifest (ii) or,
- * byte-identical to dist (iii). A manifest file MISSING from the slot is
- * clean by decision — a deletion adds no unique content (its source is
- * dist). Returns the first unproven relative path.
- */
 async function firstDriftingPath(
     copyFs: CopyFs,
     platform: LinkPlatform,
@@ -853,12 +781,6 @@ async function firstDriftingPath(
     return undefined;
 }
 
-/**
- * Recursive delete inside the gated slot. Every entry is re-`lstat`ed
- * immediately before acting (TOCTOU guard): links and files are unlinked —
- * never followed — and only a real directory recurses. The caller rmdirs
- * the slot root after this returns.
- */
 async function removeSlotTree(
     copyFs: CopyFs,
     platform: LinkPlatform,
@@ -917,10 +839,6 @@ export async function removeCleanCopySlot(
                 detail: `${ERR_COPY_SLOT_NOT_DIRECTORY}: ${W} is no longer a real directory (the toggle only replaces a copy slot)`,
             };
         }
-        // Parity with the link attachment table: an EMPTY real dir is
-        // auto-replaced by attach. It holds no content, so deleting it
-        // loses nothing — rmdir is still the TOCTOU guard (a dir that
-        // gained entries since readdir fails ENOTEMPTY).
         const existing = await copyFs.readdirEntries(W);
         if (existing.length === 0) {
             await copyFs.rmdir(W);
@@ -949,7 +867,6 @@ export async function removeCleanCopySlot(
                 detail: NO_SLOT_MANIFEST_DETAIL,
             };
         }
-        // Gate step 3 — the same link scan the reconcile pass runs.
         await assertNoLinksInside(copyFs, opts.platform, W);
         const drift = await firstDriftingPath(
             copyFs,

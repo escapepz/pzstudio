@@ -88,7 +88,6 @@ describe('experimental integration opt-in (CLI-10, BREAKING)', () => {
     });
 
     it('falls back to an explicit global config setting when the project is silent', () => {
-        // project.json exists but carries no experimental key at all.
         const dir = makeProject({
             workshop: { title: 'T', visibility: 'public', tags: [] },
             mods: {},

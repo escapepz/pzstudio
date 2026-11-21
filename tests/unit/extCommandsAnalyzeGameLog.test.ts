@@ -4,9 +4,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('vscode', async () => {
     const { createVscodeMock } = await import('../helpers/vscode-mock');
-    // The shared mock has no diagnostics surface yet (analyzeGameLog is its
-    // first consumer): add the minimal classes and a settable collection
-    // the command needs, without widening the shared helper.
     const mock = createVscodeMock() as unknown as Record<string, unknown>;
     class MockRange {
         constructor(
@@ -38,8 +35,6 @@ vi.mock('vscode', async () => {
     return mock as unknown as typeof import('vscode');
 });
 
-// The command only renders: the analyzer is injected (index.ts passes the
-// CLI API's analyzeGameLogFile), so the tests stub a plain async function.
 import * as vscode from 'vscode';
 import { registerAnalyzeGameLogCommand } from '../../packages/vscode-extension/src/commands/analyzeGameLog';
 import type { ConsoleLogReport } from '@pzstudio/cli/api';
@@ -48,8 +43,6 @@ const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 
 const ATTRIBUTED_URI =
     'file:///proj/zul_test_dev/42/media/lua/client/zul_test_client.lua';
-// A plain Windows filesystem path, not a file:// URI: a context built
-// without the vscode-URI remap carries filesystem paths from the CLI host.
 const PLAIN_WINDOWS_PATH =
     'E:\\proj\\zul_test_dev\\42\\media\\lua\\client\\zul_test_client.lua';
 
@@ -75,7 +68,6 @@ function makeReport(
     };
 }
 
-/** Registers the command and returns its handler plus the analyzer stub. */
 async function setupHandler(
     analyze: ReturnType<typeof vi.fn>,
     onError?: (error: unknown) => void,
@@ -92,7 +84,6 @@ async function setupHandler(
     return { handler: entry![1] };
 }
 
-/** The channel object the command actually holds, via the call's result. */
 function createdChannel(name: string) {
     const mocked = asMock(vscode.window.createOutputChannel);
     const index = mocked.mock.calls.findIndex(
@@ -105,7 +96,6 @@ function createdChannel(name: string) {
     };
 }
 
-/** The collection object the command actually holds, via the call's result. */
 function createdCollection(name: string) {
     const mocked = asMock(vscode.languages.createDiagnosticCollection);
     const index = mocked.mock.calls.findIndex(
@@ -252,8 +242,6 @@ describe('pzstudio.analyzeGameLog', () => {
         >;
         expect(setCalls).toHaveLength(1);
         const [uri, diagnostics] = setCalls[0];
-        // Uri.file materialization (not Uri.parse's verbatim pass-through):
-        // a real vscode host cannot parse a bare Windows path as a URI.
         expect(uri).toBeInstanceOf(vscode.Uri);
         expect(String(uri.path)).toContain('zul_test_client.lua');
         expect(diagnostics).toHaveLength(1);
@@ -336,9 +324,6 @@ describe('pzstudio.analyzeGameLog', () => {
         asMock(analyze).mockResolvedValue(makeReport([]));
         const { handler } = await setupHandler(analyze);
 
-        // Both surfaces are materialized on the first run, not at
-        // registration: the bundle activation smoke test registers every
-        // command against a vscode stub without the diagnostics/output APIs.
         expect(
             asMock(vscode.window.createOutputChannel),
         ).not.toHaveBeenCalled();
@@ -414,10 +399,6 @@ describe('pzstudio.analyzeGameLog', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* Errors never throw past the handler: they route to onError          */
-/* ------------------------------------------------------------------ */
-
 describe('pzstudio.analyzeGameLog error handling', () => {
     let analyze: ReturnType<typeof vi.fn>;
     let onError: ReturnType<typeof vi.fn>;
@@ -437,7 +418,6 @@ describe('pzstudio.analyzeGameLog error handling', () => {
 
         expect(onError).toHaveBeenCalledTimes(1);
         expect(onError.mock.calls[0][0]).toBe(boom);
-        // Nothing was rendered: no channel open on a failed run.
         const channel = createdChannel('PZ Studio Game Log');
         expect(asMock(channel.show)).not.toHaveBeenCalled();
     });

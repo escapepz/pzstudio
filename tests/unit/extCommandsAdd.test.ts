@@ -25,10 +25,6 @@ function commandHandler(name: string): () => Promise<void> {
     return call[1] as () => Promise<void>;
 }
 
-/**
- * Anchors project resolution: an active editor inside an opened folder,
- * with fs.stat mocked so findEnclosingProjectDir resolves a project dir.
- */
 function anchorProject() {
     (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [
         { uri: vscode.Uri.file('/proj'), name: 'proj' },

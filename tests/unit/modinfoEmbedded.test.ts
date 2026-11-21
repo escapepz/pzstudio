@@ -1,14 +1,3 @@
-/**
- * Sweep d08-B5 regression (P1): the ext `pzstudio.modinfoGenerate` leg runs
- * the `modinfo` command through the v2 embedded lifecycle (studio.run with
- * an explicit projectDir). The command resolved its mod-folder walk from the
- * LEGACY ambient default (legacyProjectDir → the raw anchor slots, never
- * written by embedded hosts) which falls back to the HOST process's cwd —
- * so every embedded run failed with "No pzstudio project found." even
- * though the project was passed in, while the CLI (cwd = project) worked.
- * The command must inject its invocation-resolved project root through the
- * whole generation flow.
- */
 import { describe, it, expect, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
@@ -31,7 +20,6 @@ function makeTempDir(): string {
     return dir;
 }
 
-/** A minimal valid project with the given mods (validated on read). */
 function makeProjectDir(mods: Record<string, unknown>): string {
     const dir = makeTempDir();
     fs.writeFileSync(
@@ -45,7 +33,6 @@ function makeProjectDir(mods: Record<string, unknown>): string {
     return dir;
 }
 
-/** A mod folder with one Build 42 branch folder carrying a media dir. */
 function makeBranchFolder(projectDir: string, modId: string): string {
     const branch = path.join(projectDir, modId, '42', 'media');
     fs.mkdirSync(branch, { recursive: true });
@@ -63,9 +50,6 @@ afterEach(() => {
 
 describe('modinfo embedded project-root injection (sweep d08-B5)', () => {
     it('studio.run modinfo generate <modId> with a valid projectDir generates the branch mod.info — cwd is never consulted', async () => {
-        // The project lives in a temp dir; the vitest process cwd (repo
-        // root) carries no project.json above it — exactly the host-process
-        // shape that made the legacy-default walk fail closed.
         const proj = makeProjectDir({
             modA: { name: 'Mod A', description: 'A test mod' },
         });
@@ -136,8 +120,6 @@ describe('modinfo embedded project-root injection (sweep d08-B5)', () => {
         expect(caught).toBeInstanceOf(CliError);
         const err = caught as CliError;
         expect(err.message).toBe('No pzstudio project found.');
-        // Structured, not vague: the error names where discovery searched
-        // and what to do next.
         expect(err.cause).toContain(
             `Searched from '${path.resolve(emptyDir)}'`,
         );

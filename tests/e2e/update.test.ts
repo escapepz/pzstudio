@@ -3,11 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import { createE2EWorkspace, E2ETestWorkspace } from '../helpers/e2e-fixtures';
 
-/**
- * Module-level state that controls the mocked spawnSync behavior.
- * Tests set `mockFailSubstrings` before calling workspace.run() to
- * control which git clone operations should fail.
- */
 let mockFailSubstrings: string[] = [];
 
 vi.mock('child_process', async (importOriginal) => {
@@ -25,7 +20,6 @@ vi.mock('child_process', async (importOriginal) => {
                         return { status: 1 } as any;
                     }
 
-                    // Mock success: create a .git dir and a dummy file
                     fs.mkdirSync(dest, { recursive: true });
                     fs.mkdirSync(path.join(dest, '.git'), {
                         recursive: true,
@@ -33,7 +27,6 @@ vi.mock('child_process', async (importOriginal) => {
                     fs.writeFileSync(path.join(dest, 'project.json'), '{}');
                     return { status: 0 } as any;
                 } else {
-                    // Refresh operations: fetch, reset, submodule, clean
                     const cwd = opts?.cwd as string;
                     if (
                         cwd &&
@@ -49,11 +42,6 @@ vi.mock('child_process', async (importOriginal) => {
     };
 });
 
-/**
- * True when stderr reports a clone FAILURE for the given template category.
- * The URL alone is not enough since the stream contract (CLI-2) puts the
- * "Cloning template from <url>" progress line on stderr for every category.
- */
 const stderrHasCloneFailure = (result: E2EResult, category: string) =>
     result.stderr.some(
         (l) =>
@@ -90,12 +78,10 @@ describe('update command (E2E) - Mocked', () => {
         const result = await workspace.run('update');
         workspace.assertSuccess(result);
 
-        // Clone failure is logged as a warning
         workspace.assertStderr(
             result,
             "Failed to clone template from 'https://github.com/escapepz/pzstudio-template-mod.git'",
         );
-        // Falls back to legacy template, so updateCmd still counts it as success
         workspace.assertStderr(
             result,
             'All template caches refreshed successfully!',
@@ -108,15 +94,12 @@ describe('update command (E2E) - Mocked', () => {
         const result = await workspace.run('update');
         workspace.assertSuccess(result);
 
-        // All clones fail, all fall back to legacy
         workspace.assertStderr(
             result,
             "Failed to clone template from 'https://github.com/escapepz/pzstudio-template-project.git'",
         );
         workspace.assertStderr(result, 'Falling back to offline legacy');
 
-        // updateCmd still considers all successful because resolveTemplateDir
-        // returned a valid path (the legacy fallback)
         workspace.assertStderr(
             result,
             'All template caches refreshed successfully!',
@@ -142,13 +125,11 @@ describe('update — per-category failure isolation (E2E)', () => {
         const result = await workspace.run('update');
         workspace.assertSuccess(result);
 
-        // Project clone failure should be warned
         workspace.assertStderr(
             result,
             "Failed to clone template from 'https://github.com/escapepz/pzstudio-template-project.git'",
         );
 
-        // Other categories should NOT have clone failures in stderr
         expect(stderrHasCloneFailure(result, 'mod')).toBe(false);
         expect(stderrHasCloneFailure(result, 'workshop')).toBe(false);
         expect(stderrHasCloneFailure(result, 'language')).toBe(false);
@@ -225,11 +206,6 @@ describe('update — per-category failure isolation (E2E)', () => {
 describe('update — legacy template cache refresh (E2E)', () => {
     let workspace: E2ETestWorkspace;
 
-    // The stamped bundled copy Task 1's build step produces
-    // (packages/cli/dist/.template-legacy/.pzstudio-templates.json). In the
-    // in-process suite the bundled-dir probe reaches only
-    // <cwd>/.template-legacy, and workspace.run() chdirs to the workspace,
-    // so planting it there pins the bundled side of the stamp comparison.
     const stampedBundledDir = path.resolve(
         __dirname,
         '..',
@@ -240,7 +216,6 @@ describe('update — legacy template cache refresh (E2E)', () => {
         '.template-legacy',
     );
 
-    /** Plants the stamped bundled copy where the cwd probe will find it. */
     const plantBundledLegacyCopy = () => {
         if (
             !fs.existsSync(
@@ -272,10 +247,6 @@ describe('update — legacy template cache refresh (E2E)', () => {
 
     it('reports the legacy cache as up to date on a fresh home', async () => {
         plantBundledLegacyCopy();
-        // A fresh home: drop the pre-seeded junction (rmSync unlinks the
-        // link, never the shared store) so the category loop's bootstrap
-        // fills the cache from the bundled copy — the stamps then already
-        // match when the refresh step compares them.
         fs.rmSync(globalLegacyDir(), { recursive: true, force: true });
 
         const result = await workspace.run('update');
@@ -285,8 +256,6 @@ describe('update — legacy template cache refresh (E2E)', () => {
 
     it('refreshes a stale legacy cache and washes out stale content', async () => {
         plantBundledLegacyCopy();
-        // Seed the installed cache with content the bundled copy does not
-        // carry (and no stamp): the refresh must replace it wholesale.
         fs.rmSync(globalLegacyDir(), { recursive: true, force: true });
         fs.mkdirSync(globalLegacyDir(), { recursive: true });
         fs.writeFileSync(

@@ -56,10 +56,6 @@ import { getActiveInvocationContext } from '../../packages/cli/src/lib/invocatio
 import * as helperModule from '../../packages/cli/src/lib/helper';
 import * as coreModule from '../../packages/core/src/index';
 
-/* ------------------------------------------------------------------ */
-/* Fixtures and capture helpers                                        */
-/* ------------------------------------------------------------------ */
-
 function recordingLogger() {
     const calls: Array<{ method: string; message: any }> = [];
     const logger = {
@@ -80,7 +76,6 @@ function makeTempDir(): string {
     return dir;
 }
 
-/** A minimal valid project fixture (no outdir: host layers decide). */
 function makeProjectDir(title: string): string {
     const dir = makeTempDir();
     fs.writeFileSync(
@@ -94,7 +89,6 @@ function makeProjectDir(title: string): string {
     return dir;
 }
 
-/** A DevSync-ready fixture: a mod with a source file and a template dir. */
 function makeSyncProject(includeOutdir = true): {
     root: string;
     projectDir: string;
@@ -135,7 +129,6 @@ function sentinelTransport(name: 'git' | 'fetch' = 'git'): TemplateTransport {
     };
 }
 
-/** CliIO capture sink for raw-tier emission equivalence checks. */
 function captureIO(): { stdout: string[]; stderr: string[] } {
     const captured = { stdout: [] as string[], stderr: [] as string[] };
     const sink: CliIO = {
@@ -146,14 +139,6 @@ function captureIO(): { stdout: string[]; stderr: string[] } {
     return captured;
 }
 
-/**
- * Copies the bundled legacy templates into the fake home without running
- * the bootstrap. Fixture prep for tests that need the legacy fallback dir
- * present while asserting some OTHER emission — distinct from the removed
- * commit-5 workaround (that one pre-seeded the marker to HIDE the bootstrap
- * emission; this seeds the directory as test data, bootstrap-free by
- * construction because the target already exists).
- */
 function seedLegacyTemplates(): void {
     const fakeHome = (globalThis as any).__PZSTUDIO_FAKE_HOME as string;
     const bundled = path.join(process.cwd(), '.template-legacy');
@@ -162,7 +147,6 @@ function seedLegacyTemplates(): void {
     fs.cpSync(bundled, target, { recursive: true });
 }
 
-/** Temporarily replaces a registered command's run (test-only swap). */
 function withCommandRun(
     name: string,
     swapped: () => Promise<void>,
@@ -193,10 +177,6 @@ afterEach(() => {
     tempDirs = [];
 });
 
-/* ------------------------------------------------------------------ */
-/* 1. Doctor: legacy vs core golden report equivalence                 */
-/* ------------------------------------------------------------------ */
-
 describe('doctor legacy-vs-core golden equivalence', () => {
     it('identical DoctorReport on a healthy fixture', async () => {
         const proj = makeProjectDir('Doctor Golden');
@@ -209,7 +189,6 @@ describe('doctor legacy-vs-core golden equivalence', () => {
         });
 
         expect(core).toEqual(legacy);
-        // Sanity: the golden actually ran against the fixture.
         expect(legacy.projectDir).toBe(proj);
     });
 
@@ -241,10 +220,6 @@ describe('doctor legacy-vs-core golden equivalence', () => {
         expect(core).toEqual(legacy);
     });
 });
-
-/* ------------------------------------------------------------------ */
-/* 2. DevSync: plan-input equivalence legacy vs core                   */
-/* ------------------------------------------------------------------ */
 
 describe('devsync plan-input equivalence', () => {
     function spyGatherPlanInput(): Array<any[]> {
@@ -284,16 +259,11 @@ describe('devsync plan-input equivalence', () => {
 
         expect(captured).toHaveLength(2);
         expect(captured[1]).toEqual(captured[0]);
-        // Sanity: the plan input carries the session's own project path and
-        // the resolved config (tier-1 outdir against the walked root).
         expect(captured[0][0]).toBe(projectDir);
         expect(captured[0][1].outdir).toBe(path.join(projectDir, 'out'));
     });
 
     it('core deps are evaluated per plan input (accessor freshness)', async () => {
-        // No project outdir: the settings workspace layer is the outdir
-        // tier that actually decides (tier 2), so its per-apply freshness
-        // is observable in the plan input.
         const { projectDir, templateDir } = makeSyncProject(false);
         const outA = makeTempDir();
         const outB = makeTempDir();
@@ -305,8 +275,6 @@ describe('devsync plan-input equivalence', () => {
         const session = createDevSyncCore(
             projectDir,
             {
-                // The template override keeps template resolution fixed so
-                // the settings layers are the only moving part.
                 settings: () => layers,
                 logger: legacyLogger(),
                 templateTransport: legacyTransport(),
@@ -324,10 +292,6 @@ describe('devsync plan-input equivalence', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 3. Legacy createDevSync keeps its anchor-write side effect          */
-/* ------------------------------------------------------------------ */
-
 describe('legacy createDevSync anchor side effect (§13)', () => {
     it('leaves externalProjectDir anchored at the session path for its lifetime', async () => {
         const { projectDir, templateDir } = makeSyncProject();
@@ -344,8 +308,6 @@ describe('legacy createDevSync anchor side effect (§13)', () => {
 
         await session.start(['main']);
 
-        // Still anchored after applies (the observable §13 contract a
-        // subsequent legacy runCLI discovery relies on).
         expect(getExternalProjectDir()).toBe(projectDir);
         expect(legacyDiscoveryStart()).toBe(projectDir);
         await session.stop();
@@ -370,10 +332,6 @@ describe('legacy createDevSync anchor side effect (§13)', () => {
         expect(legacyDiscoveryStart()).toBeUndefined();
     });
 });
-
-/* ------------------------------------------------------------------ */
-/* 4. Legacy doctor keeps save → set → run → restore                   */
-/* ------------------------------------------------------------------ */
 
 describe('legacy doctor save/restore side effect (§13)', () => {
     it('restores the previous anchor on success', async () => {
@@ -404,10 +362,6 @@ describe('legacy doctor save/restore side effect (§13)', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 5. ModInfo: implicit default resolves the RAW project root          */
-/* ------------------------------------------------------------------ */
-
 describe('legacy modinfo resolved-root semantics (§8.0/§13)', () => {
     it('an anchor nested below the project root resolves upward to the real root', () => {
         const projRoot = makeProjectDir('ProjRoot');
@@ -418,12 +372,9 @@ describe('legacy modinfo resolved-root semantics (§8.0/§13)', () => {
         fs.mkdirSync(nested, { recursive: true });
         setProjectRootAnchor(nested);
 
-        // Implicit default: walk-up from the raw anchor — the exact
-        // pre-migration projectDir() algorithm over raw state.
         expect(resolveModInfoTargets('modA')).toEqual([
             path.join(projRoot, 'modA', 'branch'),
         ]);
-        // Identical to the explicit-root call.
         expect(resolveModInfoTargets('modA', projRoot)).toEqual(
             resolveModInfoTargets('modA'),
         );
@@ -439,10 +390,6 @@ describe('legacy modinfo resolved-root semantics (§8.0/§13)', () => {
         );
     });
 });
-
-/* ------------------------------------------------------------------ */
-/* 6. The same modinfo behavior while a v2 invocation is active        */
-/* ------------------------------------------------------------------ */
 
 describe('modinfo resolved-root with an active v2 run', () => {
     it('resolves the legacy root from the raw anchor — never the v2 project', async () => {
@@ -486,21 +433,7 @@ describe('modinfo resolved-root with an active v2 run', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 7. First R1 overlap cases: legacy ops next to an active v2 run      */
-/* ------------------------------------------------------------------ */
-
 describe('R1 overlap: legacy non-engine ops beside an active v2 run', () => {
-    /**
-     * Shared frame: a parked v2 run (lock held, ambient installed) plus
-     * populated legacy facade state, deliberately different from the v2
-     * instance's dependencies. done() releases the gate, restores the
-     * swapped command and settles the parked run — always call it in a
-     * finally. The legacy-template bootstrap marker is deliberately NOT
-     * pre-seeded (the commit-5 workaround is gone): every test here runs
-     * cold, and commit 6's io threading is what keeps the bootstrap and
-     * template emissions out of the v2 logger.
-     */
     async function parkedV2Frame() {
         const projV2 = makeProjectDir('V2Project');
         const v2Out = makeTempDir();
@@ -524,7 +457,6 @@ describe('R1 overlap: legacy non-engine ops beside an active v2 run', () => {
         const legacyOut = makeTempDir();
         const L1 = recordingLogger();
 
-        // Legacy facade state — deliberately different from the instance's.
         setLogger(L1.logger);
         setVsCodeSettings({
             outdir: legacyOut,
@@ -588,12 +520,7 @@ describe('R1 overlap: legacy non-engine ops beside an active v2 run', () => {
             await session.start(['main']);
             await session.stop();
 
-            // Project: the session resolved ITS OWN explicit path (and the
-            // legacy wrapper left the anchor write intact).
             expect(getExternalProjectDir()).toBe(frame.projLegacy);
-            // Dist-always: the session writes ONLY the project's canonical
-            // dist root — the settings outdir slots are deployment targets,
-            // never write targets; both stay untouched.
             expect(
                 fs.existsSync(
                     path.join(frame.projLegacy, 'dist', 'LegacyProject'),
@@ -601,8 +528,6 @@ describe('R1 overlap: legacy non-engine ops beside an active v2 run', () => {
             ).toBe(true);
             expect(fs.readdirSync(frame.v2Out)).toEqual([]);
             expect(fs.readdirSync(frame.legacyOut)).toEqual([]);
-            // Logger: session emissions routed to the legacy slot; the v2
-            // logger received nothing from the legacy operation.
             expect(frame.L1.calls.length).toBeGreaterThan(0);
             expect(frame.L1.calls.some((c) => c.method === 'info')).toBe(true);
             expect(frame.L2.calls.length).toBe(l2Count);
@@ -630,9 +555,6 @@ describe('R1 overlap: legacy non-engine ops beside an active v2 run', () => {
                 gameBuild: '42.20.1',
             });
 
-            // The engine hand-off received the legacy-composed inputs:
-            // outdir from the LEGACY workspace layer, template probe from
-            // the LEGACY template layers — never the v2 instance's.
             expect(inputs).toHaveLength(1);
             expect(inputs[0].projectDir).toBe(frame.projLegacy);
             expect(inputs[0].outDir).toBe(resolve(frame.legacyOut));
@@ -649,13 +571,9 @@ describe('R1 overlap: legacy non-engine ops beside an active v2 run', () => {
                 settings: legacyLayers,
             });
             expect(inputs[0].templateDir).toBe(expectedTemplate!.dir);
-            // A settings-less probe resolves the default-template cache —
-            // different dir, proving the legacy layers (not a fallback) fed
-            // the core.
             expect(inputs[0].templateDir).not.toBe(
                 probeTemplateCacheDir('project')!.dir,
             );
-            // Same report the core produces with the same raw legacy snapshot.
             expect(report).toEqual(
                 await runProjectDoctorCore(frame.projLegacy, {
                     settings: legacySettings(),
@@ -663,7 +581,6 @@ describe('R1 overlap: legacy non-engine ops beside an active v2 run', () => {
                     gameBuild: '42.20.1',
                 }),
             );
-            // The v2 logger received nothing from the legacy operation.
             expect(frame.L2.calls.length).toBe(l2Count);
         } finally {
             await frame.done();
@@ -685,8 +602,6 @@ describe('R1 overlap: legacy non-engine ops beside an active v2 run', () => {
 
             const targets = resolveModInfoTargets('my_mod');
 
-            // Resolved from the raw legacy anchor's real root — never the
-            // v2 project and never the bare anchor directory.
             expect(targets).toEqual([
                 path.join(frame.projLegacy, 'my_mod', 'branch'),
             ]);
@@ -718,27 +633,16 @@ describe('R1 overlap: legacy non-engine ops beside an active v2 run', () => {
                 templateTransport: T1,
             });
 
-            // The cache path derives from the PASSED settings' url,
-            // validated by the PASSED transport — cache hit, no clone, no
-            // ambient touch.
             expect(dir).toBe(
                 probeTemplateCacheDir('workshop', {
                     settings: legacyLayers,
                 })!.dir,
             );
             expect(t1Valid).toHaveBeenCalledWith(dir);
-            // The v2 instance transport was never consulted.
             expect(frame.T2.isCacheValid).not.toHaveBeenCalled();
             expect(frame.T2.download).not.toHaveBeenCalled();
             expect(frame.T2.refresh).not.toHaveBeenCalled();
-            // Nor the v2 settings: a settings-less probe resolves the
-            // default-template cache — a different dir.
             expect(dir).not.toBe(probeTemplateCacheDir('workshop')!.dir);
-            // Commit 6 (Appendix C): the scope form omits the io logger →
-            // raw legacy routing. COLD frame: the one-time bootstrap info —
-            // the exact emission the commit-5 test had to pre-seed away —
-            // occurs naturally and lands in the LEGACY slot, never in the
-            // v2 logger.
             expect(
                 frame.L1.calls
                     .slice(l1Count)
@@ -757,10 +661,6 @@ describe('R1 overlap: legacy non-engine ops beside an active v2 run', () => {
         expect(getActiveInvocationContext()).toBeUndefined();
     });
 });
-
-/* ------------------------------------------------------------------ */
-/* 8. Outdir tier order: project > ws > user > global > default        */
-/* ------------------------------------------------------------------ */
 
 describe('getOutDir explicit scope: exact tier order', () => {
     const layers = (ws?: string, user?: string) => ({
@@ -833,11 +733,6 @@ describe('getOutDir explicit scope: exact tier order', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 9. Commit 6 (Appendix C): explicit io threading — the emission      */
-/*    inventory captured per reachable path, not sampled               */
-/* ------------------------------------------------------------------ */
-
 describe('commit 6 io threading (Appendix C): explicit io scopes', () => {
     const fakeHome = () => (globalThis as any).__PZSTUDIO_FAKE_HOME as string;
 
@@ -847,7 +742,6 @@ describe('commit 6 io threading (Appendix C): explicit io scopes', () => {
         fs.writeFileSync(
             path.join(proj, 'project.json'),
             JSON.stringify({
-                // root-level "title" triggers the migration warning
                 title: 'Old Title',
                 workshop: {
                     title: 'Old Title',
@@ -925,7 +819,6 @@ describe('commit 6 io threading (Appendix C): explicit io scopes', () => {
     it('readGlobalConfig: read verbose and corrupt/validation warns route to the io logger', () => {
         const { calls, logger } = recordingLogger();
         fs.mkdirSync(path.join(fakeHome(), '.pzstudio'), { recursive: true });
-        // Valid JSON that FAILS validation — the corrupt-config warning path.
         fs.writeFileSync(
             getConfigPath(),
             JSON.stringify({ useSymlinks: 'yes' }),
@@ -933,7 +826,6 @@ describe('commit 6 io threading (Appendix C): explicit io scopes', () => {
 
         const config = readGlobalConfig(true, { logger });
 
-        // In-memory defaults survive (the warning path's contract).
         expect(config.useSymlinks).toBe(true);
         expect(
             calls.some(
@@ -1009,7 +901,6 @@ describe('commit 6 io threading (Appendix C): explicit io scopes', () => {
             throw new Error('raw clone exploded');
         });
 
-        // 4-arg call — the exact baseline published shape; no io scope.
         expect(
             cloneRemoteTemplate(
                 'https://github.com/x/y.git',
@@ -1036,8 +927,6 @@ describe('commit 6 io threading (Appendix C): explicit io scopes', () => {
             throw new Error('clone exploded');
         });
 
-        // Official default url → after the failed clone the legacy fallback
-        // applies; the fake home is cold, so the one-time bootstrap runs.
         const dir = resolveTemplateDir('workshop', {
             templateTransport: T,
             logger,
@@ -1072,7 +961,6 @@ describe('commit 6 io threading (Appendix C): explicit io scopes', () => {
         const T = sentinelTransport('git');
         vi.spyOn(T, 'isCacheValid').mockReturnValue(false);
 
-        // Community url → no legacy fallback → actionable throw.
         expect(() =>
             resolveTemplateDir('workshop', {
                 settings: {
@@ -1107,7 +995,6 @@ describe('commit 6 io threading (Appendix C): explicit io scopes', () => {
             workspace: { templates: { workshop: { url } } },
         };
 
-        // Invalid cache: the dir exists but holds no valid cache.
         const cacheDir = probeTemplateCacheDir('workshop', {
             settings: layers,
         })!.dir;
@@ -1134,7 +1021,6 @@ describe('commit 6 io threading (Appendix C): explicit io scopes', () => {
             ),
         ).toBe(true);
 
-        // Offline fallback: no cache, non-empty legacy dir.
         const offline = recordingLogger();
         const offlineDir = resolveTemplateDir('workshop', {
             isOffline: true,
@@ -1153,7 +1039,6 @@ describe('commit 6 io threading (Appendix C): explicit io scopes', () => {
             ),
         ).toBe(true);
 
-        // Forced refresh failure on a valid cache.
         const refresh = recordingLogger();
         const T3 = sentinelTransport('git');
         vi.spyOn(T3, 'isCacheValid').mockReturnValue(true);
@@ -1179,15 +1064,10 @@ describe('commit 6 io threading (Appendix C): explicit io scopes', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 10. Commit 6: transport constructor sinks                           */
-/* ------------------------------------------------------------------ */
-
 describe('commit 6 transport constructor sinks (Appendix C)', () => {
     it('GitTransport refresh emissions route to the constructor sink', () => {
         const { calls, logger } = recordingLogger();
 
-        // A non-repo dir makes the real git fetch fail fast (no network).
         expect(
             new GitTransport({ logger }).refresh(makeTempDir(), undefined),
         ).toBe(false);
@@ -1215,8 +1095,6 @@ describe('commit 6 transport constructor sinks (Appendix C)', () => {
     it('GitTransport download info routes to the constructor sink (fires before the clone attempt)', () => {
         const { calls, logger } = recordingLogger();
 
-        // GIT_ALLOW_PROTOCOL=file (suite setup) fails the https clone
-        // instantly; the info emission happens BEFORE the spawn either way.
         expect(() =>
             new GitTransport({ logger }).download(
                 'https://github.com/owner/repo.git',
@@ -1238,9 +1116,6 @@ describe('commit 6 transport constructor sinks (Appendix C)', () => {
     it('FetchTransport download verbose/info and no-manifest refresh warn route to the constructor sink', () => {
         const { calls, logger } = recordingLogger();
         const t = new FetchTransport({ logger });
-        // The archive fetch itself is not under test — only its emissions.
-        // The empty archive makes the extraction throw AFTER the verbose
-        // and info emissions have fired, which is exactly what we capture.
         vi.spyOn(t as any, 'fetchArchive').mockReturnValue(new Uint8Array());
         expect(() =>
             t.download(
@@ -1285,9 +1160,6 @@ describe('commit 6 transport constructor sinks (Appendix C)', () => {
         ).toBe(true);
     });
 
-    // Sweep d15-B5: refresh used to rmSync the cache BEFORE the re-download,
-    // so a failed download left the machine with NO cache at all. The
-    // replacement must stage into a sibling and swap only after it lands.
     it('FetchTransport.refresh swaps the cache only after the staged re-download succeeds (d15-B5)', () => {
         const cacheDir = makeTempDir();
         fs.writeFileSync(path.join(cacheDir, 'old.txt'), 'old');
@@ -1299,8 +1171,6 @@ describe('commit 6 transport constructor sinks (Appendix C)', () => {
         vi.spyOn(t as any, 'fetchArchive').mockReturnValue(new Uint8Array());
         vi.spyOn(t as any, 'extract').mockImplementation(
             (_zip: unknown, destDir: string) => {
-                // The real extract mkdirs the destination (the staging dir
-                // does not exist yet) — mirror that before writing.
                 fs.mkdirSync(destDir, { recursive: true });
                 fs.writeFileSync(path.join(destDir, 'fresh.txt'), 'new');
             },
@@ -1323,13 +1193,9 @@ describe('commit 6 transport constructor sinks (Appendix C)', () => {
         );
         const { calls, logger } = recordingLogger();
         const t = new FetchTransport({ logger });
-        // The empty archive makes the real extract throw — a re-download
-        // failure after the old code would have already deleted the cache.
         vi.spyOn(t as any, 'fetchArchive').mockReturnValue(new Uint8Array());
 
         expect(t.refresh(cacheDir, undefined)).toBe(false);
-        // The previous cache survived, the staging dir left no debris, and
-        // the warn names the preserved cache (clear error, d15-B5 contract).
         expect(fs.existsSync(path.join(cacheDir, 'old.txt'))).toBe(true);
         expect(fs.existsSync(`${cacheDir}.replacing`)).toBe(false);
         expect(
@@ -1344,20 +1210,9 @@ describe('commit 6 transport constructor sinks (Appendix C)', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 11. Commit 6: R1 raw-legacy default routing                         */
-/* ------------------------------------------------------------------ */
-
 describe('commit 6 R1 raw-legacy default routing', () => {
     const fakeHome = () => (globalThis as any).__PZSTUDIO_FAKE_HOME as string;
 
-    /**
-     * Minimal parked-v2 frame: a v2 run holding the lock with its ambient
-     * installed and its instance logger/transport deliberately separate
-     * from the legacy slots. v2Count snapshots the instance logger's call
-     * count once the run is truly parked (inside the swapped command body),
-     * so later assertions are race-free.
-     */
     async function parkedV2SinkFrame() {
         const projV2 = makeProjectDir('V2Project');
         const V2 = recordingLogger();
@@ -1402,13 +1257,12 @@ describe('commit 6 R1 raw-legacy default routing', () => {
     it('an omitted io scope routes exactly like the explicit raw legacy sink (legacy default-sink equivalence)', () => {
         setVerbose(true);
 
-        // Via the legacy logger slot (externalLogger):
         const L = recordingLogger();
         setLogger(L.logger);
-        readGlobalConfig(false); // omitted io → raw tier
+        readGlobalConfig(false);
         const afterOmitted = L.calls.length;
         expect(afterOmitted).toBeGreaterThan(0);
-        readGlobalConfig(false, { logger: legacyLogger() }); // explicit raw sink
+        readGlobalConfig(false, { logger: legacyLogger() });
         expect(L.calls.length).toBe(afterOmitted + 1);
         expect(L.calls[afterOmitted].method).toBe('verbose');
         expect(String(L.calls[afterOmitted].message)).toBe(
@@ -1416,8 +1270,6 @@ describe('commit 6 R1 raw-legacy default routing', () => {
         );
         setLogger(undefined);
 
-        // Via the raw stdout/stderr sink (no external logger): identical
-        // captured streams.
         const first = captureIO();
         readGlobalConfig(false);
         const firstStderr = [...first.stderr];
@@ -1433,7 +1285,7 @@ describe('commit 6 R1 raw-legacy default routing', () => {
         setLogger(frame.L1.logger);
         setVerbose(true);
         try {
-            readGlobalConfig(false); // omitted io
+            readGlobalConfig(false);
             expect(
                 frame.L1.calls.some(
                     (c) =>
@@ -1455,14 +1307,10 @@ describe('commit 6 R1 raw-legacy default routing', () => {
         setLogger(frame.L1.logger);
         setVerbose(true);
         try {
-            // The positional form's only visible transport is the engine
-            // reader (the parked v2 instance's) — made valid so the path
-            // stops at the cache hit. The assertion targets EMISSION
-            // routing: every emission must land raw legacy, none in V2.
             vi.spyOn(frame.T2, 'isCacheValid').mockReturnValue(true);
             const l1Start = frame.L1.calls.length;
 
-            const dir = resolveTemplateDir('workshop'); // positional, no scope
+            const dir = resolveTemplateDir('workshop');
 
             expect(frame.T2.isCacheValid).toHaveBeenCalledWith(dir);
             const l1 = frame.L1.calls.slice(l1Start);
@@ -1518,11 +1366,6 @@ describe('commit 6 R1 raw-legacy default routing', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 12. Commit 6 acceptance: R1 cold overlap with a LEGACY cold         */
-/*     template operation (replaces the commit-5 pre-seed workaround)  */
-/* ------------------------------------------------------------------ */
-
 describe('commit 6 R1 cold overlap: legacy cold template op beside a parked v2 run', () => {
     it('every bootstrap/cache/template/transport emission lands in the legacy logger; the v2 logger receives none', async () => {
         const projV2 = makeProjectDir('V2Project');
@@ -1536,10 +1379,6 @@ describe('commit 6 R1 cold overlap: legacy cold template op beside a parked v2 r
         const legacyOut = makeTempDir();
         const L1 = recordingLogger();
 
-        // Legacy facade state — populated, deliberately different from the
-        // instance's. The sticky transport is a REAL GitTransport so the
-        // transport-tier emissions occur naturally; its omitted constructor
-        // sink routes raw legacy.
         setLogger(L1.logger);
         setVerbose(true);
         setVsCodeSettings({ outdir: legacyOut });
@@ -1575,12 +1414,6 @@ describe('commit 6 R1 cold overlap: legacy cold template op beside a parked v2 r
             const v2Count = V2.calls.length;
             const l1Start = L1.calls.length;
 
-            // LEGACY cold template operation: the legacy DevSync wrapper —
-            // raw legacy deps per apply, NO template override, cold fake
-            // home. The plan input bootstraps the legacy templates, reads
-            // the global config, resolves the workshop template and clones
-            // (failing fast against the suite's git protocol lockdown) —
-            // all emissions occur naturally.
             const projLegacy = makeProjectDir('LegacyProject');
             fs.mkdirSync(path.join(projLegacy, 'my_mod', 'media', 'lua'), {
                 recursive: true,
@@ -1594,8 +1427,6 @@ describe('commit 6 R1 cold overlap: legacy cold template op beside a parked v2 r
             await session.start(['main']);
             await session.stop();
 
-            // ALL legacy emissions landed in L1 — the full Appendix C
-            // inventory this path can emit, captured, not sampled.
             const l1 = L1.calls.slice(l1Start);
             const has = (method: string, fragment: string) =>
                 l1.some(
@@ -1618,8 +1449,6 @@ describe('commit 6 R1 cold overlap: legacy cold template op beside a parked v2 r
                 true,
             );
 
-            // The v2 logger received NONE of them — and nothing at all
-            // during the legacy operation's window.
             expect(V2.calls.length).toBe(v2Count);
             expect(
                 V2.calls.some((c) =>
@@ -1631,10 +1460,6 @@ describe('commit 6 R1 cold overlap: legacy cold template op beside a parked v2 r
                 ),
             ).toBe(false);
 
-            // Dist-always fingerprint: the sync wrote the project's
-            // canonical dist root — the RAW legacy settings slot (outdir)
-            // is a deployment target now, never a write target; the v2
-            // slot stays untouched too.
             expect(
                 fs.existsSync(path.join(projLegacy, 'dist', 'LegacyProject')),
             ).toBe(true);
@@ -1650,11 +1475,6 @@ describe('commit 6 R1 cold overlap: legacy cold template op beside a parked v2 r
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 13. Commit 6: the mirror direction — v2 non-engine ops use the      */
-/*     instance logger even with the legacy slots populated            */
-/* ------------------------------------------------------------------ */
-
 describe('commit 6 R1 mirror: v2 non-engine ops log to the instance with legacy slots populated', () => {
     it('studio.createDevSync routes the cold plan-input emissions to the instance logger; the legacy slot stays silent', async () => {
         const legacyOut = makeTempDir();
@@ -1664,7 +1484,6 @@ describe('commit 6 R1 mirror: v2 non-engine ops log to the instance with legacy 
         vi.spyOn(T1, 'download');
         vi.spyOn(T1, 'refresh');
 
-        // Aggressively populated legacy facade state.
         setLogger(L1.logger);
         setVerbose(true);
         setProjectDir(makeTempDir());
@@ -1683,9 +1502,6 @@ describe('commit 6 R1 mirror: v2 non-engine ops log to the instance with legacy 
         const studio = createPzStudio({
             logger: V2.logger,
             settings: () => ({ workspace: { outdir: v2Out } }),
-            // No templateTransport: the host default is constructed with
-            // the instance logger (§12, commit 6) — a real GitTransport
-            // whose emissions must land in V2.
         });
 
         const proj = makeProjectDir('MirrorProject');
@@ -1720,19 +1536,11 @@ describe('commit 6 R1 mirror: v2 non-engine ops log to the instance with legacy 
             true,
         );
 
-        // The legacy logger received NOTHING from the plan input — the only
-        // raw-legacy emission is the recorder's one-time disclosure notice
-        // (the devsync.create usage span runs outside any invocation
-        // context, so its R1 default routing is the raw legacy tier).
         expect(L1.calls).toHaveLength(1);
         expect(L1.calls[0].method).toBe('info');
         expect(String(L1.calls[0].message)).toContain('saves local usage logs');
-        // The legacy sticky transport was never consulted.
         expect(T1.isCacheValid).not.toHaveBeenCalled();
         expect(T1.download).not.toHaveBeenCalled();
-        // Dist-always settings fingerprint: the instance's plan input wrote
-        // ONLY the project's canonical dist root; NEITHER settings outdir
-        // slot is a write target.
         expect(fs.existsSync(path.join(proj, 'dist', 'MirrorProject'))).toBe(
             true,
         );
@@ -1753,7 +1561,6 @@ describe('commit 6 R1 mirror: v2 non-engine ops log to the instance with legacy 
         fs.writeFileSync(
             path.join(proj, 'project.json'),
             JSON.stringify({
-                // root-level "title" → the [MIGRATION] warning path
                 title: 'Old Doctor',
                 workshop: {
                     title: 'Old Doctor',
@@ -1780,10 +1587,6 @@ describe('commit 6 R1 mirror: v2 non-engine ops log to the instance with legacy 
                     String(c.message).includes('Reading global config from:'),
             ),
         ).toBe(true);
-        // The legacy logger received nothing from the doctor run itself —
-        // only the recorder's one-time disclosure notice (the doctor.api
-        // usage span runs outside any invocation context, so its R1
-        // default routing is the raw legacy tier).
         expect(L1.calls).toHaveLength(1);
         expect(L1.calls[0].method).toBe('info');
         expect(String(L1.calls[0].message)).toContain('saves local usage logs');
@@ -1807,10 +1610,6 @@ describe('commit 6 R1 mirror: v2 non-engine ops log to the instance with legacy 
         expect(V2.calls).toEqual([]);
     });
 });
-
-/* ------------------------------------------------------------------ */
-/* 14. PzStudio §7 final surface                                       */
-/* ------------------------------------------------------------------ */
 
 describe('PzStudio §7 final surface', () => {
     it('exposes the full normative shape: run, createDevSync, runProjectDoctor, resolveModInfoTargets', () => {
@@ -1896,8 +1695,6 @@ describe('PzStudio §7 final surface', () => {
         await vi.waitFor(() => expect(parkedFlag).toBe(true));
 
         try {
-            // Another instance's doctor completes while the first run
-            // still holds the lock — non-engine ops never queue (§13).
             const projDoctor = makeProjectDir('LockFreeDoctor');
             await expect(
                 createPzStudio({
@@ -1914,17 +1711,9 @@ describe('PzStudio §7 final surface', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 15. Commit 6 engine routing: emissions from inside the io-threaded  */
-/*     helper layer follow the invocation logger on BOTH doors (§12).  */
-/*     The R1 raw default only covers legacy non-engine omissions —    */
-/*     engine commands pass engineIo(), never raw, never the slot.     */
-/* ------------------------------------------------------------------ */
-
 describe('commit 6 engine routing: helper-layer emissions keep the invocation logger under studio.run()', () => {
     const fakeHome = () => (globalThis as any).__PZSTUDIO_FAKE_HOME as string;
 
-    /** A project.json in the LEGACY shape (root-level title) so that reading it emits the [MIGRATION] warning. */
     function makeLegacyShapeProject(title: string): string {
         const dir = makeTempDir();
         fs.writeFileSync(
@@ -1943,16 +1732,11 @@ describe('commit 6 engine routing: helper-layer emissions keep the invocation lo
         const L1 = recordingLogger();
         const raw = captureIO();
 
-        // Conflicting legacy facade state, verbosity wide open: if any
-        // helper emission routed raw, L1 (or the captured streams) would
-        // receive it.
         setLogger(L1.logger);
         setVerbose(true);
 
         const V2 = recordingLogger();
         const studio = createPzStudio({ logger: V2.logger });
-        // Verbosity is per-invocation (the parsed --verbose flag): the v2
-        // run deliberately does not consume the legacy setVerbose slot (R0).
         await studio.run('list', [], {
             flags: ['--verbose', '--project', proj],
         });
@@ -1962,24 +1746,16 @@ describe('commit 6 engine routing: helper-layer emissions keep the invocation lo
                 (c) =>
                     c.method === method && String(c.message).includes(fragment),
             );
-        // Helper-layer emissions (readProjectConfig → [MIGRATION];
-        // applyProjectDefaults → poster default verbose; the migration
-        // path materializes excludes, so only mod-level defaults remain):
         expect(has('warn', '[MIGRATION]')).toBe(true);
         expect(has('verbose', "Mod 'my_mod' defaulting poster to:")).toBe(true);
-        // The command's own engine-tier emission is still there:
         expect(has('log', 'my_mod')).toBe(true);
 
-        // NONE of it landed in the legacy slot or the raw streams.
         expect(L1.calls).toEqual([]);
         expect(raw.stderr.join('')).not.toContain('[MIGRATION]');
         expect(raw.stdout.join('')).not.toContain('[MIGRATION]');
     });
 
     it('studio.run(update) routes the full template-resolution inventory (refresh, clone, fallback, bootstrap) to the instance logger', async () => {
-        // Pre-seed VALID template caches (non-empty + .git) for every
-        // category so the forced update exercises the refresh path first,
-        // then the real (protocol-locked) git failure cascade.
         const templatesRoot = path.join(fakeHome(), '.pzstudio', 'templates');
         for (const repo of [
             'pzstudio-template-project',
@@ -1997,9 +1773,6 @@ describe('commit 6 engine routing: helper-layer emissions keep the invocation lo
         setVerbose(true);
 
         const V2 = recordingLogger();
-        // No templateTransport override: the host default transport is
-        // constructed with the instance logger (§12), so transport-owned
-        // emissions must also land in V2.
         const studio = createPzStudio({ logger: V2.logger });
         const proj = makeProjectDir('Engine Update');
         await studio.run('update', [], {
@@ -2011,32 +1784,26 @@ describe('commit 6 engine routing: helper-layer emissions keep the invocation lo
                 (c) =>
                     c.method === method && String(c.message).includes(fragment),
             );
-        // Config-read verboses (readGlobalConfig inside resolveTemplateDir):
         expect(has('verbose', 'Reading global config from:')).toBe(true);
         expect(has('verbose', 'Resolved cacheDir:')).toBe(true);
         expect(has('verbose', 'Resolved legacyDir:')).toBe(true);
-        // Transport-tier emissions (GitTransport refresh + download):
         expect(has('info', '- Refreshing template cache at')).toBe(true);
         expect(has('warn', 'git fetch failed')).toBe(true);
         expect(
             has('warn', 'Failed to refresh template cache. Re-cloning...'),
         ).toBe(true);
         expect(has('info', '- Cloning template from https://')).toBe(true);
-        // resolveTemplateDir fallback emissions:
         expect(has('warn', "Failed to clone template from 'https://")).toBe(
             true,
         );
         expect(has('warn', 'Falling back to offline legacy template for')).toBe(
             true,
         );
-        // Cold-cache bootstrap emission (bootstrapLegacyTemplates):
         expect(has('info', '- Bootstrapping legacy templates')).toBe(true);
-        // The command's own aggregate emission:
         expect(has('info', 'All template caches refreshed successfully!')).toBe(
             true,
         );
 
-        // The legacy slot received NOTHING.
         expect(L1.calls).toEqual([]);
     });
 

@@ -3,14 +3,6 @@ import { t } from './l10n';
 
 export type ConfirmDecision = 'yes' | 'never' | 'cancel';
 
-/**
- * Modal confirmation before running a destructive or disruptive command
- * (build/clean can clobber the output the game is currently loading when
- * debugging; delete removes a mod for good; rename rewrites the mod's
- * folder name and its project.json key). Honors the
- * pzstudio.confirmBeforeRun setting; "Don't Ask Again" is applied by the
- * caller writing that setting for the project.
- */
 export async function confirmBeforeRun(
     action: 'build' | 'clean' | 'delete' | 'rename',
     subject: string,
@@ -64,7 +56,6 @@ export async function confirmBeforeRun(
     return 'yes';
 }
 
-/** Persists "Don't Ask Again" for the workspace folder containing projectDir. */
 export async function disableConfirmBeforeRun(
     projectDir?: string,
 ): Promise<void> {

@@ -13,7 +13,6 @@ import { notifyActionSuccess } from '../../packages/vscode-extension/src/util/fi
 
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 
-/** Minimal PzStudio stub: the runner only ever calls studio.run. */
 function studioStub(implementation?: () => Promise<void>) {
     return { run: vi.fn(implementation ?? (async () => {})) };
 }
@@ -40,11 +39,6 @@ function withSingleProject(root = 'proj') {
     asMock(vscode.workspace.fs.readDirectory).mockResolvedValue([]);
 }
 
-/**
- * The runner wired EXACTLY like extension.ts does: notifyActionSuccess as
- * the onSuccess hook, so the toasts are judged at the same point success
- * is knowable (studio.run resolved; execute.ts swallows engine errors).
- */
 function setup(run?: () => Promise<void>) {
     const studio = studioStub(run);
     const output = vscode.window.createOutputChannel('test');
@@ -56,9 +50,6 @@ function setup(run?: () => Promise<void>) {
     );
 }
 
-// d01-U1/U2, d10-U3: new/add/clean completions used to be silent. The
-// runner's onSuccess hook fires only when studio.run resolves, so each
-// completion toasts once and a failed run never toasts.
 describe('success toasts on command completion', () => {
     beforeEach(() => {
         vi.clearAllMocks();

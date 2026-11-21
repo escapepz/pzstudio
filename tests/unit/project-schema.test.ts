@@ -2,14 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import { describe, it, expect } from 'vitest';
 
-/**
- * The project.json schema ships in two copies (repo root for the CLI/docs,
- * packages/vscode-extension/schemas for editor IntelliSense). They must
- * stay in sync — this suite pins the dist-always amendment's
- * `build.materialize` field in both: enum `['symlink', 'copy']` only.
- * There is deliberately no 'none' value — omitting `outdir` is the only
- * "no deployment" expression (owner decision, 2026-11-12).
- */
 const schemaCopies = [
     'pzstudio.schema.json',
     path.join(

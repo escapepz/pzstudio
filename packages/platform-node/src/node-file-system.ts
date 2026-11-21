@@ -17,7 +17,6 @@ import type {
     ProjectFileSystem,
 } from '@pzstudio/platform';
 
-/** Translates a file:// URI (or a plain absolute path) into a Node path. */
 function toPath(uri: string): string {
     if (uri.startsWith('file:')) {
         return fileURLToPath(uri);
@@ -25,7 +24,6 @@ function toPath(uri: string): string {
     return uri;
 }
 
-/** Joins a directory URI and a child name into an absolute URI string. */
 function joinUri(dirUri: string, name: string): string {
     const base = dirUri.startsWith('file:')
         ? dirUri.replace(/\/+$/, '')

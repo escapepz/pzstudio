@@ -1,13 +1,5 @@
 'use strict';
 
-/**
- * The shared diagnostics runner (doc 11 §17 commit 10): createProjectDiagnostics
- * binds util/doctor's reducer to the host PzStudio instance — the run goes
- * through studio.runProjectDoctor with the explicit project fsPath (no
- * legacy anchor save/restore), and the published legacy `runProjectDoctor`
- * export stays cold from the extension path.
- */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
@@ -68,7 +60,6 @@ describe('createProjectDiagnostics (instance-bound doctor run)', () => {
         expect(asMock(studio.runProjectDoctor)).toHaveBeenCalledWith(
             projectDir.fsPath,
         );
-        // Same reducer output the pre-migration util produced.
         expect(summary.errors).toBe(2);
         expect(summary.warnings).toBe(1);
         expect(summary.infos).toBe(3);
@@ -81,18 +72,10 @@ describe('createProjectDiagnostics (instance-bound doctor run)', () => {
 
         await runner(new UriCtor(['ws', 'proj']) as never);
 
-        // The legacy door is spied and stays cold — the extension doctor
-        // path has no runtime import of it left (compile-dropped), and the
-        // instance method is the only engine entry.
         expect(api.runProjectDoctor).not.toHaveBeenCalled();
         expect(asMock(studio.runProjectDoctor)).toHaveBeenCalledTimes(1);
     });
 });
-
-/* ------------------------------------------------------------------ */
-/* UX-05: the doctor run resolves its explicit project's folder        */
-/* settings through the extension settings provider                    */
-/* ------------------------------------------------------------------ */
 
 describe('runProjectDoctor resource-scoped settings (UX-05)', () => {
     let temps: string[] = [];
@@ -108,7 +91,6 @@ describe('runProjectDoctor resource-scoped settings (UX-05)', () => {
         configurationStore.reset();
     });
 
-    /** Minimal valid project (schemaVersion 2, no project-level outdir). */
     function makeProject(title: string): string {
         const dir = makeTemp();
         fs.writeFileSync(
@@ -129,8 +111,6 @@ describe('runProjectDoctor resource-scoped settings (UX-05)', () => {
         const outA = path.join(makeTemp(), 'out-a');
         const outB = path.join(makeTemp(), 'out-b');
 
-        // Folder-scoped pzstudio.outdir per project folder (the projects do
-        // not set outdir in project.json, so the host workspace layer wins).
         configurationStore.folders[projectA] = { 'pzstudio.outdir': outA };
         configurationStore.folders[projectB] = { 'pzstudio.outdir': outB };
         (
@@ -140,7 +120,6 @@ describe('runProjectDoctor resource-scoped settings (UX-05)', () => {
             { uri: vscode.Uri.file(projectB), name: 'project-b' },
         ];
 
-        // The exact provider wiring extension.ts installs.
         const contexts: Array<string | undefined> = [];
         const studio = createPzStudio({
             settings: (ctx) => {
@@ -150,15 +129,9 @@ describe('runProjectDoctor resource-scoped settings (UX-05)', () => {
         });
         const runner = createProjectDiagnostics(studio);
 
-        // The runner only reads uri.fsPath; a plain holder keeps the real
-        // temp path intact for the real fs engine (a MockUri round-trip
-        // would prepend a separator).
         const projectUri = (projectDir: string) =>
             ({ fsPath: projectDir }) as never as vscode.Uri;
 
-        // The outdirs do not exist on disk: the engine's outDirMissing
-        // finding names the resolved path — the honest proof of WHICH
-        // outdir the doctor consumed.
         const missingDirs = async (projectDir: string) => {
             const summary = await runner(projectUri(projectDir));
             return summary.report.diagnostics.filter(
@@ -180,15 +153,9 @@ describe('runProjectDoctor resource-scoped settings (UX-05)', () => {
         const summaryB = await runner(projectUri(projectB));
         expect(JSON.stringify(summaryB.report.diagnostics)).not.toContain(outA);
 
-        // Every doctor run resolved settings for its OWN project context
-        // (two extra runs above double the count, order intact).
         expect(contexts).toEqual([projectA, projectA, projectB, projectB]);
     });
 });
-
-/* ------------------------------------------------------------------ */
-/* UX-11: the shared runner forwards the project's pzstudio.gameBuild  */
-/* ------------------------------------------------------------------ */
 
 describe('runProjectDoctor gameBuild forwarding (UX-11)', () => {
     afterEach(() => {
@@ -205,7 +172,6 @@ describe('runProjectDoctor gameBuild forwarding (UX-11)', () => {
         const calls = asMock(studio.runProjectDoctor).mock.calls;
         expect(calls).toHaveLength(1);
         expect(calls[0][0]).toBe(uri.fsPath);
-        // Single argument: no options object while the setting stays empty.
         expect(calls[0]).toHaveLength(1);
     });
 
@@ -235,10 +201,6 @@ describe('runProjectDoctor gameBuild forwarding (UX-11)', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* UX-11: configured compatibility checks against the real engine     */
-/* ------------------------------------------------------------------ */
-
 describe('gameBuild compatibility reporting (real engine, UX-11)', () => {
     let temps: string[] = [];
     function makeTemp(): string {
@@ -256,7 +218,6 @@ describe('gameBuild compatibility reporting (real engine, UX-11)', () => {
         ).workspaceFolders = [];
     });
 
-    /** Minimal valid project carrying an optional pzBuildCompatibility. */
     function makeProject(title: string, pzBuildCompatibility?: string): string {
         const dir = makeTemp();
         fs.writeFileSync(
@@ -275,7 +236,6 @@ describe('gameBuild compatibility reporting (real engine, UX-11)', () => {
     }
 
     function makeRunnerWithSettingsProvider() {
-        // The exact provider wiring extension.ts installs.
         return createProjectDiagnostics(
             createPzStudio({
                 settings: (ctx) => readPzStudioHostSettings(ctx),
@@ -295,8 +255,6 @@ describe('gameBuild compatibility reporting (real engine, UX-11)', () => {
 
     it("the default '' skips the compatibility check even when a range is declared", async () => {
         makeProject('No default build');
-        // pzBuildCompatibility declared but pzstudio.gameBuild stays at its
-        // default: no compatibility check, no finding.
         const findings = await compatFindings(temps[0]);
         expect(findings).toHaveLength(0);
     });
@@ -317,7 +275,6 @@ describe('gameBuild compatibility reporting (real engine, UX-11)', () => {
         expect(findings[0].module).toBe('buildTarget');
         expect(findings[0].message).toContain("'42.x'");
         expect(findings[0].message).toContain("'41.50.0'");
-        // Advisory semantics unchanged.
         expect(findings[0].hint).toContain('never blocks a build');
     });
 
@@ -346,8 +303,6 @@ describe('gameBuild compatibility reporting (real engine, UX-11)', () => {
 
         const findingsA = await compat(projectA);
         const findingsB = await compat(projectB);
-        // A's folder value is inside its own range → silent; B's own value
-        // mismatches → its warning names B's build, never A's.
         expect(findingsA).toHaveLength(0);
         expect(findingsB).toHaveLength(1);
         expect(findingsB[0].message).toContain("'41.9.0'");

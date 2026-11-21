@@ -19,7 +19,6 @@ describe('Global CLI Error Handling (E2E)', () => {
     });
 
     it('should fail when a required argument is missing', async () => {
-        // Create a project so we get past the project directory check
         workspace.write(
             'project.json',
             JSON.stringify({
@@ -30,8 +29,6 @@ describe('Global CLI Error Handling (E2E)', () => {
             }),
         );
 
-        // 'add' requires at least one argument (modName) — enforced by the
-        // shared semantic validator (usage error, exit 2).
         const result = await workspace.run('add');
         workspace.assertFailure(result, 2);
         workspace.assertStderr(
@@ -41,7 +38,6 @@ describe('Global CLI Error Handling (E2E)', () => {
     });
 
     it('should fail when an invalid argument type is provided', async () => {
-        // 'outdir' requires 1 argument
         const result = await workspace.run('outdir');
         workspace.assertFailure(result, 2);
         workspace.assertStderr(

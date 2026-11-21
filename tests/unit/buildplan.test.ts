@@ -92,7 +92,6 @@ describe('planBuild (pure)', () => {
         const copyTrees = operations.filter(
             (op) => op.type === 'copyTree',
         ) as any[];
-        // workshop template + the included mod only
         expect(copyTrees).toHaveLength(2);
         expect(
             copyTrees.find((op) => op.from === '/proj/other_mod'),
@@ -118,7 +117,6 @@ describe('planBuild (pure)', () => {
         expect(
             mainCopies.find((op) => op.from === '/proj/dev_mod'),
         ).toBeUndefined();
-        // the normal mod is still built
         expect(
             mainCopies.find((op) => op.from === '/proj/my_mod'),
         ).toBeDefined();
@@ -338,8 +336,6 @@ describe('planBuild (pure)', () => {
         const operations = planBuild(input);
         const writes = modInfoWrites(operations);
 
-        // Only branch folder targets get mod.info handling; the root file is
-        // legacy Build 41 layout and is copied verbatim.
         expect(writes).toHaveLength(1);
         expect(writes[0].path).toBe(
             '/out/Test Project - dev_branch/Contents/mods/my_mod_dev/42/mod.info',

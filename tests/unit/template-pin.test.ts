@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 
-// resolve to repo-root scripts via relative path
 const nodeRequire = createRequire(import.meta.url);
 const pin = nodeRequire('../../scripts/pin-template-legacy.js');
 
@@ -96,24 +95,17 @@ describe('resolvePin branch mode', () => {
     });
 });
 
-// ---------------------------------------------------------------------------
-// Pin diff, gitlink apply, CLI entry
-// ---------------------------------------------------------------------------
-
 const PROJECT_SHA = '8373400243235d4ce121656886393c58a70501b5';
 const MOD_SHA = '561b717fa0224c404108cbc5ac1a70d80ce0eef7';
 const NEWER_PROJECT_SHA = '6666666666666666666666666666666666666666';
 const WORKSHOP_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
-// Canned `git ls-tree HEAD .template-legacy/` output (tree line + gitlinks).
 const LS_TREE_OUTPUT = [
     '040000 tree e55734848205eefa023ac3eaf5393c8932c00a8a\t.template-legacy',
     `160000 commit ${PROJECT_SHA}\t.template-legacy/.template-project`,
     `160000 commit ${MOD_SHA}\t.template-legacy/.template-mod`,
 ].join('\n');
 
-// Real URLs from scripts/template-pin.json, so `main` tests (which load the
-// real config) can key their fake ls-remote answers by URL.
 const URL_BY_NAME: Record<string, string> = {};
 for (const entry of pin.loadConfig()) {
     URL_BY_NAME[entry.name] = entry.url;
@@ -123,14 +115,11 @@ interface FakeGitOptions {
     lsRemoteByUrl?: Record<string, string>;
     lsTree?: string;
     updateIndexStatus?: number;
-    /** `git -C <dir> --git-dir=.git rev-parse HEAD` answer per submodule dir. */
     revParseByDir?: Record<string, { status?: number; stdout?: string }>;
-    /** stdout for `git -C <dir> for-each-ref` (the update-ref --stdin feed). */
     forEachRefOut?: string;
     submoduleUpdateStatus?: number;
 }
 
-/** Fake GitRunner: answers git calls from canned maps, records calls+opts. */
 function makeFakeGit(options: FakeGitOptions = {}) {
     const calls: string[][] = [];
     const runOpts: ({ input?: string } | undefined)[] = [];
@@ -178,13 +167,11 @@ function makeFakeGit(options: FakeGitOptions = {}) {
                     : '',
             };
         }
-        // fetch, reset, update-ref, reflog expire, gc
         return { status: 0, stdout: '', stderr: '' };
     };
     return { runner, calls, runOpts };
 }
 
-/** Collect console.log lines emitted by fn, restoring the real log after. */
 function captureLogs(fn: () => void): string[] {
     const logs: string[] = [];
     const spy = vi
@@ -200,7 +187,6 @@ function captureLogs(fn: () => void): string[] {
     return logs;
 }
 
-/** Capture lines written via the given console method (warn/error) during fn. */
 function captureStream(method: 'warn' | 'error', fn: () => void): string[] {
     const lines: string[] = [];
     const spy = vi
@@ -250,11 +236,8 @@ describe('computeUpdates', () => {
         const fake = makeFakeGit({
             lsTree: LS_TREE_OUTPUT,
             lsRemoteByUrl: {
-                // project: remote moved ahead of the pinned sha -> update
                 'https://example.com/project': `${NEWER_PROJECT_SHA}\trefs/tags/42.22.0-20261109-1902\n`,
-                // mod: remote newest tag == pinned sha -> no update
                 'https://example.com/mod': `${MOD_SHA}\trefs/tags/42.22.0\n`,
-                // workshop: no remote answer -> resolvePin undefined -> skip
             },
         });
         expect(pin.computeUpdates(fake.runner, config)).toEqual([
@@ -415,10 +398,6 @@ describe('main', () => {
     });
 });
 
-// ---------------------------------------------------------------------------
-// --sync: depth-1 pinned checkout materialization
-// ---------------------------------------------------------------------------
-
 const PIN_SHA = 'dddddddddddddddddddddddddddddddddddddddd';
 const OLD_SHA = 'cccccccccccccccccccccccccccccccccccccccc';
 const LANG_SHA = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
@@ -577,16 +556,12 @@ describe('syncSubmodules', () => {
 });
 
 describe('defaultRunner', () => {
-    // The purge feeds `update-ref --stdin` through the runner's `input` opt;
-    // with stdio[0] ignored spawnSync silently drops the input, so pin the
-    // stdin plumbing with real git (offline: plain hash-object, no repo).
     it('feeds the input option into git stdin', () => {
         const content = 'hello\n';
         const res = pin.defaultRunner(['hash-object', '--stdin'], {
             input: content,
         });
         expect(res.status).toBe(0);
-        // git prints the blob object id: sha1("blob <len>\0" + content)
         expect(res.stdout.trim()).toBe(
             createHash('sha1')
                 .update(`blob ${Buffer.byteLength(content)}\0`)

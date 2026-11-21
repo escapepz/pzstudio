@@ -1,64 +1,13 @@
-/**
- * F23-WRITE P0 (CLI tier) — alias-route containment for the standalone CLI's
- * synchronous mutation sites (doc 17 §11.4, the contract-only interim
- * containment; §11.8's CLI parity boundary).
- *
- * This module is the synchronous Node-fs mirror of the Core guard
- * (packages/core/src/mutation-guard.ts): the same invariant, the same
- * matching semantics, executed against the real filesystem the CLI's
- * executor touches. Every mutating call site that declares an output root
- * must establish its physical route before it mutates:
- *
- * - the configured output root itself is NEVER inspected (INV-A: a
- *   user-configured junction outdir is intentional alias resolution and must
- *   keep building — the scan starts at the root's entries, never the root);
- * - every path component strictly below the root on the operation's target
- *   must exist as a non-alias entry, or be missing entirely (fresh creation
- *   by this very operation) — a symbolic-link/junction component anywhere on
- *   the route (readdirSync reports NTFS junctions as symbolicLink entries)
- *   is refused explicitly BEFORE the mutation;
- * - the leaf is operation-specific (doc 17 §11.2): a delete may remove a
- *   link itself (leaf-local, target untouched — B1); a write never writes
- *   through one (class 5);
- * - a route directory that cannot be listed (any failure other than
- *   not-there) fails the operation explicitly — an unverifiable route is
- *   never a silent skip, a warning, or a success;
- * - entry matching uses the resolveDestinationChain witness rule: an exact
- *   on-disk name match wins; otherwise a unique case-insensitive match
- *   counts only when a stat of the plan spelling succeeds, so distinct
- *   case-sensitive paths are never merged.
- *
- * Disclosed residuals (doc 17 §11.4, unchanged by this tier): alias
- * insertion or retargeting between inspection and the OS call (TOCTOU);
- * hard-linked file leaves (S9c); 8.3 short names; E1 ownership destruction
- * inside the resolved root (doc 15's boundary stands — this guard
- * authorizes routes, not file ownership).
- *
- * The guard is opt-in: without an output root every function is a no-op and
- * callers keep today's behavior. This module is CLI-internal: it is not
- * re-exported through the api surface and adds no public API.
- */
 import fs from 'fs';
 import { basename, dirname, join } from 'path';
 import type { Dirent } from 'fs';
 
-/** Leaf semantics of the guarded mutation (doc 17 §11.2). */
 export type MutationLeafMode = 'write' | 'delete';
 
-/** Route-guard options for the CLI's synchronous executor. */
 export interface CliMutationRouteOptions {
-    /**
-     * The configured build output root (config.outdir) every guarded
-     * mutation must stay below. When absent the guard is inactive and
-     * callers keep today's behavior (mirrors Core's MutationRouteOptions).
-     */
     outputRoot?: string;
 }
 
-/**
- * Splits a native path into segments. Backslashes fold to '/', empty
- * segments drop — the same normalization the Core guard applies.
- */
 function pathSegments(path: string): string[] {
     return path
         .replace(/\\/g, '/')
@@ -66,11 +15,6 @@ function pathSegments(path: string): string[] {
         .filter((segment) => segment !== '');
 }
 
-/**
- * Locates `candidate` strictly inside `root`, segment-wise (null when not
- * inside). Same comparison semantics as the Core guard: only a Windows
- * drive prefix compares case-insensitively.
- */
 function segmentsBelow(root: string, candidate: string): string[] | null {
     const rootSegments = pathSegments(root);
     const candidateSegments = pathSegments(candidate);
@@ -100,11 +44,6 @@ function isNoSuchEntryError(e: unknown): boolean {
     );
 }
 
-/**
- * Lists a route directory for authorization: null when the directory is not
- * there (everything below is fresh creation); any other listing failure
- * throws an explicit authorization error — never a swallowed skip.
- */
 function listRouteDirectorySync(
     operation: string,
     targetPath: string,
@@ -125,14 +64,6 @@ function listRouteDirectorySync(
     }
 }
 
-/**
- * Looks a plan-spelled name up in a directory listing: an exact on-disk
- * match wins; otherwise a unique case-insensitive match counts only when a
- * stat of the plan spelling succeeds — the resolveDestinationChain witness
- * rule (a case-variant stored entry is the same directory on a
- * case-insensitive host; on a case-sensitive host the twin is a distinct
- * path and stays untouched).
- */
 function lookupRouteEntrySync(
     parentDir: string,
     entries: Dirent[],
@@ -157,7 +88,6 @@ function lookupRouteEntrySync(
     return variants[0];
 }
 
-/** The actionable refusal for an alias component on a mutation route. */
 export function aliasRouteError(
     operation: string,
     targetPath: string,
@@ -169,18 +99,6 @@ export function aliasRouteError(
     );
 }
 
-/**
- * Authorizes a mutating operation's route before the filesystem is touched.
- *
- * Walks the components of `targetPath` strictly below `outputRoot` (a
- * delete's leaf excluded — removing a link is leaf-local) and refuses when
- * any existing component is a symbolicLink listing entry: the OS would
- * resolve the mutation through it into content the plan never spelled.
- * Missing components authorize everything below them as fresh creation; a
- * route directory that cannot be listed (any failure other than
- * not-there) fails the operation. A target outside the declared root is
- * refused outright.
- */
 export function assertNoAliasRouteSync(
     outputRoot: string | undefined,
     targetPath: string,
@@ -220,29 +138,12 @@ export function assertNoAliasRouteSync(
             );
         }
         if (isLeaf || !entry.isDirectory()) {
-            // A write onto an existing non-alias leaf (class 4 — ownership
-            // is E1's decision, not this guard's), or a non-directory
-            // component the OS itself will reject: no alias route either
-            // way.
             return;
         }
         current = join(current, entry.name);
     }
 }
 
-/**
- * Destination-entry clash check for recursive copies (doc 17 §11.4 rule 2):
- * refuses when the name a copy is about to write onto or descend through is
- * a symbolic-link entry of the corresponding destination directory.
- * Unrelated links the copy never touches cause no refusal.
- *
- * The destination directory is listed FRESH on every check. The copy itself
- * can create destination links — every included source symlink is re-created
- * as a destination link (cpSync's onLink; dereference stays false) — so a
- * listing captured earlier in the same copy can omit an alias that exists by
- * the time a later entry is authorized, and no authorization may rely on
- * such a snapshot. The cost is one readdirSync per guarded entry.
- */
 export function assertNoAliasDestinationEntry(
     destPath: string,
     outputRoot: string,

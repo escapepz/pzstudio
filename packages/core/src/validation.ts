@@ -4,7 +4,7 @@ import { PROJECT_SCHEMA_VERSION } from './schema-version';
  * Structured validation failure details.
  */
 export interface ValidationError {
-    location: string; // File path + field path (e.g., "project.json:workshop.visibility")
+    location: string;
     problem: string; // What is wrong (e.g., "Must be one of: public, friendsOnly, private, unlisted")
     impact: string; // How to fix it or why it matters (e.g., "PZ requires a valid visibility to publish to the Workshop")
 }
@@ -70,7 +70,6 @@ export function validateProject(config: any, context: ValidationContext): void {
 
     validateSchemaVersionField(config.schemaVersion, context);
 
-    // Legacy/Unsupported root fields
     if ('title' in config) {
         context.addError(
             'title',
@@ -78,13 +77,6 @@ export function validateProject(config: any, context: ValidationContext): void {
             'Move this to "workshop.title" in your project.json',
         );
     }
-
-    // Root "authors" is deliberately NOT a validation error: migration now
-    // preserves it (kept in place when there is no single mod to move it
-    // onto — d16-B2), so a migrated project may legitimately still carry
-    // the field. The deprecation signal lives in migration.checkProject
-    // (the persistent [MIGRATION] warning); rejecting the field here would
-    // brick every command on the very file migrate just fail-closed kept.
 
     if ('id' in config) {
         context.addError(

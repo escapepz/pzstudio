@@ -36,22 +36,15 @@ describe('deleteCmd', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        // Destructive gate (CLI-9): unit tests invoke the command directly
-        // in embedded mode — publish --yes as the confirmation intent.
         setInvocationOptions({ yes: true });
         vi.mocked(projectDir).mockReturnValue('/proj' as any);
-        // Default raw outdir snapshot: absence (unit fs mock makes the
-        // config path nonexistent — the fail-closed reader would throw).
         vi.mocked(readRawProjectOutdir).mockReturnValue(undefined as any);
-        // Fresh copy per call: deleteCmd mutates the config it receives
         vi.mocked(resolveProjectConfig).mockImplementation(
             () => JSON.parse(JSON.stringify(project)) as any,
         );
         vi.mocked(updateProjectConfig).mockReturnValue(undefined as any);
         vi.mocked(updateExperimentalScripts).mockReturnValue(undefined as any);
 
-        // Only the old mod directory "exists" (normalize separators: join()
-        // produces backslashes on Windows)
         vi.mocked(fs.existsSync).mockImplementation((p: any) => {
             return String(p).replace(/\\/g, '/').endsWith('/old_mod');
         });
@@ -93,10 +86,6 @@ describe('deleteCmd', () => {
     });
 
     it('should fail closed before removing the directory when the raw outdir snapshot is unreadable (D3-a)', () => {
-        // The raw outdir snapshot must be captured BEFORE the mod directory
-        // is removed: an unreadable snapshot aborts the command with the
-        // directory and project.json still intact, instead of deleting
-        // first and discovering the unreadable snapshot afterwards.
         vi.mocked(readRawProjectOutdir).mockImplementation(() => {
             throw new Error('snapshot unavailable');
         });

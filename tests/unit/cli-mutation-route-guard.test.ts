@@ -1,54 +1,3 @@
-/**
- * CLI P0 — standalone-CLI alias-route containment (doc 17 §11.4, CLI tier).
- *
- * The CLI's synchronous build executor (executeBuildPlan in
- * packages/cli/src/lib/commands/build.ts) and its recursive copy
- * (scaffoldProject in packages/cli/src/lib/templateManager.ts) execute the
- * same OS alias semantics as the Core executor (doc 16 §16.5 ND1/ND4/ND5,
- * doc 15 §4) but had no F23-WRITE protection of record (doc 17 §11.8: CLI
- * parity was the separate defect decision this suite now gates).
- *
- * RED-first regression rows (CLI-P0-R1/R2/R3, parts of R4/R5/R6) fail at the
- * pre-guard HEAD: the demonstrated standalone-CLI escapes — silent external
- * victim overwrite through a below-root junction (S3), silent cross-variant
- * write redirection (S5), and the cryptic dangling-alias failure (S7) — all
- * reproduce deterministically through staged execution (reset prefix first,
- * alias planted, mutating remainder — the ND4/A6 operation-order shape; no
- * concurrency required).
- *
- * GREEN-preservation rows (G1/G2/G3/G4-class, plus the opt-in boundary) pin
- * behavior that must NOT change: intentional configured-root junctions keep
- * building and cleaning (INV-A), delete leaves stay link-safe (G2), alias-free
- * builds stay byte-compatible (G3), the pre-existing case-6 cpSync defect is
- * neither masked nor altered (G4), and callers that pass no output root keep
- * today's behavior (the guard is opt-in, mirroring Core's
- * MutationRouteOptions).
- *
- * Native honesty split (doc 17 §3): NTFS directory junctions need no
- * privilege and are the executed alias form on Windows — readdirSync reports
- * them as symbolicLink entries (the doc 17 §11 header probe, re-verified for
- * this suite's Node v22 runtime). File symlinks need developer mode/admin;
- * their tier attempts a runtime probe and skips accurately when the OS
- * refuses. Off-Windows hosts skip the native tiers entirely (no junction
- * support) — the Core emulated suites carry the invariant cross-platform.
- *
- * Documented residuals (NOT test claims, §6 of the brief): alias retargeting
- * between inspection and the OS call (TOCTOU), hard-link write leaves (S9c),
- * 8.3 short names. No all-schedules protection is claimed.
- *
- * CACHE rows (CLI P0 cache correction): the destination-listing cache the P0
- * patch introduced rests on the invariant "a copy never creates links" —
- * false for the CLI's cpSync (dereference false re-creates every included
- * source symlink as a destination link, cp-sync.js onLink), so a listing
- * captured earlier in one copy can omit an alias that exists by the time a
- * later entry is authorized. CACHE-R1/R3 drive the real guard through a
- * faithful modeled copy sequence — the alias materialization is modeled
- * directly because this host's cpSync link re-creation is privilege-gated
- * (native probe: EPERM from symlinkSync); the modeled later-entry landing is
- * not produced by the current one-pass mirrored copy state machine (a future
- * copy change or the TOCTOU residual would produce it). CACHE-R2 pins the
- * Node-level physical landing (Node alone, no guard code).
- */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import fsp from 'fs/promises';
@@ -69,7 +18,6 @@ let sandbox: string;
 
 beforeEach(async () => {
     sandbox = await fsp.mkdtemp(path.join(os.tmpdir(), 'cli-mutation-route-'));
-    // Standard fixture: source mod, workshop template, configured outdir.
     await fsp.mkdir(path.join(sandbox, 'proj', 'my_mod', 'media', 'lua'), {
         recursive: true,
     });
@@ -126,12 +74,10 @@ function planInput(outdir = OUT()): Omit<PlanBuildInput, 'variant'> {
     };
 }
 
-/** Creates a real NTFS junction (no privilege required). */
 async function junction(link: string, target: string): Promise<void> {
     await fsp.symlink(target, link, 'junction');
 }
 
-/** Snapshot of every file's bytes under a root, keyed by relative path. */
 async function treeSnapshot(root: string): Promise<Record<string, string>> {
     const snap: Record<string, string> = {};
     const walk = async (dir: string, rel: string): Promise<void> => {
@@ -157,12 +103,6 @@ async function treeSnapshot(root: string): Promise<Record<string, string>> {
     return snap;
 }
 
-/**
- * Executes a plan's reset prefix (removeDir + makeDir of the variant
- * folder — always planBuild's first two operations) and returns the full
- * plan, so an alias can be planted in the post-reset window before the
- * mutating remainder runs (the ND4/A6 staged shape).
- */
 function runResetPrefix(
     variant: 'main' | 'development' = 'main',
     outdir = OUT(),
@@ -175,9 +115,6 @@ function runResetPrefix(
     return plan;
 }
 
-// ---------------------------------------------------------------------------
-// CLI-P0-R1 — external write redirection (S3)
-// ---------------------------------------------------------------------------
 describe.skipIf(process.platform !== 'win32')(
     'CLI-P0-R1: external write redirection through a below-root junction (S3)',
     () => {
@@ -193,8 +130,6 @@ describe.skipIf(process.platform !== 'win32')(
             await fsp.writeFile(path.join(victim, 'SENTINEL.txt'), 'KEEP');
 
             const plan = runResetPrefix();
-            // Plant the below-root alias in the post-reset window: the mod
-            // copyTree's own destination is now a junction to the victim.
             await fsp.mkdir(path.join(OUT_VP(), 'Contents', 'mods'), {
                 recursive: true,
             });
@@ -207,13 +142,10 @@ describe.skipIf(process.platform !== 'win32')(
                 refusal = e as Error;
             }
 
-            // GREEN: explicit refusal naming the offending alias component.
             expect(refusal).toBeInstanceOf(Error);
             expect(refusal!.message).toMatch(/symbolic link/i);
             expect(refusal!.message).toContain('my_mod');
-            // The operation string carries the plan's spelling ('/'-separated).
             expect(refusal!.message).toContain(OUT_MOD().replace(/\\/g, '/'));
-            // Victim untouched — no silent external overwrite.
             expect(
                 await fsp.readFile(
                     path.join(victim, 'media', 'lua', 'hello.lua'),
@@ -223,8 +155,6 @@ describe.skipIf(process.platform !== 'win32')(
             expect(
                 await fsp.readFile(path.join(victim, 'SENTINEL.txt'), 'utf8'),
             ).toBe('KEEP');
-            // No false success: the refusal surfaced (thrown, not swallowed).
-            // Partial output from operations before the refusal is disclosed.
             expect(
                 fs.existsSync(
                     path.join(OUT_VP(), 'Contents', 'template-file.txt'),
@@ -234,20 +164,14 @@ describe.skipIf(process.platform !== 'win32')(
     },
 );
 
-// ---------------------------------------------------------------------------
-// CLI-P0-R2 — cross-variant write redirection (S5)
-// ---------------------------------------------------------------------------
 describe.skipIf(process.platform !== 'win32')(
     'CLI-P0-R2: cross-variant write redirection (S5)',
     () => {
         it('refuses a main build whose mods junction targets dev territory; dev bytes and entries unchanged', async () => {
-            // A real dev build first, with distinguishing bytes.
             executeBuildPlan(
                 planBuild({ ...planInput(), variant: 'development' }),
                 { outputRoot: OUT() },
             );
-            // The dev variant patches the mod id: its territory is
-            // my_mod_dev (pushDevIdPatch), distinct from main's my_mod.
             const devHello = path.join(
                 OUT_DEV_VP(),
                 'Contents',
@@ -259,14 +183,12 @@ describe.skipIf(process.platform !== 'win32')(
             );
             expect(fs.existsSync(devHello)).toBe(true);
             expect(fs.readFileSync(devHello, 'utf8')).toBe('hello-v1');
-            // Change the source so the main build would carry different bytes.
             await fsp.writeFile(
                 path.join(PROJ(), 'my_mod', 'media', 'lua', 'hello.lua'),
                 'hello-v2-MAIN',
             );
             const devBefore = await treeSnapshot(OUT_DEV_VP());
 
-            // Main build, staged: reset, then plant mods → dev's mods.
             const plan = runResetPrefix();
             await fsp.mkdir(path.join(OUT_VP(), 'Contents'), {
                 recursive: true,
@@ -286,16 +208,12 @@ describe.skipIf(process.platform !== 'win32')(
             expect(refusal).toBeInstanceOf(Error);
             expect(refusal!.message).toMatch(/symbolic link/i);
             expect(refusal!.message).toContain('mods');
-            // Dev territory byte-identical and entry-identical.
             expect(await treeSnapshot(OUT_DEV_VP())).toEqual(devBefore);
             expect(fs.readFileSync(devHello, 'utf8')).toBe('hello-v1');
         });
     },
 );
 
-// ---------------------------------------------------------------------------
-// CLI-P0-R3 — dangling below-root alias (S7)
-// ---------------------------------------------------------------------------
 describe.skipIf(process.platform !== 'win32')(
     'CLI-P0-R3: dangling below-root destination alias (S7)',
     () => {
@@ -318,12 +236,9 @@ describe.skipIf(process.platform !== 'win32')(
                 error = e as Error;
             }
 
-            // GREEN: an actionable refusal naming the alias component — not
-            // today's bare ENOENT from mkdir through the dangling junction.
             expect(error).toBeInstanceOf(Error);
             expect(error!.message).toMatch(/symbolic link/i);
             expect(error!.message).toContain('mods');
-            // No unauthorized mutation at the spelled target.
             expect(fs.existsSync(danglingTarget)).toBe(false);
             expect(fs.existsSync(path.join(danglingTarget, 'my_mod'))).toBe(
                 false,
@@ -332,11 +247,6 @@ describe.skipIf(process.platform !== 'win32')(
     },
 );
 
-// ---------------------------------------------------------------------------
-// CLI-P0-R4 — write-leaf symbolic link
-// ---------------------------------------------------------------------------
-
-/** Runtime privilege probe: can this host create file symlinks at all? */
 function probeFileSymlinkSupport(): boolean {
     const probeDir = fs.mkdtempSync(
         path.join(os.tmpdir(), 'cli-symlink-probe-'),
@@ -413,9 +323,6 @@ describe.skipIf(process.platform !== 'win32')(
     },
 );
 
-// ---------------------------------------------------------------------------
-// CLI-P0-R5 — recursive-copy destination entries (scaffoldProject)
-// ---------------------------------------------------------------------------
 describe.skipIf(process.platform !== 'win32')(
     'CLI-P0-R5: scaffoldProject destination-entry guard',
     () => {
@@ -512,7 +419,6 @@ describe.skipIf(process.platform !== 'win32')(
             }
 
             expect(refusal).toBeInstanceOf(Error);
-            // The refusal names the alias entry the walk would descend through.
             expect(refusal!.message).toMatch(/symbolic link/i);
             expect(refusal!.message).toContain('media');
 
@@ -548,7 +454,6 @@ describe.skipIf(process.platform !== 'win32')(
                     'utf8',
                 ),
             ).toBe('hello-v1');
-            // The unrelated link itself is untouched, target intact.
             expect(
                 fs
                     .lstatSync(path.join(destDir, 'unrelated-link'))
@@ -576,14 +481,6 @@ describe.skipIf(process.platform !== 'win32')(
     },
 );
 
-// ---------------------------------------------------------------------------
-// CLI-P0-F1 — ignore-filter ordering regression (audit finding F1):
-// destination-entry authorization runs only for entries the copy is
-// actually about to write onto or descend through. An excluded source
-// entry is never written, so a junction at its destination name must
-// not refuse the copy (Core parity: execute.ts evaluates the inclusion
-// policy before the destination-entry clash).
-// ---------------------------------------------------------------------------
 describe.skipIf(process.platform !== 'win32')(
     'CLI-P0-F1: ignored source entry with a junction at its destination name',
     () => {
@@ -591,8 +488,6 @@ describe.skipIf(process.platform !== 'win32')(
         const F1_VICTIM = () => path.join(sandbox, 'f1victim');
 
         beforeEach(async () => {
-            // Source: a nested .pzstudioignore excludes 'lua', so the copy
-            // must never touch the destination 'media/lua' entry.
             await fsp.mkdir(path.join(F1_SRC(), 'media', 'lua'), {
                 recursive: true,
             });
@@ -608,7 +503,6 @@ describe.skipIf(process.platform !== 'win32')(
                 path.join(F1_SRC(), 'media', 'modfile.txt'),
                 'F1-TPL',
             );
-            // The controlled victim behind the planted junction.
             await fsp.mkdir(F1_VICTIM(), { recursive: true });
             await fsp.writeFile(
                 path.join(F1_VICTIM(), 'KEEP.txt'),
@@ -632,26 +526,19 @@ describe.skipIf(process.platform !== 'win32')(
                 error = e as Error;
             }
 
-            // No alias authorization refusal for the excluded entry.
             expect(error).toBeUndefined();
-            // The included entry is copied.
             expect(
                 await fsp.readFile(
                     path.join(destDir, 'media', 'modfile.txt'),
                     'utf8',
                 ),
             ).toBe('F1-TPL');
-            // The .pzstudioignore handling itself is unchanged (Rule 1: the
-            // ignore file is copied while excludeIgnoreFile is unset).
             expect(
                 await fsp.readFile(
                     path.join(destDir, 'media', '.pzstudioignore'),
                     'utf8',
                 ),
             ).toBe('lua\n');
-            // The excluded entry was never copied: the junction is unchanged
-            // and no descendant landed behind it — asserted at the physical
-            // victim path, not through the link.
             expect(
                 fs
                     .lstatSync(path.join(destDir, 'media', 'lua'))
@@ -667,9 +554,6 @@ describe.skipIf(process.platform !== 'win32')(
     },
 );
 
-// ---------------------------------------------------------------------------
-// CLI-P0-R6 — mutation-site and failure coverage (executor matrix)
-// ---------------------------------------------------------------------------
 describe.skipIf(process.platform !== 'win32')(
     'CLI-P0-R6: mutation-site coverage matrix',
     () => {
@@ -994,7 +878,6 @@ describe.skipIf(process.platform !== 'win32')(
                 path.join(target, 'media', 'lua', 'hello.lua'),
                 'R6-CASE-VICTIM',
             );
-            // Stored on disk as upper-case MODS; the plan spells `mods`.
             await fsp.mkdir(path.join(OUT_VP(), 'Contents'), {
                 recursive: true,
             });
@@ -1040,9 +923,6 @@ describe.skipIf(process.platform !== 'win32')(
             });
             await junction(path.join(OUT_VP(), 'Contents', 'mods'), target);
 
-            // Today's behavior: no guard error — the opt-in contract keeps
-            // executor-direct callers (parity tests, embedded consumers) on
-            // the pre-guard semantics until they declare a root.
             expect(() =>
                 executeBuildPlan([
                     {
@@ -1055,9 +935,6 @@ describe.skipIf(process.platform !== 'win32')(
     },
 );
 
-// ---------------------------------------------------------------------------
-// G1/G3/G4 — preservation gates
-// ---------------------------------------------------------------------------
 describe.skipIf(process.platform !== 'win32')(
     'CLI-P0 preservation: configured-root junctions and alias-free builds',
     () => {
@@ -1097,7 +974,6 @@ describe.skipIf(process.platform !== 'win32')(
                     'utf8',
                 ),
             ).toBe('hello-v1');
-            // The junction root itself is never inspected nor removed.
             expect(fs.lstatSync(OUT()).isSymbolicLink()).toBe(true);
         });
 
@@ -1124,8 +1000,6 @@ describe.skipIf(process.platform !== 'win32')(
                     { outputRoot: OUT() },
                 ),
             ).not.toThrow();
-            // Deleted through the junction root (accepted INV-A semantics);
-            // the configured root link itself survives.
             expect(
                 fs.existsSync(
                     path.join(
@@ -1166,7 +1040,6 @@ describe.skipIf(process.platform !== 'win32')(
         });
 
         it('G4: the pre-existing case-6 self-copy defect is neither masked nor altered (recorded, not fixed here)', async () => {
-            // Case-6: outdir inside the configured mod folder.
             const case6Out = path.join(PROJ(), 'my_mod', 'gen');
             await fsp.mkdir(case6Out, { recursive: true });
 
@@ -1180,25 +1053,12 @@ describe.skipIf(process.platform !== 'win32')(
                 error = e as Error;
             }
 
-            // Today's behavior: the CLI's own cpSync self-copy guard aborts
-            // the build. The route guard must not mask, pre-empt or change
-            // this separate defect — no alias refusal may appear for the
-            // alias-free case-6 layout.
             expect(error).toBeInstanceOf(Error);
             expect(error!.message).not.toMatch(/symbolic link/i);
         });
     },
 );
 
-// ---------------------------------------------------------------------------
-// CACHE-R1 — stale destination-listing authorization divergence. The P0
-// patch's listing cache is keyed per destination directory for the whole
-// scaffoldProject copy and never invalidated, on the invariant that a copy
-// never creates links. The invariant is false (cp-sync.js onLink re-creates
-// included source symlinks as destination links), so a listing captured
-// before the copy materialized an alias authorizes a later entry that a
-// fresh listing refuses. Modeled copy sequence through the REAL guard.
-// ---------------------------------------------------------------------------
 describe.skipIf(process.platform !== 'win32')(
     'CACHE-R1: stale destination-listing authorization divergence',
     () => {
@@ -1219,30 +1079,16 @@ describe.skipIf(process.platform !== 'win32')(
             const destAlias = path.join(destParent, 'media');
             const operation = `copyTree destination '${destParent}'`;
 
-            // Step 1 — the copy's first guarded entry into this parent: the
-            // authorization observes the parent as it is (no alias yet).
             expect(() =>
                 assertNoAliasDestinationEntry(destAlias, OUT(), operation),
             ).not.toThrow();
 
-            // Step 2 — the copy materializes an included source symlink as a
-            // destination alias in this parent (modeled directly: this
-            // host's cpSync link re-creation is privilege-gated; the
-            // resulting destination state — a symbolicLink dirent in the
-            // parent listing — is what the guard reads on capable hosts).
             await junction(destAlias, victim);
 
-            // Step 3 — a later included source entry resolves onto the same
-            // destination name: the authorization must observe the alias a
-            // fresh listing shows, never a snapshot captured before the
-            // copy created it (the pre-fix cache served exactly that stale
-            // snapshot and authorized — the recorded RED).
             expect(() =>
                 assertNoAliasDestinationEntry(destAlias, OUT(), operation),
             ).toThrow(/symbolic link/i);
 
-            // The victim behind the alias is untouched (nothing followed the
-            // authorization in this authorization-only row).
             expect(
                 await fsp.readFile(path.join(victim, 'SENTINEL.txt'), 'utf8'),
             ).toBe('CACHE-R1-KEEP');
@@ -1250,13 +1096,6 @@ describe.skipIf(process.platform !== 'win32')(
     },
 );
 
-// ---------------------------------------------------------------------------
-// CACHE-R2 — nested physical landing under the CLI's synchronous cpSync
-// option shape. NODE-LEVEL EVIDENCE ONLY: no production guard code runs
-// here. It pins the physical landing behavior (cp-sync.js: nested entries
-// bypass the native boundary check; onDir descends through an existing
-// destination alias) that makes stale destination authorization dangerous.
-// ---------------------------------------------------------------------------
 describe.skipIf(process.platform !== 'win32')(
     'CACHE-R2: nested physical landing under synchronous cpSync (Node-level evidence)',
     () => {
@@ -1302,12 +1141,7 @@ describe.skipIf(process.platform !== 'win32')(
                 error = e as Error;
             }
 
-            // The landing is silent: the copy reports success.
             expect(error).toBeUndefined();
-            // The source subtree physically landed at the VICTIM path — the
-            // link-name segment ('media') is consumed by the junction, so
-            // src/media/lua lands at victim/lua and src/media/modfile.txt at
-            // victim/modfile.txt.
             expect(
                 await fsp.readFile(
                     path.join(victim, 'lua', 'hello.lua'),
@@ -1317,7 +1151,6 @@ describe.skipIf(process.platform !== 'win32')(
             expect(
                 await fsp.readFile(path.join(victim, 'modfile.txt'), 'utf8'),
             ).toBe('CACHE-R2-MODFILE');
-            // Pre-existing victim bytes survive; the alias survives.
             expect(
                 await fsp.readFile(path.join(victim, 'SENTINEL.txt'), 'utf8'),
             ).toBe('BYTE-EXACT-SENTINEL-BEFORE');
@@ -1330,15 +1163,6 @@ describe.skipIf(process.platform !== 'win32')(
     },
 );
 
-// ---------------------------------------------------------------------------
-// CACHE-R3 — copy-created alias through the guarded copy path: the full
-// modeled sequence with the real filter-first inclusion (F1), the real
-// destination-entry authorization and the real cpSync option shape. The
-// landing geometry is the natively probed one (a nested destination alias
-// is descended through). Model limits: the later entry resolving onto the
-// copy-created alias is not produced by the current one-pass mirrored copy
-// (see CACHE-R1).
-// ---------------------------------------------------------------------------
 describe.skipIf(process.platform !== 'win32')(
     'CACHE-R3: copy-created alias through the guarded copy path (modeled full sequence)',
     () => {
@@ -1373,9 +1197,6 @@ describe.skipIf(process.platform !== 'win32')(
             const operation = `copyTree destination '${destParent}'`;
             const filter = createIgnoreFilter(src);
 
-            // Step 1 — the copy's first guarded child of media: inclusion
-            // first (F1), then authorization (the parent listing as it is,
-            // empty at this point).
             expect(
                 filter(
                     path.join(src, 'media', 'modfile.txt'),
@@ -1390,13 +1211,8 @@ describe.skipIf(process.platform !== 'win32')(
                 ),
             ).not.toThrow();
 
-            // Step 2 — an included source symlink is re-created as a
-            // destination alias inside media (modeled directly; see the
-            // CACHE-R1 host-capability disclosure).
             await junction(path.join(destDir, 'lua'), victim);
 
-            // Step 3 — a later included source entry resolves onto that
-            // same destination name.
             expect(
                 filter(
                     path.join(src, 'media', 'lua'),
@@ -1410,9 +1226,6 @@ describe.skipIf(process.platform !== 'win32')(
                     OUT(),
                     operation,
                 );
-                // RED path — the stale authorization lets the copy proceed:
-                // the real synchronous cpSync lands the source subtree
-                // through the alias (natively probed geometry).
                 fs.cpSync(path.join(src, 'media'), destDir, {
                     recursive: true,
                     filter: () => true,
@@ -1421,15 +1234,9 @@ describe.skipIf(process.platform !== 'win32')(
                 refusal = e as Error;
             }
 
-            // GREEN: explicit refusal naming the offending component,
-            // raised BEFORE any copy ran.
             expect(refusal).toBeDefined();
             expect(refusal!.message).toMatch(/symbolic link/i);
             expect(refusal!.message).toContain('lua');
-            // ...so nothing landed behind the alias (the link-name segment is
-            // consumed by the junction: a stale-authorized landing would put
-            // hello.lua directly at the victim root) and the alias itself
-            // still stands.
             expect(fs.existsSync(path.join(victim, 'hello.lua'))).toBe(false);
             expect(
                 await fsp.readFile(path.join(victim, 'SENTINEL.txt'), 'utf8'),
@@ -1441,13 +1248,6 @@ describe.skipIf(process.platform !== 'win32')(
     },
 );
 
-/* ------------------------------------------------------------------ */
-/* DEC-6 — pzstudio clean joins the build guard (CLI parity): clean's  */
-/* deletions go through cleanOutputPath, the clean tier of the         */
-/* F23-WRITE P0 guard. Containment rows are cross-platform; junction   */
-/* rows need NTFS junctions (win32 only, like the native tiers above). */
-/* ------------------------------------------------------------------ */
-
 describe('clean output path guard (DEC-6)', () => {
     it('refuses a clean target outside the configured output root', async () => {
         const outside = path.join(sandbox, 'elsewhere', 'Sync Project');
@@ -1455,7 +1255,6 @@ describe('clean output path guard (DEC-6)', () => {
         expect(() => cleanOutputPath(OUT(), outside)).toThrow(
             /not inside the configured build output root/,
         );
-        // The refusal happens before anything is deleted.
         expect(fs.existsSync(outside)).toBe(true);
     });
 
@@ -1468,7 +1267,6 @@ describe('clean output path guard (DEC-6)', () => {
         );
         expect(() => cleanOutputPath(OUT(), variant)).not.toThrow();
         expect(fs.existsSync(variant)).toBe(false);
-        // The configured root itself is never the deletion target.
         expect(fs.existsSync(OUT())).toBe(true);
     });
 

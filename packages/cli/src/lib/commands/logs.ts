@@ -37,11 +37,6 @@ function severityColor(text: string, severity: string): string {
     return pc.gray(text);
 }
 
-/**
- * The gray click-to-file hint under a finding: the owning mod and the
- * workspace source location when attribution resolved them. Unattributed
- * findings print no hint line (never guess).
- */
 function findingHint(finding: ConsoleLogFinding): string | undefined {
     if (finding.modId === undefined && finding.sourceFile === undefined) {
         return undefined;
@@ -58,9 +53,6 @@ function findingHint(finding: ConsoleLogFinding): string | undefined {
 }
 
 export async function logsCmd() {
-    // Optional, non-fatal project discovery: the analyzer works without an
-    // open project (findings stay unattributed), so a missing or invalid
-    // project.json only costs attribution, never the report.
     let context;
     try {
         context = buildProjectContext(projectDir());
@@ -79,8 +71,6 @@ export async function logsCmd() {
         else counts.infos++;
     }
 
-    // Status follows the result (CLI-7): an unreadable log or any
-    // error-severity finding blocks (exit 1); warnings are advisory.
     const status =
         report.log.readError !== undefined || counts.errors > 0
             ? 'error'
@@ -88,9 +78,6 @@ export async function logsCmd() {
               ? 'warnings'
               : 'ok';
 
-    // Machine output (CLI-8): the envelope is the ONLY stdout content of
-    // the command — no human header, no report lines. Exit code follows
-    // the result.
     if (hasFlag('json')) {
         printJsonEnvelope('logs', {
             status,
@@ -128,8 +115,6 @@ export async function logsCmd() {
         `\nSummary: ${counts.errors} error(s), ${counts.warnings} warning(s), ${counts.infos} info(s).`,
     );
 
-    // DEBUG volume is count-and-dropped by the engine (never findings);
-    // the count proves a -debug capture to the user.
     const debugTotal = Object.values(report.stats.debugByChannel).reduce(
         (sum, n) => sum + n,
         0,
@@ -147,7 +132,6 @@ export async function logsCmd() {
         );
     }
 
-    // Verdict follows the result (CLI-7).
     if (counts.errors > 0) {
         log(`✗ Log analysis found ${counts.errors} error(s).`);
         throw logsError(report, counts.errors);
@@ -161,7 +145,6 @@ export async function logsCmd() {
     }
 }
 
-/** The structured CliError behind every exit-1 outcome of the command. */
 function logsError(report: ConsoleLogReport, errors: number): CliError {
     if (report.log.readError !== undefined) {
         return new CliError(

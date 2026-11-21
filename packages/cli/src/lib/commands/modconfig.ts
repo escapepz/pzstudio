@@ -26,7 +26,6 @@ addHelp(
     pack, tiledef, modInfo (build.modInfo: auto | skip | auto-if-missing).`,
 );
 
-/** Fields stored as string arrays (values split on commas). */
 const ARRAY_KEYS = new Set([
     'description',
     'poster',
@@ -38,7 +37,6 @@ const ARRAY_KEYS = new Set([
     'tiledef',
 ]);
 
-/** Fields stored as plain strings. modInfo maps to build.modInfo. */
 const STRING_KEYS = new Set([
     'name',
     'author',
@@ -54,13 +52,8 @@ const STRING_KEYS = new Set([
 const KNOWN_KEYS = new Set([...ARRAY_KEYS, ...STRING_KEYS]);
 const MODINFO_VALUES = new Set(['auto', 'skip', 'auto-if-missing']);
 
-/** Fields required by the project.json schema — unset would break validation. */
 const REQUIRED_KEYS = new Set(['name', 'description']);
 
-/**
- * Reads project.json raw (no defaults applied) so an edit only touches the
- * fields it actually changes instead of materializing defaults for every mod.
- */
 function readRawProjectConfig(): { path: string; config: IProjectConfig } {
     const path = join(projectDir(), 'project.json');
     if (!existsSync(path)) {
@@ -78,7 +71,6 @@ function readRawProjectConfig(): { path: string; config: IProjectConfig } {
     return { path, config: config as IProjectConfig };
 }
 
-/** Throws when the project.json is structurally invalid after an edit. */
 function assertValidConfig(config: IProjectConfig): void {
     const context = new ValidationContext('project.json');
     validateProject(config, context);
@@ -101,7 +93,6 @@ function getModOrThrow(config: IProjectConfig, modId: string): IModConfig {
     return mod;
 }
 
-/** Resolves the mod's build state: excluded > dev only > included. */
 export function modBuildState(
     config: IProjectConfig,
     modId: string,
@@ -152,7 +143,6 @@ function applyExclude(config: IProjectConfig, modId: string): boolean {
         return false;
     }
     config.excludes = [...(config.excludes ?? []), modId];
-    // Excluded wins over dev-only: keep the state invariant.
     const mod = config.mods[modId];
     if (mod.build?.devOnly !== undefined) {
         delete mod.build.devOnly;
@@ -173,18 +163,12 @@ function applyDevOnly(config: IProjectConfig, modId: string): boolean {
     return true;
 }
 
-/**
- * Applies `set`: coerces the raw value to the field's shape and returns the
- * previous value (undefined when the field was absent).
- */
 function applySet(
     mod: IModConfig,
     key: string,
     rawValue: string,
 ): string | string[] | undefined {
     if (!KNOWN_KEYS.has(key)) {
-        // Invalid enum value on the handler path: usage error, exit 2
-        // (d11-F8 review — same semantics as the parse-stage enum check).
         throw new CliUsageError(
             `Unknown mod config key '${key}' (expected one of: ${[...KNOWN_KEYS].join(', ')}).`,
         );
@@ -224,8 +208,6 @@ function applyUnset(
     key: string,
 ): string | string[] | undefined {
     if (!KNOWN_KEYS.has(key)) {
-        // Invalid enum value on the handler path: usage error, exit 2
-        // (d11-F8 review — same semantics as the parse-stage enum check).
         throw new CliUsageError(
             `Unknown mod config key '${key}' (expected one of: ${[...KNOWN_KEYS].join(', ')}).`,
         );
@@ -254,9 +236,6 @@ function formatValue(value: string | string[] | undefined): string {
     return Array.isArray(value) ? value.join(', ') : value;
 }
 
-/**
- * Handles the modconfig command.
- */
 export async function modconfigCmd(positionals: string[]) {
     const [modId, action = 'show', key, ...valueParts] = positionals;
 
@@ -269,7 +248,6 @@ export async function modconfigCmd(positionals: string[]) {
     const { path, config } = readRawProjectConfig();
     getModOrThrow(config, modId);
 
-    // 'show' returns above; every other branch assigns before reading.
     let changed: boolean;
     switch (action) {
         case 'show':
@@ -338,10 +316,6 @@ export async function modconfigCmd(positionals: string[]) {
             break;
         }
         default:
-            // Invalid enum value on the handler path: usage error, exit 2
-            // (d11-F8 review — same semantics as the parse-stage enum check).
-            // 'show' is listed too (bf4-n08): it is a real action (and the
-            // implicit default), not just the fallback this message guards.
             throw new CliUsageError(
                 `Unknown modconfig action '${action}' (expected one of: show, include, devonly, exclude, set, unset).`,
             );

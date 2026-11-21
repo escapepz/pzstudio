@@ -6,11 +6,6 @@ import {
     maybePrintFirstBuildUrl,
 } from '../../packages/cli/src/lib/first-run';
 
-// Mock factory (same shape as usageRecorder.test.ts / templateManager.test.ts):
-// keeps the module-graph fs shared so a vi.spyOn(fs, 'writeFileSync') in a
-// case below reaches first-run.ts's named import; the fns start as the real
-// implementations and are re-primed per test, so cases verify real-file
-// behavior through the module under test.
 vi.mock('fs', async () => {
     const actual = await vi.importActual<typeof import('fs')>('fs');
     const mocks = {
@@ -28,13 +23,6 @@ vi.mock('fs', async () => {
     };
 });
 
-/**
- * First-run URL print (one-time, marker-file pinned). The marker directory
- * resolves through getConfigDir() → os.homedir(), which vitest.setup.ts
- * pins to a fresh fake home per test — the same pattern
- * tests/unit/templateManager.test.ts uses for its stamp cases, so every
- * case here verifies real-file behavior through the module under test.
- */
 const fakeHome = (): string =>
     (globalThis as any).__PZSTUDIO_FAKE_HOME as string;
 const configDir = (): string => join(fakeHome(), '.pzstudio');
@@ -45,9 +33,6 @@ describe('maybePrintFirstBuildUrl', () => {
 
     beforeEach(async () => {
         vi.restoreAllMocks();
-        // Vitest 4's restoreAllMocks resets the vi.fn(actual.*) wrappers the
-        // fs mock factory installed, so re-prime them with the real
-        // implementations and clear the call records for isolation.
         const actualFs = await vi.importActual<typeof import('fs')>('fs');
         vi.mocked(fs.existsSync).mockImplementation(actualFs.existsSync as any);
         vi.mocked(fs.mkdirSync).mockImplementation(actualFs.mkdirSync as any);
@@ -65,7 +50,6 @@ describe('maybePrintFirstBuildUrl', () => {
     });
 
     it('prints the URL once and writes the marker', () => {
-        // The exported landing URL is pinned verbatim (spec constant).
         expect(LANDING_URL_CLI).toBe(
             'https://escapepz.github.io/pzstudio/landing/?utm_source=cli-print',
         );
@@ -78,7 +62,6 @@ describe('maybePrintFirstBuildUrl', () => {
         expect(lines[0]).toContain(
             'escapepz.github.io/pzstudio/landing/?utm_source=cli-print',
         );
-        // The CTA line reads as the closing note of a successful build.
         expect(lines[0].startsWith('See tips & updates -> ')).toBe(true);
         expect(fs.existsSync(markerPath())).toBe(true);
     });
@@ -95,11 +78,6 @@ describe('maybePrintFirstBuildUrl', () => {
     });
 
     it('print-then-mark order: a failing write does not lose the print', () => {
-        // Windows cannot make a directory write-protected via chmod, so the
-        // failure is simulated at the write call (same shape as the C7
-        // copy-failure simulation in templateManager.test.ts): the print
-        // must already have happened when the marker write throws, and the
-        // swallowed failure must not escape the call.
         vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
             throw new Error('simulated marker write failure');
         });
@@ -114,15 +92,12 @@ describe('maybePrintFirstBuildUrl', () => {
         expect(lines[0]).toContain(
             'escapepz.github.io/pzstudio/landing/?utm_source=cli-print',
         );
-        // The write really failed: no marker may be stranded behind it.
         expect(fs.existsSync(markerPath())).toBe(false);
     });
 });
 
 describe('runtime-context standalone gate', () => {
     it('standalone gate', async () => {
-        // Fresh module state: the gate is process-wide (module-level flag),
-        // so import freshness is what a new standalone bin run would see.
         vi.resetModules();
         const ctx = await import('../../packages/cli/src/lib/runtime-context');
 

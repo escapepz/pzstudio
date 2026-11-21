@@ -6,11 +6,6 @@ import {
     peelLine,
 } from '../../packages/core/src/consoleLogParse';
 
-/**
- * Envelope peelers for Project Zomboid console.txt lines. Fixture lines are
- * verbatim captures from real game logs (paths sanitized to `<user>`); do
- * not adjust their spacing, casing or paths.
- */
 describe('consoleLogParse peelLine', () => {
     it('peels the padded envelope without a caller', () => {
         const p = peelLine('LOG  : General      f:0> 15-11-2026 13:28:36');
@@ -121,11 +116,6 @@ describe('consoleLogParse peelLine', () => {
     });
 });
 
-/**
- * Real captured error block (deliberate Lua syntax-error session). Verbatim
- * evidence: the leading tabs, the double-tab frame indentation and the
- * `require` backticks are significant — do not adjust them.
- */
 const ERROR_BLOCK = [
     'ERROR: General      f:0> LuaManager.RunLuaInternal> Exception thrown',
     "\tse.krka.kahlua.vm.KahluaException: zul_test_client.lua:43: '}' expected (to close '{' at line 40) near `require` at Lua.zul_test_client.lua(zul_test_client.lua:43).",
@@ -202,7 +192,6 @@ describe('consoleLogParse assembleEntries', () => {
         expect(result.entries).toHaveLength(1);
         expect(result.entries[0].continuations).toHaveLength(64);
         expect(result.entries[0].continuationsCapped).toBe(true);
-        // Overflow lines are counted, never silently dropped.
         expect(result.junkCount).toBe(6);
     });
 });

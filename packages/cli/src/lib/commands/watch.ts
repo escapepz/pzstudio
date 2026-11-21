@@ -67,8 +67,6 @@ export async function watchCmd() {
     const isProduction = hasFlag('production');
     const isDevelopment = hasFlag('development');
     const isBoth = hasFlag('both');
-    // Mutually exclusive flag combinations are rejected by
-    // validateInvocation (CLI-1) before the handler runs.
     const variants = resolveWatchVariants(
         {
             production: isProduction,
@@ -77,8 +75,6 @@ export async function watchCmd() {
         },
         projectConfig.build?.target,
     );
-    // The banner names build.target as the variant source only when the
-    // target — not a flag — decided the variants.
     const source =
         isProduction || isDevelopment || isBoth
             ? undefined
@@ -87,25 +83,8 @@ export async function watchCmd() {
               : undefined;
 
     const projectPath = projectDir();
-    // Dist-always: the watcher ignores the canonical dist output tree (the
-    // engine's only write target); the deployment target is never a
-    // watcher concern — except its junction, which surfaces the same
-    // writes when it sits inside the project (see watchIgnoreGlobs).
     const outDir = distRootOf(projectPath);
 
-    // Root-level ignore rules ONLY — this filter never walks nested
-    // directories. Nested .gitignore/.pzstudioignore rules are the engine's
-    // apply-time territory: the sync engine re-reads the closest rule files
-    // for every path it applies (isSourcePathIncluded) and a nested
-    // rule-file change re-baselines the owning mod (classifyDelta), so
-    // duplicating that walk here would double-read every event and drift
-    // from the engine's semantics. The ROOT rules steer the watch filter:
-    // loaded once at start, reloaded when a rule-file event arrives
-    // (rule-file events survive the dot filter — a mod-scoped one must
-    // reach the engine for its mod-scoped re-baseline — and the reload
-    // keeps the watch-layer matcher in step; fire-and-forget, so a burst
-    // starts one overlapping reload per event — the last completed read
-    // wins and the reads converge on the same fresh rules).
     const nodeFs = new NodeFileSystem();
     let ignoreMatcher: ((rel: string) => boolean) | undefined;
     const reloadIgnoreRules = async (): Promise<void> => {
@@ -113,16 +92,11 @@ export async function watchCmd() {
             ignoreMatcher = createIgnoreMatcher({
                 '': await readIgnoreRulesForDir(nodeFs, projectPath),
             }).isIgnored;
-        } catch {
-            // readIgnoreRulesForDir already tolerates unreadable rule
-            // files; a total failure here retains the last good matcher.
-        }
+        } catch {}
     };
     await reloadIgnoreRules();
     const ignorePredicate = (rel: string): boolean =>
         ignoreMatcher?.(rel) ?? false;
-    // Materialize resolution BEFORE the session starts: the copy-mode
-    // refusal must fail the command up front, never mid-session.
     const materialization: MaterializationResolution = resolveMaterialization({
         projectRoot: projectPath,
         effectiveOutdir: projectConfig.outdir,
@@ -131,8 +105,6 @@ export async function watchCmd() {
         flagMaterialize: parseMaterializeFlag(extractFlag('materialize')),
         noMaterialize: hasFlag('no-materialize'),
     });
-    // Boundary refusal (data safety): an invalid deployment target is a
-    // hard error, never a silent watch-without-deployment.
     if (materialization.refused) {
         throw new CliError(materialization.refused, {
             tryHint:
@@ -153,19 +125,11 @@ export async function watchCmd() {
                 : 'skip'
         }`,
     );
-    // Compact single-line banner (CLI-7): what is syncing, where the variant
-    // choice came from (when it came from config), and how to stop.
     info(
         `Syncing '${projectConfig.workshop.title}' (${variants.join(' + ')}${source ? ` — ${source}` : ''}) — press Ctrl+C to stop.`,
     );
 
-    // Engine command: plan-input emissions must follow the active invocation
-    // logger (doc 11 §12) via the internal engine path, while the §13 raw
-    // legacy settings/transport composition and the anchor side effect stay
-    // with the (signature-frozen) facade export.
     const session = createDevSyncForEngine(projectPath);
-    // Initial full build: on failure the session is stopped and the command
-    // exits — watching an output that could not be built helps nobody.
     try {
         await session.start(variants);
     } catch (e) {
@@ -173,17 +137,8 @@ export async function watchCmd() {
         throw e;
     }
 
-    // Materialize after the initial build: one junction per synced item
-    // (mode 'symlink'), created ONCE — every subsequent apply flows through
-    // the link at O(0) cost, which is exactly why watch runs in symlink
-    // mode. Non-fatal by contract; refusals surface and doctor reports.
     if (materialization.action === 'materialize') {
         const anchoredConfig = { ...projectConfig, outdir: outDir };
-        // Materialize only variants the engine actually built: buildVariants
-        // skips a variant whose included-mod set is empty (buildsession's
-        // `continue`), so its dist item root never exists — a junction for
-        // it would dangle. The same filter gates the standalone build's
-        // materialize step (builtItems).
         const itemNames = variants
             .filter(
                 (variant) =>
@@ -207,9 +162,6 @@ export async function watchCmd() {
         const batch = pending.splice(0, pending.length);
         if (batch.length === 0) return;
         const result = await session.apply(batch);
-        // A successful sync is otherwise silent: say what a batch did so
-        // "nothing happened" is never ambiguous again (same wording the
-        // extension's output channel uses).
         const summary = summarizeApplyResult(result);
         if (summary) {
             info(`- ${summary}.`);
@@ -246,13 +198,6 @@ export async function watchCmd() {
                 return;
             }
             for (const event of events) {
-                // A rule-file event re-steers the filter AND reaches the
-                // engine below (a mod-scoped one re-baselines its owning
-                // mod there): trigger the reload, then apply the same
-                // shared drop decision. A failed reload retains the last
-                // good matcher; every burst event starts its own reload
-                // and the reads overlap — the last completed read wins,
-                // and they converge on the same fresh rules.
                 const name = basename(event.path);
                 if (name === '.gitignore' || name === '.pzstudioignore') {
                     void reloadIgnoreRules();
@@ -270,9 +215,6 @@ export async function watchCmd() {
                 ) {
                     continue;
                 }
-                // parcel's 'update' is our 'change'; directories pass
-                // through as create/delete events and the session decides
-                // what they mean (it never writes a directory as a file).
                 const type: FileDelta['type'] =
                     event.type === 'update'
                         ? 'change'
@@ -283,10 +225,6 @@ export async function watchCmd() {
             }
         },
         {
-            // Cheaper to drop the output trees natively than to filter their
-            // events after delivery (watching our own writes is pure noise):
-            // the canonical dist root, plus the deployment root when it sits
-            // inside the project (a junction surfaces the same writes).
             ignore: watchIgnoreGlobs(
                 projectPath,
                 outDir,
@@ -310,18 +248,12 @@ export async function watchCmd() {
         await session.stop();
         resolveStopped();
     };
-    // The command owns its interruption (CLI-6): one handler, one message,
-    // exit 130. runCLI no longer installs a process-level handler, so
-    // Ctrl+C no longer double-reports.
     process.once('SIGINT', () => {
         process.exitCode = 130;
         void shutdown();
     });
 
     await stopped;
-    // d12-U4: name the exit convention in the stop line itself. The SIGINT
-    // handler above sets exit 130, but nothing told the user the number —
-    // scripts wrapping pzstudio watch kept guessing (d18-U2 recurrence).
     info(`Development sync stopped. (exit 130 — Ctrl+C/SIGINT convention)`);
 }
 

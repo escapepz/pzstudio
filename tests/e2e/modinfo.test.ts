@@ -70,7 +70,6 @@ describe('modinfo command e2e', () => {
             fs.existsSync(path.join(workspace.dir, modId2, '42', 'mod.info')),
         ).toBe(true);
 
-        // Root level should NOT have mod.info
         expect(
             fs.existsSync(path.join(workspace.dir, modId1, 'mod.info')),
         ).toBe(false);
@@ -197,8 +196,6 @@ describe('modinfo command e2e', () => {
             }),
         );
 
-        // No folders created
-
         const result = await workspace.run('modinfo', ['generate']);
         workspace.assertSuccess(result);
 
@@ -223,7 +220,6 @@ describe('modinfo command e2e', () => {
         );
 
         const result = await workspace.run('modinfo', ['invalid']);
-        // d11-F8: invalid enum values exit 2 on the handler path too.
         workspace.assertFailure(result, 2);
         workspace.assertStderr(
             result,
@@ -356,7 +352,6 @@ describe('modinfo command e2e', () => {
                     [modId]: {
                         name: 'Default Mod',
                         description: 'Desc',
-                        // build.modInfo omitted
                     },
                 },
             }),
@@ -393,7 +388,6 @@ describe('modinfo command e2e', () => {
                     [modId]: {
                         name: 'Forced Mod',
                         description: 'Desc',
-                        // build.modInfo omitted: default auto-if-missing
                     },
                 },
             }),

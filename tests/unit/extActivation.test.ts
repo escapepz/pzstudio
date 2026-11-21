@@ -8,15 +8,6 @@ vi.mock('vscode', async () => {
     const { createVscodeMock } = await import('../helpers/vscode-mock');
     return createVscodeMock();
 });
-// Every runtime api import across the activation graph (extension.ts plus
-// the consumers it wires). After commit 10 every engine/operation consumer
-// — runner, task provider, DevSync, doctor, modinfo — goes through the
-// created instance. Commit 11 retires the legacy facade setters:
-// setLogger / setProjectDir / setVsCodeSettings are no longer called by the
-// extension runtime (doc 11 §17 commit 11). `runCLI`, `runProjectDoctor`,
-// `resolveModInfoTargets`, `createDevSync`, `log` and `warn` are
-// deliberately ABSENT from the mock: any runtime import of a published
-// legacy door would surface as an undefined call inside activate.
 vi.mock('@pzstudio/cli/api', () => ({
     createPzStudio: vi.fn(() => ({
         run: vi.fn(async () => {}),
@@ -87,8 +78,6 @@ describe('extension activation (host instance wiring)', () => {
             settings: (ctx: unknown) => unknown;
         };
 
-        // The logger is the extension channel adapter: log() writes into the
-        // 'PZ Studio' output channel createPZLogger was handed.
         expect(typeof options.logger.log).toBe('function');
         expect(typeof options.logger.info).toBe('function');
         expect(typeof options.logger.warn).toBe('function');
@@ -105,9 +94,6 @@ describe('extension activation (host instance wiring)', () => {
         options.logger.log('routed');
         expect(asMock(channel.appendLine)).toHaveBeenCalledWith('routed');
 
-        // The settings provider is the pure host reader: same snapshot the
-        // direct reader returns (the context is accepted but ignored —
-        // pinned in extUtilSettings.test.ts).
         expect(typeof options.settings).toBe('function');
         expect(options.settings({ projectDir: 'C:/proj' })).toEqual(
             readPzStudioHostSettings({ projectDir: 'C:/proj' }),
@@ -130,8 +116,6 @@ describe('extension activation (host instance wiring)', () => {
         expect(handler).toBeDefined();
         await handler();
 
-        // Update refreshes the global template caches: the palette entry
-        // must not resolve or anchor a project even when one exists.
         expect(studio.run).toHaveBeenCalledTimes(1);
         expect(studio.run).toHaveBeenCalledWith('update', [], { flags: [] });
         expect('projectDir' in asMock(studio.run).mock.calls[0][2]).toBe(false);
@@ -173,9 +157,6 @@ describe('extension activation (host instance wiring)', () => {
             resolveModInfoTargets: import('vitest').Mock;
         };
 
-        // Doctor: a tree-node run goes through the bound diagnostics
-        // runner → studio.runProjectDoctor with the explicit fsPath. The
-        // empty report exercises the clean-project message path.
         const doctorHandler = asMock(
             vscode.commands.registerCommand,
         ).mock.calls.find(([id]) => id === 'pzstudio.doctor')?.[1] as (
@@ -193,9 +174,6 @@ describe('extension activation (host instance wiring)', () => {
             "PZStudio: no problems found in 'proj'. Everything looks good.",
         );
 
-        // ModInfo: a tree-node run resolves the overwrite targets through
-        // the instance with the explicit mod + project, then generates via
-        // the runner's studio.run.
         const modinfoHandler = asMock(
             vscode.commands.registerCommand,
         ).mock.calls.find(([id]) => id === 'pzstudio.modinfoGenerate')?.[1] as (
@@ -215,20 +193,10 @@ describe('extension activation (host instance wiring)', () => {
             ['generate', 'my_mod'],
             { flags: [], projectDir: path.sep + path.join('proj') },
         );
-        // No existing target in the stub → no overwrite modal.
         expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
     });
 
     it('extension source imports no legacy facade setter (commit 11 grep-guard)', () => {
-        // doc 11 §17 commit 11: setLogger / setProjectDir / setVsCodeSettings are
-        // retired from the extension runtime. The grep guard prevents any future
-        // import of these from re-entering the extension source.
-        //
-        // The test/ directory is excluded: integration.test.ts runs inside a
-        // real VS Code extension host (uses real runCLI + real command
-        // registration) and intentionally exercises the legacy facade on that
-        // host. Its imports of setProjectDir and runCLI are the test itself,
-        // not production code.
         const extSrc = path.resolve(
             __dirname,
             '../../packages/vscode-extension/src',
@@ -272,19 +240,12 @@ describe('extension activation (host instance wiring)', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* UX-11: gameBuild forwarding, doctor failure routing and cache       */
-/* invalidation wiring                                                  */
-/* ------------------------------------------------------------------ */
-
 describe('UX-11 wiring (activation graph)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        // The default dismissal path: notifications resolve with no choice.
         asMock(vscode.window.showErrorMessage).mockResolvedValue(undefined);
     });
 
-    /** The provider instance captured from the createTreeView wiring. */
     function activatedProvider() {
         const calls = asMock(vscode.window.createTreeView).mock.calls as Array<
             [string, { treeDataProvider: unknown }]
@@ -302,7 +263,6 @@ describe('UX-11 wiring (activation graph)', () => {
         };
     }
 
-    /** The single configuration-change listener extension.ts registers. */
     function configListener() {
         const calls = asMock(vscode.workspace.onDidChangeConfiguration).mock
             .calls as Array<[unknown]>;
@@ -336,7 +296,6 @@ describe('UX-11 wiring (activation graph)', () => {
         const calls = asMock(activatedStudio().runProjectDoctor).mock.calls;
         expect(calls).toHaveLength(1);
         expect(calls[0][0]).toBe(path.sep + path.join('proj'));
-        // Single argument while pzstudio.gameBuild stays at its default ''.
         expect(calls[0]).toHaveLength(1);
     });
 
@@ -349,22 +308,17 @@ describe('UX-11 wiring (activation graph)', () => {
         const doctorCalls = () =>
             asMock(activatedStudio().runProjectDoctor).mock.calls.length;
 
-        // First render: exactly one doctor run; the fingerprint alone keeps
-        // a presentation refresh cheap.
         await provider.getChildren();
         expect(doctorCalls()).toBe(1);
         await provider.getChildren();
         expect(doctorCalls()).toBe(1);
 
-        // pzstudio.gameBuild changed — invisible to the project.json
-        // fingerprint — yet the badge must recompute.
         await onConfig({
             affectsConfiguration: (section) => section === 'pzstudio.gameBuild',
         });
         await provider.getChildren();
         expect(doctorCalls()).toBe(2);
 
-        // An unrelated pzstudio.* change does not invalidate diagnostics.
         await onConfig({
             affectsConfiguration: (section) => section === 'pzstudio.language',
         });
@@ -389,7 +343,6 @@ describe('UX-11 wiring (activation graph)', () => {
             'PZStudio Error: engine boom',
             'Show Details',
         );
-        // One channel: the PZ Studio one, holding the full error detail.
         expect(asMock(vscode.window.createOutputChannel)).toHaveBeenCalledTimes(
             1,
         );
@@ -400,7 +353,6 @@ describe('UX-11 wiring (activation graph)', () => {
         };
         const lines = channel.appendLine.mock.calls.map((c) => String(c[0]));
         expect(lines.some((l) => /\[ERROR\] engine boom\n/.test(l))).toBe(true);
-        // No auto-open on the default dismissal path.
         expect(channel.show).not.toHaveBeenCalled();
     });
 
@@ -413,7 +365,6 @@ describe('UX-11 wiring (activation graph)', () => {
         );
         const provider = activatedProvider();
 
-        // Neither render may throw or surface a notification.
         const first = await provider.getChildren();
         const second = await provider.getChildren();
 
@@ -436,8 +387,6 @@ describe('UX-11 wiring (activation graph)', () => {
         );
         expect(new Set(ids).size).toBe(ids.length);
         expect(ids).toContain('pzstudio.doctor');
-        // Exactly one doctor registration (the command + the shared
-        // diagnostics runner wiring), the doctor keeps the pre-existing id.
         expect(ids.filter((id) => id === 'pzstudio.doctor')).toHaveLength(1);
     });
 });

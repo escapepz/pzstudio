@@ -5,8 +5,6 @@ import { log } from '../logger';
 import { CliUsageError, suggestCommands } from '../parser';
 
 function buildFullHelp(): string {
-    // Hidden commands (CLI-7) stay registered and runnable but are not
-    // advertised in the generated listing.
     const lines = allCommands()
         .filter((c) => !c.hidden)
         .map((c) => `    ${c.name.padEnd(15)}- ${c.summary}`);
@@ -32,9 +30,6 @@ export function helpCmd(command?: string) {
         if (helpText) {
             log(helpText);
         } else {
-            // Asking help for a command that does not exist is a usage
-            // error (exit 2), not a runtime failure — same classification
-            // and suggestion as the parser's unknown-command path.
             throw new CliUsageError(
                 `Unknown command [${command}].${suggestCommands(command)}`,
             );

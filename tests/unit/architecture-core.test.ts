@@ -2,8 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { NODE_CAPABILITIES } from '../../packages/platform-node/src/index';
-// Import the capabilities module directly: the platform-web barrel pulls in
-// the 'vscode' module, which only resolves inside an editor host.
 import { WEB_CAPABILITIES } from '../../packages/platform-web/src/web-capabilities';
 import { MemoryFileSystem } from '../helpers/memory-file-system';
 import {
@@ -28,12 +26,6 @@ const VALID_CONFIG = {
     outdir: '/out',
 };
 
-/**
- * The acceptance chain from the architecture direction: a config is loaded
- * through an injected filesystem, validated and turned into a build plan —
- * nothing in the chain knows which host is running. Swap the in-memory fs
- * for NodeFileSystem or WorkspaceFileSystem and the same code must work.
- */
 describe('core is host-blind', () => {
     it('runs the load -> validate -> plan chain on an injected filesystem', async () => {
         const fs = new MemoryFileSystem();
@@ -42,16 +34,13 @@ describe('core is host-blind', () => {
             new TextEncoder().encode(JSON.stringify(VALID_CONFIG)),
         );
 
-        // 1. Load (detectVersion -> migrate -> validate -> normalize)
         const project = await loadProject(fs, CONFIG_URI);
         expect(project.version).toBe(PROJECT_SCHEMA_VERSION);
 
-        // 2. Validate — the standalone diagnostic pass
         const context = new ValidationContext('project.json');
         validateProject(project.config, context);
         expect(context.hasErrors()).toBe(false);
 
-        // 3. Plan — the pure build planner consumes the loaded config
         const operations = planBuild({
             config: project.config,
             variant: 'development',
@@ -78,12 +67,6 @@ describe('core is host-blind', () => {
     });
 });
 
-/**
- * Browser-safety gate: @pzstudio/core and @pzstudio/platform (plus the web
- * adapter) must never reach for Node builtins, CommonJS require or process
- * globals. This is the compile-level fence the esbuild browser gate will
- * lean on in the web milestone.
- */
 describe('browser-safety gate', () => {
     const BROWSER_SAFE_ROOTS = [
         'packages/core/src',
@@ -132,8 +115,6 @@ describe('browser-safety gate', () => {
     });
 
     it('declares capability profiles that hide unsupported features', () => {
-        // Web: no shell, no local executables, no game folders — but the
-        // workspace is writable and portable (zip) builds work.
         expect(WEB_CAPABILITIES.node).toBe(false);
         expect(WEB_CAPABILITIES.shell).toBe(false);
         expect(WEB_CAPABILITIES.localExecutables).toBe(false);
@@ -142,7 +123,6 @@ describe('browser-safety gate', () => {
         expect(WEB_CAPABILITIES.workspaceWrite).toBe(true);
         expect(WEB_CAPABILITIES.portableBuild).toBe(true);
 
-        // Node: everything available.
         expect(NODE_CAPABILITIES.node).toBe(true);
         expect(NODE_CAPABILITIES.shell).toBe(true);
         expect(NODE_CAPABILITIES.workshopOutput).toBe(true);

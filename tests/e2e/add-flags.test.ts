@@ -67,16 +67,13 @@ describe('add — templates (E2E Mocked)', () => {
 
     it('should refresh the template cache when --force-update is provided', async () => {
         writeMinimalProject(workspace);
-        // Run once to populate cache (mocked clone)
         await workspace.run('add', ['M1', 'm1', '--force-update']);
 
-        // Remove the seeded local template to force using the global cache again for the next add
         fs.rmSync(path.join(workspace.dir, '.template-mod'), {
             recursive: true,
             force: true,
         });
 
-        // Run again with force-update to trigger fetch (mocked fetch)
         const result2 = await workspace.run('add', [
             'M2',
             'm2',
@@ -95,7 +92,6 @@ describe('add — templates (E2E Mocked)', () => {
 
     it('should fail when force-update refresh fails and re-clone also fails', async () => {
         writeMinimalProject(workspace);
-        // Set a custom template in global config to avoid legacy fallback
         const customUrl = 'https://github.com/custom/template.git';
         workspace.writeGlobalConfig({
             templates: { mod: { url: customUrl } },
@@ -111,7 +107,6 @@ describe('add — templates (E2E Mocked)', () => {
             return { status: 0 } as any;
         });
 
-        // Populate an "invalid" cache to force refresh/re-clone
         const cacheDir = path.join(
             workspace.fakeHome,
             '.pzstudio',

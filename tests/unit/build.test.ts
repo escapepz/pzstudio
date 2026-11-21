@@ -17,8 +17,6 @@ import {
 } from '../../packages/cli/src/lib/templateManager';
 import { hasFlag } from '../../packages/cli/src/lib/args';
 
-// The real helper implementation, outside the module mock: tests that mock
-// gatherPlanInput must restore the delegate so overrides cannot leak.
 const actualHelper = await vi.importActual<
     typeof import('../../packages/cli/src/lib/helper')
 >('../../packages/cli/src/lib/helper');
@@ -43,9 +41,6 @@ vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => {
         resolveProjectConfig: vi.fn(),
         resolveModInfoTargets: vi.fn(),
         readWorkshopDescriptionLines: vi.fn(),
-        // Delegates to the real implementation: most tests drive the real
-        // snapshot logic through the fs mocks; branch-folder scenarios
-        // override this mock with a hand-written plan input.
         gatherPlanInput: vi.fn(actual.gatherPlanInput),
     };
 });
@@ -60,15 +55,10 @@ describe('buildCmd', () => {
         },
         mods: { my_mod: { name: 'My Mod', description: 'A mod.' } },
         excludes: [],
-        // No deployment target: this suite exercises plan execution, and a
-        // configured outdir would run the real copy/junction materializer
-        // over a mocked fs (creating real artifacts at the resolved path).
     };
 
     beforeEach(() => {
         vi.clearAllMocks();
-        // mockReturnValue values set by branch-folder tests must not leak
-        // into the tests that drive the real snapshot logic.
         vi.mocked(gatherPlanInput).mockImplementation(
             actualHelper.gatherPlanInput,
         );
@@ -84,15 +74,8 @@ describe('buildCmd', () => {
         vi.mocked(readWorkshopDescriptionLines).mockReturnValue([] as any);
         vi.mocked(hasFlag).mockReturnValue(false as any);
 
-        // The mutation-route guard inspects route directories; the fs mock
-        // has no on-disk state, so every listing reports an empty (missing)
-        // directory — fresh-creation authorization, the first-build shape.
         vi.mocked(fs.readdirSync).mockReturnValue([] as any);
 
-        // workshop/preview.png and every scheduled mod folder exist in the
-        // project root (d13-U3 pre-check: a mod folder whose existsSync
-        // probe fails is named and fails the variant). Normalize
-        // separators: join() produces backslashes on Windows.
         vi.mocked(fs.existsSync).mockImplementation((p: any) => {
             const normalized = String(p).replace(/\\/g, '/');
             return (
@@ -107,10 +90,6 @@ describe('buildCmd', () => {
 
         await expect(buildCmd()).rejects.toThrow('No pzstudio project found.');
     });
-
-    // Mutually exclusive target flags (--production/--development/--both)
-    // are rejected by validateInvocation (CLI-1) before the handler runs;
-    // conflict pins live in tests/unit/args.test.ts.
 
     it('should plan and execute a main build by default', async () => {
         await buildCmd();
@@ -155,7 +134,6 @@ describe('buildCmd', () => {
 
         await buildCmd();
 
-        // One template copy: the dev output only
         const templateCopies = vi
             .mocked(scaffoldProject)
             .mock.calls.filter((call) => call[0] === '/templates/workshop');
@@ -194,8 +172,6 @@ describe('buildCmd', () => {
 
     it('should generate mod.info in branch folders from the source snapshot', async () => {
         vi.mocked(gatherPlanInput).mockReturnValue({
-            // Dist-always: hand-written plan inputs must carry the anchored
-            // dist output root, exactly what the real gatherPlanInput does.
             config: {
                 ...JSON.parse(JSON.stringify(project)),
                 outdir: distRootOf('/proj'),
@@ -223,8 +199,6 @@ describe('buildCmd', () => {
 
     it('should skip mod.info generation when the snapshot says it exists', async () => {
         vi.mocked(gatherPlanInput).mockReturnValue({
-            // Dist-always: anchored dist output root, as the real
-            // gatherPlanInput produces.
             config: {
                 ...JSON.parse(JSON.stringify(project)),
                 outdir: distRootOf('/proj'),
@@ -336,7 +310,6 @@ describe('buildCmd', () => {
 
         await buildCmd();
 
-        // Nothing may touch the output: the previous build must survive.
         expect(fs.rmSync).not.toHaveBeenCalled();
         expect(fs.mkdirSync).not.toHaveBeenCalled();
         expect(scaffoldProject).not.toHaveBeenCalled();
@@ -479,7 +452,6 @@ describe('buildCmd', () => {
     });
 
     it('should still build the dev output when the main output is locked', async () => {
-        // First rmSync call is the main variant's removeDir: simulate a lock.
         vi.mocked(fs.rmSync).mockImplementationOnce(() => {
             const e = new Error('not empty') as NodeJS.ErrnoException;
             e.code = 'ENOTEMPTY';
@@ -493,7 +465,6 @@ describe('buildCmd', () => {
             `Cannot delete '${distRootOf('/proj').replace(/\\/g, '/')}/Test Project' — the folder is in use by another program`,
         );
 
-        // The dev variant was still planned and executed.
         expect(fs.writeFileSync).toHaveBeenCalledWith(
             expect.stringMatching(/dev_branch\/workshop\.txt$/),
             expect.anything(),
@@ -501,10 +472,6 @@ describe('buildCmd', () => {
     });
 
     it('does not print the first-build URL when not standalone', async () => {
-        // markStandaloneBin() fires only in the bin entry (index.ts), so an
-        // in-process buildCmd() run (tests, API hosts, the extension) keeps
-        // the standalone gate OFF: the first-build URL print must neither
-        // run nor consume the marker file.
         await buildCmd();
 
         const infoLines = vi
@@ -513,10 +480,6 @@ describe('buildCmd', () => {
             .join('\n');
         expect(infoLines).not.toContain('escapepz.github.io');
 
-        // No marker write may even be attempted through fs, and the fake
-        // home's real disk (vitest.setup.ts) holds no marker either —
-        // fs is module-mocked here, so the disk check goes through the
-        // actual fs.
         expect(
             vi
                 .mocked(fs.writeFileSync)
@@ -535,7 +498,6 @@ describe('buildCmd', () => {
     });
 
     describe('json envelope (d11-F1)', () => {
-        /** Parses the v1 envelopes printed through logger.log. */
         const jsonEnvelopes = (): any[] =>
             logger.log.mock.calls
                 .map((call) => String(call[0]))
@@ -568,7 +530,6 @@ describe('buildCmd', () => {
     });
 
     describe('missing mod folder pre-check (d13-U3)', () => {
-        /** A 3-mod project whose middle mod's folder is broken (absent). */
         const threeModProject = {
             workshop: {
                 id: 12345,
@@ -588,7 +549,6 @@ describe('buildCmd', () => {
             vi.mocked(resolveProjectConfig).mockImplementation(
                 () => JSON.parse(JSON.stringify(threeModProject)) as any,
             );
-            // Only the two healthy mod folders exist on the mocked disk.
             vi.mocked(fs.existsSync).mockImplementation((p: any) => {
                 const normalized = String(p).replace(/\\/g, '/');
                 return (
@@ -604,14 +564,10 @@ describe('buildCmd', () => {
                 (name: string) => name === 'both',
             );
 
-            // The whole run still exits non-zero after the survivors were
-            // copied (the existing aggregate-partial semantics).
             await expect(buildCmd()).rejects.toThrow(
                 /mod mod_broken is missing on disk/,
             );
 
-            // The missing folder is named as a per-mod diagnosis, not a
-            // raw ENOENT — once per variant.
             expect(logger.error).toHaveBeenCalledTimes(2);
             for (const call of vi.mocked(logger.error).mock.calls) {
                 expect((call[0] as Error).message).toMatch(
@@ -619,8 +575,6 @@ describe('buildCmd', () => {
                 );
             }
 
-            // The survivors still copied — including mod_ok2, which the
-            // old mid-plan ENOENT abort lost. No copy names the broken mod.
             const copiedFroms = vi
                 .mocked(scaffoldProject)
                 .mock.calls.map((call) => String(call[0]));
@@ -634,7 +588,6 @@ describe('buildCmd', () => {
                 copiedFroms.some((from) => from.endsWith('mod_broken')),
             ).toBe(false);
 
-            // Per-mod outcome summary on the aggregate (--both) build.
             const infoLines = vi
                 .mocked(logger.info)
                 .mock.calls.map((call) => String(call[0]));
@@ -647,7 +600,6 @@ describe('buildCmd', () => {
         });
 
         it('adds no summary line to a single-variant build (d13-U3 aggregate-only)', async () => {
-            // Every scheduled mod folder exists — the healthy shape.
             vi.mocked(fs.existsSync).mockImplementation((p: any) => {
                 const normalized = String(p).replace(/\\/g, '/');
                 return (
@@ -671,7 +623,6 @@ describe('buildCmd', () => {
             vi.mocked(hasFlag).mockImplementation(
                 (name: string) => name === 'both',
             );
-            // Every scheduled mod folder exists — the healthy shape.
             vi.mocked(fs.existsSync).mockImplementation((p: any) => {
                 const normalized = String(p).replace(/\\/g, '/');
                 return (

@@ -37,13 +37,9 @@ export interface MigrationUpgradeOptions {
  * Helpers for detecting and upgrading legacy file shapes.
  */
 export const migration = {
-    /**
-     * Detects if a project.json needs migration.
-     */
     checkProject: (config: any): MigrationResult => {
         const issues: string[] = [];
 
-        // Legacy: deprecated root fields
         if ('title' in config) issues.push('root "title" is deprecated');
         if ('authors' in config)
             issues.push(
@@ -51,14 +47,9 @@ export const migration = {
             );
         if ('id' in config) issues.push('root "id" is deprecated');
 
-        // Legacy: workshop.excludes has moved to root excludes
         if (config.workshop && 'excludes' in config.workshop) {
             issues.push('"workshop.excludes" has moved to root');
         }
-
-        // Legacy: IWorshopConfig vs IWorkshopConfig (typo in code but might exist in JSON if we strict-check)
-        // Actually the typo is in the code's interface name, not necessarily the JSON key.
-        // But data-model says "IWorshopConfig rename and WorkshopTags sync".
 
         if (issues.length > 0) {
             return {
@@ -70,12 +61,6 @@ export const migration = {
         return { needsMigration: false };
     },
 
-    /**
-     * Upgrades a project.json to the current shape. Never drops data: a
-     * root field with no direct modern home is MOVED onto a mod (when there
-     * is exactly one unambiguous target) or KEPT in place with a notice —
-     * never silently deleted (sweep d16-B2).
-     */
     upgradeProject: (
         config: any,
         options: MigrationUpgradeOptions = {},
@@ -84,23 +69,16 @@ export const migration = {
 
         if (!upgraded.workshop) upgraded.workshop = {};
 
-        // Migrate root id to workshop.id
         if ('id' in upgraded && upgraded.workshop.id === undefined) {
             upgraded.workshop.id = upgraded.id;
         }
         delete upgraded.id;
 
-        // Migrate root title to workshop.title
         if ('title' in upgraded && upgraded.workshop.title === undefined) {
             upgraded.workshop.title = upgraded.title;
         }
         delete upgraded.title;
 
-        // Migrate root authors. The mod data model has no workshop-level
-        // authors list — authorship lives on each mod (`author`). To keep
-        // the migration lossless: with exactly one mod that has no author
-        // yet, the value MOVES onto that mod; otherwise the root field is
-        // KEPT as-is (still deprecated) so nothing is lost (d16-B2).
         if ('authors' in upgraded) {
             const authors = upgraded.authors;
             const modIds =
@@ -136,7 +114,6 @@ export const migration = {
             }
         }
 
-        // Migrate workshop.excludes to root excludes
         if (upgraded.workshop.excludes !== undefined) {
             if (
                 upgraded.excludes === undefined ||
@@ -164,15 +141,6 @@ export const migration = {
         return upgraded as IProjectConfig;
     },
 
-    /**
-     * Detects if config.json needs migration.
-     *
-     * Dist-always amendment (2026-11-12): `outdir` is no longer a required
-     * field — an unconfigured global config is a legitimate pure-build
-     * state, never a migration trigger. A missing outdir on a config that
-     * needs migration for OTHER reasons still gets the v1→v2 stamp in
-     * upgradeConfig (the migrating user keeps their Workshop target).
-     */
     checkConfig: (config: any): MigrationResult => {
         const issues: string[] = [];
         if (config.useSymlinks === undefined)
@@ -191,10 +159,6 @@ export const migration = {
         return { needsMigration: false };
     },
 
-    /**
-     * Upgrades config.json to the current shape. Pure: the legacy backup
-     * read and the platform default outdir come in through hostOptions.
-     */
     upgradeConfig: (
         config: any,
         hostOptions: MigrationHostOptions = {},
@@ -221,9 +185,7 @@ export const migration = {
             try {
                 const backup = hostOptions.readBackupOutdir?.();
                 if (backup) upgraded.outdir = backup;
-            } catch {
-                // Fall through
-            }
+            } catch {}
             if (!upgraded.outdir && hostOptions.defaultOutdir) {
                 upgraded.outdir = hostOptions.defaultOutdir;
             }
@@ -232,9 +194,6 @@ export const migration = {
         return upgraded;
     },
 
-    /**
-     * Upgrades mod.info content.
-     */
     upgradeModInfo: (content: string): string => {
         const lines = content
             .split('\n')
@@ -251,7 +210,6 @@ export const migration = {
             }
         });
 
-        // Ensure required fields
         if (!map.has('id')) map.set('id', 'new_mod');
         if (!map.has('name')) map.set('name', 'New Mod');
         if (!map.has('description'))
@@ -261,10 +219,6 @@ export const migration = {
             .map(([k, v]) => `${k}=${v}`)
             .join('\n');
     },
-    /**
-     * Parses mod.info content into a partial IModConfig.
-     * Delegates to the shared parser in modInfoParser.ts.
-     */
     parseModInfo: (content: string): Partial<IModConfig> & { id?: string } =>
         parseModInfoText(content),
 };

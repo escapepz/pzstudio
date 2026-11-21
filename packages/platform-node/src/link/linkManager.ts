@@ -211,16 +211,10 @@ export function normalizeLinkTarget(
     return platform === 'win32' ? resolved.toLowerCase() : resolved;
 }
 
-/** dev/ino equality across bigint and plain stats, via BigInt coercion. */
 function sameIdentity(a: StatsLike, b: StatsLike): boolean {
     return BigInt(a.dev) === BigInt(b.dev) && BigInt(a.ino) === BigInt(b.ino);
 }
 
-/**
- * Stage 3 for one side of the identity check: bigint-stat `p`; ENOENT maps
- * to the DANGLING_LINK detail, any other error rethrows. Shared by the
- * cascade and the post-attach verification.
- */
 async function statIdentityOrDangling(
     fs: LinkFs,
     p: string,
@@ -253,7 +247,6 @@ export async function inspectWorkshopLink(
     const linkDir = pathImpl.dirname(W);
     const normalizedD = normalizeLinkTarget(D, linkDir, opts.platform);
 
-    // Stage 1: entry type. ENOENT means nothing occupies the slot.
     let entry: StatsLike;
     try {
         entry = await fs.lstat(W);
@@ -291,7 +284,6 @@ export async function inspectWorkshopLink(
     }
 
     if (entry.isDirectory()) {
-        // A real directory occupies the slot; Task 2 classifies further.
         return { state: 'CONFLICT_REAL_DIR' };
     }
 
@@ -301,7 +293,6 @@ export async function inspectWorkshopLink(
     };
 }
 
-/** Stages 2-4 for an entry that is a link: target, identity, ownership. */
 async function classifyLinkTarget(
     fs: LinkFs,
     W: string,
@@ -311,7 +302,6 @@ async function classifyLinkTarget(
     rawTarget: string,
     opts: InspectWorkshopLinkOptions,
 ): Promise<WorkshopLinkInspection> {
-    // Stage 2: the target must resolve to the dist directory.
     const normalizedTarget = normalizeLinkTarget(
         rawTarget,
         linkDir,
@@ -325,7 +315,6 @@ async function classifyLinkTarget(
         };
     }
 
-    // Stage 3: identity — following the link must land on D itself.
     const statsW = await statIdentityOrDangling(fs, W);
     if ('dangling' in statsW) {
         return { state: 'DANGLING_LINK', rawTarget, detail: statsW.dangling };
@@ -342,8 +331,6 @@ async function classifyLinkTarget(
         };
     }
 
-    // Stage 4: ownership — only manage a dist directory carrying our
-    // marker. The default (no reader injected) is "marker absent".
     const marker = opts.readMarker ? await opts.readMarker(D) : undefined;
     if (marker === undefined || marker === null) {
         return {
@@ -356,13 +343,8 @@ async function classifyLinkTarget(
     return { state: 'OK_LINK', rawTarget };
 }
 
-// ---------------------------------------------------------------------------
-// Attach / detach — the attachment rules on top of the cascade.
-// ---------------------------------------------------------------------------
-
 const WORKSHOP_TXT = 'workshop.txt';
 
-/** One-line failure description with the errno code, for `detail`. */
 function describeFailure(op: string, subject: string, error: unknown): string {
     const code = errnoOf(error);
     const message = error instanceof Error ? error.message : String(error);
@@ -370,16 +352,11 @@ function describeFailure(op: string, subject: string, error: unknown): string {
     return `${op} ${subject} failed${withCode}: ${message}`;
 }
 
-/**
- * Backup sibling name: `<W>.backup-<ISO-timestamp>` with `:`/`.` flattened
- * to `-` so the stamp is a legal single path segment on Windows too.
- */
 function backupPathFor(W: string, now: Date): string {
     const stamp = now.toISOString().replace(/[:.]/g, '-');
     return `${W}.backup-${stamp}`;
 }
 
-/** Every uncommented `id=` line's value in workshop.txt-style text. */
 function extractWorkshopIds(text: string): string[] {
     const ids: string[] = [];
     for (const line of text.split(/\r?\n/)) {
@@ -391,14 +368,6 @@ function extractWorkshopIds(text: string): string[] {
     return ids;
 }
 
-/**
- * Refuse-path diagnosis: does `W/workshop.txt` carry an `id=` value the
- * source text does not know? (A lost `id=` would make the next
- * workshop_build_item publish a duplicate item instead of updating.)
- * Reading `W/workshop.txt` is allowed — mutation is not. `undefined` when
- * the diagnosis cannot know: no source text provided, or the built copy is
- * unreadable.
- */
 async function diagnoseUnsyncedWorkshopId(
     realFs: RealFs,
     W: string,
@@ -415,15 +384,6 @@ async function diagnoseUnsyncedWorkshopId(
     return extractWorkshopIds(built).some((id) => !sourceIds.has(id));
 }
 
-/**
- * Post-mutation verification for attach: the identity + ownership stages of
- * the cascade, without the target-normalization stage. The link was just
- * created pointing at the resolved `D` directly, and re-normalizing its raw
- * target through `opts.platform` semantics could disagree with the host
- * filesystem on cross-flavor rows (a 'dir'-symlink attach on a win32 host);
- * identity subsumes the target check — a re-pointed or broken link cannot
- * produce D's dev/ino.
- */
 async function verifyAttachedLink(
     fs: LinkFs,
     W: string,
@@ -477,12 +437,6 @@ async function verifyAttachedLink(
     return { state: 'OK_LINK' };
 }
 
-/**
- * Creates the link in an empty slot and verifies it through the seam. Only
- * ever called with the slot already empty: nothing at `W` (ATTACHABLE), a
- * slot emptied by rmdir (auto-replace), a slot vacated by the backup rename,
- * or a foreign link just unlinked by forceLink.
- */
 async function attachIntoEmptySlot(
     fs: LinkFs,
     realFs: RealFs,
@@ -496,9 +450,6 @@ async function attachIntoEmptySlot(
     try {
         await realFs.symlink(D, W, type);
     } catch (e) {
-        // The slot is still empty; a retry after the host resolves the
-        // cause (EBUSY open handles, missing 'dir'-symlink privilege)
-        // works. Surface, never throw past the caller.
         return {
             ok: false,
             state: 'ATTACHABLE',
@@ -508,12 +459,6 @@ async function attachIntoEmptySlot(
     }
     const post = await verifyAttachedLink(fs, W, D, opts);
     if (post.state === 'OK_LINK' || post.state === 'UNOWNED_TARGET') {
-        // UNOWNED_TARGET post-attach is a link this call itself created and
-        // identity-verified against D — unlike the PRE-state refusal, the
-        // slot was not filled by someone else; only the ownership-marker
-        // stage could not confirm (no reader injected, or the build has not
-        // written the marker yet). Doctor owns that signal; the detail
-        // carries the ERR_UNOWNED_DIST_TARGET code for the host surface.
         return {
             ok: true,
             state: post.state,
@@ -529,7 +474,6 @@ async function attachIntoEmptySlot(
     };
 }
 
-/** Attachment table for `lstat(W)` = real directory (spec §4). */
 async function attachOverRealDir(
     fs: LinkFs,
     realFs: RealFs,
@@ -537,14 +481,8 @@ async function attachOverRealDir(
     D: string,
     opts: AttachWorkshopLinkOptions,
 ): Promise<AttachResult> {
-    // Diagnosis-only reads at W: readdir for the item count, readFile for
-    // the unsynced-id flag. Reading for diagnosis is allowed at W; mutation
-    // is not (except the two table actions below).
     const entries = await fs.readdir(W);
     if (entries.length === 0) {
-        // Auto-replace: rmdir is the kernel-level TOCTOU guard — a dir that
-        // became non-empty between readdir and rmdir fails ENOTEMPTY, and
-        // nothing is ever deleted recursively.
         try {
             await realFs.rmdir(W);
         } catch (e) {
@@ -574,8 +512,6 @@ async function attachOverRealDir(
     try {
         await realFs.rename(W, backupPath);
     } catch (e) {
-        // EBUSY/EPERM (open handles: PZ, Steam, Explorer) abort cleanly:
-        // nothing deleted, no symlink, W intact.
         return {
             ok: false,
             state: 'CONFLICT_REAL_DIR',
@@ -601,8 +537,6 @@ export async function attachWorkshopLink(
     D: string,
     opts: AttachWorkshopLinkOptions,
 ): Promise<AttachResult> {
-    // The junction target must be absolute before symlink (the host's own
-    // path semantics — `D` arrives in host form regardless of the flavor).
     const absoluteD = pathResolve(D);
     const pre = await inspectWorkshopLink(fs, W, absoluteD, {
         platform: opts.platform,
@@ -611,7 +545,6 @@ export async function attachWorkshopLink(
 
     switch (pre.state) {
         case 'OK_LINK':
-            // The correct, owned link is already in place — idempotent.
             return { ok: true, state: 'OK_LINK' };
         case 'ATTACHABLE':
             return attachIntoEmptySlot(fs, realFs, W, absoluteD, opts, {});
@@ -621,13 +554,9 @@ export async function attachWorkshopLink(
             if (!opts.forceLink) {
                 return { ok: false, state: 'FOREIGN_LINK', detail: pre.detail };
             }
-            // Explicit relink: cascade first (rawTarget recorded in `pre`),
-            // then the only two mutations ever allowed at `W` in sequence:
-            // unlink(W) + symlink(D, W, type).
             try {
                 await realFs.unlink(W);
             } catch (e) {
-                // The foreign link is still in place — slot unchanged.
                 return {
                     ok: false,
                     state: 'FOREIGN_LINK',
@@ -636,11 +565,6 @@ export async function attachWorkshopLink(
             }
             return attachIntoEmptySlot(fs, realFs, W, absoluteD, opts, {});
         default:
-            // DANGLING_LINK: the slot already holds a link to D — re-creating
-            // it cannot fix a missing D (the build recreates D first).
-            // NOT_DIRECTORY / UNOWNED_TARGET / IDENTITY_MISMATCH: fail-closed,
-            // never even with forceLink — identity mismatch means the target
-            // itself is wrong; surface, don't fix.
             return { ok: false, state: pre.state, detail: pre.detail };
     }
 }
@@ -692,8 +616,6 @@ export async function detachWorkshopLink(
     } catch (e) {
         const code = errnoOf(e);
         if (code === 'ENOTEMPTY' || code === 'EPERM' || code === 'EISDIR') {
-            // Kernel refusal — TOCTOU swap or OS protection. Surface
-            // cleanly; zero deletions; never fall back to rm/rmdir.
             const expected =
                 opts.platform === 'win32' ? 'junction' : 'dir symlink';
             return {

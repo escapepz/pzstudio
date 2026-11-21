@@ -46,9 +46,6 @@ describe('generateWorkshopVdf', () => {
         const text = readFileSync(outPath, 'utf-8');
         expect(text.startsWith('"workshopitem"\n{\n')).toBe(true);
 
-        // contentfolder: ABSOLUTE, points at the item's Contents folder.
-        // VDF values escape backslashes SteamCMD-style (\\), so unescape
-        // before comparing with the real path.
         const cf = /"contentfolder"\s+"([^"]+)"/
             .exec(text)![1]
             .replace(/\\\\/g, '\\');
@@ -57,15 +54,11 @@ describe('generateWorkshopVdf', () => {
             true,
         );
 
-        // Footer: Workshop ID empty until first upload, one Mod ID per mod.
         expect(text).toContain('Workshop ID: \n');
         expect(text).toContain('Mod ID: my_mod');
-        // Description body + footer compose the description value (VDF
-        // quoted values keep raw newlines, like SteamCMD's own writer).
         expect(text).toContain('A mod.');
         expect(text).toContain('Second line.');
 
-        // Printed steamcmd command carries the quoted VDF path.
         expect(res.command).toBe(
             `steamcmd +login <user> +workshop_build_item "${outPath}" +quit`,
         );
@@ -114,10 +107,6 @@ describe('generateWorkshopVdf', () => {
         expect(res.publishedfileid).toBe('123456');
     });
 
-    // d11-F8: an invalid --visibility FLAG value is a usage error (exit 2,
-    // parse-stage message style), while a bad visibility inside workshop.txt
-    // is a project-data problem (exit 1) — two different error classes for
-    // two different layers, pinned here (reviewer-identified test gap).
     it('--visibility flag path: invalid value is a CliUsageError (exit 2) with the parse-stage message', async () => {
         await expect(
             generateWorkshopVdf({
@@ -161,7 +150,6 @@ describe('generateWorkshopVdf', () => {
         expect(src).not.toContain('child_process');
         expect(src).not.toContain('spawn');
         expect(src).not.toContain('exec(');
-        // And the command is wired into the CLI entry.
         const cli = readFileSync(
             resolve(__dirname, '../../packages/cli/src/lib/cli.ts'),
             'utf-8',

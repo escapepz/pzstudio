@@ -4,7 +4,6 @@ import { asModNode } from '../providers/projectExplorer';
 import { pickModId, readModConfig } from '../util/project';
 import { t } from '../util/l10n';
 
-/** Editable mod fields, in menu order (mirrors the modconfig whitelist). */
 const FIELD_KEYS = [
     'name',
     'description',
@@ -26,7 +25,6 @@ const FIELD_KEYS = [
 
 const MODINFO_VALUES = ['auto', 'skip', 'auto-if-missing'] as const;
 
-/** Build-inclusion choices; a function so labels re-translate on language change. */
 function getStateChoices(): Array<{
     label: string;
     action: 'include' | 'devonly' | 'exclude';

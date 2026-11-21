@@ -69,20 +69,6 @@ addHelp(
         pzstudio build --verbose     - Enable diagnostic output.`,
 );
 
-/**
- * Executes the operations produced by planBuild. This is the only I/O layer of
- * the build: everything above it is pure planning. Exported so the sync
- * engine's filesystem-based executor can be kept in parity by tests.
- *
- * When `options.outputRoot` declares the configured build output root, every
- * mutating operation is guarded against alias routes before it touches the
- * filesystem (F23-WRITE P0, doc 17 §11.4 — the CLI tier of the Core guard):
- * a symbolic link or junction anywhere on a mutation's route below the root —
- * including a write's leaf — aborts the plan with an explicit refusal naming
- * the link; operations that already ran remain on disk (disclosed partial
- * output, the existing mid-plan abort shape). Without an output root the
- * executor keeps today's behavior.
- */
 export function executeBuildPlan(
     operations: FileOperation[],
     options?: CliMutationRouteOptions,
@@ -147,22 +133,14 @@ export function executeBuildPlan(
 export async function buildCmd() {
     const projectConfig = resolveProjectConfig();
 
-    // Check if we are in a project directory
     if (!projectConfig) {
         throw new CliError('No pzstudio project found.');
     }
 
     const startTime = performance.now();
 
-    // Dist-always amendment (2026-11-12): the canonical build root is
-    // ALWAYS `<projectRoot>/dist` (anchored in gatherPlanInput); the
-    // user's outdir (any tier) is the DEPLOYMENT target. `projectRoot`
-    // resolved once: the marker identity (projectId hash) and the plan
-    // input must share the project root's canonical spelling, or the
-    // ownership check never matches (Task 3 review carry-forward).
     const projectPath = resolve(projectDir());
     const distRoot = distRootOf(projectPath);
-    // Invalid --materialize values are a usage error (shared parser).
     const materialization: MaterializationResolution = resolveMaterialization({
         projectRoot: projectPath,
         effectiveOutdir: projectConfig.outdir,
@@ -171,8 +149,6 @@ export async function buildCmd() {
         flagMaterialize: parseMaterializeFlag(extractFlag('materialize')),
         noMaterialize: hasFlag('no-materialize'),
     });
-    // Boundary refusal (data safety): an invalid deployment target is a
-    // hard error, never a silent skip-to-build-only.
     if (materialization.refused) {
         throw new CliError(materialization.refused, {
             tryHint:
@@ -200,10 +176,6 @@ export async function buildCmd() {
         `Flags: production=${isProduction}, development=${isDevelopment}, both=${isBoth}`,
     );
 
-    // Target resolution: explicit flags win over project.json build.target,
-    // which in turn wins over the default (main only). Mutually exclusive
-    // flag combinations are rejected by validateInvocation (CLI-1) before
-    // the handler runs.
     const configTarget = projectConfig.build?.target;
     let buildMain = false;
     let buildDev = false;
@@ -220,18 +192,11 @@ export async function buildCmd() {
     } else if (configTarget === 'development') {
         buildDev = true;
     } else {
-        // 'production' or unset — the main output only
         buildMain = true;
     }
     verbose(`Targets: main=${buildMain}, development=${buildDev}`);
 
-    // d13-U3: a build that runs BOTH workshop outputs is the aggregate of
-    // two variant outcomes (CLI-6); it gets a per-mod outcome summary line
-    // after each variant's copy phase.
     const isAggregateBuild = buildMain && buildDev;
-    // Mod folders live directly under the project root (planModOperations
-    // copies `<projectDir>/<modId>`). The pre-check runs on the host side —
-    // the pure planner cannot probe the disk.
     const modFolderMissing = (modId: string) =>
         !existsSync(join(projectPath, modId));
     const missingOnDiskSuffix = (missingMods: string[]) =>
@@ -248,10 +213,6 @@ export async function buildCmd() {
         templateWorkshopPath,
     );
 
-    // Each variant is isolated: a locked output folder in one target must
-    // not prevent the other target from being built (--both). The recorded
-    // outcomes decide the exit code mechanically (CLI-6): any failure part
-    // fails the command after every variant got its chance.
     const variantOutcomes: OperationOutcome[] = [];
     const variantErrors: string[] = [];
     const builtItems: Array<{
@@ -259,7 +220,6 @@ export async function buildCmd() {
         variant: 'main' | 'development';
     }> = [];
 
-    // Build main workshop (Default/project.json target or explicit --production)
     if (buildMain) {
         try {
             const mainModIds = collectIncludedModIds(projectConfig, 'main');
@@ -280,15 +240,6 @@ export async function buildCmd() {
                     );
                 }
                 info(`\nBuilding main workshop...`);
-                // d13-U3: pre-check every scheduled mod folder before the
-                // copy phase. A missing folder used to die mid-plan as a
-                // raw ENOENT ('...scandir .../<modId>'), naming the mod
-                // only as a filesystem path inside the error and leaving
-                // the user guessing which mods were copied. Now each
-                // missing folder is a named, per-mod error that fails THIS
-                // mod while the survivors proceed; the variant still fails
-                // and the run still exits non-zero — the existing
-                // aggregate-partial semantics, unchanged.
                 const missingMods = mainModIds.filter(modFolderMissing);
                 for (const modId of missingMods) {
                     error(
@@ -333,19 +284,11 @@ export async function buildCmd() {
                 } else {
                     variantOutcomes.push(OUTCOME_SUCCESS);
                     builtItems.push({
-                        // The ANCHORED plan config carries the dist output root
-                        // (the raw project config's outdir is the deployment
-                        // target and may be unset — pure build mode).
                         name: basename(
                             resolveBuildOutputPath(planInput.config, 'main'),
                         ),
                         variant: 'main',
                     });
-                    // The dist-side ownership marker is written on EVERY
-                    // successful variant build (dist-always: there is no
-                    // legacy mode left to gate it). A failure never fails the
-                    // variant — fail-closed downstream (a missing marker
-                    // surfaces as UNOWNED_TARGET).
                     try {
                         await writeBuiltItemMarker(
                             planInput.config,
@@ -373,7 +316,6 @@ export async function buildCmd() {
         }
     }
 
-    // Build dev_branch workshop (project.json target, --development or --both)
     if (buildDev) {
         try {
             const devModIds = collectIncludedModIds(
@@ -387,9 +329,6 @@ export async function buildCmd() {
                 variantOutcomes.push(OUTCOME_WARNING);
             } else {
                 info(`\nBuilding dev_branch workshop...`);
-                // d13-U3: the same per-mod pre-check as the main variant —
-                // a missing folder is a named error whose mod fails while
-                // the survivors proceed (see the main block above).
                 const missingMods = devModIds.filter(modFolderMissing);
                 for (const modId of missingMods) {
                     error(
@@ -469,13 +408,6 @@ export async function buildCmd() {
         }
     }
 
-    // Materialize step: expose each successfully built item to the game —
-    // a junction per item (mode 'symlink', the default) or a verified,
-    // reconciled copy (mode 'copy'), into the configured deployment root.
-    // NON-FATAL by contract (Review Focus 4) — every refusal/failure is
-    // recorded and surfaced. Runs BEFORE the failure throw: a failed
-    // variant must not orphan the deployment of a variant that DID build
-    // (final review fix wave #4). No target / --no-materialize: hard no-op.
     const sourceTexts: Record<string, string> = {};
     for (const built of builtItems) {
         sourceTexts[built.name] = workshopTextForVariant(
@@ -501,11 +433,6 @@ export async function buildCmd() {
     const endTime = performance.now();
     info(`Build complete in ${((endTime - startTime) / 1000).toFixed(2)}s!`);
 
-    // Machine output (CLI-8, d11-F1): the envelope is the ONLY stdout
-    // content (every human line here is stderr). The items built plus the
-    // timing the completion line reports are the machine-relevant result.
-    // A failed build never reaches this point: stdout stays empty and the
-    // error goes to stderr (CLI-8 failure semantics).
     if (hasFlag('json')) {
         printJsonEnvelope('build', {
             items: builtItems,
@@ -513,12 +440,6 @@ export async function buildCmd() {
         });
     }
 
-    // First-success URL print (one-time per machine, marker-file pinned):
-    // only a standalone bin run prints or consumes the marker — an
-    // extension-hosted in-process build must never print nor pin it, so
-    // the terminal CLI still gets its first print. Progress-class info():
-    // stderr, --quiet-suppressible, stdout untouched. Printed after the
-    // completion line so the CTA reads as the closing note of the build.
     if (isStandaloneBin()) {
         maybePrintFirstBuildUrl((line) => info(line));
     }

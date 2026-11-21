@@ -55,9 +55,7 @@ export const OUTPUT_MARKER_FILENAME = '.pzstudio-output.json';
 
 const OUTPUT_MARKER_SCHEMA_VERSION = 1;
 const OUTPUT_MARKER_ENGINE = 'pzstudio';
-/** Length, in hex characters, of the projectId digest prefix (8 bytes). */
 const PROJECT_ID_HEX_LENGTH = 16;
-/** Fallback when the host did not provide an engine version. */
 const UNKNOWN_ENGINE_VERSION = 'unknown';
 
 /** Ownership marker written into every built item directory. */
@@ -92,18 +90,10 @@ export interface OutputMarkerInput {
     outputRoot?: string;
 }
 
-/** Minimal structural slice of the Web Crypto SubtleCrypto interface. */
 interface SubtleCryptoLike {
     digest(algorithm: 'SHA-256', data: Uint8Array): Promise<ArrayBuffer>;
 }
 
-/**
- * Canonical spelling of a project root for identity hashing: backslashes
- * fold to '/', trailing separators drop, and a Windows drive letter is
- * lowercased (the one case-insensitive path component — the same precedent
- * the executor's destination-chain comparison uses). Everything else
- * compares case-sensitively.
- */
 function canonicalProjectRoot(projectRoot: string): string {
     const unified = projectRoot.replace(/\\/g, '/').replace(/\/+$/, '');
     const driveMatch = /^([a-zA-Z]):/.exec(unified);
@@ -200,8 +190,6 @@ export async function writeOutputMarker(
         'write',
         `output marker tmp write '${tmpTarget}'`,
     );
-    // tmp first (write-ahead copy of the exact payload), then the final
-    // path, then the tmp cleanup — see the atomicity note in the header.
     await fs.write(tmpTarget, content);
     await fs.write(target, content);
     await fs.delete(tmpTarget);
@@ -234,15 +222,6 @@ export async function readOutputMarker(
         return undefined;
     }
 }
-
-// ---------------------------------------------------------------------------
-// Copy-slot marker — the deployment root's ownership trace (2026-11-12
-// amendment §6.1). DISTINCT from the output marker on purpose: a plain copy
-// of `dist/<Item>` already carries `.pzstudio-output.json`, so checking only
-// that file would misclassify a hand-copied, hand-edited folder as an
-// engine-managed slot. `projectId` reuses `computeProjectId` — one identity
-// implementation, two markers.
-// ---------------------------------------------------------------------------
 
 /** The copy-ownership marker every engine-managed copy slot carries. */
 export const COPY_MARKER_FILENAME = '.pzstudio-copy.json';

@@ -65,14 +65,13 @@ describe('project.json contract (core)', () => {
         it('applies the legacy shape migration before stamping', () => {
             const legacy = {
                 ...validConfig(),
-                title: 'Old Root Title', // deprecated root field
+                title: 'Old Root Title',
             };
 
             const result = migrateProject(legacy);
 
             expect(result.fromVersion).toBe(1);
             expect(result.migrations).toHaveLength(1);
-            // workshop.title was already set, so it wins over the root relic
             expect(result.config.workshop.title).toBe('Test Project');
             expect('title' in result.config).toBe(false);
             expect(result.config.schemaVersion).toBe(PROJECT_SCHEMA_VERSION);
@@ -105,7 +104,6 @@ describe('project.json contract (core)', () => {
             expect(project.uri).toBe(CONFIG_URI);
             expect(project.version).toBe(PROJECT_SCHEMA_VERSION);
             expect(project.migrations).toBeUndefined();
-            // normalize: poster/icon defaults materialized
             expect(project.config.mods.my_mod.poster).toBe('poster.png');
             expect(project.config.mods.my_mod.icon).toBe('icon.png');
         });
@@ -119,7 +117,6 @@ describe('project.json contract (core)', () => {
 
             const project = await loadProject(fs, CONFIG_URI);
 
-            // The reason line + the recorded move decision (d16-B2).
             expect(project.migrations).toHaveLength(2);
             expect(project.migrations).toContain(
                 "moved root authors to mod 'my_mod'",
@@ -139,8 +136,6 @@ describe('project.json contract (core)', () => {
 
             const project = await loadProject(fs, CONFIG_URI);
 
-            // The kept deprecated root field must NOT trip validation —
-            // the project stays loadable and the value survives verbatim.
             expect((project.config as any).authors).toEqual([
                 'OldAuthor',
                 'SecondAuthor',

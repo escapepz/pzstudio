@@ -18,8 +18,6 @@ describe('add command e2e', () => {
                     const dest = argsList[argsList.length - 1];
                     fs.mkdirSync(dest, { recursive: true });
                     fs.mkdirSync(path.join(dest, '.git'), { recursive: true });
-                    // Create a dummy template structure if needed, or just leave it empty
-                    // so it falls back to legacy if it wants to find something specific.
                     return {
                         status: 0,
                         stdout: Buffer.from(''),
@@ -41,7 +39,6 @@ describe('add command e2e', () => {
     });
 
     it('should add a new mod to an existing project', async () => {
-        // 1. Setup existing project
         workspace.write(
             'project.json',
             JSON.stringify({
@@ -60,7 +57,6 @@ describe('add command e2e', () => {
             }),
         );
 
-        // 2. Run add command
         const newModTitle = 'Second Mod';
         const newModId = 'second_mod';
         const result = await workspace.run('add', [newModTitle, newModId]);
@@ -69,15 +65,11 @@ describe('add command e2e', () => {
             workspace.assertSuccess(result);
             workspace.assertStderr(result, 'Command [add] completed');
 
-            // 3. Verify filesystem
             expect(workspace.exists(newModId)).toBe(true);
-            // The template might have media/lua or other structure, let's just check if it's a directory
 
-            // 4. Verify project.json update
             const config = workspace.readJson('project.json');
             expect(config.mods[newModId]).toBeDefined();
             expect(config.mods[newModId].name).toBe(newModTitle);
-            // Verify build.modInfo is NOT added (omission is the new default)
             expect(config.mods[newModId].build?.modInfo).toBeUndefined();
         } catch (e) {
             console.log('STDOUT:', result.stdout.join('\n'));

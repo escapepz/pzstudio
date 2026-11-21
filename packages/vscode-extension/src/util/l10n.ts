@@ -3,16 +3,6 @@ import { TextDecoder } from 'util';
 
 type Bundle = Record<string, string>;
 
-/**
- * Display-language override for the extension UI (pzstudio.language).
- *
- * 'auto' (default) leaves the bundle undefined so t() delegates to
- * vscode.l10n, which follows the VS Code display language. Any other
- * value loads the matching bundle file from the extension's l10n/ folder
- * so the UI can differ from VS Code itself. Strings rendered by VS Code
- * from the manifest (command titles, setting descriptions) always follow
- * the VS Code display language; that part is not overridable.
- */
 let bundle: Bundle | undefined;
 
 const decoder = new TextDecoder();
@@ -39,8 +29,6 @@ async function loadBundle(
         if (fileName === 'bundle.l10n.json') {
             return undefined;
         }
-        // Missing/unreadable locale file: fall back to the English bundle,
-        // and if even that fails stay on the vscode.l10n delegate.
         try {
             return await readBundle(
                 vscode.Uri.joinPath(
@@ -55,11 +43,6 @@ async function loadBundle(
     }
 }
 
-/**
- * Applies pzstudio.language: 'auto' clears the override, anything else
- * loads the locale bundle. Idempotent — call again whenever the setting
- * changes.
- */
 export async function initExtensionL10n(
     context: vscode.ExtensionContext,
 ): Promise<void> {
@@ -70,7 +53,6 @@ export async function initExtensionL10n(
         language === 'auto' ? undefined : await loadBundle(context, language);
 }
 
-/** Translates through the override bundle when active, else vscode.l10n. */
 export function t(
     message: string,
     ...args: Array<string | number | boolean>

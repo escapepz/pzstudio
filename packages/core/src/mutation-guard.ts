@@ -1,38 +1,3 @@
-/**
- * F23-WRITE P0 — alias-route containment at the Core mutation boundaries
- * (doc 17 §11.4, the contract-only interim containment).
- *
- * Every mutating operation must establish its physical route relative to the
- * configured output root before it touches the filesystem, using only the
- * existing ProjectFileSystem contract: the link type a host's list() already
- * reports (DirectoryEntry.type === 'symbolicLink').
- *
- * The invariant implemented (INV-B, permissive bound + route refusal):
- * - the configured output root itself is NEVER inspected (INV-A: a
- *   user-configured junction outdir is intentional alias resolution and must
- *   keep building);
- * - every path component strictly below the root on the operation's target
- *   must exist as a non-alias entry, or be missing entirely (fresh creation
- *   by this very operation) — an alias component anywhere on the route is
- *   refused explicitly BEFORE the mutation;
- * - the leaf is operation-specific (doc 17 §11.2): a delete may remove a
- *   link itself (leaf-local, target untouched — B1); a write never writes
- *   through one (class 5);
- * - a route component that cannot be verified (listing fails with anything
- *   other than "not there") fails the operation explicitly — an
- *   unverifiable route is never a silent skip, a warning, or a success.
- *
- * Disclosed residuals (doc 17 §11.4 "what the P0 does not stop"): alias
- * insertion or retargeting between this inspection and the OS call (TOCTOU —
- * narrowed by scan placement, not closed); hard-linked file leaves
- * (invisible to every listing); 8.3 short names; hosts whose list() cannot
- * report link types faithfully; E1 ownership destruction inside the resolved
- * root. Containment decides where a mutation lands — it is not an ownership
- * authorization (doc 15's boundary stands).
- *
- * This module is Core-internal: it is not re-exported through the package
- * index and adds no public API surface.
- */
 import type {
     DirectoryEntry,
     FileStat,
@@ -65,7 +30,6 @@ function pathSegments(path: string): string[] {
         .filter((segment) => segment !== '');
 }
 
-/** Folds a plan-space path to '/' separators (the scan's working space). */
 function normalizeRoute(path: string): string {
     const segments = pathSegments(path);
     const absolute = path.replace(/\\/g, '/').startsWith('/');
@@ -74,7 +38,6 @@ function normalizeRoute(path: string): string {
         : '/';
 }
 
-/** Joins scan-space segments, preserving any absolute prefix. */
 function joinRoute(...parts: string[]): string {
     const joined = parts
         .map((part) => part.replace(/\\/g, '/'))
@@ -83,11 +46,6 @@ function joinRoute(...parts: string[]): string {
     return joined.replace(/\/{2,}/g, '/');
 }
 
-/**
- * Locates `candidate` strictly inside `root`, segment-wise (null when not
- * inside). Same comparison semantics as execute.ts's segmentsBelow: only a
- * Windows drive prefix compares case-insensitively.
- */
 function segmentsBelow(root: string, candidate: string): string[] | null {
     const rootSegments = pathSegments(root);
     const candidateSegments = pathSegments(candidate);
@@ -244,9 +202,6 @@ export async function assertNoAliasRoute(
             );
         }
         if (isLeaf || entry.type !== 'directory') {
-            // A write onto an existing non-alias leaf (class 4 — ownership
-            // is E1's decision, not this guard's), or a non-directory
-            // component the OS itself will reject: no alias route either way.
             return;
         }
         current = joinRoute(current, entry.name);
@@ -320,7 +275,6 @@ export async function assertWritableOwnedOrEmptyDestination(
     throw unownedWriteDestinationError(operation, destination);
 }
 
-/** The E1 verdict for a destination: engine-owned, empty, or unproven. */
 async function destinationOwnership(
     fs: ProjectFileSystem,
     operation: string,
@@ -337,16 +291,6 @@ async function destinationOwnership(
         : 'unproven';
 }
 
-/**
- * Whether `candidate` denotes a location at or below `root`: an exact
- * segment match, or — the resolveDestinationChain witness rule — a
- * case-only spelling difference the filesystem itself resolves (a stat of
- * the candidate spelling succeeds). On a case-insensitive host the stored
- * root answers the variant spelling (same physical directory — engine
- * territory); on a case-sensitive host the stat fails and the case twin
- * is a distinct, unowned path. Windows drive prefixes compare
- * case-insensitively, as everywhere in plan space.
- */
 async function resolvesInsideRoot(
     fs: ProjectFileSystem,
     root: string,

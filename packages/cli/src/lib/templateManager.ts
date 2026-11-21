@@ -47,14 +47,6 @@ import { getTemplateTransport } from './transport';
 
 export type { TemplateCategory, GlobalConfig, ITemplateConfig };
 
-/**
- * Parses one ignore file's content into entries with the core engine's
- * semantics (trimmed, backslashes folded to '/', trailing slashes stripped,
- * blanks and comments dropped): the same shape readIgnoreRulesForDir
- * produces on the ProjectFileSystem contract. Returns null when nothing
- * usable remains — a directory whose rule files all parse empty carries no
- * rules at all.
- */
 function parseIgnoreEntries(content: string): string[] | null {
     const lines = content
         .split(/\r?\n/)
@@ -65,29 +57,12 @@ function parseIgnoreEntries(content: string): string[] | null {
     return lines.length > 0 ? lines : null;
 }
 
-/**
- * Creates a filter for fs.cpSync derived from .gitignore/.pzstudioignore or
- * hardcoded defaults. Matching is delegated to the core engine
- * (createIgnoreMatcher): each directory's rule set carries both files, the
- * closest directory carrying rules between the entry's parent and the copy
- * root decides, and within that level .gitignore entries are added first so
- * .pzstudioignore outranks them. The basenames mod.info, .pzstudioignore
- * and .gitignore are rails the engine always keeps regardless of rules.
- * @param sourceRoot The root directory of the copy operation
- * @param options Filter options
- * @returns A filter function compatible with fs.cpSync
- */
 export function createIgnoreFilter(
     sourceRoot: string,
     options: { excludeIgnoreFile?: boolean; ignoreDotFiles?: boolean } = {},
 ): (src: string, dest: string) => boolean {
-    // Cache for parsed rule sets per directory (both rule files, read once)
     const rulesCache: Record<string, IgnoreRuleSet> = {};
 
-    /**
-     * Resolves and caches the ignore rules of a specific directory:
-     * its .pzstudioignore and .gitignore entries.
-     */
     const getRulesForDir = (dir: string): IgnoreRuleSet => {
         if (rulesCache[dir]) return rulesCache[dir];
 
@@ -121,12 +96,11 @@ export function createIgnoreFilter(
 
     return (src: string) => {
         let relToRoot = relative(sourceRoot, src);
-        if (!relToRoot) return true; // Include root itself
+        if (!relToRoot) return true;
         relToRoot = relToRoot.replace(/\\/g, '/');
 
         const name = basename(src);
 
-        // Rule 0: Built-in defaults always apply
         if (name === '.gitkeep') return false;
 
         if (
@@ -139,14 +113,12 @@ export function createIgnoreFilter(
             return false;
         }
 
-        // Rule 0.5: Optional dotfile ignore (matching copyFolderSync legacy behavior)
         if (options.ignoreDotFiles) {
             if (name.startsWith('.') && name !== '.pzstudioignore') {
                 return false;
             }
         }
 
-        // Rule 1: .pzstudioignore is special
         if (
             relToRoot === '.pzstudioignore' ||
             relToRoot.endsWith('/.pzstudioignore')
@@ -154,9 +126,6 @@ export function createIgnoreFilter(
             return !options.excludeIgnoreFile;
         }
 
-        // Rule 2: The closest directory carrying rules between the entry's
-        // parent and the source root decides (the core engine's walk — a
-        // directory entry is governed by its parent's rules, never its own).
         const segments = relToRoot.split('/');
         const rulesByDir: Record<string, IgnoreRuleSet> = {};
         for (let end = segments.length - 1; end >= 0; end -= 1) {
@@ -168,7 +137,7 @@ export function createIgnoreFilter(
             const ruleSet = getRulesForDir(dir);
             if (ruleSet.pzstudio !== null || ruleSet.git !== null) {
                 rulesByDir[key] = ruleSet;
-                break; // Closest one wins
+                break;
             }
         }
 
@@ -179,7 +148,6 @@ export function createIgnoreFilter(
 const OFFICIAL_ORG = 'escapepz';
 
 function getCachePathFromUrl(url: string): string {
-    // Expected: https://github.com/user/repo.git OR user/repo
     const parts = url
         .replace('https://github.com/', '')
         .replace('.git', '')
@@ -191,7 +159,6 @@ function getCachePathFromUrl(url: string): string {
         return join(getConfigDir(), 'templates', user, repo);
     }
 
-    // Fallback if URL is weird
     return join(
         getConfigDir(),
         'templates',
@@ -204,15 +171,6 @@ function isOfficialTemplate(url: string): boolean {
     return url.includes(`github.com/${OFFICIAL_ORG}/`) || !url.includes('/');
 }
 
-/**
- * Parses a template URL/string into url and ref.
- * Supports:
- * - user/repo
- * - user/repo@tag
- * - user/repo#branch
- * - https://github.com/user/repo.git
- * - https://github.com/user/repo.git@tag
- */
 export function parseTemplateUrl(input: string): { url: string; ref?: string } {
     let url = input;
     let ref: string | undefined;
@@ -238,16 +196,6 @@ export function getConfigPath(): string {
     return join(getConfigDir(), 'config.json');
 }
 
-/**
- * Finds the bundled .template-legacy directory to install or refresh from.
- * Probes cover, in order: the esbuild bundle (co-located
- * dist/.template-legacy next to dist/index.js), the repo root during
- * development on the tsc layout (packages/cli/dist/lib -> repo root), the
- * package root when published on the tsc layout (dist/lib -> package
- * root), the dist folder on the tsc layout (dist/lib ->
- * dist/.template-legacy), and the working directory. The first existing
- * non-empty probe wins; undefined when none matches.
- */
 export function findBundledLegacyDir(): string | undefined {
     const installRootPaths = [
         join(__dirname, '.template-legacy'),
@@ -265,13 +213,6 @@ export function findBundledLegacyDir(): string | undefined {
     return undefined;
 }
 
-/**
- * Bootstraps the bundled legacy templates into ~/.pzstudio (one-time, cold
- * caches only). `io` (doc 11 §17 commit 6, Appendix C) is the emission
- * target of the bootstrap info/warn: the v2 non-engine paths thread the
- * instance logger, every omitted scope routes raw legacy (R1) — the
- * bootstrap emission can never inherit an active v2 ambient.
- */
 function bootstrapLegacyTemplates(io?: IoScope | undefined): void {
     const globalLegacyDir = join(getConfigDir(), '.template-legacy');
     if (existsSync(globalLegacyDir) && isDirNonEmpty(globalLegacyDir)) {
@@ -287,12 +228,6 @@ function bootstrapLegacyTemplates(io?: IoScope | undefined): void {
         );
         try {
             mkdirSync(dirname(globalLegacyDir), { recursive: true });
-            // Stamp-last (same invariant as refreshLegacyTemplates): the
-            // copy excludes the bundled stamp and the stamp is written
-            // only after the copy succeeds — an interrupted bootstrap must
-            // not strand a stamp that pins a partial cache as current. An
-            // unstamped dev source writes no stamp (readLegacyTemplateStamp
-            // returns undefined for it).
             cpSync(bundledLegacyDir, globalLegacyDir, {
                 recursive: true,
                 filter: (src) => basename(src) !== LEGACY_STAMP_FILE,
@@ -313,12 +248,6 @@ function bootstrapLegacyTemplates(io?: IoScope | undefined): void {
 
 export type LegacyRefreshStatus = 'refreshed' | 'up-to-date' | 'skipped';
 
-/**
- * The Task 1 build stamp written by scripts/update-build-date.js into the
- * bundled .template-legacy copy (`.pzstudio-templates.json`): the handle
- * `pzstudio update` compares to decide whether the installed global cache
- * still matches what this build shipped.
- */
 interface LegacyTemplateStamp {
     version: string;
     buildDate: string;
@@ -326,13 +255,6 @@ interface LegacyTemplateStamp {
 
 const LEGACY_STAMP_FILE = '.pzstudio-templates.json';
 
-/**
- * Reads a Task 1 stamp file from a .template-legacy dir. Returns undefined
- * when the file is missing, unparseable or malformed (missing/non-string
- * keys) — a bad stamp is data for the caller ('skipped' for the bundled
- * side, 'outdated' for the global side), never a crash (Review Focus 2).
- * The full parsed object comes back so equality can consider every field.
- */
 function readLegacyTemplateStamp(dir: string): LegacyTemplateStamp | undefined {
     const stampPath = join(dir, LEGACY_STAMP_FILE);
     if (!existsSync(stampPath)) return undefined;
@@ -352,10 +274,6 @@ function readLegacyTemplateStamp(dir: string): LegacyTemplateStamp | undefined {
     }
 }
 
-/**
- * Deep-equal on the parsed stamp objects: two stamps are equal only when
- * every key (including extras a future writer may add) matches.
- */
 function legacyStampsEqual(a: unknown, b: unknown): boolean {
     if (a === b) return true;
     if (
@@ -379,27 +297,6 @@ function legacyStampsEqual(a: unknown, b: unknown): boolean {
     );
 }
 
-/**
- * Refreshes the global legacy template cache (~/.pzstudio/.template-legacy)
- * when the bundled copy differs from the installed one, judged by the Task
- * 1 stamp file each bundled copy carries:
- * - equal stamps → 'up-to-date' (the cache is left untouched),
- * - no bundled copy, or a bundled copy without a usable stamp → 'skipped'
- *   (a bad stamp is data, never a crash — Review Focus 2),
- * - otherwise the cache is replaced wholesale with the bundled copy
- *   ('refreshed') — the swap also washes out stray .git gitfiles a
- *   pre-stamp install may hold (Review Focus 1). The bundled stamp never
- *   rides the copy: cpSync excludes it and the stamp is written only after
- *   the copy completes (into the staging dir), so a staged copy can never
- *   strand a stamp. The replacement stages into a sibling
- *   `<dir>.replacing` directory and swaps in only after it is fully on
- *   disk (d15-U1, the ab045cdcd cache pattern): a failed staging pass
- *   throws with the previous global dir left untouched.
- * `bundledDirOverride` pins the bundled source (test seam; Task 3's update
- * command stays on the probe). cpSync/remove failures throw — the caller
- * owns the catch. `io` (Appendix C) is the emission target; an omitted
- * scope routes raw legacy (R1).
- */
 export function refreshLegacyTemplates(
     io?: IoScope | undefined,
     bundledDirOverride?: string | undefined,
@@ -429,25 +326,11 @@ export function refreshLegacyTemplates(
         return 'up-to-date';
     }
 
-    // Staging-swap (d15-U1, mirroring the ab045cdcd cache pattern): the
-    // bundled copy stages into a sibling directory and swaps in only after
-    // it is fully on disk. The old code removeDirRecursive'd the global dir
-    // and only THEN cpSync'd the bundled copy, so a failed copy (a locked
-    // file, a full disk) left the machine with NO legacy fallback at all —
-    // worse than before the refresh. Every staging failure now leaves the
-    // previous global dir untouched.
     const stagingDir = `${globalLegacyDir}.replacing`;
     rmSync(stagingDir, { recursive: true, force: true });
     let secured = false;
     try {
         mkdirSync(dirname(stagingDir), { recursive: true });
-        // Stamp-last: the copy excludes the bundled stamp and the stamp is
-        // written only after the copy completes (into the staging dir). On
-        // NTFS the stamp sorts ahead of the category dirs, so a copy that
-        // rode the stamp along could strand it on an interrupted copy —
-        // leaving a cache that carries the current stamp but is missing
-        // category dirs, which every future update would then report
-        // "up to date" forever.
         cpSync(bundledLegacyDir, stagingDir, {
             recursive: true,
             filter: (src) => basename(src) !== LEGACY_STAMP_FILE,
@@ -459,12 +342,10 @@ export function refreshLegacyTemplates(
         );
         secured = true;
     } finally {
-        // A failed staging pass leaves no half-copy behind.
         if (!secured) {
             rmSync(stagingDir, { recursive: true, force: true });
         }
     }
-    // Replacement secured — only now remove the old dir and swap in.
     if (existsSync(globalLegacyDir)) {
         removeDirRecursive(globalLegacyDir);
     }
@@ -485,13 +366,6 @@ function getEmbeddedTemplateDir(
     return join(globalLegacyDir, `.template-${category}`);
 }
 
-/**
- * Checks if a cache directory is usable for the active template transport
- * (git caches require .git; fetch caches only need content). An explicitly
- * supplied transport (the explicit-scope cores, doc 11 commit 5) is used
- * as-is; the default stays the engine-scope reader — correct inside an
- * invocation, and the legacy behavior for the exported helpers.
- */
 function isCacheValid(dir: string, transport?: TemplateTransport): boolean {
     return (transport ?? getTemplateTransport()).isCacheValid(dir);
 }
@@ -506,22 +380,6 @@ function isDirNonEmpty(dir: string): boolean {
     return readdirSync(dir).length > 0;
 }
 
-/**
- * Clones a remote template from a GitHub repository.
- * Kept as an exported API; the actual download is delegated to the active
- * template transport (git by default). An explicitly supplied transport
- * (doc 11 commit 5 — the explicit-scope cores) is used as-is so a legacy
- * non-engine operation stays ambient-blind (R1); the default remains the
- * engine-scope reader. The published signature is frozen (§13: unchanged
- * signatures); the clone-failure warning routes raw legacy here (omitted
- * io → R1 default) — the internal WithIo variant below carries the io
- * scope for the io-threaded callers.
- * @param url The repository URL or user/repo shorthand
- * @param dest The destination directory
- * @param ref Optional branch or tag
- * @param transport Optional explicit transport override
- * @returns True if the clone was successful
- */
 export function cloneRemoteTemplate(
     url: string,
     dest: string,
@@ -531,14 +389,6 @@ export function cloneRemoteTemplate(
     return cloneRemoteTemplateWithIo(url, dest, ref, transport, undefined);
 }
 
-/**
- * INTERNAL io-threaded clone (doc 11 §17 commit 6, Appendix C — not
- * re-exported from `@pzstudio/cli/api`): the §13 clone with an explicit io
- * scope as the emission target of the clone-failure warning. The v2
- * non-engine paths thread the instance logger; an omitted scope routes
- * raw legacy (R1); the transport's own emissions belong to the
- * transport's constructor sink, not to this scope.
- */
 export function cloneRemoteTemplateWithIo(
     url: string,
     dest: string,
@@ -555,16 +405,6 @@ export function cloneRemoteTemplateWithIo(
     }
 }
 
-/**
- * Refreshes a cached template repository using the active transport (or an
- * explicitly supplied one — doc 11 commit 5, R1). Emits nothing here:
- * every refresh emission belongs to the transport, whose routing is its
- * own constructor sink. Signature unchanged (§13).
- * @param dir The cache directory
- * @param ref Optional branch or tag
- * @param transport Optional explicit transport override
- * @returns True if the refresh was successful
- */
 export function refreshCachedTemplate(
     dir: string,
     ref?: string,
@@ -576,14 +416,6 @@ export function refreshCachedTemplate(
 import { ValidationContext, validateConfig } from '@pzstudio/core';
 import { migration } from '@pzstudio/core';
 
-/**
- * Reads the global pzstudio config from ~/.pzstudio/config.json
- * @param validate Whether to validate (and migrate) the config
- *   (default: true)
- * @param io Optional explicit io scope (doc 11 §17 commit 6, Appendix C):
- *   the config-read verbose and the migration/validation warnings route to
- *   its logger; an omitted scope means raw legacy routing (R1).
- */
 export function readGlobalConfig(
     validate: boolean = true,
     io?: IoScope | undefined,
@@ -592,27 +424,17 @@ export function readGlobalConfig(
     const configDir = getConfigDir();
     emitVerbose(io, `Reading global config from: ${configPath}`);
 
-    // Default values for global config
     const defaultConfig: GlobalConfig = {
         templates: { ...DEFAULT_TEMPLATES },
         useSymlinks: true,
         outdir: undefined,
     };
 
-    // Fallback for outdir: the legacy .pzstudio.bak backup only — a value
-    // the USER once configured (the legacy store's outdir), never a
-    // factory default. Dist-always amendment (2026-11-12): the old
-    // `~/Zomboid/Workshop` fallback tier is REMOVED — an unconfigured
-    // global config carries no outdir, the build runs pure (dist only),
-    // and the materialize step is skipped until the user sets one
-    // (`pzstudio outdir`) or `pzstudio new` writes the project.json token.
     const backupPath = join(configDir, '.pzstudio.bak');
     if (existsSync(backupPath)) {
         try {
             defaultConfig.outdir = readFileSync(backupPath, 'utf-8').trim();
-        } catch {
-            // Fall through
-        }
+        } catch {}
     }
 
     if (!existsSync(configPath)) {
@@ -623,7 +445,6 @@ export function readGlobalConfig(
         let config = content.trim() ? JSON.parse(content) : {};
 
         if (validate) {
-            // Apply migration FIRST so we validate the modern shape
             const migrationCheck = migration.checkConfig(config);
             if (migrationCheck.needsMigration) {
                 emitVerbose(
@@ -648,7 +469,6 @@ export function readGlobalConfig(
             }
         }
 
-        // Merge defaults with file content
         const mergedConfig = {
             ...defaultConfig,
             ...config,
@@ -667,14 +487,10 @@ export function readGlobalConfig(
     }
 }
 
-/**
- * Migrates the global config to the latest version if needed.
- */
 export function migrateGlobalConfigIfNeeded(): void {
     const configPath = getConfigPath();
     if (!existsSync(configPath)) {
         try {
-            // Write initial config with all defaults materialized
             const config = readGlobalConfig(false, engineIo());
             writeGlobalConfig(config);
         } catch (_e) {
@@ -691,8 +507,6 @@ export function migrateGlobalConfigIfNeeded(): void {
 
         const migrationCheck = migration.checkConfig(config);
         if (migrationCheck.needsMigration) {
-            // Progress to stderr (CLI-2): --json runs must keep stdout to
-            // exactly one JSON document.
             info(`- Migrating config.json: ${migrationCheck.reason}`);
             const upgraded = migration.upgradeConfig(
                 config,
@@ -706,14 +520,9 @@ export function migrateGlobalConfigIfNeeded(): void {
                 );
             }
         }
-    } catch (_e) {
-        // Silently fail if config is corrupt, readGlobalConfig will handle it
-    }
+    } catch (_e) {}
 }
 
-/**
- * Writes the global pzstudio config to ~/.pzstudio/config.json
- */
 export function writeGlobalConfig(config: GlobalConfig): void {
     const configDir = getConfigDir();
     if (!existsSync(configDir)) {
@@ -722,9 +531,6 @@ export function writeGlobalConfig(config: GlobalConfig): void {
     writeFileSync(getConfigPath(), JSON.stringify(config, null, 4), 'utf-8');
 }
 
-/**
- * Validates that a template directory exists and has content.
- */
 export function validateTemplateManifest(
     dir: string,
     _expectedCategory: TemplateCategory,
@@ -732,17 +538,6 @@ export function validateTemplateManifest(
     return isCacheValid(dir);
 }
 
-/**
- * Explicit scope for the template readers (doc 11 §17 commit 5, R1): the
- * host settings layers for the template-config override tier and, for
- * resolveTemplateDir, the transport to acquire/refresh with. Supplied by
- * the explicit-scope cores; an omitted scope keeps the engine-scope
- * readers, and an omitted transport inside a scope falls back to the
- * engine-scope reader (the DevSync core always supplies it). `logger`
- * (doc 11 §17 commit 6, Appendix C) is the emission target of every
- * threaded emission on the scope path — the instance logger for the v2
- * non-engine paths; an omitted logger means raw legacy routing (R1).
- */
 export interface TemplateScope {
     isOffline?: boolean;
     forceUpdate?: boolean;
@@ -751,23 +546,10 @@ export interface TemplateScope {
     logger?: PzStudioLogger | undefined;
 }
 
-/**
- * Normalizes a TemplateScope into an io scope (commit 6, Appendix C): the
- * scope's logger when supplied, else undefined — the R1 raw legacy default
- * the emit* adapters apply. An omitted scope resolves to undefined too.
- */
 function scopeIo(scope: TemplateScope | undefined): IoScope | undefined {
     return scope?.logger ? { logger: scope.logger } : undefined;
 }
 
-/**
- * Resolves the template cache directory a category would use — WITHOUT any
- * side effect (no clone, no refresh, no cache cleanup). Returns undefined
- * when nothing would resolve for the category. Doctor uses this to report
- * the template state without triggering a download. With an explicit scope
- * the settings come from the caller-supplied snapshot (ambient-blind, R1);
- * without one the engine-scope reader applies.
- */
 export function probeTemplateCacheDir(
     category: TemplateCategory,
     scope?: TemplateScope,
@@ -780,7 +562,6 @@ export function probeTemplateCacheDir(
     const templateConfig = templates?.[category];
     if (!templateConfig) return undefined;
 
-    // Same shorthand getCachePathFromUrl derives, kept as a display name.
     const parts = templateConfig.url
         .replace('https://github.com/', '')
         .replace('.git', '')
@@ -792,32 +573,6 @@ export function probeTemplateCacheDir(
     return { dir: getCachePathFromUrl(templateConfig.url), name };
 }
 
-/**
- * Resolves the template directory for a given category.
- *
- * Resolution chain:
- * 1. Resolved project config (which merges workspace + global)
- * 2. Global config directly (~/.pzstudio/config.json)
- * 3. Cache missing or invalid: clone from config or hardcoded default → cache
- * 4. Clone fails → fall back to local .template-legacy
- * 5. Nothing found → throw actionable error
- *
- * Two call shapes: the legacy positional form
- * `resolveTemplateDir(category, isOffline?, forceUpdate?)` keeps the
- * engine-scope readers (context-aware settings/transport — correct inside
- * an invocation, byte-identical legacy behavior otherwise), and the
- * explicit-scope form `resolveTemplateDir(category, { isOffline?,
- * forceUpdate?, settings?, templateTransport?, logger? })` resolves
- * everything from caller-supplied dependencies (doc 11 §17 commit 5, R1):
- * no ambient context, no legacy anchor. The DevSync plan input uses the
- * scope form with its per-apply raw/instance deps. Emissions on both
- * shapes route through the explicit io scope's logger, else raw legacy
- * (commit 6, Appendix C) — never the engine tier, so no template emission
- * can inherit an active v2 ambient. The published positional signature is
- * frozen: the engine's own commands supply the invocation logger through
- * the internal engine path below, never by widening this export; the
- * scope form carries its logger in the scope.
- */
 export function resolveTemplateDir(
     category: TemplateCategory,
     isOfflineOrScope?: boolean | TemplateScope,
@@ -831,14 +586,6 @@ export function resolveTemplateDir(
     );
 }
 
-/**
- * INTERNAL engine-command path (doc 11 §12 — not re-exported from
- * `@pzstudio/cli/api`): the positional form's engine-scope settings/
- * transport readers with ONLY the emission target set to the
- * context-aware engineIo() logger, so command template emissions follow
- * the active invocation logger. Ambient awareness enters only through
- * this explicit engine caller.
- */
 export function resolveTemplateDirForEngine(
     category: TemplateCategory,
     isOffline?: boolean,
@@ -889,7 +636,6 @@ function resolveTemplateDirWithIo(
     emitVerbose(io, `Resolved cacheDir: ${cacheDir}`);
     emitVerbose(io, `Resolved legacyDir: ${legacyDir}`);
 
-    // If offline, try cache first, then legacy for defaults
     if (isOffline) {
         if (isCacheValid(cacheDir, transport)) {
             return cacheDir;
@@ -906,13 +652,6 @@ function resolveTemplateDirWithIo(
         );
     }
 
-    // Online mode: use cache if valid and not forcing update. Data safety
-    // (sweep d15-B5): an existing cache — valid or invalid — is NEVER deleted
-    // before its replacement is secured. The old code rmSync'd the cache and
-    // only then re-cloned, so a transient clone failure (a 404, a timeout)
-    // left the machine with NO template path at all — worse than before the
-    // update. The replacement now stages into a sibling directory and swaps
-    // in only after it is fully on disk; on failure the previous cache stays.
     let replacingExistingCache = false;
     if (isCacheValid(cacheDir, transport)) {
         if (force) {
@@ -931,7 +670,6 @@ function resolveTemplateDirWithIo(
         replacingExistingCache = true;
     }
 
-    // Re-clone or initial clone
     if (!isOfficialTemplate(templateConfig.url)) {
         emitWarn(
             io,
@@ -955,13 +693,11 @@ function resolveTemplateDirWithIo(
                     io,
                 ) && validateTemplateManifest(stagingDir, category);
         } finally {
-            // A failed clone leaves no half-download behind.
             if (!secured) {
                 rmSync(stagingDir, { recursive: true, force: true });
             }
         }
         if (secured) {
-            // Replacement secured — only now remove the old cache and swap.
             rmSync(cacheDir, { recursive: true, force: true });
             renameSync(stagingDir, cacheDir);
             return cacheDir;
@@ -971,7 +707,6 @@ function resolveTemplateDirWithIo(
             `Failed to clone template from '${templateConfig.url}'. The previous template cache at ${cacheDir} was left untouched.`,
         );
     } else {
-        // Initial clone: no existing cache to protect — clone into place.
         if (
             cloneRemoteTemplateWithIo(
                 templateConfig.url,
@@ -992,7 +727,6 @@ function resolveTemplateDirWithIo(
         }
     }
 
-    // Fallback to legacy for official templates only if clone/cache failed
     if (isOfficialTemplate(templateConfig.url) && isDirNonEmpty(legacyDir)) {
         emitWarn(
             io,
@@ -1007,18 +741,6 @@ function resolveTemplateDirWithIo(
     );
 }
 
-/**
- * Scaffolds a project by copying files from a template with filtering.
- * Supports directory junctions for specific folders if useSymlinks is enabled.
- *
- * When `options.outputRoot` declares the configured build output root, the
- * copy is guarded against alias routes (F23-WRITE P0, doc 17 §11.4 rule 2 —
- * opt-in; every other consumer of this helper keeps today's behavior): the
- * destination chain is authorized once before the copy, and each destination
- * entry the copy writes onto or descends through must not be a symbolic
- * link. Unrelated links in the destination that the copy never touches
- * cause no refusal.
- */
 export function scaffoldProject(
     templateDir: string,
     destDir: string,
@@ -1066,19 +788,6 @@ export function scaffoldProject(
     info(`- Scaffolding into ${destDir}...`);
 
     const filter = createIgnoreFilter(templateDir, options);
-    // The guard wraps the ignore filter so it runs at exactly the entries
-    // the copy is about to write onto or descend through — both for the
-    // top-level entries below and inside cpSync's recursive traversal
-    // (fs.cpSync invokes the filter for the root and for every entry before
-    // that entry is inspected or written, and propagates a throwing filter
-    // as a copy error). Inclusion comes first: an excluded source entry is
-    // never written onto or descended into, so its destination name must
-    // not trigger an alias refusal (F1 — Core parity: execute.ts evaluates
-    // the inclusion policy before the destination-entry clash). Each
-    // authorization lists the destination directory fresh: the copy itself
-    // can create destination links (an included source symlink is
-    // re-created as a destination link), so a listing captured earlier in
-    // this same copy may already be stale.
     const guardedFilter = (srcPath: string, destPath: string): boolean => {
         if (!filter(srcPath, destPath)) {
             return false;
@@ -1112,10 +821,6 @@ export function scaffoldProject(
     });
 }
 
-/**
- * Specialized helper to scaffold a specific template folder as a link or copy.
- * Used for .template-mod, .template-language, and .libraries.
- */
 export function scaffoldTemplateFolder(
     templateDir: string,
     destDir: string,
@@ -1124,8 +829,6 @@ export function scaffoldTemplateFolder(
     if (useSymlinks) {
         try {
             if (existsSync(destDir)) {
-                // If it's already a link or dir, we might want to skip or recreate
-                // For safety in 'new', we assume destDir shouldn't exist or we can overwrite
                 rmSync(destDir, { recursive: true, force: true });
             }
             mkdirSync(dirname(destDir), { recursive: true });
@@ -1141,6 +844,5 @@ export function scaffoldTemplateFolder(
         }
     }
 
-    // Fallback or explicit copy
     scaffoldProject(templateDir, destDir, false, false);
 }

@@ -20,7 +20,6 @@ const folder = (parts: string[]) => ({
 });
 const fsPath = (parts: string[]) => new UriCtor(parts).fsPath;
 
-/** stat succeeds only for ".../project.json" under `projectRoots`. */
 function statProjects(projectRoots: string[]) {
     asMock(vscode.workspace.fs.stat).mockImplementation(
         async (uri: { path: string }) => {
@@ -33,12 +32,10 @@ function statProjects(projectRoots: string[]) {
     );
 }
 
-/** Workspace whose roots (and only those) contain a project.json. */
 function withProjects(...roots: string[]) {
     (
         vscode.workspace as unknown as { workspaceFolders: unknown }
     ).workspaceFolders = roots.map((r) => folder([r]));
-    // stat matches the URI path, which always carries the leading slash.
     statProjects(roots.map((r) => '/' + r));
     asMock(vscode.workspace.fs.readDirectory).mockResolvedValue([]);
 }
@@ -48,11 +45,6 @@ interface Harness {
     handler: (node?: unknown) => Promise<void>;
 }
 
-/**
- * Registers build+clean on the REAL command runner wired to a studio
- * stub, so cancellation is judged by what actually reaches the engine
- * (studio.run) — not just by which pickers opened.
- */
 function setup(action: 'build' | 'clean', run?: () => Promise<void>): Harness {
     const studio = { run: vi.fn(run ?? (async () => {})) };
     const output = vscode.window.createOutputChannel('test');
@@ -69,12 +61,6 @@ function setup(action: 'build' | 'clean', run?: () => Promise<void>): Harness {
     return { studio, handler: entry![1] };
 }
 
-// UX-02: cancelling the project picker in build/clean used to re-prompt
-// (the runner resolved again because the handler passed an unset
-// projectDir) and, after the second cancel, show the false "no PZ
-// project found" warning. Cancel must abort exactly once with no side
-// effects (spec §13); an explicit selection stays authoritative through
-// the run.
 describe.each(['build', 'clean'] as const)(
     'pzstudio.%s command (UX-02)',
     (action) => {
@@ -82,8 +68,6 @@ describe.each(['build', 'clean'] as const)(
 
         beforeEach(() => {
             vi.clearAllMocks();
-            // Fresh default configuration per test: resolveFlags and
-            // confirmBeforeRun read pzstudio.* settings.
             asMock(vscode.workspace.getConfiguration).mockImplementation(
                 () =>
                     ({
@@ -98,11 +82,9 @@ describe.each(['build', 'clean'] as const)(
             (
                 vscode.window as unknown as { activeTextEditor: unknown }
             ).activeTextEditor = undefined;
-            // No workshop titles: the confirm names the folder instead.
             asMock(vscode.workspace.fs.readFile).mockRejectedValue(
                 new Error('ENOENT'),
             );
-            // Pickers dismissed and modals closed unless a test opts in.
             asMock(vscode.window.showQuickPick).mockResolvedValue(undefined);
             asMock(vscode.window.showWarningMessage).mockResolvedValue(
                 undefined,
@@ -115,12 +97,9 @@ describe.each(['build', 'clean'] as const)(
 
             await handler(undefined);
 
-            // Exactly one picker — the runner must not resolve again.
             expect(asMock(vscode.window.showQuickPick)).toHaveBeenCalledTimes(
                 1,
             );
-            // Cancel is not "no project": projects exist, so the
-            // no-project warning would be a lie.
             expect(
                 asMock(vscode.window.showWarningMessage),
             ).not.toHaveBeenCalled();
@@ -141,8 +120,6 @@ describe.each(['build', 'clean'] as const)(
             expect(asMock(vscode.window.showQuickPick)).toHaveBeenCalledTimes(
                 1,
             );
-            // The confirm names the picked project so a wrong pick is
-            // obvious before anything is written.
             expect(
                 asMock(vscode.window.showWarningMessage),
             ).toHaveBeenCalledWith(
@@ -170,7 +147,6 @@ describe.each(['build', 'clean'] as const)(
             expect(asMock(vscode.window.showQuickPick)).toHaveBeenCalledTimes(
                 1,
             );
-            // The only warning message is the confirm modal itself.
             const warnCalls = asMock(vscode.window.showWarningMessage).mock
                 .calls;
             expect(warnCalls).toHaveLength(1);
@@ -263,7 +239,7 @@ describe.each(['build', 'clean'] as const)(
                 label: 'one',
                 dir: new UriCtor(['one']),
             });
-            await handler(undefined); // runs project one
+            await handler(undefined);
             pick.mockResolvedValueOnce(undefined); // next invocation cancelled
             await handler(undefined);
 
@@ -272,12 +248,10 @@ describe.each(['build', 'clean'] as const)(
                 flags: [],
                 projectDir: fsPath(['one']),
             });
-            // One picker per invocation — the cancelled one did not
-            // re-prompt, and no warning followed it.
             expect(pick).toHaveBeenCalledTimes(2);
             expect(
                 asMock(vscode.window.showWarningMessage),
-            ).toHaveBeenCalledTimes(1); // the run's confirm modal only
+            ).toHaveBeenCalledTimes(1);
         });
 
         it('keeps error semantics when the run throws after a valid selection', async () => {

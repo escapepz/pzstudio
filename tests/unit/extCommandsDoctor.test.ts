@@ -7,9 +7,6 @@ vi.mock('vscode', async () => {
     return createVscodeMock();
 });
 
-// The doctor command only renders: the diagnostics runner is injected (the
-// instance-bound factory is pinned in extUtilDoctor.test.ts), so the tests
-// stub a plain runner.
 import * as vscode from 'vscode';
 import { registerDoctorCommand } from '../../packages/vscode-extension/src/commands/doctor';
 import { createPZLogger } from '../../packages/vscode-extension/src/util/logger';
@@ -18,7 +15,6 @@ import type { ProjectDiagnosticsRunner } from '../../packages/vscode-extension/s
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 const UriCtor = vscode.Uri as unknown as new (parts: string[]) => vscode.Uri;
 
-/** Registers the command and returns its handler. */
 async function setupHandler(
     runner: ProjectDiagnosticsRunner,
     onError?: (error: unknown) => void,
@@ -131,10 +127,6 @@ describe('pzstudio.doctor', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* UX-16: user-invoked doctor failures report through the host logger  */
-/* ------------------------------------------------------------------ */
-
 describe('pzstudio.doctor error reporting (UX-16)', () => {
     let runProjectDiagnostics: ReturnType<typeof vi.fn>;
     let onError: ReturnType<typeof vi.fn>;
@@ -154,13 +146,10 @@ describe('pzstudio.doctor error reporting (UX-16)', () => {
         asMock(runProjectDiagnostics).mockRejectedValue(boom);
         const { handler } = await setupHandler(failingRunner(), onError);
 
-        // No unhandled command rejection: the handler resolves normally.
         await expect(handler(projectNode)).resolves.toBeUndefined();
 
         expect(onError).toHaveBeenCalledTimes(1);
         expect(onError.mock.calls[0][0]).toBe(boom);
-        // The command itself stays silent: the logger's notification is the
-        // single popup, no quick-pick rendering on top of it.
         expect(asMock(vscode.window.showQuickPick)).not.toHaveBeenCalled();
         expect(asMock(vscode.window.showErrorMessage)).not.toHaveBeenCalled();
     });
@@ -190,18 +179,15 @@ describe('pzstudio.doctor error reporting (UX-16)', () => {
 
         await handler(projectNode);
 
-        // Exactly one error notification, with the localized action item.
         expect(asMock(vscode.window.showErrorMessage)).toHaveBeenCalledTimes(1);
         expect(asMock(vscode.window.showErrorMessage)).toHaveBeenCalledWith(
             'PZStudio Error: engine boom',
             'Show Details',
         );
-        // The full detail (message + stack) landed in the channel record.
         const lines = asMock(channel.appendLine).mock.calls.map((c) =>
             String(c[0]),
         );
         expect(lines.some((l) => /\[ERROR\] engine boom\n/.test(l))).toBe(true);
-        // Merely reporting never opens the panel.
         await Promise.resolve();
         expect(asMock(channel.show)).not.toHaveBeenCalled();
     });
@@ -259,7 +245,6 @@ describe('pzstudio.doctor error reporting (UX-16)', () => {
         await handler(projectNode);
 
         expect(asMock(vscode.window.showErrorMessage)).not.toHaveBeenCalled();
-        // Detail stays in the channel record; the sink drops the popup.
         const lines = asMock(channel.appendLine).mock.calls.map((c) =>
             String(c[0]),
         );
@@ -275,10 +260,7 @@ describe('pzstudio.doctor error reporting (UX-16)', () => {
             infos: 0,
             report: { projectDir: '/proj', diagnostics: [] },
         });
-        const { handler } = await setupHandler(
-            failingRunner(), // the mock is the runner; it resolves here
-            onError,
-        );
+        const { handler } = await setupHandler(failingRunner(), onError);
 
         await handler(projectNode);
 

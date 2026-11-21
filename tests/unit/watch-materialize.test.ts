@@ -163,8 +163,6 @@ describe('watch materialize helpers (dist-always amendment §7)', () => {
         });
 
         it('keeps the deployment-root check inert when the root is outside the project', () => {
-            // An external deploy root never enters the loop check — but an
-            // IN-PROJECT source under the same watch must stay delivered.
             const external = path.resolve('C:/deploy-external');
             expect(
                 isWatchPathIgnored(
@@ -187,15 +185,11 @@ describe('resolveMaterialization boundary gate (data safety)', () => {
         expect(r.action).toBe('skip');
         expect(r.refused).toContain('the project root itself');
         expect(r.refused).toContain('would write links or copies');
-        // The cascade result still travels (doctor UX, callers may render).
         expect(r.mode).toBe('symlink');
         expect(r.distRoot).toBe(path.resolve('C:/proj/dist'));
     });
 
     it('aliases the canonical dist root itself to a plain skip (healthy dist-model shape)', () => {
-        // The doctor e2e pins outdir=<root>/dist as the healthy shape:
-        // deployment target == build root IS pure-build mode, an info —
-        // never a refusal.
         const r = resolveMaterialization({
             projectRoot: 'C:/proj',
             effectiveOutdir: 'C:/proj/dist',
@@ -211,10 +205,6 @@ describe('resolveMaterialization boundary gate (data safety)', () => {
             effectiveOutdir: 'C:/proj/dist/Workshop',
         });
         expect(r.action).toBe('skip');
-        // The refusal names the RESOLVED build output root — resolve the
-        // same literal here so the pin holds on every host (a Windows-style
-        // literal resolves against the cwd on POSIX instead of mapping a
-        // drive; the refusal semantics are identical either way).
         expect(r.refused).toContain(
             `build output root '${path.resolve('C:/proj/dist')}`,
         );
@@ -222,9 +212,6 @@ describe('resolveMaterialization boundary gate (data safety)', () => {
     });
 
     it('allows a dedicated target inside the project but outside dist', () => {
-        // The dist model requires a dedicated artifact DIRECTORY — an
-        // in-project deployment root (<root>/deploy) is legitimate (the
-        // watcher already steers its loop check around one).
         const r = resolveMaterialization({
             projectRoot: 'C:/proj',
             effectiveOutdir: 'C:/proj/deploy',
@@ -295,7 +282,6 @@ describe('maybeMaterializeBuiltItems symlink pre-pass (COPY_SLOT toggle, Batch B
             outdir: distRoot,
             mods: { my_mod: {} },
         } as unknown as IProjectConfig;
-        // The junction attach proves ownership against the dist marker.
         await writeOutputMarker(new NodeFileSystem(), {
             config,
             variant: 'main',

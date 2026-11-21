@@ -1,25 +1,3 @@
-/**
- * F23-WRITE P0 — native NTFS junction tier (Windows-only).
- *
- * The alias-route containment guard (packages/core mutation boundaries) is
- * asserted here against the real NodeFileSystem adapter on REAL Windows
- * NTFS directory junctions — the doc 17 §2 methodology, now permanent. The
- * emulated tier (f23-write-boundary.test.ts) carries the same classes on
- * every CI host; this tier proves the guard against the OS's own alias
- * resolution and pins the Node adapter's link-reporting contract.
- *
- * Honesty split (carried from doc 17 §3): junctions are directory aliases;
- * file symlinks need developer mode/admin on Windows and are NOT executed
- * here — the write-leaf symlink class is covered by the emulated tier, and
- * its native equivalence is asserted by the same OS mechanism, not executed.
- *
- * Documented residual (not a test, by design): an alias RETARGETED between
- * the guard's inspection and the OS call (doc 17 §2 B6) is a structural
- * TOCTOU window no decide-then-act guard can close on today's path-string
- * contract — only narrowed by scan placement. An alias INSERTED before
- * mutation-time inspection (A6) IS detected; that distinction is pinned in
- * the A6 test below. No all-schedules protection is claimed anywhere.
- */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import fsp from 'fs/promises';
@@ -44,7 +22,6 @@ let sandbox: string;
 
 beforeEach(async () => {
     sandbox = await fsp.mkdtemp(path.join(os.tmpdir(), 'f23-write-boundary-'));
-    // Standard fixture: source mod, template, configured outdir root.
     await fsp.mkdir(path.join(sandbox, 'proj', 'my_mod', 'media', 'lua'), {
         recursive: true,
     });
@@ -101,9 +78,7 @@ async function planInput(): Promise<Omit<PlanBuildInput, 'variant'>> {
             'utf8',
         );
         state.modInfoExists[''] = true;
-    } catch {
-        // no root mod.info (Build 41 layout)
-    }
+    } catch {}
     return {
         config: config(),
         workshopTemplateDir: path.join(sandbox, 'tpl'),
@@ -130,7 +105,6 @@ function host(fs: NodeFileSystem): {
     };
 }
 
-/** Creates a real NTFS junction (no privilege required). */
 async function junction(link: string, target: string): Promise<void> {
     await fsp.symlink(target, link, 'junction');
 }
@@ -156,8 +130,6 @@ describe.skipIf(process.platform !== 'win32')(
             const real = entries.find((entry) => entry.name === 'real');
             expect(alias?.type).toBe('symbolicLink');
             expect(real?.type).toBe('directory');
-            // stat FOLLOWS the junction — insufficient for alias detection;
-            // this is why the guard inspects listings, not stat types.
             expect((await adapter.stat(alias!.uri)).type).toBe('directory');
         });
     },
@@ -205,10 +177,6 @@ describe.skipIf(process.platform !== 'win32')(
             const { host: sessionHost } = host(adapter);
             const session = new BuildSession(sessionHost);
             await session.start(['main']);
-            // A full build's reset heals links inside the variant folder;
-            // the exposed flow is the scoped rebuild (reset target below the
-            // junction). The real mods directory must be removed before the
-            // junction can take its place (EEXIST).
             await fsp.rm(path.join(OUT_VP(), 'Contents', 'mods'), {
                 recursive: true,
                 force: true,
@@ -240,7 +208,6 @@ describe.skipIf(process.platform !== 'win32')(
 describe.skipIf(process.platform !== 'win32')(
     'F23-WB native: incremental sync through a planted junction',
     () => {
-        /** Clean build, then the output media swapped for a junction. */
         async function sessionWithMediaJunction(target: string) {
             const adapter = new NodeFileSystem();
             const { host: sessionHost } = host(adapter);
@@ -308,8 +275,6 @@ describe.skipIf(process.platform !== 'win32')(
             const adapter = new NodeFileSystem();
             const input = await planInput();
             const plan = planBuild({ ...input, variant: 'main' });
-            // Split: the plan's reset first, then plant the alias, then the
-            // mutating remainder.
             const resetOps = plan.slice(0, 2);
             const restOps = plan.slice(2);
             await executeFileOperations(adapter, resetOps, undefined, {
@@ -331,7 +296,6 @@ describe.skipIf(process.platform !== 'win32')(
             expect(fs.readFileSync(path.join(victim, 'keep.txt'), 'utf8')).toBe(
                 'A6-KEEP',
             );
-            // Partial output before the refusal is disclosed on disk.
             expect(
                 fs.existsSync(
                     path.join(OUT_VP(), 'Contents/template-file.txt'),
@@ -340,14 +304,10 @@ describe.skipIf(process.platform !== 'win32')(
         });
 
         it('A4a: a user-configured junction outdir still builds at the resolved root (T2, permissive bound)', async () => {
-            // The configured outdir root itself is a junction.
             const target = path.join(sandbox, 'out-target');
             await fsp.mkdir(target);
             await fsp.rm(OUT(), { recursive: true, force: true });
             await junction(OUT(), target);
-            // Pre-existing unowned content in the resolved variant folder —
-            // its destruction is the E1 boundary (doc 15), pinned here as
-            // documented current behavior, NOT an alias-route escape.
             const legacy = path.join(
                 target,
                 'Sync Project',
@@ -371,7 +331,6 @@ describe.skipIf(process.platform !== 'win32')(
                 { outputRoot: OUT() },
             );
 
-            // The build landed inside the junction's target...
             expect(
                 fs.readFileSync(
                     path.join(target, 'Sync Project', 'workshop.txt'),
@@ -393,8 +352,6 @@ describe.skipIf(process.platform !== 'win32')(
                     'utf8',
                 ),
             ).toBe('hello-v1');
-            // ...and the E1 destruction inside the resolved root still
-            // occurs pending doc 15 §11.1 (this is NOT closed by the guard).
             expect(fs.existsSync(path.join(legacy, 'userfile.lua'))).toBe(
                 false,
             );
@@ -412,7 +369,6 @@ describe.skipIf(process.platform !== 'win32')(
             await fsp.mkdir(path.join(OUT_VP(), 'jdir'), { recursive: true });
             await junction(path.join(OUT_VP(), 'jdir', 'jlink'), jtarget);
 
-            // The full-build reset removes OUT_VP (junction inside, as child).
             const { planBuild } =
                 await import('../../packages/core/src/buildplan');
             await executeFileOperations(

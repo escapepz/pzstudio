@@ -1,38 +1,5 @@
 'use strict';
 
-/**
- * UX-06: the Development Sync toggle's startup presentation — the initial
- * full build of both outputs runs inside a native withProgress window that
- * stays up until the start settles, and a startup failure is handled at the
- * command boundary: exactly one user-facing notification, no unhandled
- * rejection, no false-active state.
- *
- * UX-15 Task 3 reshapes the toggle's plumbing and its feedback: the command
- * is a thin GATED dispatch over the shared DevSyncManager (extension.ts owns
- * the single instance — the command never touches DevSyncController
- * directly anymore), and the success popups are GONE — the status-bar item
- * is the run's source of truth (spinner + folder while in flight, muted
- * circle-slash while off). Only the start-fail toast remains. The gate is
- * load-bearing: the manager deliberately has no start-guard, so a start
- * happens only from idle (including idle-with-lastError), a toggle during
- * `syncing` stops, a toggle during `starting` queues the stop through the
- * manager's queued-stop protocol and a toggle during `stopping` is a no-op.
- *
- * The status-bar item pins: state-driven text/icon/tooltip per phase, the
- * muted idle paint, and item.command === 'pzstudio.watch' (a click executes
- * the existing palette command — no manifest entry, no new registration).
- *
- * The controller contract itself (warn + cleanup + rethrow) is pinned
- * in extUtilDevSync.test.ts and is not changed here; the toggle-off stop
- * flow's lifecycle side, picker cancellation (UX-02) and the no-project
- * warning are pinned as preserved behavior.
- *
- * The shared vscode mock's EventEmitter is an inert stub (fire delivers
- * nothing), useless for a subscription whose contract IS event delivery —
- * this file's mock factory swaps in the same functional emitter the
- * devSyncState suites use (test-local swap).
- */
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('vscode', async () => {
@@ -85,7 +52,6 @@ const folder = (parts: string[]) => ({
 });
 const fsPath = (parts: string[]) => new UriCtor(parts).fsPath;
 
-/** A BuildSession-shaped stub: the controller drives exactly these calls. */
 function fakeSession() {
     return {
         start: vi.fn(async () => {}),
@@ -104,11 +70,6 @@ function fakeSession() {
     };
 }
 
-/**
- * Minimal PzStudio stub: the controller calls createDevSync and — since
- * UX-09 — resolveOutDir. The root sits outside every project used here, so
- * these startup-presentation pins are unaffected by filtering decisions.
- */
 function studioStub(session: BuildSession): PzStudio {
     return {
         createDevSync: vi.fn(() => session),
@@ -118,17 +79,11 @@ function studioStub(session: BuildSession): PzStudio {
 
 interface ProgressRecord {
     options: { location?: unknown; title?: string; cancellable?: boolean };
-    /** Flips once the progress window's promise settles either way. */
     settled: boolean;
 }
 
 let progressRecords: ProgressRecord[] = [];
 
-/**
- * Records every withProgress invocation — options plus the exact promise
- * the command awaits — while keeping the default pass-through behavior, so
- * "the progress window stayed up" is observable without any timers.
- */
 function recordProgress(): void {
     asMock(vscode.window.withProgress).mockImplementation(
         async (options: ProgressRecord['options'], task: () => unknown) => {
@@ -144,7 +99,6 @@ function recordProgress(): void {
     );
 }
 
-/** Workspace whose roots (and only those) contain a project.json. */
 function withProjects(...roots: string[]) {
     (
         vscode.workspace as unknown as { workspaceFolders: unknown }
@@ -159,11 +113,9 @@ function withProjects(...roots: string[]) {
         },
     );
     asMock(vscode.workspace.fs.readDirectory).mockResolvedValue([]);
-    // Picker labels tolerate unreadable project.json files.
     asMock(vscode.workspace.fs.readFile).mockRejectedValue(new Error('ENOENT'));
 }
 
-/** The status-bar item created by the wiring, as a plain mutable record. */
 interface StatusBarRecord {
     text: string;
     tooltip?: string;
@@ -173,7 +125,6 @@ interface StatusBarRecord {
     dispose: import('vitest').Mock;
 }
 
-/** The last status-bar item the mock handed out. */
 function statusBarRecord(): StatusBarRecord {
     const results = asMock(vscode.window.createStatusBarItem).mock
         .results as Array<{ value: StatusBarRecord }>;
@@ -191,13 +142,6 @@ interface Harness {
     item: StatusBarRecord;
 }
 
-/**
- * Registers the watch command AND the status-bar item on a REAL
- * DevSyncManager (real controller over a studio stub), so gating, state
- * transitions and status-bar rendering are judged by what the command
- * actually does to the shared lifecycle — not by mock bookkeeping alone.
- * `startImpl` gates the initial build inside the session.
- */
 function setup(startImpl?: () => Promise<void>): Harness {
     const session = fakeSession();
     if (startImpl) {
@@ -207,9 +151,6 @@ function setup(startImpl?: () => Promise<void>): Harness {
     const channel = vscode.window.createOutputChannel('PZ Studio') as {
         appendLine: import('vitest').Mock;
     };
-    // The REAL extension logger: its warn() only writes the channel line —
-    // proving one-notification-on-failure needs the actual warn path, not a
-    // mock that could hide a second toast.
     const controller = new DevSyncController(
         studio,
         createPZLogger(channel as never),
@@ -256,7 +197,6 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
         expect(options.title).toBe(
             "PZStudio: starting development sync for 'proj'…",
         );
-        // The progress window closed only after the startup settled.
         expect(progressRecords[0].settled).toBe(true);
         expect(asMock(studio.createDevSync)).toHaveBeenCalledWith(
             fsPath(['proj']),
@@ -266,21 +206,13 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
             'development',
         ]);
 
-        // UX-15 behavior change: the success popups are gone — the status
-        // bar is the source of truth. Not ONE information toast on the
-        // whole flow (the load-bearing regression guard).
         expect(
             asMock(vscode.window.showInformationMessage),
         ).not.toHaveBeenCalled();
 
-        // The toggle dispatched through the manager: the controller runs
-        // AND the manager published `syncing`.
         expect(controller.active).toBe(true);
         expect(manager.state.phase).toBe('syncing');
 
-        // The status bar shows the spinner + the project folder, default
-        // color, a tooltip naming the project, and the click runs the
-        // existing palette command.
         expect(item.text).toBe('$(sync~spin) DevSync: proj');
         expect(item.color).toBeUndefined();
         expect(item.tooltip).toBe(
@@ -305,9 +237,6 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
         });
         await vi.waitFor(() => expect(progressRecords).toHaveLength(1));
 
-        // The startup is still gated: the progress window is up, the command
-        // has not completed, nothing announced success and the status bar
-        // already shows the starting run (folder derived from the anchor).
         expect(progressRecords[0].settled).toBe(false);
         expect(done).toBe(false);
         expect(
@@ -333,16 +262,11 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
             () => Promise.reject(new Error('boom')),
         );
 
-        // The command handles the rejection — nothing escapes the handler.
         await expect(handler()).resolves.toBeUndefined();
 
-        // Progress closed despite the failure.
         expect(progressRecords).toHaveLength(1);
         expect(progressRecords[0].settled).toBe(true);
 
-        // Exactly ONE user-facing notification, naming the operation, the
-        // project and the reason — not a generic host error (the start-fail
-        // toast UX-15 deliberately kept).
         const errors = asMock(vscode.window.showErrorMessage).mock.calls;
         expect(errors).toHaveLength(1);
         expect(errors[0][0]).toContain(
@@ -350,15 +274,11 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
         );
         expect(errors[0][0]).toContain('boom');
 
-        // No success signal, no stray warnings.
         expect(
             asMock(vscode.window.showInformationMessage),
         ).not.toHaveBeenCalled();
         expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
 
-        // The controller's diagnostic warning still landed in the output
-        // channel (the real logger.warn never toasts — the notification
-        // above is the only user surface for this failure).
         expect(channel.appendLine).toHaveBeenCalledWith(
             expect.stringContaining('[WARN]'),
         );
@@ -366,16 +286,12 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
             expect.stringContaining('boom'),
         );
 
-        // No false-active state, no half-registered watcher, disposal stays
-        // clean (the half-started session is dropped without a stop call —
-        // the exact cleanup contract pinned in extUtilDevSync.test.ts).
         expect(
             asMock(vscode.workspace.createFileSystemWatcher),
         ).not.toHaveBeenCalled();
         expect(controller.active).toBe(false);
         expect(manager.state.phase).toBe('idle');
         expect(manager.state.lastError).toBe('boom');
-        // The status bar shows the settled outcome, not a stuck spinner.
         expect(item.text).toBe('$(circle-slash) DevSync off');
         expect(item.color).toBeDefined();
         await expect(manager.dispose()).resolves.toBeUndefined();
@@ -395,7 +311,6 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
         expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
         expect(asMock(vscode.window.showErrorMessage)).not.toHaveBeenCalled();
         expect(manager.state.phase).toBe('idle');
-        // The status bar stayed on its initial idle paint.
         expect(item.text).toBe('$(circle-slash) DevSync off');
         await manager.dispose();
     });
@@ -428,15 +343,11 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
 
         expect(asMock(session.stop)).toHaveBeenCalled();
         expect(controller.active).toBe(false);
-        // UX-15 behavior change: no stop toast either — not ONE information
-        // toast across start and stop.
         expect(
             asMock(vscode.window.showInformationMessage),
         ).not.toHaveBeenCalled();
-        // Only the start opened a progress window; the stop path never does.
         expect(progressRecords).toHaveLength(1);
         expect(asMock(vscode.window.showQuickPick)).not.toHaveBeenCalled();
-        // The status bar settled back to muted off.
         expect(item.text).toBe('$(circle-slash) DevSync off');
         expect(item.color).toBeDefined();
         expect(item.tooltip).toBe('PZStudio: development sync is off.');
@@ -457,9 +368,6 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
         await vi.waitFor(() => expect(progressRecords).toHaveLength(1));
         expect(item.text).toBe('$(sync~spin) DevSync: proj');
 
-        // The gated toggle sees `starting` and queues the stop through the
-        // manager: the second invocation resolves immediately, opens no
-        // second progress window and creates no duplicate session.
         await expect(handler()).resolves.toBeUndefined();
         expect(progressRecords).toHaveLength(1);
         expect(asMock(studio.createDevSync)).toHaveBeenCalledTimes(1);
@@ -467,8 +375,6 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
 
         releaseStart();
         await first;
-        // The queued stop drained the freshly settled run — the session the
-        // start was about to publish never outlives the request.
         expect(controller.active).toBe(false);
         expect(asMock(session.stop)).toHaveBeenCalled();
         expect(item.text).toBe('$(circle-slash) DevSync off');
@@ -486,8 +392,6 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
         const first = startViaManager(manager);
         await vi.waitFor(() => expect(manager.state.phase).toBe('starting'));
 
-        // The atomic gate: refused BEFORE any state mutation — the in-flight
-        // run's queued stop and anchor stay intact.
         await expect(manager.start(fsPath(['proj']))).rejects.toThrow(
             /already starting/,
         );
@@ -505,11 +409,6 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
         withProjects('proj');
         const { handler, studio, session, manager, item } = setup();
 
-        // Both invocations read the idle guard before either reaches the
-        // manager (status-bar click vs palette over one project). One wins;
-        // the other must fail without duplicating the session or corrupting
-        // the state timeline. Neither handler() ever rejects — the command
-        // boundary owns the failure (the one start-fail toast).
         await expect(Promise.all([handler(), handler()])).resolves.toEqual([
             undefined,
             undefined,
@@ -517,10 +416,7 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
         await vi.waitFor(() => expect(manager.state.phase).toBe('syncing'));
         expect(asMock(studio.createDevSync)).toHaveBeenCalledTimes(1);
         expect(asMock(session.start)).toHaveBeenCalledTimes(1);
-        // The winner's surface is the normal started feedback...
         expect(item.text).toBe('$(sync~spin) DevSync: proj');
-        // ...and the loser's failure is the one honest start-fail toast —
-        // not a generic host error and not a silent swallow.
         expect(asMock(vscode.window.showErrorMessage)).toHaveBeenCalledTimes(1);
         expect(
             asMock(vscode.window.showErrorMessage).mock.calls[0][0],
@@ -529,7 +425,6 @@ describe('pzstudio.watch — gated manager toggle: startup progress and failure 
     });
 });
 
-/** Starts through the manager directly (no command), for gate-level tests. */
 function startViaManager(manager: DevSyncManager): Promise<void> {
     return manager.start(fsPath(['proj']));
 }
@@ -548,9 +443,6 @@ describe('DevSync status-bar item (UX-15)', () => {
         withProjects('proj');
         const { manager, item } = setup();
 
-        // Initial paint: muted off item, click wired to the EXISTING
-        // `pzstudio.watch` command — no manifest entry, no second
-        // registration, so the click runs the identical gated toggle.
         expect(item.text).toBe('$(circle-slash) DevSync off');
         expect(item.color?.id).toBe('descriptionForeground');
         expect(item.tooltip).toBe('PZStudio: development sync is off.');
@@ -571,8 +463,6 @@ describe('DevSync status-bar item (UX-15)', () => {
             await gate;
         });
 
-        // The gated toggle entered `stopping` (beginStopping fired before
-        // the teardown awaits): the item stays on the syncing visual.
         const off = handler();
         await vi.waitFor(() => expect(item.tooltip).toContain('is stopping'));
         expect(item.text).toBe('$(sync~spin) DevSync: proj');

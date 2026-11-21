@@ -28,13 +28,6 @@ import {
 import type { SlotManifest } from '../../packages/platform-node/src/link/copyMaterializer';
 import { MemoryFileSystem } from '../helpers/memory-file-system';
 
-/**
- * Real-fs fixtures over a tmpdir (the link-manager suite's approach): the
- * copy materializer's gates are defined against actual filesystem
- * semantics (junction unlink, ENOTEMPTY races), so the tests run the real
- * module over real trees. Junction creation works unprivileged on win32
- * ('junction' type); posix tests use 'dir' symlinks.
- */
 const PLATFORM = process.platform === 'win32' ? 'win32' : 'posix';
 const LINK_TYPE =
     PLATFORM === 'win32' ? ('junction' as const) : ('dir' as const);
@@ -62,8 +55,6 @@ const nodeLinkFs: LinkFs = {
 
 const nodeRealFs = fsp as unknown as RealFs;
 
-/** A ProjectFileSystem over the real fs — what the CLI hands to core's
- * writeCopySlotMarker (plain absolute paths accepted). */
 const markerFs: ProjectFileSystem = {
     read: async (uri) => new Uint8Array(await fsp.readFile(uri)),
     write: async (uri, data) => {
@@ -107,7 +98,6 @@ describe('copy materializer (real fs fixtures)', () => {
         await fsp.rm(root, { recursive: true, force: true });
     });
 
-    /** Writes the dist tree: keys are item-relative POSIX paths. */
     async function makeDist(files: Record<string, string>): Promise<void> {
         for (const [rel, content] of Object.entries(files)) {
             const target = path.join(distItem, ...rel.split('/'));
@@ -123,7 +113,6 @@ describe('copy materializer (real fs fixtures)', () => {
         };
     }
 
-    /** Runs one full copy pass — leaves a manifest-bearing slot. */
     async function copyPass(): Promise<void> {
         const result = await materializeCopySlot(
             nodeCopyFs,
@@ -264,7 +253,7 @@ describe('copy materializer (real fs fixtures)', () => {
             projectDir,
             itemId: ITEM,
             slotDir: distItem,
-        }); // the dist OUTPUT marker equivalent for the readMarker probe
+        });
         await fsp.mkdir(path.dirname(slotDir), { recursive: true });
         await fsp.symlink(distItem, slotDir, LINK_TYPE);
         const inspection = await inspectMaterializeSlot(
@@ -309,7 +298,6 @@ describe('copy materializer (real fs fixtures)', () => {
         );
         expect(marker?.projectId).toBe((await identity()).projectId);
         expect(marker?.itemId).toBe(ITEM);
-        // dist is untouched by the copy pass.
         expect(
             await fsp.readFile(path.join(distItem, 'workshop.txt'), 'utf8'),
         ).toBe('id=1');
@@ -331,8 +319,6 @@ describe('copy materializer (real fs fixtures)', () => {
         const slotStats = await fsp.lstat(slotDir);
         expect(slotStats.isSymbolicLink()).toBe(false);
         expect(slotStats.isDirectory()).toBe(true);
-        // The dist file must be byte-identical — the copy never wrote
-        // through the link.
         expect(
             await fsp.readFile(path.join(distItem, 'Contents/a.lua'), 'utf8'),
         ).toBe('-- a');
@@ -367,7 +353,6 @@ describe('copy materializer (real fs fixtures)', () => {
         expect(result.state).toBe('UNLINK_FAILED');
         expect(result.detail).toContain('unlink');
         expect(result.detail).toContain('EBUSY');
-        // The junction survives (nothing was removed), dist is untouched.
         expect((await fsp.lstat(slotDir)).isSymbolicLink()).toBe(true);
         expect(
             await fsp.readFile(path.join(distItem, 'workshop.txt'), 'utf8'),
@@ -375,8 +360,6 @@ describe('copy materializer (real fs fixtures)', () => {
     });
 
     it('materialize: a dangling owned junction heals into a copy slot', async () => {
-        // True DANGLING: the link already targets D, but D does not exist
-        // yet (a junction to a DIFFERENT missing path is FOREIGN_LINK).
         await fsp.mkdir(path.dirname(slotDir), { recursive: true });
         await fsp.symlink(distItem, slotDir, LINK_TYPE);
         await makeDist({ 'workshop.txt': 'id=1' });
@@ -449,7 +432,6 @@ describe('copy materializer (real fs fixtures)', () => {
             { ...opts(), copyIdentity: await identity() },
         );
         expect(result.ok).toBe(false);
-        // A failed reconcile must not report the healthy slot label (M3 pin).
         expect(result.state).toBe('RECONCILE_FAILED');
         expect(result.detail).toContain('ERR_COPY_SLOT_LINK_INSIDE');
         expect(await fsp.readFile(path.join(slotDir, 'keep.txt'), 'utf8')).toBe(
@@ -459,7 +441,6 @@ describe('copy materializer (real fs fixtures)', () => {
 
     it('materialize: an interrupted copy self-heals on the next pass', async () => {
         await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
-        // A crashed earlier pass left the marker + one stale file.
         await fsp.mkdir(path.join(slotDir, 'Contents'), { recursive: true });
         await writeMarker(slotDir);
         await fsp.writeFile(path.join(slotDir, 'workshop.txt'), 'stale');
@@ -494,7 +475,6 @@ describe('copy materializer (real fs fixtures)', () => {
             distItem,
             { ...opts(), copyIdentity: await identity() },
         );
-        // dist moves on: one file changed, one file gone, one tree gone.
         await fsp.writeFile(
             path.join(distItem, 'Contents/keep.lua'),
             '-- keep v2',
@@ -511,7 +491,7 @@ describe('copy materializer (real fs fixtures)', () => {
             { ...opts(), copyIdentity: await identity() },
         );
         expect(second.ok, second.detail).toBe(true);
-        expect(second.filesCopied).toBe(1); // keep.lua only
+        expect(second.filesCopied).toBe(1);
         expect(second.filesPruned).toBe(1); // the stale g.lua (dirs are structure)
         expect(
             await fsp.readFile(path.join(slotDir, 'Contents/keep.lua'), 'utf8'),
@@ -519,7 +499,6 @@ describe('copy materializer (real fs fixtures)', () => {
         expect(await fsp.readdir(path.join(slotDir, 'Contents'))).toEqual([
             'keep.lua',
         ]);
-        // The untouched file keeps its mtime — the third pass copies nothing.
         const after = await fsp.stat(path.join(slotDir, 'workshop.txt'));
         expect(after.mtimeMs).toBe(before.mtimeMs);
         const third = await materializeCopySlot(
@@ -534,13 +513,9 @@ describe('copy materializer (real fs fixtures)', () => {
         expect(third.filesPruned).toBe(0);
     });
 
-    // d03-B5: a prune deletes slot content the manifest does not carry —
-    // frequently a hand-made file. The result must carry every pruned leaf
-    // path so the caller can warn per file, not just count.
     it('reconcile: reports the full path of every pruned hand-made file', async () => {
         await makeDist({ 'workshop.txt': 'id=1' });
         await copyPass();
-        // The user drops a hand-made file and a hand-made tree in the slot.
         const orphanFile = path.join(slotDir, 'notes.txt');
         const nestedOrphan = path.join(slotDir, 'handmade', 'extra.lua');
         await fsp.writeFile(orphanFile, 'mine');
@@ -561,8 +536,6 @@ describe('copy materializer (real fs fixtures)', () => {
         expect(result.prunedPaths).toHaveLength(2);
         expect(result.prunedPaths).toContain(orphanFile);
         expect(result.prunedPaths).toContain(nestedOrphan);
-        // The prune itself still ran — the slot mirrors dist again (the
-        // copy marker is the slot's own ownership trace and stays).
         expect((await fsp.readdir(slotDir)).sort()).toEqual(
             ['.pzstudio-copy.json', 'workshop.txt'].sort(),
         );
@@ -588,8 +561,6 @@ describe('copy materializer (real fs fixtures)', () => {
     it('reconcile: a replacement prune (dist file over slot dir) reports the displaced file', async () => {
         await makeDist({ 'workshop.txt': 'id=1' });
         await copyPass();
-        // dist turns payload/ into a single file while the slot still has
-        // the directory — the dir's leaf file is a replacement prune.
         await fsp.writeFile(path.join(distItem, 'payload'), 'now a file');
         await fsp.mkdir(path.join(slotDir, 'payload'), { recursive: true });
         await fsp.writeFile(path.join(slotDir, 'payload', 'old.txt'), 'dir');
@@ -631,8 +602,6 @@ describe('copy materializer (real fs fixtures)', () => {
             copyIdentity: await identity(),
         });
         expect(calls.length).toBe(2);
-        // Marker-before: ownership only — an interrupted pass leaves a
-        // marker WITHOUT a manifest, and the toggle refuses it.
         expect(calls[0].files).toBeUndefined();
         const manifest = calls[1].files!;
         expect(Object.keys(manifest).sort()).toEqual([
@@ -641,7 +610,7 @@ describe('copy materializer (real fs fixtures)', () => {
         ]);
         for (const entry of Object.values(manifest) as unknown[][]) {
             expect(entry).toHaveLength(2);
-            expect(typeof entry[0]).toBe('number'); // size
+            expect(typeof entry[0]).toBe('number');
             expect(typeof entry[1]).toBe('number'); // mtimeMs
         }
     });
@@ -668,9 +637,6 @@ describe('copy materializer (real fs fixtures)', () => {
     });
 
     it('reconcile: a mid-walk fs error reports RECONCILE_FAILED, never the healthy COPY_SLOT label', async () => {
-        // Contract (ReconcileResult.state): a failed pass must never reuse
-        // COPY_SLOT — callers surface the state verbatim, so a generic fs
-        // error (EIO, ENOSPC) must land in the reconcile-only failure state.
         await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
         await fsp.mkdir(slotDir, { recursive: true });
         await writeMarker(slotDir);
@@ -699,8 +665,6 @@ describe('copy materializer (real fs fixtures)', () => {
         expect(result.ok).toBe(false);
         expect(result.state).toBe('RECONCILE_FAILED');
         expect(result.detail).toContain('EIO');
-        // The marker-before write survives the failed pass (self-heal is the
-        // next run's job); nothing else in the walk order is guaranteed.
         await expect(
             fsp.readFile(path.join(slotDir, COPY_MARKER_FILENAME), 'utf8'),
         ).resolves.toBeDefined();
@@ -715,15 +679,12 @@ describe('copy materializer (real fs fixtures)', () => {
         await expect(fsp.lstat(slotDir)).rejects.toMatchObject({
             code: 'ENOENT',
         });
-        // dist is never touched by the toggle.
         expect(
             await fsp.readFile(path.join(distItem, 'workshop.txt'), 'utf8'),
         ).toBe('id=1');
     });
 
     it('toggle: a copy-then-immediate-toggle does not false-drift', async () => {
-        // Review Focus 3: Date projection truncates sub-ms mtimes, so the
-        // manifest's own numbers must compare within the 1 ms tolerance.
         await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
         await copyPass();
         const result = await toggle();
@@ -748,8 +709,6 @@ describe('copy materializer (real fs fixtures)', () => {
         await copyPass();
         const edited = path.join(slotDir, 'workshop.txt');
         await fsp.writeFile(edited, 'id=2');
-        // Force the mtime out of the manifest's tolerance so the size-matched
-        // byte compare is the tier that decides.
         const marker = JSON.parse(
             await fsp.readFile(
                 path.join(slotDir, COPY_MARKER_FILENAME),
@@ -781,7 +740,6 @@ describe('copy materializer (real fs fixtures)', () => {
     });
 
     it('toggle: a deleted deployed file is clean (the decided exception)', async () => {
-        // A deletion adds no unique content — its source is dist.
         await makeDist({ 'workshop.txt': 'id=1', 'Contents/a.lua': '-- a' });
         await copyPass();
         await fsp.unlink(path.join(slotDir, 'Contents/a.lua'));
@@ -792,7 +750,7 @@ describe('copy materializer (real fs fixtures)', () => {
 
     it('toggle: a legacy marker without a manifest refuses with the upgrade hint', async () => {
         await fsp.mkdir(slotDir, { recursive: true });
-        await writeMarker(slotDir); // a marker-before-only (interrupted) pass
+        await writeMarker(slotDir);
         const result = await toggle();
         expect(result.ok).toBe(false);
         expect(result.state).toBe('COPY_SLOT_DRIFT');
@@ -871,8 +829,6 @@ describe('copy-slot marker (core)', () => {
     });
 
     it('platform-node excludes the same marker filename core owns', () => {
-        // The materializer must neither copy nor prune the marker core
-        // writes — the two constants must never drift apart.
         expect(NODE_COPY_MARKER_FILENAME).toBe(COPY_MARKER_FILENAME);
     });
 });

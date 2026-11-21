@@ -1,26 +1,5 @@
 'use strict';
 
-/**
- * Legacy CLI facade settings compatibility (doc 11 §13/§13.1; commit 11).
- *
- * The extension's transitional settings push bridge (updateVsCodeSettings →
- * setVsCodeSettings) was retired in commit 11 — the extension's every
- * operation path resolves settings through its v2 instance provider
- * (pinned in extUtilSettings.test.ts + extActivation.test.ts) and no
- * extension runtime code writes the legacy slots anymore.
- *
- * What remains public contract is the CLI's own legacy facade: an external
- * consumer of `@pzstudio/cli/api` calls `setVsCodeSettings(ws, user)`
- * DIRECTLY and every legacy door observes the slots. These tests pin that
- * contract for the three frozen §13 non-engine legacy doors (runCLI,
- * legacy createDevSync, legacy runProjectDoctor), setting up the slots
- * exactly the way an external consumer does — never through removed
- * extension code.
- *
- * Everything runs against the real `@pzstudio/cli/api` (the same module the
- * extension bundle inlines): only `vscode` is mocked.
- */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
@@ -44,10 +23,6 @@ import {
 import type { DoctorReport } from '@pzstudio/cli/api';
 
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
-
-/* ------------------------------------------------------------------ */
-/* Fixtures                                                            */
-/* ------------------------------------------------------------------ */
 
 let temps: string[] = [];
 function makeTemp(): string {
@@ -78,7 +53,6 @@ function makeProject(title: string): string {
     return dir;
 }
 
-/** Non-default configuration: custom outdir, no symlinks, custom template. */
 function withNonDefaultConfig(customOut: string, withTemplates = true) {
     asMock(vscode.workspace.getConfiguration).mockImplementation(
         (section: string) => {
@@ -120,24 +94,6 @@ function withNonDefaultConfig(customOut: string, withTemplates = true) {
     );
 }
 
-/**
- * The exact layers the extension's retired push bridge used to push (the
- * extUtilSettings reader snapshot shape). An external consumer of the
- * legacy facade sets up the slots DIRECTLY like this — same layer shapes,
- * same workspaceValue/globalValue semantics (§10).
- *
- * withWorkshopTemplate: template resolution REPLACES the global config
- * templates wholesale when the host layers define any template
- * (`vscodeSettings?.templates ?? globalConfig.templates`,
- * templateManager.ts) — per-category fallback against the global defaults
- * does not exist. A slot-fed build therefore needs the workshop category
- * pushed alongside the project one. The pushed workshop entry keeps the
- * OFFICIAL default URL (DEFAULT_TEMPLATES.workshop): the offline legacy
- * fallback only exists for official templates, so this mirrors a consumer
- * who customized the project template but left workshop at its default —
- * and keeps the test hermetic (blocked clone → embedded legacy template,
- * the same path the empty-slots test takes).
- */
 function pushLegacyLayers(
     customOut: string,
     withWorkshopTemplate = false,
@@ -177,10 +133,6 @@ function outDirMissingMessages(report: DoctorReport): string[] {
         .map((d) => d.message);
 }
 
-/* ------------------------------------------------------------------ */
-/* Legacy CLI facade contract: slots feed the legacy doors             */
-/* ------------------------------------------------------------------ */
-
 describe('legacy CLI facade settings (external consumers feed the slots directly)', () => {
     let customOut: string;
 
@@ -203,18 +155,10 @@ describe('legacy CLI facade settings (external consumers feed the slots directly
     it('runCLI build writes dist and materializes a junction at the configured outdir', async () => {
         const proj = makeProject('Facade Build');
         withNonDefaultConfig(customOut, false);
-        // Build resolves the workshop template category, so the pushed
-        // workshop layer (official default URL) rides along — see
-        // pushLegacyLayers. Hermetic: the clone fails instantly in this
-        // network-blocked suite and the CLI falls back to the embedded
-        // legacy template — the same offline path the empty-slots test
-        // below exercises.
         pushLegacyLayers(customOut, true);
         setProjectDir(proj);
         await runCLI('build', [], { flags: [] });
 
-        // Dist-always: the artifacts land in the project's canonical dist
-        // root; the configured outdir receives the DEPLOYMENT junction.
         expect(
             fs.existsSync(
                 path.join(proj, 'dist', 'Facade Build', 'workshop.txt'),
@@ -231,10 +175,8 @@ describe('legacy CLI facade settings (external consumers feed the slots directly
     });
 
     it('legacy createDevSync plan input writes the project dist root (slots are never write targets)', async () => {
-        pushLegacyLayers(customOut); // direct slot write
+        pushLegacyLayers(customOut);
         const proj = makeProject('Facade Sync');
-        // Hermetic template short-circuit only — the plan input still
-        // resolves its layers from the legacy slots.
         const workshopTemplateDir = path.join(makeTemp(), 'tpl-workshop');
         fs.mkdirSync(workshopTemplateDir, { recursive: true });
         const session = createDevSync(proj, { workshopTemplateDir });
@@ -244,9 +186,6 @@ describe('legacy CLI facade settings (external consumers feed the slots directly
             await session.stop();
         }
 
-        // Dist-always: the session writes ONLY the project's canonical
-        // dist root; sessions do not materialize — both outdir slots stay
-        // empty.
         expect(fs.existsSync(path.join(proj, 'dist', 'Facade Sync'))).toBe(
             true,
         );
@@ -257,17 +196,14 @@ describe('legacy CLI facade settings (external consumers feed the slots directly
     });
 
     it('legacy runProjectDoctor resolves the configured outdir and template layers', async () => {
-        pushLegacyLayers(customOut); // direct slot write
+        pushLegacyLayers(customOut);
         const proj = makeProject('Facade Doctor');
 
         const report = await runProjectDoctor(proj);
 
-        // The outdir tier took the pushed workspace value...
         const outDirMissing = outDirMissingMessages(report);
         expect(outDirMissing).toHaveLength(1);
         expect(outDirMissing[0]).toContain(customOut);
-        // ...and the template probe saw the pushed templates.project layer
-        // (cache never downloaded → info diagnostic naming it).
         const notCached = report.diagnostics.find(
             (d) => d.code === 'templates.notCached',
         );
@@ -275,10 +211,6 @@ describe('legacy CLI facade settings (external consumers feed the slots directly
     });
 
     it('runCLI build with empty legacy slots runs pure: dist only, no deployment', async () => {
-        // The mirror of the slot-fed case: empty slots → no deployment
-        // target exists (the factory-default tier is removed), so the
-        // build writes the canonical dist root and nothing else
-        // (§13.1 post-run state semantics).
         withNonDefaultConfig(customOut, false);
         const proj = makeProject('Facade Build Bare');
 

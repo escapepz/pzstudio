@@ -36,8 +36,6 @@ vi.mock('fs', async () => {
     };
 });
 
-// The notice text pinned by the feature spec (emitted via emitInfo right
-// after the first successful event write).
 const NOTICE =
     "PZ Studio saves local usage logs (commands, durations, errors) to ~/.pzstudio/usage — nothing is ever uploaded. Inspect them any time; turn off with 'pzstudio usage off', share with 'pzstudio usage export'.";
 
@@ -66,7 +64,6 @@ const writeRawConfig = (content: string): void => {
 const writeJsonConfig = (config: unknown): void =>
     writeRawConfig(JSON.stringify(config));
 
-/** How many times the notice text went out through emitInfo. */
 const noticeEmissions = (): number =>
     vi.mocked(logger.emitInfo).mock.calls.filter((call) => call[1] === NOTICE)
         .length;
@@ -76,10 +73,6 @@ describe('UsageRecorder', () => {
 
     beforeEach(async () => {
         vi.restoreAllMocks();
-        // Vitest 4's restoreAllMocks resets the vi.fn(actual.*) wrappers the
-        // fs mock factory installed, so re-prime them: every case here
-        // verifies real-file behavior through the module under test (fake
-        // HOME from vitest.setup.ts), not mocks-of-mocks.
         actualFs = await vi.importActual('fs');
         vi.mocked(fs.existsSync).mockImplementation(actualFs.existsSync as any);
         vi.mocked(fs.readFileSync).mockImplementation(
@@ -98,8 +91,6 @@ describe('UsageRecorder', () => {
         vi.mocked(fs.statSync).mockImplementation(actualFs.statSync as any);
         vi.mocked(fs.unlinkSync).mockImplementation(actualFs.unlinkSync as any);
         vi.mocked(fs.utimesSync).mockImplementation(actualFs.utimesSync as any);
-        // restoreAllMocks leaves call records on the factory-created fs fns
-        // and the auto-mocked logger fns — clear them for call isolation.
         vi.mocked(fs.existsSync).mockClear();
         vi.mocked(fs.readFileSync).mockClear();
         vi.mocked(fs.writeFileSync).mockClear();
@@ -200,9 +191,6 @@ describe('UsageRecorder', () => {
         fs.mkdirSync(usageDir(), { recursive: true });
         const winnerSalt = 'f'.repeat(32);
         fs.writeFileSync(saltPath(), winnerSalt, 'utf-8');
-        // Simulate a concurrent first run winning the race between our
-        // existsSync probe (misses) and our exclusive-create write (hits
-        // EEXIST with the winner's salt already on disk).
         const realExistsSync = actualFs.existsSync as any;
         const realWriteFileSync = actualFs.writeFileSync as any;
         vi.mocked(fs.existsSync).mockImplementation(((target: unknown) =>
@@ -232,8 +220,6 @@ describe('UsageRecorder', () => {
             .update('/p' + winnerSalt)
             .digest('hex')
             .slice(0, 8);
-        // The winner's salt is adopted (the hash matches it) and the file
-        // was not overwritten by the loser's fresh salt.
         expect(hash).toBe(expected);
         expect(fs.readFileSync(saltPath(), 'utf-8')).toBe(winnerSalt);
     });
@@ -248,7 +234,6 @@ describe('UsageRecorder', () => {
         expect(fs.readFileSync(saltPath(), 'utf-8').trim()).toMatch(
             /^[0-9a-f]{32}$/,
         );
-        // A second instance adopts the regenerated salt.
         expect(new UsageRecorder().projectHash('/p')).toBe(hash);
     });
 
@@ -287,12 +272,10 @@ describe('UsageRecorder', () => {
                 status: 'ok',
             }),
         ).not.toThrow();
-        // The append failed: nothing saved, so nothing disclosed or pinned.
         expect(noticeEmissions()).toBe(0);
         expect(fs.existsSync(noticeMarker())).toBe(false);
         expect(fs.existsSync(eventsFile())).toBe(false);
 
-        // The next successful write appends the event, then discloses once.
         recorder.recordOp({ op: 'build', host: 'cli', durMs: 1, status: 'ok' });
         expect(noticeEmissions()).toBe(1);
         expect(fs.existsSync(noticeMarker())).toBe(true);
@@ -360,8 +343,6 @@ describe('UsageRecorder', () => {
 
         const recorder = new UsageRecorder({ maxDirBytes: 60 });
         recorder.recordOp({ op: 'build', host: 'cli', durMs: 1, status: 'ok' });
-        // 100 bytes total > 60 cap: the oldest file goes first, dropping it
-        // is enough (50 <= 60), so the newer file and the new event stay.
         expect(fs.existsSync(older)).toBe(false);
         expect(fs.existsSync(newer)).toBe(true);
         expect(eventLines(eventsFile())).toHaveLength(1);
@@ -408,7 +389,6 @@ describe('UsageRecorder', () => {
         expect(first.usageLog?.enabled).toBe(false);
         expect(first.outdir).toBe('C:/x');
 
-        // Simulate `pzstudio usage off`: read → set enabled:false → write.
         first.usageLog = { enabled: false };
         writeGlobalConfig(first);
         const second = readGlobalConfig(true);
@@ -416,7 +396,6 @@ describe('UsageRecorder', () => {
         expect(second.outdir).toBe('C:/x');
         expect(second.templates.project).toBeDefined();
 
-        // A config without the key stays default-ON (enabled undefined).
         writeJsonConfig({ templates: {}, outdir: 'C:/x' });
         const third = readGlobalConfig(true);
         expect(third.usageLog?.enabled).toBeUndefined();

@@ -13,20 +13,14 @@ vi.mock('vscode', async () => {
 import * as vscode from 'vscode';
 import { createPZLogger } from '../../packages/vscode-extension/src/util/logger';
 
-// Importing the legacy dispatcher registers every command into the registry
-// (studio.run dispatches through the same registry) — the same pattern as
-// cliStudioInstances.test.ts, so the routing tests below run the REAL engine
-// lifecycle, not a mocked studio.
 import '../../packages/cli/src/lib/cli';
 import { createPzStudio } from '../../packages/cli/src/lib/studio';
 import { createTempDir, deleteDir } from '../helpers/test-fixtures';
 
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 
-/** Timestamp shape produced by getTimestamp() — never a wall-clock value. */
 const TIMESTAMP = /\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]/;
 
-/** The mock factory hands out a fresh channel object per call — capture it. */
 function makeChannel() {
     const channel = vscode.window.createOutputChannel('PZ Studio');
     return { channel, appendLine: asMock(channel.appendLine) };
@@ -45,8 +39,6 @@ function makeTempDir(): string {
 }
 
 beforeEach(() => {
-    // Mock call counts must not leak between tests (the no-duplicate-channel
-    // assertion counts createOutputChannel calls).
     vi.clearAllMocks();
 });
 
@@ -89,9 +81,6 @@ describe('createPZLogger (host OutputChannel bridge)', () => {
         );
     });
 
-    // UX-16: the notification is actionable — a localized "Show Details"
-    // button opens the handed PZ Studio channel on demand. The panel is
-    // never auto-opened merely by reporting the error.
     it('error decorates, prints the stack for Error values and notifies with a Show Details action', async () => {
         const { channel, appendLine } = makeChannel();
         const logger = createPZLogger(channel);
@@ -105,8 +94,6 @@ describe('createPZLogger (host OutputChannel bridge)', () => {
         expect(String(appendLine.mock.calls[1][0])).toMatch(
             new RegExp(`^${TIMESTAMP.source} \\[ERROR\\] boom\\n`),
         );
-        // Exactly one popup per error (no duplicate notifications), with the
-        // action item attached.
         expect(asMock(vscode.window.showErrorMessage)).toHaveBeenCalledTimes(2);
         expect(asMock(vscode.window.showErrorMessage)).toHaveBeenNthCalledWith(
             1,
@@ -118,7 +105,6 @@ describe('createPZLogger (host OutputChannel bridge)', () => {
             'PZStudio Error: boom',
             'Show Details',
         );
-        // Merely reporting never touches the panel's visibility.
         await Promise.resolve();
         expect(asMock(channel.show)).not.toHaveBeenCalled();
     });
@@ -150,8 +136,6 @@ describe('createPZLogger (host OutputChannel bridge)', () => {
         expect(asMock(channel.show)).not.toHaveBeenCalled();
     });
 
-    // Cancellation is a normal flow: it stays recorded in the channel but
-    // must not surface as an error notification.
     it('records a cancellation error in the channel without the notification', () => {
         const { channel, appendLine } = makeChannel();
         const logger = createPZLogger(channel);
@@ -168,10 +152,6 @@ describe('createPZLogger (host OutputChannel bridge)', () => {
         expect(asMock(vscode.window.showErrorMessage)).not.toHaveBeenCalled();
     });
 
-    // UX-04: verbose diagnostics must reach the SAME channel, decorated like
-    // the other semantic channels (timestamp + DEBUG tag), with the message
-    // preserved verbatim — the engine owns the --verbose gating, the host
-    // logger only renders.
     it('verbose writes DEBUG lines into the same OutputChannel', () => {
         const { channel, appendLine } = makeChannel();
         const logger = createPZLogger(channel);
@@ -197,8 +177,6 @@ describe('createPZLogger (host OutputChannel bridge)', () => {
         expect(lines[0]).toMatch(
             new RegExp(`^${TIMESTAMP.source} \\[DEBUG\\] line one\\nline two$`),
         );
-        // Empty diagnostics follow the plain appendLine convention of the
-        // other channels: one decoration prefix, no invented content.
         expect(lines[1]).toMatch(
             new RegExp(`^${TIMESTAMP.source} \\[DEBUG\\] $`),
         );
@@ -217,8 +195,6 @@ describe('createPZLogger (host OutputChannel bridge)', () => {
         expect(lines[0]).toMatch(/\[INFO\] first$/);
         expect(lines[1]).toMatch(/\[DEBUG\] second$/);
         expect(lines[2]).toMatch(/\[WARN\] third$/);
-        // The bridge itself never creates a channel — it renders into the one
-        // it was handed.
         expect(asMock(vscode.window.createOutputChannel)).toHaveBeenCalledTimes(
             1,
         );
@@ -257,10 +233,6 @@ describe('UX-04: engine verbose diagnostics reach the OutputChannel', () => {
         return dir;
     }
 
-    // The real engine lifecycle emits verbose diagnostics before every real
-    // command (cli.ts "Project Dir:" / "Executing command [...]" lines), so a
-    // hermetic `list` run against a temp project exercises the full chain:
-    // studio.run → InvocationContext logger → createPZLogger → channel.
     function makeStudio(channel: vscode.OutputChannel) {
         return createPzStudio({
             logger: createPZLogger(channel),
@@ -280,14 +252,10 @@ describe('UX-04: engine verbose diagnostics reach the OutputChannel', () => {
 
         const lines = channelLines(appendLine);
         const debugLines = lines.filter((l) => l.includes('[DEBUG]'));
-        // The engine's own pre-command diagnostics, complete (message not
-        // truncated, no re-prefixing).
         expect(debugLines.some((l) => /Project Dir:/.test(l))).toBe(true);
         expect(
             debugLines.some((l) => /Executing command \[list\]/.test(l)),
         ).toBe(true);
-        // Ordering: diagnostics precede the completion progress line and the
-        // data output stays undecorated.
         const firstDebug = lines.findIndex((l) => l.includes('[DEBUG]'));
         const completed = lines.findIndex((l) =>
             l.includes('[INFO] Command [list] completed.'),
@@ -305,7 +273,6 @@ describe('UX-04: engine verbose diagnostics reach the OutputChannel', () => {
 
         const lines = channelLines(appendLine);
         expect(lines.some((l) => l.includes('[DEBUG]'))).toBe(false);
-        // Normal channels keep working exactly as before.
         expect(
             lines.some((l) => l.includes('[INFO] Command [list] completed.')),
         ).toBe(true);

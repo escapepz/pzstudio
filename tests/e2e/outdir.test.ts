@@ -15,11 +15,9 @@ describe('outdir command e2e', () => {
     });
 
     it('should change the machine-level deployment root', async () => {
-        // 1. Create a dummy directory to set as outdir
         const newOutDir = path.join(workspace.dir, 'new_out');
         fs.mkdirSync(newOutDir, { recursive: true });
 
-        // 2. Run outdir command
         const result = await workspace.run('outdir', [newOutDir]);
 
         try {
@@ -29,7 +27,6 @@ describe('outdir command e2e', () => {
                 'The deployment root has been changed',
             );
 
-            // 3. Verify config.json in fake home
             const configPath = path.join(
                 workspace.fakeHome,
                 '.pzstudio',
@@ -54,7 +51,6 @@ describe('outdir command e2e', () => {
         const outDir = path.join(workspace.dir, 'out');
         fs.mkdirSync(outDir, { recursive: true });
 
-        // Setup config.json
         const configPath = path.join(
             workspace.fakeHome,
             '.pzstudio',
@@ -80,8 +76,6 @@ describe('outdir command e2e', () => {
         );
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         expect(path.isAbsolute(config.outdir)).toBe(true);
-        // The CLI resolves through the real cwd; on macOS the tmp dir sits
-        // behind the /var -> /private/var symlink, so compare real paths.
         expect(config.outdir).toBe(
             fs.realpathSync(path.resolve(workspace.dir, 'relative_out')),
         );
@@ -148,7 +142,6 @@ describe('outdir — path edge cases (E2E)', () => {
             'config.json',
         );
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        // The stored path should be normalized (no trailing separator)
         expect(path.isAbsolute(config.outdir)).toBe(true);
     });
 });

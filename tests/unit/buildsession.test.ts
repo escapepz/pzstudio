@@ -35,13 +35,6 @@ function baseConfig(): IProjectConfig {
     } as unknown as IProjectConfig;
 }
 
-/**
- * A fake session host: getPlanInput() reads the same facts the CLI's build
- * command reads (mod.info presence/content, branch folders, workshop
- * metadata) — but through the injected memory filesystem. The config lives
- * in a mutable holder so tests can mutate project.json's meaning and let a
- * full rebuild pick it up.
- */
 function createHost(
     fs: MemoryFileSystem,
     config: IProjectConfig,
@@ -69,9 +62,7 @@ function createHost(
                         `${PROJECT_DIR}/${modId}/mod.info`,
                     );
                     state.modInfoExists[''] = true;
-                } catch {
-                    // no root mod.info
-                }
+                } catch {}
                 const entries = await fs.list(`${PROJECT_DIR}/${modId}`);
                 for (const entry of entries) {
                     if (entry.type !== 'directory') continue;
@@ -83,12 +74,8 @@ function createHost(
                             state.modInfoContent[entry.name] =
                                 await fs.readText(`${entry.uri}/mod.info`);
                             state.modInfoExists[entry.name] = true;
-                        } catch {
-                            // branch without mod.info
-                        }
-                    } catch {
-                        // not a Build 42 branch folder
-                    }
+                        } catch {}
+                    } catch {}
                 }
                 modSourceStates[modId] = state;
             }
@@ -97,16 +84,12 @@ function createHost(
                 descriptionLines = (
                     await fs.readText(`${PROJECT_DIR}/workshop/description.txt`)
                 ).split(/\r?\n/);
-            } catch {
-                // no description file
-            }
+            } catch {}
             let previewPngExists = false;
             try {
                 await fs.stat(`${PROJECT_DIR}/workshop/preview.png`);
                 previewPngExists = true;
-            } catch {
-                // no preview
-            }
+            } catch {}
             return {
                 config: holder.config,
                 workshopTemplateDir: TEMPLATE_DIR,
@@ -150,8 +133,6 @@ describe('coalesceDeltas (pure)', () => {
             { type: 'delete', path: '/p/c.lua' },
             { type: 'create', path: '/p/c.lua' },
         ]);
-        // create→change collapses to the create (the write is identical);
-        // any→delete stays a delete; delete→create becomes a create.
         expect(coalesced).toEqual([
             { type: 'create', path: '/p/a.lua' },
             { type: 'delete', path: '/p/b.lua' },
@@ -230,7 +211,6 @@ describe('classifyDelta (pure)', () => {
             variants: ['main', 'development'],
             type: 'change',
         });
-        // Dev-only mods only qualify for the development variant.
         expect(
             classifyDelta(
                 { type: 'change', path: '/proj/dev_mod/media/lua/d.lua' },
@@ -348,7 +328,6 @@ describe('BuildSession (fs-driven sync engine)', () => {
                 `${DEV_OUT}/Contents/mods/my_mod_dev/media/lua/shared/hello.lua`,
             ),
         ).toBe('print("v1")');
-        // mod.info is generated (auto-if-missing, no source mod.info)
         expect(
             await fs.readText(`${MAIN_OUT}/Contents/mods/my_mod/mod.info`),
         ).toContain('id=my_mod');
@@ -382,8 +361,6 @@ describe('BuildSession (fs-driven sync engine)', () => {
                 `${DEV_OUT}/Contents/mods/my_mod_dev/media/lua/shared/hello.lua`,
             ),
         ).toBe('print("v2")');
-        // Nothing else was touched: the pre-existing util.lua copy is still
-        // the original and workshop.txt still has the id (no full rebuild).
         expect(
             await fs.readText(
                 `${MAIN_OUT}/Contents/mods/my_mod/media/lua/shared/util.lua`,
@@ -434,7 +411,6 @@ describe('BuildSession (fs-driven sync engine)', () => {
         const { host } = createHost(fs, config);
         const session = new BuildSession(host);
         await session.start();
-        // Both outputs carry the source mod.info (auto-if-missing)…
         expect(
             await fs.readText(`${MAIN_OUT}/Contents/mods/my_mod/mod.info`),
         ).toContain('id=my_mod');
@@ -457,7 +433,6 @@ describe('BuildSession (fs-driven sync engine)', () => {
         expect(
             await fs.readText(`${MAIN_OUT}/Contents/mods/my_mod/mod.info`),
         ).toContain('name=Renamed Mod');
-        // The development output keeps the folder-name-aligned id.
         expect(
             await fs.readText(`${DEV_OUT}/Contents/mods/my_mod_dev/mod.info`),
         ).toBe('id=my_mod_dev\nname=Renamed Mod\n');
@@ -469,7 +444,6 @@ describe('BuildSession (fs-driven sync engine)', () => {
         const { host } = createHost(fs, config);
         const session = new BuildSession(host);
         await session.start();
-        // The ignore file itself is never copied (excludeIgnoreFile)…
         expect(
             fs.files.has(`${MAIN_OUT}/Contents/mods/my_mod/.pzstudioignore`),
         ).toBe(false);
@@ -510,7 +484,6 @@ describe('BuildSession (fs-driven sync engine)', () => {
         const result = await session.apply([
             { type: 'change', path: '/proj/dev_mod/media/lua/d.lua' },
         ]);
-        // Only the development output was touched.
         expect(result.incremental).toBe(1);
         expect(
             await fs.readText(
@@ -548,18 +521,15 @@ describe('BuildSession (fs-driven sync engine)', () => {
         const session = new BuildSession(host);
         await session.start();
 
-        // The user renamed the mod's display name in project.json.
         const next = baseConfig();
         next.mods.my_mod = { name: 'Renamed', description: 'A mod.' };
         setConfig(next);
-        // The session host reads the holder, so getPlanInput() sees it.
 
         const result = await session.apply([
             { type: 'change', path: '/proj/project.json' },
         ]);
         expect(result.fullRebuild).toBe(true);
         expect(result.errors).toEqual([]);
-        // The regenerated mod.info now carries the new name.
         expect(
             await fs.readText(`${MAIN_OUT}/Contents/mods/my_mod/mod.info`),
         ).toContain('name=Renamed');
@@ -585,15 +555,10 @@ describe('BuildSession (fs-driven sync engine)', () => {
     });
 
     it('collects per-action errors instead of throwing', async () => {
-        // A write that keeps failing with a transient lock: both variants
-        // fail, the distinct cause is reported once, and the session stays
-        // usable for the next batch.
         let failWrites = false;
         const failingFs: ProjectFileSystem = Object.create(fs);
         failingFs.write = async (uri: string, data: Uint8Array) => {
             if (failWrites && uri.includes('/shared/hello.lua')) {
-                // Both variants hit the same lock; the engine reports the
-                // distinct causes once each, so the message is identical.
                 throw Object.assign(
                     new Error("EBUSY: resource busy, open 'hello.lua'"),
                     { code: 'EBUSY' },
@@ -618,7 +583,6 @@ describe('BuildSession (fs-driven sync engine)', () => {
         expect(result.errors[0]).toContain('EBUSY');
         expect(result.incremental).toBe(0);
 
-        // The session stays usable.
         const second = await session.apply([
             { type: 'change', path: '/proj/my_mod/media/lua/shared/hello.lua' },
         ]);
@@ -633,10 +597,6 @@ describe('BuildSession (fs-driven sync engine)', () => {
     });
 
     it('normalizes a failed scoped plan-input fetch into result.errors', async () => {
-        // The scoped phase re-reads the world through the host; when that
-        // read rejects (project resolution, template lookup, source
-        // snapshotting), apply() must still resolve — never throw — with
-        // the failure collected and the committed baseline untouched.
         await fs.writeText(
             `${PROJECT_DIR}/my_mod/mod.info`,
             'id=my_mod\nname=My Mod\n',
@@ -676,30 +636,21 @@ describe('BuildSession (fs-driven sync engine)', () => {
         ]);
         failFetch = false;
 
-        // Resolved with the failure collected — not a rejection, and not
-        // represented as a successful scoped sync.
         expect(result.errors).toHaveLength(1);
         expect(result.errors[0]).toContain('plan input unreadable');
         expect(result.scoped).toEqual([]);
         expect(result.fullRebuild).toBe(false);
-        // The batch's earlier incremental phase keeps its committed
-        // writes…
         expect(result.incremental).toBe(2);
         expect(
             await fs.readText(
                 `${MAIN_OUT}/Contents/mods/my_mod/media/lua/shared/hello.lua`,
             ),
         ).toBe('print("v2")');
-        // …while the scoped rebuild never ran: the output mod.info is
-        // unchanged.
         expect(
             await fs.readText(`${MAIN_OUT}/Contents/mods/my_mod/mod.info`),
         ).toBe('id=my_mod\nname=My Mod\n');
-        // Exactly one fetch for the failed batch: no retry, no replay.
         expect(fetches).toBe(2);
 
-        // The baseline survived and the queue accepts the next batch: the
-        // same scoped change rebuilds once the host reads again.
         const second = await session.apply([
             { type: 'change', path: `${PROJECT_DIR}/my_mod/mod.info` },
         ]);
@@ -720,9 +671,6 @@ describe('BuildSession (fs-driven sync engine)', () => {
             ...host,
             getPlanInput: async () => {
                 if (rejectString) {
-                    // A non-Error rejection value: describeError's
-                    // String(e) fallback must still produce a usable
-                    // message at this boundary.
                     return Promise.reject('plan input vanished');
                 }
                 return host.getPlanInput();
@@ -745,7 +693,6 @@ describe('BuildSession (fs-driven sync engine)', () => {
         const session = new BuildSession(host);
         await session.start();
 
-        // Fire two batches without awaiting the first.
         await fs.writeText(
             `${PROJECT_DIR}/my_mod/media/lua/shared/hello.lua`,
             'a1',
@@ -784,13 +731,10 @@ describe('BuildSession (fs-driven sync engine)', () => {
     });
 
     it('skips directory events without writing them as files', async () => {
-        // Watchers report directory creations like file creations (the
-        // extension's FileSystemWatcher and @parcel/watcher alike).
         const { host } = createHost(fs, config);
         const session = new BuildSession(host);
         await session.start();
 
-        // The directory has content so stat() resolves it as a directory.
         await fs.writeText(`${PROJECT_DIR}/my_mod/media/lua/sub/x.lua`, 'x');
         const result = await session.apply([
             { type: 'create', path: `${PROJECT_DIR}/my_mod/media/lua/sub` },
@@ -798,11 +742,9 @@ describe('BuildSession (fs-driven sync engine)', () => {
         expect(result.errors).toEqual([]);
         expect(result.ignored).toBe(1);
         expect(result.incremental).toBe(0);
-        // No file was materialized at the directory path in the output.
         expect(
             fs.files.has(`${MAIN_OUT}/Contents/mods/my_mod/media/lua/sub`),
         ).toBe(false);
-        // The directory's content still syncs like any file event.
         const fileResult = await session.apply([
             {
                 type: 'create',
@@ -835,9 +777,6 @@ describe('BuildSession transient sources and batch summary', () => {
         const session = new BuildSession(host);
         await session.start();
 
-        // Watchers deliver events for transient files too (atomic saves,
-        // temp copies like "_init.lua.git"); by the time the batch runs the
-        // file is gone. That is not a sync failure.
         const result = await session.apply([
             {
                 type: 'change',
@@ -919,15 +858,6 @@ describe('BuildSession transient sources and batch summary', () => {
     });
 });
 
-/**
- * E1 Stage-1 ownership guard, scoped by DEC-2=c (Owner, 2026-11-07): the
- * fail-closed boundary applies to destinations inside a configured mod's
- * source folder (the case-6 layout, doc 15 §1); out-of-mod output roots
- * keep the committed adoption behavior — a recorded, temporary deviation
- * from doc 18 B1-A until the receipt ledger provides cross-session
- * ownership evidence. Every fixture below therefore plants foreign content
- * at an in-mod root unless it is explicitly pinning the out-of-mod adopt.
- */
 describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => {
     let fs: MemoryFileSystem;
     let config: IProjectConfig;
@@ -943,12 +873,6 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
         const session = new BuildSession(host);
         await session.start();
 
-        // A foreign, non-empty destination at the future output root inside
-        // the mod source (case-6): the adoption full rebuild must refuse to
-        // delete it (E1 fail-closed) instead of silently replacing it with
-        // generated output. A second foreign file exercises the
-        // incremental-delete window after the failed adoption re-bases the
-        // session onto the new config.
         const moved = baseConfig();
         moved.outdir = '/proj/my_mod/nested-out';
         setConfig(moved);
@@ -964,23 +888,17 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
         const refused = await session.apply([
             { type: 'change', path: '/proj/project.json' },
         ]);
-        // The main variant's destination is refused and reported through
-        // the existing error contract — never a silent success…
         expect(refused.errors).toHaveLength(1);
         expect(refused.errors[0]).toContain('Refusing full rebuild removeDir');
         expect(refused.errors[0]).toContain(
             '/proj/my_mod/nested-out/Sync Project',
         );
         expect(refused.fullRebuild).toBe(false);
-        // …the development variant's destination was absent (safe to
-        // create) and still builds…
         expect(
             await fs.readText(
                 '/proj/my_mod/nested-out/Sync Project - dev_branch/Contents/mods/my_mod_dev/media/lua/shared/hello.lua',
             ),
         ).toBe('print("v1")');
-        // …and the unproven content is preserved byte-exact, with nothing
-        // written into the refused destination.
         expect(
             await fs.readText(
                 '/proj/my_mod/nested-out/Sync Project/Contents/mods/foreign/precious.lua',
@@ -989,11 +907,8 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
         expect(
             fs.files.has('/proj/my_mod/nested-out/Sync Project/workshop.txt'),
         ).toBe(false);
-        // The former root is untouched.
         expect(fs.files.has(`${MAIN_OUT}/workshop.txt`)).toBe(true);
 
-        // An incremental delete below the unowned in-mod root fails closed
-        // too — the M6–M8 destructive window.
         const deleteRefused = await session.apply([
             { type: 'delete', path: '/proj/my_mod/media/lua/victim.lua' },
         ]);
@@ -1007,8 +922,6 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
             ),
         ).toBe('victim');
 
-        // Recovery: once the destination is cleared, the same batch adopts
-        // it (empty destinations build) and the session continues.
         await fs.delete('/proj/my_mod/nested-out', { recursive: true });
         const adopted = await session.apply([
             { type: 'change', path: '/proj/project.json' },
@@ -1021,7 +934,6 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
             ),
         ).toBe('print("v1")');
 
-        // Inside output the session itself produced, deletes proceed.
         const deleted = await session.apply([
             { type: 'delete', path: '/proj/my_mod/media/lua/shared/util.lua' },
         ]);
@@ -1040,9 +952,6 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
         const session = new BuildSession(host);
         await session.start();
 
-        // Only hidden content at the future in-mod variant root: an
-        // enumeration that skipped dot entries would call this destination
-        // empty and delete the user's data.
         const moved = baseConfig();
         moved.outdir = '/proj/my_mod/dot-out';
         setConfig(moved);
@@ -1071,11 +980,6 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
         const session = new BuildSession(host);
         await session.start();
 
-        // An out-of-band outdir move into the mod source (no project.json
-        // delta): a mod.info edit re-reads the config in the scoped phase,
-        // so the scoped plan's removeDir targets the NEW in-mod root. A
-        // foreign file inside the future mod folder must stop it before any
-        // mutation.
         const moved = baseConfig();
         moved.outdir = '/proj/my_mod/scoped-out';
         setConfig(moved);
@@ -1092,13 +996,9 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
         expect(result.errors[0]).toContain(
             '/proj/my_mod/scoped-out/Sync Project/Contents/mods/my_mod',
         );
-        // Attempted scoped work is still reported alongside the errors
-        // (the existing failed-scoped convention) — never a clean success.
         expect(result.scoped).toEqual([
             { modId: 'my_mod', variants: ['main', 'development'] },
         ]);
-        // The foreign file survived and the engine wrote nothing into the
-        // refused destination…
         expect(
             await fs.readText(
                 '/proj/my_mod/scoped-out/Sync Project/Contents/mods/my_mod/keepme.lua',
@@ -1109,7 +1009,6 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
                 '/proj/my_mod/scoped-out/Sync Project/Contents/mods/my_mod/mod.info',
             ),
         ).toBe(false);
-        // …while the absent dev destination built normally.
         expect(
             await fs.readText(
                 '/proj/my_mod/scoped-out/Sync Project - dev_branch/Contents/mods/my_mod_dev/media/lua/shared/hello.lua',
@@ -1119,12 +1018,6 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
     });
 
     it('start() adopts a non-empty out-of-mod destination — the committed behavior DEC-2=c preserves', async () => {
-        // DEC-2=c: destinations outside every mod folder keep the committed
-        // adoption behavior — a fresh session may replace its configured
-        // output root exactly as `pzstudio build` always has, foreign
-        // content included. This is the recorded deviation from doc 18
-        // B1-A until the receipt ledger (doc 18 §2–§9) provides
-        // cross-session ownership evidence; the in-mod equivalent refuses.
         await fs.writeText(
             `${MAIN_OUT}/Contents/mods/foreign/precious.lua`,
             'user data',
@@ -1132,14 +1025,10 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
         const { host } = createHost(fs, config);
         const session = new BuildSession(host);
         await session.start();
-        // The root was replaced with generated output…
         expect(fs.files.has(`${MAIN_OUT}/workshop.txt`)).toBe(true);
         expect(
             fs.files.has(`${MAIN_OUT}/Contents/mods/foreign/precious.lua`),
         ).toBe(false);
-        // …and a fresh session adopts the non-empty root again: the
-        // repeated `pzstudio build` / watch-restart loop stays intact for
-        // out-of-mod roots.
         const second = new BuildSession(host);
         await second.start();
         expect(fs.files.has(`${MAIN_OUT}/workshop.txt`)).toBe(true);
@@ -1147,7 +1036,6 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
     });
 
     it('start() refuses per variant regardless of iteration order — a foreign in-mod dev-only root is preserved too', async () => {
-        // DEC-2=c: the refusal applies per variant at in-mod destinations.
         const case6 = baseConfig();
         case6.outdir = '/proj/my_mod/nested';
         await fs.writeText(
@@ -1170,7 +1058,6 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
                 '/proj/my_mod/nested/Sync Project - dev_branch/workshop.txt',
             ),
         ).toBe(false);
-        // Variant independence: the absent main destination still built.
         expect(
             fs.files.has('/proj/my_mod/nested/Sync Project/workshop.txt'),
         ).toBe(true);
@@ -1184,8 +1071,6 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
         const moved = baseConfig();
         moved.outdir = '/proj/my_mod/nested-out';
         setConfig(moved);
-        // A foreign file at exactly the path a later source change would
-        // write, inside the otherwise non-empty unowned in-mod root.
         await fs.writeText(
             '/proj/my_mod/nested-out/Sync Project/Contents/mods/my_mod/media/lua/shared/hello.lua',
             'foreign bytes',
@@ -1195,10 +1080,6 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
         ]);
         expect(refused.errors).toHaveLength(1);
 
-        // The failed adoption re-based the session onto the new config: a
-        // later plain change must not silently write into the unowned root
-        // — the decision is made at the variant-root boundary, so a missing
-        // leaf elsewhere in the tree proves nothing either.
         await fs.writeText(
             `${PROJECT_DIR}/my_mod/media/lua/shared/hello.lua`,
             'print("v2")',
@@ -1214,7 +1095,6 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
         expect(write.errors[0]).toContain(
             '/proj/my_mod/nested-out/Sync Project',
         );
-        // The foreign same-path file is intact.
         expect(
             await fs.readText(
                 '/proj/my_mod/nested-out/Sync Project/Contents/mods/my_mod/media/lua/shared/hello.lua',
@@ -1231,8 +1111,6 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
         const moved = baseConfig();
         moved.outdir = '/proj/my_mod/nested-out';
         setConfig(moved);
-        // Foreign metadata at the exact rewrite target inside the unowned
-        // in-mod main root.
         await fs.writeText(
             '/proj/my_mod/nested-out/Sync Project/workshop.txt',
             'user text',
@@ -1251,7 +1129,6 @@ describe('BuildSession E1 ownership guard (fail-closed output mutation)', () => 
         ]);
         expect(textResult.errors).toHaveLength(1);
         expect(textResult.errors[0]).toContain('Refusing workshop.txt rewrite');
-        // The foreign metadata is intact; the owned dev root still rewrote.
         expect(
             await fs.readText(
                 '/proj/my_mod/nested-out/Sync Project/workshop.txt',

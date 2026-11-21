@@ -25,7 +25,6 @@ describe('build command e2e', () => {
     });
 
     it('should build a project created with new', async () => {
-        // 1. Create a new project
         const projectTitle = 'Build Project';
         const modId = 'build_mod';
 
@@ -56,9 +55,6 @@ describe('build command e2e', () => {
         workspace.assertSuccess(buildResult);
 
         try {
-            // Dist-always: no outdir configured anywhere → pure build mode.
-            // The artifacts land in the project's canonical dist root and
-            // nothing is deployed.
             const expectedOutDir = path.join(
                 workspace.dir,
                 'dist',
@@ -131,14 +127,9 @@ describe('build command e2e', () => {
         const buildResult = await workspace.run('build');
         workspace.assertSuccess(buildResult);
 
-        // Dist-always: artifacts land in dist; the configured outdir
-        // receives the per-item junction (mode 'symlink', the default).
         const distItem = path.join(workspace.dir, 'dist', projectTitle);
         expect(fs.existsSync(distItem)).toBe(true);
         expect(fs.existsSync(path.join(distItem, 'workshop.txt'))).toBe(true);
-        // The ownership marker must live in DIST, not the deployment root:
-        // it is what proves ownership to the junction cascade on every
-        // later build.
         expect(
             fs.existsSync(path.join(distItem, '.pzstudio-output.json')),
         ).toBe(true);
@@ -148,8 +139,6 @@ describe('build command e2e', () => {
                 .isSymbolicLink(),
         ).toBe(true);
 
-        // A second build re-inspects the existing junction: with the marker
-        // in place it must stay OK_LINK, never degrade to UNOWNED_TARGET.
         const secondBuild = await workspace.run('build');
         workspace.assertSuccess(secondBuild);
         expect(secondBuild.stderr.join('\n')).not.toMatch(
@@ -196,7 +185,6 @@ describe('build command e2e', () => {
             fs.writeFileSync(projectJsonPath, JSON.stringify(cfg, null, 2));
         };
 
-        // Build 1 — default symlink: a junction at the deployment root.
         const first = await workspace.run('build');
         workspace.assertSuccess(first);
         expect(fs.lstatSync(slot).isSymbolicLink()).toBe(true);
@@ -204,8 +192,6 @@ describe('build command e2e', () => {
             fs.existsSync(path.join(distItem, '.pzstudio-output.json')),
         ).toBe(true);
 
-        // Build 2 — copy: the junction is unlinked, a real reconciled copy
-        // carrying the copy marker replaces it.
         setMaterialize('copy');
         const second = await workspace.run('build');
         workspace.assertSuccess(second);
@@ -219,8 +205,6 @@ describe('build command e2e', () => {
             fs.existsSync(path.join(distItem, '.pzstudio-output.json')),
         ).toBe(true);
 
-        // Build 3 — back to symlink: the proven-clean copy slot is removed
-        // and the junction restored; dist is untouched throughout.
         setMaterialize('symlink');
         const third = await workspace.run('build');
         workspace.assertSuccess(third);
@@ -237,9 +221,6 @@ describe('build command e2e', () => {
         workspace.write(
             'project.json',
             JSON.stringify({
-                // A path that passes through an existing FILE: creating a
-                // directory under it fails on every platform (ENOTDIR),
-                // unlike Windows-reserved characters such as '?'.
                 outdir: './project.json',
                 workshop: {
                     title: 'Invalid OutDir',
@@ -252,9 +233,6 @@ describe('build command e2e', () => {
         workspace.write(path.join('mod', 'poster.png'), 'fake image');
 
         const buildResult = await workspace.run('build');
-        // Dist-always: the artifacts are complete in dist; the outdir is a
-        // deployment target — an unusable one is a surfaced, non-fatal
-        // materialize failure, never a build failure.
         workspace.assertSuccess(buildResult);
         expect(
             fs.existsSync(path.join(workspace.dir, 'dist', 'Invalid OutDir')),
@@ -283,7 +261,6 @@ describe('build command e2e', () => {
         );
         workspace.write(path.join(modId, 'poster.png'), 'fake image');
 
-        // Create a stale file in the canonical dist output directory
         const outModPath = path.join(
             workspace.dir,
             'dist',

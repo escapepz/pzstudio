@@ -25,15 +25,11 @@ export async function collectLuaBasenames(
     const byBasename = new Map<string, string[]>();
     await walkLuaFiles(fs, mod.sourceRootUri, byBasename);
     for (const uris of byBasename.values()) {
-        // Array#sort is stable, so walk order survives within a rank.
         uris.sort((a, b) => luaUriRank(a) - luaUriRank(b));
     }
     return byBasename;
 }
 
-// Recursive walk from the mod source root. An unreadable or absent subtree
-// simply contributes nothing — external or partially synced mods must not
-// break the whole analysis.
 async function walkLuaFiles(
     fs: ProjectFileSystem,
     uri: string,
@@ -63,8 +59,6 @@ async function walkLuaFiles(
     }
 }
 
-// B42 version folders (42, 42.1, ...) rank before the shared `common` tree;
-// anything else trails.
 const LUA_VERSION_42 = /\/42(?:\.\d+)?\/media\/lua\//;
 
 function luaUriRank(uri: string): number {

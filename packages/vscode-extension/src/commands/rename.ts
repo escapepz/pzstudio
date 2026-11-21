@@ -28,10 +28,6 @@ export function registerRenameCommand(
             });
             if (!newName) return;
 
-            // Shared destructive consent (bf4-n07): the same
-            // pzstudio.confirmBeforeRun modal gate build/clean/delete use —
-            // a disabled setting skips the modal, "Don't Ask Again" persists
-            // the bypass on the project's workspace folder.
             const decision = await confirmBeforeRun('rename', modId, newName);
             if (decision === 'cancel') {
                 return;
@@ -40,8 +36,6 @@ export function registerRenameCommand(
                 await disableConfirmBeforeRun(projectDir.fsPath);
             }
 
-            // The embedded API refuses destructive commands without --yes
-            // (CLI-9): our confirm above IS the confirmation, so forward it.
             await execute('rename', [modId, newName], ['--yes'], {
                 projectDir: projectDir.fsPath,
             });

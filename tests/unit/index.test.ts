@@ -7,7 +7,6 @@ vi.mock('../../packages/cli/src/lib/cli', () => ({
 
 describe('Index Entry Point', () => {
     it('should call runCLI when imported', async () => {
-        // We import the index file which should execute the side effect
         await import('../../packages/cli/src/index');
         expect(runCLI).toHaveBeenCalled();
     });

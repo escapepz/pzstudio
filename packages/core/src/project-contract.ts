@@ -70,13 +70,10 @@ export function migrateProject(raw: unknown): MigratedProject {
     const migrations: string[] = [];
 
     if (fromVersion < 2) {
-        // v1 → v2: normalize legacy shapes, then stamp the version field.
         const check = migration.checkProject(config);
         if (check.needsMigration) {
             migrations.push(check.reason ?? 'legacy project shape');
             config = migration.upgradeProject(config, {
-                // Record the migration decisions (moved/kept root fields)
-                // alongside the reason so loadProject callers see them.
                 onNotice: (message) => migrations.push(message),
             });
         }
@@ -102,7 +99,6 @@ export interface LoadedProject {
     migrations?: string[];
 }
 
-/** Extracts a display name from a URI without assuming a path module. */
 function basenameOf(uri: string): string {
     const slash = Math.max(uri.lastIndexOf('/'), uri.lastIndexOf('\\'));
     return slash === -1 ? uri : uri.substring(slash + 1);

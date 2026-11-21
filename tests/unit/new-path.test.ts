@@ -71,8 +71,6 @@ describe('newCmd --path (issue #43)', () => {
 
         await newCmd('My Mod');
 
-        // The scaffold targets a staging directory and the commit is a
-        // same-volume rename onto the destination.
         const [stagingPath, destPath] = vi.mocked(fs.renameSync).mock
             .calls[0] as [string, string];
         expect(stagingPath).toContain('.my_mod.staging-');
@@ -89,7 +87,6 @@ describe('newCmd --path (issue #43)', () => {
             false,
             expect.objectContaining({ ignoreItems: ['.libraries'] }),
         );
-        // Never touches the cwd
         const cwdCalls = vi
             .mocked(scaffoldProject)
             .mock.calls.filter((c) =>
@@ -162,7 +159,6 @@ describe('newCmd --path (issue #43)', () => {
             'No project was created.',
         );
 
-        // The staging directory was removed and nothing was committed.
         expect(removeDirRecursive).toHaveBeenCalledTimes(1);
         const [stagingPath] = vi.mocked(removeDirRecursive).mock.calls[0];
         expect(String(stagingPath)).toContain('.my_mod.staging-');

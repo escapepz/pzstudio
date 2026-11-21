@@ -35,10 +35,6 @@ function severityColor(text: string, severity: string): string {
 
 export async function doctorCmd() {
     const gameBuild = extractFlag('game-build');
-    // Engine command: plan-input emissions must follow the active invocation
-    // logger (doc 11 §12) via the internal engine path; the §13 raw legacy
-    // settings composition and the anchor dance stay with the
-    // (signature-frozen) facade export.
     const report = await runProjectDoctorForEngine(projectDir(), {
         gameBuild,
     });
@@ -50,10 +46,6 @@ export async function doctorCmd() {
         else counts.infos++;
     }
 
-    // Machine output (CLI-8): the envelope is the ONLY stdout content of
-    // the command — no human header, no report lines. Exit code follows
-    // the result: blocking issues print the envelope (result.status
-    // 'error') and still exit 1.
     if (hasFlag('json')) {
         printJsonEnvelope('doctor', {
             status:
@@ -104,8 +96,6 @@ export async function doctorCmd() {
         `\nSummary: ${counts.errors} error(s), ${counts.warnings} warning(s), ${counts.infos} info(s).`,
     );
 
-    // Verdict follows the result (CLI-7): the report closes with what it
-    // means for the user, and the exit code stays 1 only for errors.
     if (counts.errors > 0) {
         log(`✗ Doctor found ${counts.errors} blocking issues.`);
         throw new CliError(

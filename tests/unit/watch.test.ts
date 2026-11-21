@@ -24,9 +24,6 @@ import { readGlobalConfig } from '../../packages/cli/src/lib/templateManager';
 import { createRequire } from 'node:module';
 import { createTempDir, deleteDir } from '../helpers/test-fixtures';
 
-// The watch-command suite drives watchCmd() with the same seams build.test.ts
-// uses; every mock is partial so the DevSync integration suite below keeps
-// running the real modules (real fs, real createDevSync, real legacyLogger).
 vi.mock('../../packages/cli/src/lib/logger', async (importOriginal) => {
     const actual =
         await importOriginal<
@@ -80,12 +77,6 @@ vi.mock('../../packages/cli/src/lib/devsync', async (importOriginal) => {
     };
 });
 
-// watch.ts loads the native watcher lazily via a bare require() — vitest's
-// vi.mock only intercepts ESM/dynamic imports, not CJS require — so the
-// command-path seam is patched on the CJS module itself: Node's require
-// cache hands watch.ts the same object this spy touches. The DevSync
-// integration suite below drives the engine directly and never subscribes,
-// so restoring in afterEach costs it nothing.
 const nodeRequire = createRequire(path.join(process.cwd(), '/'));
 
 describe('resolveWatchVariants (pure)', () => {
@@ -132,9 +123,6 @@ describe('resolveWatchVariants (pure)', () => {
 });
 
 describe('isWatchPathIgnored (pure)', () => {
-    // Virtual absolute paths built with the current platform's separator —
-    // hardcoded Windows-style strings would collapse into single segments
-    // on POSIX and make every target look "outside the project".
     const projectPath = path.join(os.tmpdir(), 'pzstudio-watch-proj');
     const outDir = path.join(projectPath, 'Output');
 
@@ -197,10 +185,6 @@ describe('isWatchPathIgnored (pure)', () => {
     });
 
     it('keeps .gitignore rule files (re-baseline parity) while unrelated dot entries stay dropped', () => {
-        // A rule-file change steers the ignore rules: .gitignore survives
-        // the dot filter exactly like .pzstudioignore, so a mod-scoped one
-        // reaches classifyDelta ('.gitignore changed (ignore rules)' — the
-        // owning mod re-baselines).
         expect(
             isWatchPathIgnored(
                 projectPath,
@@ -215,8 +199,6 @@ describe('isWatchPathIgnored (pure)', () => {
                 path.join(projectPath, '.gitignore'),
             ),
         ).toBe(false);
-        // Unrelated dot entries stay invisible (.git segments, dotfile
-        // lookalikes).
         expect(
             isWatchPathIgnored(
                 projectPath,
@@ -251,13 +233,6 @@ describe('isWatchPathIgnored (pure)', () => {
     });
 });
 
-/**
- * Containment invariants of the shared filter (doc 13 §3.1/§10-C): the
- * outdir rule fails OPEN for every configuration where the output root
- * contains or adjoins the project — the fail-open property is emergent
- * (the '..' guard and the empty-outRel no-op), so these gates pin it
- * against silent regressions of watch-shared.ts.
- */
 describe('isWatchPathIgnored — containment invariants (doc 13 §10-C)', () => {
     const parent = path.join(os.tmpdir(), 'pzstudio-watch-containment');
     const projectPath = path.join(parent, 'proj');
@@ -297,7 +272,6 @@ describe('isWatchPathIgnored — containment invariants (doc 13 §10-C)', () => 
     });
 
     it('similar path prefixes never falsely contain (case 5)', () => {
-        // A sibling of the project root whose name extends it.
         const siblingOut = path.join(parent, 'proj-out');
         expect(
             isWatchPathIgnored(
@@ -306,7 +280,6 @@ describe('isWatchPathIgnored — containment invariants (doc 13 §10-C)', () => 
                 path.join(projectPath, 'my_mod', 'a.lua'),
             ),
         ).toBe(false);
-        // A sibling segment inside the project.
         const innerSiblingOut = path.join(projectPath, 'my_mod2');
         expect(
             isWatchPathIgnored(
@@ -315,7 +288,6 @@ describe('isWatchPathIgnored — containment invariants (doc 13 §10-C)', () => 
                 path.join(projectPath, 'my_mod', 'a.lua'),
             ),
         ).toBe(false);
-        // The sibling subtree itself stays filtered (case 3 for that root).
         expect(
             isWatchPathIgnored(
                 projectPath,
@@ -353,13 +325,6 @@ describe('isWatchPathIgnored — containment invariants (doc 13 §10-C)', () => 
     });
 });
 
-/**
- * The injected ignore matcher (root-level .gitignore/.pzstudioignore rules,
- * 2026-11-13 gitignore integration): the callback is the FINAL
- * drop-condition. The output/deployment rails above it decide their own
- * subtrees first, so a rule only ever adds drops outside them and is never
- * consulted for rail-covered paths.
- */
 describe('isWatchPathIgnored — injected ignore matcher', () => {
     const projectPath = path.join(os.tmpdir(), 'pzstudio-watch-rules');
     const outDir = path.join(projectPath, 'dist');
@@ -369,8 +334,6 @@ describe('isWatchPathIgnored — injected ignore matcher', () => {
             '': { pzstudio: null, git: ['scratch/**', '*.log'] },
         }).isIgnored;
         const target = path.join(projectPath, 'scratch', 'out.lua');
-        // Without the matcher the path is ordinary source — the optional
-        // param keeps every pre-existing consumer's decision unchanged.
         expect(isWatchPathIgnored(projectPath, outDir, target)).toBe(false);
         expect(
             isWatchPathIgnored(projectPath, outDir, target, undefined, matcher),
@@ -404,10 +367,6 @@ describe('isWatchPathIgnored — injected ignore matcher', () => {
             consulted += 1;
             return matcher(rel);
         };
-        // The dist event is dropped by the watch layer's OWN output-root
-        // rail — the callback is the final drop-condition and is never
-        // reached for rail-covered paths, so a rule cannot own (or miss)
-        // that decision.
         expect(
             isWatchPathIgnored(
                 projectPath,
@@ -418,9 +377,6 @@ describe('isWatchPathIgnored — injected ignore matcher', () => {
             ),
         ).toBe(true);
         expect(consulted).toBe(0);
-        // And the rooted rule never stretches past the output root: a
-        // nested dist folder is ordinary mod source (gitignore anchoring),
-        // delivered to the engine which enforces the nested rules itself.
         expect(
             isWatchPathIgnored(
                 projectPath,
@@ -490,8 +446,6 @@ describe('createDevSync (Node host integration)', () => {
         });
         await session.start(['main']);
 
-        // Dist-always: the session writes the project's canonical dist
-        // root; the configured outdir is a deployment target, untouched.
         const outFile = path.join(
             projectDir,
             'dist',
@@ -564,7 +518,6 @@ describe('watchCmd — banner names the variant source', () => {
         },
         mods: { my_mod: { name: 'My Mod', description: 'A mod.' } },
         excludes: [],
-        // No deployment target: the materialize resolution stays 'skip'.
     };
 
     const configWith = (build?: Record<string, unknown>) =>
@@ -583,9 +536,6 @@ describe('watchCmd — banner names the variant source', () => {
         vi.mocked(readGlobalConfig).mockReturnValue(undefined as any);
         vi.mocked(hasFlag).mockReturnValue(false);
         vi.mocked(createDevSyncForEngine).mockReturnValue({
-            // The banner is emitted before the engine starts; a rejected
-            // start ends the command deterministically BEFORE the watcher
-            // subscription (no native @parcel/watcher in unit tests).
             start: vi.fn().mockRejectedValue(new Error('stop-after-banner')),
             apply: vi.fn(),
             stop: vi.fn().mockResolvedValue(undefined),
@@ -628,11 +578,6 @@ describe('watchCmd — banner names the variant source', () => {
     });
 });
 
-/**
- * d12-U4: the command owns its interruption (CLI-6) and its SIGINT handler
- * sets exit 130 — but the stop line never said so, so scripts wrapping
- * `pzstudio watch` kept guessing at the exit convention (d18-U2 recurrence).
- */
 describe('watchCmd — the stop line names the exit convention (d12-U4)', () => {
     let subscribeSpy: ReturnType<typeof vi.spyOn>;
 
@@ -647,15 +592,10 @@ describe('watchCmd — the stop line names the exit convention (d12-U4)', () => 
         vi.mocked(readGlobalConfig).mockReturnValue(undefined as any);
         vi.mocked(hasFlag).mockReturnValue(false);
         vi.mocked(createDevSyncForEngine).mockReturnValue({
-            // The full session: start resolves (no rejected banner stop
-            // here — the command must reach its SIGINT handler), stop and
-            // apply are silent no-ops for shutdown().
             start: vi.fn().mockResolvedValue(undefined),
             apply: vi.fn().mockResolvedValue(undefined),
             stop: vi.fn().mockResolvedValue(undefined),
         } as any);
-        // The native watcher is never started: subscribe resolves to a
-        // subscription whose unsubscribe shutdown() can await.
         const watcher = nodeRequire('@parcel/watcher') as {
             subscribe: (...args: any[]) => any;
         };
@@ -673,9 +613,6 @@ describe('watchCmd — the stop line names the exit convention (d12-U4)', () => 
         const baseline = process.listenerCount('SIGINT');
         try {
             const stopped = watchCmd();
-            // The SIGINT handler is installed only after the (mocked)
-            // subscribe hop resolves — wait for the registration instead of
-            // racing it, then deliver the signal in-process.
             const deadline = Date.now() + 5000;
             while (process.listenerCount('SIGINT') <= baseline) {
                 if (Date.now() > deadline) {
@@ -698,7 +635,6 @@ describe('watchCmd — the stop line names the exit convention (d12-U4)', () => 
                 'Development sync stopped. (exit 130 — Ctrl+C/SIGINT convention)',
             );
         } finally {
-            // The worker's exit code must not leak a 130 into vitest.
             process.exitCode = previousExitCode;
         }
     });

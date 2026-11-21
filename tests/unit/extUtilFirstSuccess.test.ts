@@ -17,10 +17,6 @@ import { t } from '../../packages/vscode-extension/src/util/l10n';
 
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 
-/**
- * Fake extension context carrying just the globalState the popup guards
- * through (pattern from extActivation.test.ts).
- */
 function fakeContext(flag?: boolean) {
     return {
         globalState: {
@@ -93,7 +89,6 @@ describe('notifyFirstBuildSuccess', () => {
         expect(String(target)).toContain(
             'escapepz.github.io/pzstudio/landing/?utm_source=ext-popup',
         );
-        // The system browser is only the fallback, never the default path.
         expect(asMock(vscode.env.openExternal)).not.toHaveBeenCalled();
     });
 
@@ -102,7 +97,6 @@ describe('notifyFirstBuildSuccess', () => {
         asMock(vscode.window.showInformationMessage).mockResolvedValue(
             'See tips & updates',
         );
-        // Built-in disabled / environment without the command.
         asMock(vscode.commands.executeCommand).mockRejectedValueOnce(
             new Error('command not found'),
         );
@@ -120,21 +114,16 @@ describe('notifyFirstBuildSuccess', () => {
 
     it('never opens the URL when the popup is dismissed', async () => {
         const context = fakeContext();
-        // Dismissed: the message resolves without a button choice.
         asMock(vscode.window.showInformationMessage).mockResolvedValue(
             undefined,
         );
 
         notifyFirstBuildSuccess(context, 'build');
 
-        // Let the popup's promise chain settle before judging side effects.
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         expect(asMock(vscode.env.openExternal)).not.toHaveBeenCalled();
-        // Neither opening path may fire on dismissal.
         expect(asMock(vscode.commands.executeCommand)).not.toHaveBeenCalled();
-        // The one-time flag is set regardless of the dismissal: the popup
-        // never shows again even when the user closed it.
         expect(asMock(context.globalState.update)).toHaveBeenCalledWith(
             FIRST_SUCCESS_KEY,
             true,
@@ -142,10 +131,6 @@ describe('notifyFirstBuildSuccess', () => {
     });
 });
 
-// d01-U1/U2, d10-U3: new/add/clean completions used to be silent (only the
-// transient progress toast). notifyActionSuccess adds one terse localized
-// popup per successful completion — gated to exactly those commands, so
-// build keeps its own one-time popup and delete/rename stay as they are.
 describe('notifyActionSuccess', () => {
     beforeEach(() => {
         vi.clearAllMocks();

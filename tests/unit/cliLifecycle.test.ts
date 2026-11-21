@@ -8,10 +8,6 @@ const spawnSyncCalls = vi.hoisted(
     () => [] as Array<{ command: string; args?: readonly string[] }>,
 );
 
-// Counting spy over the REAL spawnSync: the probe-timing regression tests
-// below assert that invocations which need no template transport never
-// probe git availability (pre-migration side-effect surface). Everything
-// delegates to the original — no behavior is masked here.
 vi.mock('child_process', async (importOriginal) => {
     const original = await importOriginal<typeof import('child_process')>();
     return {
@@ -23,7 +19,6 @@ vi.mock('child_process', async (importOriginal) => {
     };
 });
 
-// Importing the dispatcher registers every command into the registry.
 import { runCLI } from '../../packages/cli/src/lib/cli';
 import {
     setLogger,
@@ -65,10 +60,6 @@ import {
 import { getInteractionMode } from '../../packages/cli/src/lib/interaction';
 import { getCommand } from '../../packages/cli/src/lib/registry';
 import { getActiveInvocationContext } from '../../packages/cli/src/lib/invocation';
-
-/* ------------------------------------------------------------------ */
-/* Fixtures and capture helpers                                        */
-/* ------------------------------------------------------------------ */
 
 interface LogCall {
     method: string;
@@ -123,7 +114,6 @@ function makeProjectDir(): string {
     return dir;
 }
 
-/** Temporarily replaces a registered command's run (test-only swap). */
 function withCommandRun(
     name: string,
     swapped: () => Promise<void>,
@@ -152,11 +142,6 @@ afterEach(() => {
     tempDirs = [];
 });
 
-/* ------------------------------------------------------------------ */
-/* Logger/output capture across the banner/help/command/usage-error    */
-/* paths (§17 commit 3: legacy logger-capture suite)                   */
-/* ------------------------------------------------------------------ */
-
 describe('legacy runCLI output capture (installed context routes to the same sinks)', () => {
     it('banner path: banner log, then help text, then exactly one trailing blank line', async () => {
         const { calls, logger } = recordingLogger();
@@ -165,10 +150,6 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI(undefined, undefined, { flags: [] });
 
         const methods = calls.map((c) => c.method);
-        // The banner path records NO usage event (pure invocations stay
-        // side-effect-free and never scaffold ~/.pzstudio), so the one-time
-        // disclosure notice does not fire here — it fires with the first
-        // real command's event instead.
         expect(methods).toEqual(['log', 'log', 'log']);
         expect(String(calls[0].message)).toContain('Project Zomboid Studio v');
         expect(String(calls[1].message)).toContain('Available commands:');
@@ -182,8 +163,6 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI('help');
 
         const methods = calls.map((c) => c.method);
-        // The help command is display-only (pure invocation): it records no
-        // usage event, so the one-time disclosure notice does not fire here.
         expect(methods).toEqual(['log', 'log']);
         expect(String(calls[0].message)).toContain('Available commands:');
         expect(calls[1].message).toBe('\n');
@@ -196,8 +175,6 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI('list', [], { flags: ['--help'] });
 
         const methods = calls.map((c) => c.method);
-        // --help short-circuits before execution (pure invocation): no usage
-        // event, so the one-time disclosure notice does not fire here.
         expect(methods).toEqual(['log', 'log']);
         expect(String(calls[0].message)).toContain('pzstudio list');
         expect(calls[1].message).toBe('\n');
@@ -211,8 +188,6 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         await runCLI('list', [], { flags: ['--project', projA] });
 
         const methods = calls.map((c) => c.method);
-        // One-time usage disclosure notice: the span settles after the
-        // command output, before the trailing blank line.
         expect(methods).toEqual(['log', 'log', 'info', 'info', 'log']);
         expect(calls[0].message).toBe('\n');
         expect(String(calls[1].message)).toContain(
@@ -248,8 +223,6 @@ describe('legacy runCLI output capture (installed context routes to the same sin
         ).rejects.toBeInstanceOf(CliError);
 
         const methods = calls.map((c) => c.method);
-        // The error span settles (emitting the one-time usage notice)
-        // before the lifecycle's error report.
         expect(methods).toEqual(['log', 'info', 'error']);
         expect(calls[0].message).toBe('\n');
         expect(String(calls[1].message)).toContain('saves local usage logs');
@@ -259,10 +232,6 @@ describe('legacy runCLI output capture (installed context routes to the same sin
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* Legacy post-run state suite (§13.1 write-through rows)              */
-/* ------------------------------------------------------------------ */
-
 describe('legacy runCLI post-run state (§13.1 write-through)', () => {
     it('projectRootAnchor: set from --project and persists; cleared by a run without --project', async () => {
         captureIO();
@@ -271,10 +240,7 @@ describe('legacy runCLI post-run state (§13.1 write-through)', () => {
         await runCLI('help', [], { flags: ['--project', projA] });
 
         expect(legacyDiscoveryStart()).toBe(path.resolve(projA));
-        // Observable §13.1: a subsequent default-arg discovery walks from
-        // the persisted anchor...
         expect(findProjectDir()).toBe(path.resolve(projA));
-        // ...and resolveModInfoTargets' implicit default resolves from A.
         fs.mkdirSync(path.join(projA, 'modA', 'branch', 'media'), {
             recursive: true,
         });
@@ -384,15 +350,12 @@ describe('legacy runCLI post-run state (§13.1 write-through)', () => {
         const projA = makeProjectDir();
         setProjectDir(projA);
 
-        // No --project flag: discovery must start from the externally
-        // anchored dir (the §8 legacy tier between the parsed flag and cwd).
         await runCLI('list');
 
         expect(getExternalProjectDir()).toBe(projA);
 
         await runCLI('help', [], { flags: ['--project', projA] });
 
-        // --project writes the anchor slot (§13.1) but never the external dir.
         expect(getExternalProjectDir()).toBe(projA);
         expect(legacyDiscoveryStart()).toBe(path.resolve(projA));
     });
@@ -451,12 +414,6 @@ describe('legacy runCLI post-run state (§13.1 write-through)', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* Engine lock: overlapping legacy runCLI calls serialize FIFO         */
-/* (§9 classified intentional change) — and no deadlock / no leaked    */
-/* context on any failure path.                                        */
-/* ------------------------------------------------------------------ */
-
 describe('legacy runCLI engine lock', () => {
     it('two overlapping runCLI calls serialize FIFO instead of racing', async () => {
         captureIO();
@@ -473,7 +430,6 @@ describe('legacy runCLI engine lock', () => {
             pA = runCLI('list', [], { flags: [] });
             pB = runCLI('list', [], { flags: [] });
 
-            // A dispatches first (FIFO) and parks inside its command run.
             restore = withCommandRun('list', async () => {
                 events.push('a:start');
                 await gateA;
@@ -481,8 +437,6 @@ describe('legacy runCLI engine lock', () => {
             });
             await vi.waitFor(() => expect(events).toContain('a:start'));
 
-            // B is queued behind the lock: swapping the command run now can
-            // only be observed by B, which has not started.
             restore();
             restore = withCommandRun('list', async () => {
                 events.push('b:start');
@@ -492,18 +446,14 @@ describe('legacy runCLI engine lock', () => {
             releaseA();
             await Promise.all([pA, pB]);
         } finally {
-            // Never leave a parked invocation holding the lock.
             releaseA();
             restore();
             await Promise.allSettled([pA, pB]);
         }
 
-        // No interleave: A's whole execution precedes B's.
         expect(events).toEqual(['a:start', 'a:end', 'b:start', 'b:end']);
 
-        // The lock is released and no ambient context remains.
         expect(getActiveInvocationContext()).toBeUndefined();
-        // A later invocation still runs — the FIFO chain is not stalled.
         await expect(runCLI('help')).resolves.toBeUndefined();
     });
 
@@ -521,18 +471,10 @@ describe('legacy runCLI engine lock', () => {
         ).rejects.toBeInstanceOf(CliUsageError);
         expect(getActiveInvocationContext()).toBeUndefined();
 
-        // Sequential invocations still work after both failures.
         await expect(runCLI('help')).resolves.toBeUndefined();
         expect(getActiveInvocationContext()).toBeUndefined();
     });
 });
-
-/* ------------------------------------------------------------------ */
-/* Host-default transport probe timing: the composition must not       */
-/* acquire a new eager git-availability probe (spawnSync) and no new   */
-/* pre-lifecycle failure path — the probe belongs to first template    */
-/* use, exactly as before the engine migration.                        */
-/* ------------------------------------------------------------------ */
 
 describe('host-default transport probe timing', () => {
     it('does not probe git on invocations that need no template transport', async () => {
@@ -540,14 +482,14 @@ describe('host-default transport probe timing', () => {
         const projA = makeProjectDir();
         spawnSyncCalls.length = 0;
 
-        await runCLI(undefined, undefined, { flags: [] }); // banner + help
+        await runCLI(undefined, undefined, { flags: [] });
         await runCLI('help'); // help command
         await expect(
             runCLI('build', [], { flags: ['--wat'] }),
-        ).rejects.toBeInstanceOf(CliUsageError); // usage error
+        ).rejects.toBeInstanceOf(CliUsageError);
         await runCLI('list', [], {
             flags: ['--project', projA],
-        }); // non-template command
+        });
 
         expect(spawnSyncCalls).toEqual([]);
     });
@@ -564,8 +506,6 @@ describe('host-default transport probe timing', () => {
         }
 
         expect(spawnSyncCalls).toEqual([]);
-        // Terminal control flow: version line only — no banner, no help,
-        // no trailing blank line.
         expect(captured.stdout.join('')).toContain(`v${cliPackage.version}`);
         expect(captured.stdout.join('')).not.toContain(
             'Project Zomboid Studio',
@@ -593,18 +533,16 @@ describe('host-default transport probe timing', () => {
 
         const first = getTemplateTransport();
         const second = getTemplateTransport();
-        expect(spawnSyncCalls).toEqual([]); // two acquisitions, zero probes
+        expect(spawnSyncCalls).toEqual([]);
 
-        expect(['git', 'fetch']).toContain(first.name); // use → fresh probe
+        expect(['git', 'fetch']).toContain(first.name);
         expect(['git', 'fetch']).toContain(second.name); // use → fresh probe
         expect(spawnSyncCalls).toHaveLength(2);
 
-        // Both transport kinds report an empty cache dir as invalid, so the
-        // assertion is host-capability independent — the point is the probe.
         expect(first.isCacheValid(path.join('does', 'not', 'exist'))).toBe(
             false,
         );
-        expect(spawnSyncCalls).toHaveLength(3); // every use re-resolves
+        expect(spawnSyncCalls).toHaveLength(3);
     });
 
     it('in-run host-default uses resolve freshly per use through the shared context wrapper', async () => {
@@ -623,9 +561,6 @@ describe('host-default transport probe timing', () => {
 
         expect(names).toHaveLength(2);
         expect(names.every((n) => n === 'git' || n === 'fetch')).toBe(true);
-        // One wrapper shared on the invocation context, but two uses resolve
-        // twice — pre-migration, two getTemplateTransport() requests probed
-        // twice; nothing may cache the host-capability decision in Stage A.
         expect(spawnSyncCalls).toHaveLength(2);
     });
 });

@@ -23,12 +23,6 @@ afterEach(() => {
 
 const toNative = (...segments: string[]) => path.join(root, ...segments);
 
-/**
- * Builds a fixture source tree with the cases the ignore rules must agree
- * on: dot files, .gitkeep, git folders, a root .pzstudioignore, a nested
- * .pzstudioignore overriding it (closest file wins), binary content and a
- * top-level excluded item.
- */
 function seedFixture(): { projectDir: string; templateDir: string } {
     const projectDir = toNative('proj');
     const templateDir = toNative('templates', 'workshop');
@@ -116,7 +110,6 @@ function planInputFor(
     };
 }
 
-/** Collects every file under dir as relativePosixPath -> content string. */
 function snapshot(dir: string): Map<string, string> {
     const files = new Map<string, string>();
     const walk = (current: string, rel: string) => {
@@ -137,12 +130,6 @@ function snapshot(dir: string): Map<string, string> {
     return files;
 }
 
-/**
- * Parity gate for the sync engine's executor: for the same plan, the
- * filesystem-based executor (executeFileOperations on NodeFileSystem) and
- * the CLI's synchronous executor (executeBuildPlan, backed by
- * scaffoldProject) must produce byte-identical output trees.
- */
 describe('executeFileOperations is in parity with the CLI build executor', () => {
     for (const variant of ['main', 'development'] as const) {
         it(`produces the same output tree as the synchronous executor (${variant})`, async () => {
@@ -167,7 +154,6 @@ describe('executeFileOperations is in parity with the CLI build executor', () =>
                     : 'Parity Project - dev_branch';
             const modDirName = variant === 'main' ? 'my_mod' : 'my_mod_dev';
             expect(snapshot(fsOut)).toEqual(snapshot(syncOut));
-            // Sanity: the fixture really exercised the interesting rules.
             const files = [...snapshot(path.join(syncOut, titleDir)).keys()];
             expect(files).toContain(
                 `Contents/mods/${modDirName}/media/lua/a.lua`,

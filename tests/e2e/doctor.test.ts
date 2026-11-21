@@ -15,9 +15,6 @@ describe('doctor command (E2E)', () => {
     });
 
     it('should fail closed with the discovery error outside a project directory', async () => {
-        // Embedded path: the mock logger receives the raw error, so the
-        // bare problem statement is what appears on stderr. The formatted
-        // Problem/Cause/Try rendering is asserted by the real-env suite.
         const result = await workspace.run('doctor');
         workspace.assertFailure(result);
         workspace.assertStderr(result, 'No pzstudio project found.');
@@ -33,8 +30,6 @@ describe('doctor command (E2E)', () => {
                     visibility: 'public',
                     tags: ['Build 42'],
                 },
-                // Dist-model healthy shape: the output root lives inside
-                // the project (no MIGRATE_TO_DIST_MODEL diagnostic).
                 outdir: path.join(workspace.dir, 'dist'),
                 mods: { my_mod: { name: 'My Mod', description: 'A mod.' } },
                 excludes: [],
@@ -45,8 +40,6 @@ describe('doctor command (E2E)', () => {
         workspace.write('workshop/preview.png', 'png-bytes');
         workspace.write('my_mod/42/mod.info', 'id=my_mod\nname=My Mod');
         workspace.write('my_mod/42/media/lua/shared.lua', '-- lua');
-        // The global-config output dir (fake home) must exist so the
-        // filesystem module stays quiet.
         fs.mkdirSync(path.join(workspace.fakeHome, 'Zomboid', 'Workshop'), {
             recursive: true,
         });
@@ -82,8 +75,6 @@ describe('doctor command (E2E)', () => {
             'project.json',
             JSON.stringify({
                 workshop: { title: 'P', visibility: 'public', tags: [] },
-                // Dist-model shape keeps the game-build warning the only
-                // warning in the expected count.
                 outdir: path.join(workspace.dir, 'dist'),
                 mods: { my_mod: { name: 'My Mod', description: 'A mod.' } },
                 excludes: [],
@@ -101,7 +92,6 @@ describe('doctor command (E2E)', () => {
         workspace.assertSuccess(result);
         workspace.assertStdout(result, "targets PZ build '42.x'");
         workspace.assertStdout(result, '1 warning(s)');
-        // Warnings-only verdict (CLI-7): continue, review advised.
         workspace.assertStdout(result, 'Doctor completed with 1 warnings');
     });
 
@@ -110,7 +100,6 @@ describe('doctor command (E2E)', () => {
             'project.json',
             JSON.stringify({
                 workshop: { title: 'P', visibility: 'public', tags: [] },
-                // Dist-model shape: no MIGRATE warning, status stays ok.
                 outdir: path.join(workspace.dir, 'dist'),
                 mods: { my_mod: { name: 'My Mod', description: 'A mod.' } },
                 excludes: [],
@@ -130,8 +119,6 @@ describe('doctor command (E2E)', () => {
         const envelope = JSON.parse(result.stdout.join('\n'));
         expect(envelope.schemaVersion).toBe(1);
         expect(envelope.command).toBe('doctor');
-        // status 'ok' means no errors and no warnings; plain infos (e.g.
-        // uncached templates, missing preview.png) are allowed.
         expect(envelope.result.status).toBe('ok');
         expect(envelope.result.counts.errors).toBe(0);
         expect(envelope.result.counts.warnings).toBe(0);
@@ -160,7 +147,6 @@ describe('doctor command (E2E)', () => {
         expect(envelope.command).toBe('doctor');
         expect(envelope.result.status).toBe('error');
         expect(envelope.result.counts.errors).toBeGreaterThan(0);
-        // The envelope carries the typed finding among the diagnostics.
         const errorDiagnostic = envelope.result.diagnostics.find(
             (d: any) => d.severity === 'error',
         );

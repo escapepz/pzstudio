@@ -48,7 +48,6 @@ describe('list command (E2E)', () => {
         );
         workspace.write('included_mod/.gitkeep', '');
         workspace.write('excluded_mod/.gitkeep', '');
-        // ghost_mod is intentionally absent from disk
 
         const result = await workspace.run('list');
         workspace.assertSuccess(result);

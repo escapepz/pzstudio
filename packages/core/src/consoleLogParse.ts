@@ -47,27 +47,13 @@ export interface PeeledLine {
     raw: string;
 }
 
-// Padded console envelope. Level prefixes are the fixed LogSeverity literals
-// (`TRACE: `, `DEBUG: `, `NOISE: `, `LOG  : `, `WARN : `, `ERROR: `). The
-// caller capture terminates at the first `>`, so embedded `ERROR:`/`>` text
-// in the body can never re-open the envelope; `Lua(<owner>).<func>` callers
-// pass through `[^>\r\n]+?`. `t:`/`st:` metadata is config-gated and optional.
 const PADDED_ENVELOPE =
     /^(?<level>LOG|WARN|ERROR|DEBUG|TRACE|NOISE)\s{0,2}:\s+(?<channel>[A-Za-z]+)\s+f:(?<frame>\d+)(?:[,\s]+(?:t|st):[\d,]+)*(?:\s+at\s+(?<caller>[^>\r\n]+?)\s*)?>\s?(?<body>.*)$/;
 
-// Body-embedded caller promotion: `LuaManager.RunLuaInternal> Exception thrown`.
 const BODY_EMBEDDED_CALLER = /^([A-Za-z0-9_$.()]+)> (.*)$/;
 
-// SEVERE family (no channel/frame; WARNING/INFO included defensively for
-// other JUL records).
 const SEVERE_FAMILY = /^(?<level>SEVERE|WARNING|INFO)\s*:\s*(?<body>.*)$/;
 
-// JUL header caption printed above a multi-line JUL record. Date part is
-// `Mon dd, yyyy hh:mm:ss AM|PM` (java.util.logging SimpleFormatter). NOTE:
-// the spec §Parser design carries a duplicated `[A-Z][a-z]{2}` token before
-// the day; verbatim it can never match the pinned evidence line
-// (`Nov 15, 2026 1:30:13 PM zombie.Lua.LuaManager RunLuaInternal]`), so the
-// duplicate is dropped — the only deviation from the spec's regex.
 const JUL_HEADER =
     /^[A-Z][a-z]{2} \d{1,2}, \d{4} \d{1,2}:\d{2}:\d{2} (?:AM|PM) (?<julClass>[\w.]+) (?<julMethod>\w+)\]$/;
 
@@ -78,7 +64,6 @@ export function peelLine(raw: string): PeeledLine {
         let caller = groups.caller;
         let body = groups.body;
         if (!caller) {
-            // Promote a body-embedded caller (`<caller>> message`).
             const promoted = BODY_EMBEDDED_CALLER.exec(body);
             if (promoted) {
                 caller = promoted[1];
@@ -119,10 +104,6 @@ export function peelLine(raw: string): PeeledLine {
     return { kind: 'other', raw };
 }
 
-// ---------------------------------------------------------------------------
-// Stage 2: entry assembly + dormant continuation extractors
-// ---------------------------------------------------------------------------
-
 /** One assembled log entry: an envelope/severe/jul-header line plus its continuations. */
 export interface ParsedEntry {
     kind: 'envelope' | 'severe' | 'jul-header';
@@ -161,33 +142,17 @@ export interface KahluaExceptionInfo {
     message: string;
 }
 
-// Continuations attach to the current entry up to this many lines (design
-// invariant: the cap is never crossed silently — see assembleEntries).
 const CONTINUATION_CAP = 64;
 
-// Kahlua compile-error headline: `\tse.krka.kahlua.vm.KahluaException:
-// <basename>.lua:<line>: <msg> at Lua.<chunk>(<chunk>:<line>).` (design §Stage
-// 2 regex, prefixed with \s* because continuations keep their leading tabs).
 const KAHLUA_EXCEPTION =
     /^\s*se\.krka\.kahlua\.vm\.KahluaException:\s*(?<basename>[^:]+\.lua):(?<line>\d+):\s*(?<msg>.+?)\s+at\s+Lua\./;
 
-// B41-era Kahlua stack frame (dormant in B42): `function: new -- file:
-// ISHandcraftAction.lua line # 354 | Vanilla` / `... | MOD: <name>`.
 const B41_FRAME =
     /^\s*function:\s+\S+\s+--\s+file:\s+(?<file>[^|]+?)\s+line\s+#\s+(?<line>\d+)(?:\s*\|\s*(?:MOD:\s*(?<mod>.+)|Vanilla))?/;
 
-// B42 synthetic Lua frames (dormant until a real runtime error is captured):
-// `Lua((MOD:<display name>)).func(<basename>.lua:<line>)`, `Lua(Vanilla).func(...)`,
-// `Lua(BuiltIn).func(...)` and the compile-error variant `Lua.<chunk>(<chunk>:<line>)`.
 const LUA_FRAME =
     /^\s*Lua(?:\((?<owner>\(MOD:[^)]*\)|[^)]*)\))?\.(?<func>[\w$.]+)\((?<basename>[^():]+\.lua):(?<line>\d+)\)\s*$/;
 
-// Generic stack element: `org.luaj.kahluafork.compiler.LexState.lexerror(LexState.java:274)`,
-// `java.base/java.lang.Thread.run(Thread.java:833)`, `zombie.*` engine frames.
-// PZ prints frames without an `at ` prefix (StackTraceContainer appends
-// indent + element directly); one is tolerated defensively and stripped from
-// `text`. Anchored so body-like lines (exception headlines, captions) can
-// never pass as frames.
 const JVM_FRAME = /^\s*(?:at\s+)?(?<frame>[A-Za-z_$][\w$./]*)\((?:[^)]*)\)\s*$/;
 
 /**
@@ -206,7 +171,6 @@ export function assembleEntries(lines: string[]): AssembleResult {
         const raw = lines[i];
         const peeled = peelLine(raw);
         if (peeled.kind !== 'other') {
-            // jul-header records have no peeled body — the raw caption is the body.
             current = {
                 kind: peeled.kind,
                 level: peeled.level,
@@ -228,8 +192,6 @@ export function assembleEntries(lines: string[]): AssembleResult {
             if (current.continuations.length < CONTINUATION_CAP) {
                 current.continuations.push(raw);
             } else {
-                // Over-cap continuations are dropped from the entry but still
-                // counted, and the entry is flagged (never a silent drop).
                 current.continuationsCapped = true;
                 junkCount += 1;
             }
@@ -300,7 +262,6 @@ export function extractFrames(continuations: string[]): ParsedFrame[] {
                 text: trimmed,
                 file: b41.groups.file,
                 line: parseInt(b41.groups.line, 10),
-                // undefined for `| Vanilla` and bare frames (group not present).
                 owner: b41.groups.mod,
             });
             continue;
@@ -330,8 +291,6 @@ export function extractFrames(continuations: string[]): ParsedFrame[] {
     return frames;
 }
 
-// `Lua((MOD:<display name>))` carries the display name wrapped in a second
-// paren group; plain owners (`Vanilla`, `BuiltIn`) pass through unchanged.
 function unwrapModOwner(owner: string | undefined): string | undefined {
     if (!owner) {
         return undefined;

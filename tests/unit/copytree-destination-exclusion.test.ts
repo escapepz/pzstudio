@@ -1,43 +1,3 @@
-/**
- * F23 regression — copyTree destination-subtree exclusion.
- *
- * F23 (doc 14 §4/EXP-7, §16.3/G3-F23c): the Core executor's copyTree
- * (packages/core/src/execute.ts) lists directories live while copying and
- * applies no destination exclusion. In a case-6 layout (outdir inside a
- * configured mod folder — doc 13 §3.1 case 6, a supported doctor-flagged
- * layout) the walk re-enters its own freshly written output: each level
- * re-reads what the previous level wrote and every write extends the path
- * by one fixed mod-output suffix, so there is no fixed point.
- *
- * Verified shapes (each pinned here against the real engine):
- * - clean case-6 build: bounded under alphabetical readdir, but unbounded
- *   under adverse listing orders (insertion/reverse) — EXP-7;
- * - stale-root adoption (session started on <mod>/gen-a, config adopts
- *   <mod>/gen-b): unbounded deterministically under plain alphabetical
- *   order — G3-F23c;
- * - even the bounded first build is not one generation: the dev walk
- *   re-copies the main variant's completed tree as source (pre-existing
- *   source-inclusion policy, preserved by the fix).
- *
- * Every flow runs against the real BuildSession/planBuild/executor with an
- * instrumented memory filesystem: configurable listing order, a strict
- * write budget and a list budget so a regression fails quickly and
- * deterministically instead of exhausting memory or relying on timeouts.
- *
- * Scope notes:
- * - The fix under test excludes exactly the operation's own destination
- *   subtree (segment-aware). It must NOT exclude the whole configured
- *   outdir, a stale former output root, legitimate source under the output
- *   root outside the destination subtree, or siblings with similar string
- *   prefixes (R3).
- * - E1 (the engine's removeDir destroying user files pre-placed inside a
- *   future variant folder) is closed for in-mod destinations by the E1
- *   Stage-1 fail-closed ownership guard (DEC-2=c): an adoption may only
- *   replace an in-mod destination this session produced, or one that is
- *   verifiably empty. Out-of-mod output roots keep the committed adoption
- *   behavior (recorded deviation from doc 18 B1-A). R5 pins the refusal
- *   (the pre-placed file survives; only the empty variants build).
- */
 import { describe, it, expect } from 'vitest';
 import {
     DEV_OUT_PREFIX,
@@ -83,11 +43,8 @@ describe('F23-R2: clean case-6 build from an empty destination', () => {
             const mainRoot = variantRoot(`${MOD_ROOT}/gen`, 'main');
             const devRoot = variantRoot(`${MOD_ROOT}/gen`, 'development');
 
-            // Bounded execution: every file the correct output contains was
-            // written at most a small constant number of times.
             expect(fs.writes.length).toBeLessThanOrEqual(120);
 
-            // Source → output mapping, main variant (mod id 'my_mod').
             const mainMod = `${mainRoot}/Contents/mods/my_mod`;
             expect(await fs.readText(`${mainMod}/media/lua/hello.lua`)).toBe(
                 'print("v1")',
@@ -102,8 +59,6 @@ describe('F23-R2: clean case-6 build from an empty destination', () => {
                 await fs.readText(`${mainRoot}/Contents/template-file.txt`),
             ).toBe('tpl');
 
-            // Ignore semantics preserved: closest .pzstudioignore, dotfiles,
-            // .gitkeep, project excludes.
             expect(fs.files.has(`${mainMod}/media/old.lua`)).toBe(false);
             expect(fs.files.has(`${mainMod}/scratch/x.lua`)).toBe(false);
             expect(fs.files.has(`${mainMod}/.gitkeep`)).toBe(false);
@@ -111,17 +66,13 @@ describe('F23-R2: clean case-6 build from an empty destination', () => {
             expect(fs.files.has(`${mainMod}/.pzstudioignore`)).toBe(false);
             expect(fs.files.has(`${mainMod}/staging/keep.lua`)).toBe(false);
 
-            // mod.info generation (no source mod.info): main id.
             expect(await fs.readText(`${mainMod}/mod.info`)).toBe(
                 'id=my_mod\nname=My Mod\ndescription=A mod.',
             );
-            // Workshop metadata: main carries the workshop id.
             expect(await fs.readText(`${mainRoot}/workshop.txt`)).toBe(
                 'version=1\nid=12345\ntitle=Sync Project\ntags=\nvisibility=public',
             );
 
-            // Development variant: suffixed ids, unlisted visibility, title
-            // suffix, dev mod.info id alignment.
             const devMod = `${devRoot}/Contents/mods/my_mod_dev`;
             expect(await fs.readText(`${devMod}/media/lua/hello.lua`)).toBe(
                 'print("v1")',
@@ -133,12 +84,6 @@ describe('F23-R2: clean case-6 build from an empty destination', () => {
                 'version=1\ntitle=Sync Project - dev_branch\ntags=\nvisibility=unlisted',
             );
 
-            // The exact output key sets. The embedded copies under
-            // Contents/mods/<id>/gen/... are the pre-existing source
-            // inclusion policy (the output tree lies inside the mod source,
-            // so the walk consumes it as source); the destination exclusion
-            // must not remove them, and — the F23 point — must not let the
-            // walk re-enter its own destination and grow them further.
             expect(keysUnder(fs, mainRoot)).toEqual([
                 `${mainRoot}/.pzstudio-output.json`,
                 `${mainRoot}/Contents/mods/my_mod/gen/Sync Project/Contents/template-file.txt`,
@@ -166,11 +111,6 @@ describe('F23-R2: clean case-6 build from an empty destination', () => {
                 `${devRoot}/Contents/template-file.txt`,
                 `${devRoot}/workshop.txt`,
             ]);
-            // The dev walk re-copies the main variant's completed tree
-            // (pre-existing policy, depth ≥ 2) — but nothing deeper: each
-            // plan execution may add at most one embedding generation on
-            // top of the pre-existing tree (0 here); anything beyond is
-            // F23 re-entry.
             expect(
                 maxNesting(keysUnder(fs, `${MOD_ROOT}/gen`)),
             ).toBeLessThanOrEqual(2);
@@ -211,13 +151,6 @@ describe('F23-R2: clean case-6 build from an empty destination', () => {
 });
 
 describe('F23-R1: stale output root adoption (G3-F23c)', () => {
-    /**
-     * Session starts on case-6 root gen-a (completed build for both
-     * variants); the config then adopts gen-b while stale gen-a remains on
-     * disk. Pre-fix this recursed unboundedly under plain alphabetical
-     * order (and tripped the budget in the very first build under adverse
-     * orders).
-     */
     async function runAdoption(order: ListOrder): Promise<{
         fs: F23Fs;
         genAKeys: string[];
@@ -235,20 +168,17 @@ describe('F23-R1: stale output root adoption (G3-F23c)', () => {
         const session = new BuildSession(host);
         await session.start(['main', 'development']);
 
-        // Sanity: the first build completed on gen-a.
         expect(
             await fs.readText(
                 `${variantRoot(`${MOD_ROOT}/gen-a`, 'main')}/Contents/mods/my_mod/media/lua/hello.lua`,
             ),
         ).toBe('print("v1")');
 
-        // Snapshot the stale root before the adoption.
         const genAKeys = keysUnder(fs, `${MOD_ROOT}/gen-a`);
         const genAContents = new Map(
             genAKeys.map((key) => [key, Buffer.from(fs.files.get(key)!)]),
         );
 
-        // Adopt gen-b: structural change → DevSync full rebuild.
         const nestingBefore = maxNesting(keysUnder(fs, MOD_ROOT));
         fs.writes = [];
         fs.deletes = [];
@@ -268,19 +198,11 @@ describe('F23-R1: stale output root adoption (G3-F23c)', () => {
             const { fs, genAKeys, genAContents, nestingBefore } =
                 await runAdoption(order);
 
-            // Strict budget: the correct adoption writes every output file a
-            // bounded number of times. Pre-fix, the walk re-descended its
-            // own freshly written destination and this assertion failed via
-            // BudgetExceededError after 400 writes (measured: 500+ writes at
-            // nesting depth 10 under alphabetical order).
             expect(fs.writes.length).toBeLessThanOrEqual(300);
 
             const mainRoot = variantRoot(`${MOD_ROOT}/gen-b`, 'main');
             const devRoot = variantRoot(`${MOD_ROOT}/gen-b`, 'development');
 
-            // Source-derived output present at the policy paths, both
-            // variants. mod.info is generated (no source mod.info): the dev
-            // variant generates the suffixed id.
             for (const [root, modId, modInfo] of [
                 [
                     mainRoot,
@@ -316,17 +238,11 @@ describe('F23-R1: stale output root adoption (G3-F23c)', () => {
                 );
             }
 
-            // Stale former output root preserved on disk, byte for byte —
-            // the adoption rebuild's removeDir targets only gen-b's variant
-            // folders, and the fix must not widen that.
             expect(keysUnder(fs, `${MOD_ROOT}/gen-a`)).toEqual(genAKeys);
             for (const [key, content] of genAContents) {
                 expect(Buffer.from(fs.files.get(key)!)).toEqual(content);
             }
 
-            // Engine deletes are exactly the adoption's own removeDir +
-            // makeDir sentinel operations plus the ownership markers' tmp
-            // cleanup — no new destructive behavior.
             expect(fs.deletes.sort()).toEqual(
                 [
                     `${MOD_ROOT}/gen-b/${MAIN_OUT_PREFIX}`,
@@ -338,16 +254,6 @@ describe('F23-R1: stale output root adoption (G3-F23c)', () => {
                 ].sort(),
             );
 
-            // Nesting bound — the precise F23 invariant. The pre-existing
-            // source-inclusion policy composes embeddings across operations
-            // (each plan execution copies the other variant's current output
-            // and the stale root as source), so absolute depth grows with
-            // build history; what the destination exclusion guarantees is
-            // that ONE plan execution adds at most ONE generation on top of
-            // the pre-existing tree (two plan executions run per apply —
-            // main and development). Pre-fix, the adoption recursion drove
-            // the depth from 2 to 10+ within a single operation; here the
-            // increment is exactly +2 (measured).
             expect(
                 maxNesting(keysUnder(fs, `${MOD_ROOT}/gen-b`)),
             ).toBeLessThanOrEqual(nestingBefore + 2);
@@ -381,15 +287,6 @@ describe('F23-R3: destination exclusion precision', () => {
         const session = new BuildSession(host);
         await session.start(['main', 'development']);
 
-        // Pre-adoption source material, all of it legitimate source per the
-        // current inclusion policy:
-        // - collide.lua under the FUTURE root, outside the variant folders
-        //   (the EXP-3b/G3-correction-1 positive incorporation case — the
-        //   over-broad "mask the whole output root" fix loses exactly this);
-        // - a directory whose name is a string PREFIX of the output mod
-        //   folder name (my_mod → my_mod_x) and of the adopted root
-        //   (gen-b → gen-b2) — segment-aware containment must not drop
-        //   them; naive prefix matching would.
         await fs.writeText(`${MOD_ROOT}/gen-b/staging/collide.lua`, 'collide');
         await fs.writeText(`${MOD_ROOT}/my_mod_x/nested/other.lua`, 'sibling');
         await fs.writeText(`${MOD_ROOT}/gen-b2/nested/other.lua`, 'prefix');
@@ -408,8 +305,6 @@ describe('F23-R3: destination exclusion precision', () => {
         const mainRoot = variantRoot(`${MOD_ROOT}/gen-b`, 'main');
         const devRoot = variantRoot(`${MOD_ROOT}/gen-b`, 'development');
 
-        // collide.lua incorporated at the embedded case-6 path (live-tree
-        // read), both variants.
         expect(
             await fs.readText(
                 `${mainRoot}/Contents/mods/my_mod/gen-b/staging/collide.lua`,
@@ -421,7 +316,6 @@ describe('F23-R3: destination exclusion precision', () => {
             ),
         ).toBe('collide');
 
-        // String-prefix siblings copied (segment-aware exclusion).
         expect(
             await fs.readText(
                 `${mainRoot}/Contents/mods/my_mod/my_mod_x/nested/other.lua`,
@@ -433,19 +327,12 @@ describe('F23-R3: destination exclusion precision', () => {
             ),
         ).toBe('prefix');
 
-        // The stale former output root is NOT excluded merely for having
-        // been an output: gen-a's completed tree is embedded once per the
-        // pre-existing source inclusion policy (bounded).
         expect(
             await fs.readText(
                 `${mainRoot}/Contents/mods/my_mod/gen-a/Sync Project/Contents/mods/my_mod/media/lua/hello.lua`,
             ),
         ).toBe('print("v1")');
 
-        // And the destination subtree itself was not re-entered: no
-        // gen-b-nested copy of the walk's own output exists beyond the
-        // pre-existing policy's composition growth (at most one generation
-        // per plan execution — see R1's nesting-bound comment).
         expect(
             maxNesting(keysUnder(fs, `${MOD_ROOT}/gen-b`)),
         ).toBeLessThanOrEqual(nestingBefore + 2);
@@ -473,7 +360,6 @@ describe('F23-R4: other build paths', () => {
         const { host } = createHost(fs, holder);
         const baseInput = await host.getPlanInput();
 
-        // Main: dev-only mods ship in the development output only.
         expect(collectIncludedModIds(holder.config, 'main')).toEqual([
             'my_mod',
         ]);
@@ -494,8 +380,6 @@ describe('F23-R4: other build paths', () => {
         expect(fs.writes.length).toBeLessThanOrEqual(120);
         const mainRoot = variantRoot('/out', 'main');
         const devRoot = variantRoot('/out', 'development');
-        // No embedding at all outside case-6: the output never lies inside
-        // the copied source.
         expect(maxNesting(keysUnder(fs, '/out'))).toBe(1);
         expect(keysUnder(fs, mainRoot)).toEqual([
             `${mainRoot}/Contents/mods/my_mod/media/lua/hello.lua`,
@@ -505,9 +389,6 @@ describe('F23-R4: other build paths', () => {
             `${mainRoot}/Contents/template-file.txt`,
             `${mainRoot}/workshop.txt`,
         ]);
-        // Dev-only mod present in the dev output only (no source files, so
-        // only the generated mod.info; the output folder carries the
-        // suffixed id like every variant output folder).
         expect(keysUnder(fs, devRoot)).toEqual([
             `${devRoot}/Contents/mods/dev_mod_dev/mod.info`,
             `${devRoot}/Contents/mods/my_mod_dev/media/lua/hello.lua`,
@@ -575,7 +456,6 @@ describe('F23-R4: other build paths', () => {
         await session.start(['main', 'development']);
 
         fs.writes = [];
-        // Structural change that keeps the same root: a tags update.
         const next = configFor(`${MOD_ROOT}/gen`);
         (next.workshop as { tags: string[] }).tags = ['newtag'];
         holder.config = next;
@@ -601,7 +481,6 @@ describe('F23-R4: other build paths', () => {
         fs.listCap = 6000;
         const holder = { config: configFor(`${MOD_ROOT}/gen-b`) };
         await seedProject(fs, holder.config, { withSourceModInfo: true });
-        // Stale former root, completed build shape, still on disk.
         await fs.writeText(
             `${MOD_ROOT}/gen-a/${MAIN_OUT_PREFIX}/Contents/mods/my_mod/media/lua/hello.lua`,
             'stale',
@@ -610,7 +489,6 @@ describe('F23-R4: other build paths', () => {
         const session = new BuildSession(host);
         await session.start(['main', 'development']);
 
-        // Scoped trigger: edit the source mod.info.
         const nestingBefore = maxNesting(keysUnder(fs, MOD_ROOT));
         fs.writes = [];
         fs.deletes = [];
@@ -627,28 +505,22 @@ describe('F23-R4: other build paths', () => {
             { modId: MOD, variants: ['main', 'development'] },
         ]);
 
-        // Bounded: removeDir + one bounded copyTree per variant.
         expect(fs.writes.length).toBeLessThanOrEqual(100);
 
         const mainRoot = variantRoot(`${MOD_ROOT}/gen-b`, 'main');
         const devRoot = variantRoot(`${MOD_ROOT}/gen-b`, 'development');
 
-        // Source mod.info copy behavior: main verbatim, dev id-patched.
         expect(
             await fs.readText(`${mainRoot}/Contents/mods/my_mod/mod.info`),
         ).toBe('id=my_mod\nname=My Mod v2\n');
         expect(
             await fs.readText(`${devRoot}/Contents/mods/my_mod_dev/mod.info`),
         ).toBe('id=my_mod_dev\nname=My Mod v2\n');
-        // Media content re-synced from source.
         expect(
             await fs.readText(
                 `${mainRoot}/Contents/mods/my_mod/media/lua/hello.lua`,
             ),
         ).toBe('print("v1")');
-        // The stale sibling root is embedded once (pre-existing policy),
-        // never recursively re-entered: the whole apply adds at most one
-        // generation per plan execution on top of the pre-start tree.
         expect(
             await fs.readText(
                 `${mainRoot}/Contents/mods/my_mod/gen-a/${MAIN_OUT_PREFIX}/Contents/mods/my_mod/media/lua/hello.lua`,
@@ -658,8 +530,6 @@ describe('F23-R4: other build paths', () => {
             maxNesting(keysUnder(fs, `${MOD_ROOT}/gen-b`)),
         ).toBeLessThanOrEqual(nestingBefore + 2);
 
-        // Scoped deletes: the per-variant removeDir of the mod output folder
-        // plus the makeDir sentinels — nothing else.
         expect(fs.deletes.sort()).toEqual(
             [
                 `${mainRoot}/Contents/mods/my_mod`,
@@ -683,18 +553,11 @@ describe('F23-R5: source protection boundary', () => {
         const session = new BuildSession(host);
         await session.start(['main', 'development']);
 
-        // E1 reproduction (EXP-3a): a user file inside the FUTURE root's
-        // variant folder. The adoption's removeDir must REFUSE this
-        // destination (E1 Stage-1 fail-closed): the content is not provably
-        // generated output, so it is preserved untouched and the refusal is
-        // reported through the result errors.
         await fs.writeText(
             `${MOD_ROOT}/gen-b/${MAIN_OUT_PREFIX}/Contents/mods/my_mod/extra.lua`,
             'E1 casualty',
         );
-        // Outside the variant folders: must survive the adoption untouched.
         await fs.writeText(`${MOD_ROOT}/gen-b/staging/keep.lua`, 'keep');
-        // A source edit that must reach the rebuilt output.
         await fs.writeText(`${MOD_ROOT}/media/lua/late.lua`, 'late');
 
         const genAKeys = keysUnder(fs, `${MOD_ROOT}/gen-a`);
@@ -710,24 +573,18 @@ describe('F23-R5: source protection boundary', () => {
             { type: 'change', path: `${PROJECT_DIR}\\project.json` },
         ]);
 
-        // The main variant's adoption is refused — reported, never silent.
         expect(result.errors).toHaveLength(1);
         expect(result.errors[0]).toContain(
             `${MOD_ROOT}/gen-b/${MAIN_OUT_PREFIX}`,
         );
         expect(result.fullRebuild).toBe(false);
 
-        // E1: the pre-placed file is PRESERVED byte-exact.
         expect(
             await fs.readText(
                 `${MOD_ROOT}/gen-b/${MAIN_OUT_PREFIX}/Contents/mods/my_mod/extra.lua`,
             ),
         ).toBe('E1 casualty');
 
-        // The refused variant executed nothing — its removeDir never ran.
-        // The delete log carries only the built (empty-destination) dev
-        // variant's own removeDir, makeDir sentinel, and ownership-marker
-        // tmp cleanup.
         expect(fs.deletes.sort()).toEqual(
             [
                 `${MOD_ROOT}/gen-b/${DEV_OUT_PREFIX}`,
@@ -736,31 +593,26 @@ describe('F23-R5: source protection boundary', () => {
             ].sort(),
         );
 
-        // The outdir file outside variant folders survives on disk…
         expect(await fs.readText(`${MOD_ROOT}/gen-b/staging/keep.lua`)).toBe(
             'keep',
         );
-        // …and is incorporated as source by the variant that DID build.
         expect(
             await fs.readText(
                 `${variantRoot(`${MOD_ROOT}/gen-b`, 'development')}/Contents/mods/my_mod_dev/gen-b/staging/keep.lua`,
             ),
         ).toBe('keep');
 
-        // The stale root is preserved byte for byte.
         expect(keysUnder(fs, `${MOD_ROOT}/gen-a`)).toEqual(genAKeys);
         for (const [key, content] of genAContents) {
             expect(Buffer.from(fs.files.get(key)!)).toEqual(content);
         }
 
-        // The source edit reached the built variant's output.
         expect(
             await fs.readText(
                 `${variantRoot(`${MOD_ROOT}/gen-b`, 'development')}/Contents/mods/my_mod_dev/media/lua/late.lua`,
             ),
         ).toBe('late');
 
-        // Bounded, as everywhere else in this suite.
         expect(fs.writes.length).toBeLessThanOrEqual(300);
     });
 });

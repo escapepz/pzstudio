@@ -39,11 +39,8 @@ describe('CLI Global Behavior (E2E)', () => {
     });
 
     it('should emit verbose/diagnostic output when --verbose flag is given', async () => {
-        // Use build in an empty directory — it will fail, but verbose messages
-        // are emitted before the project-check throws, so we can still assert them.
         const result = await workspace.run('build', ['--verbose']);
 
-        // Regardless of exit code the verbose messages go to stdout via the mock logger
         const hasVerbose = result.stderr.some(
             (line) =>
                 line.includes('Project Dir:') ||
@@ -53,7 +50,6 @@ describe('CLI Global Behavior (E2E)', () => {
         );
         expect(hasVerbose).toBe(true);
 
-        // Cleanup verbose state so it does not bleed into subsequent tests
         setVerbose(false);
     });
 });

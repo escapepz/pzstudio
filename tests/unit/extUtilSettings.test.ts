@@ -17,13 +17,6 @@ import { readPzStudioHostSettings } from '../../packages/vscode-extension/src/ut
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 const UriCtor = vscode.Uri as unknown as new (parts: string[]) => vscode.Uri;
 
-/**
- * Configuration stub whose inspect() mirrors a workspace where every layer
- * is exercised: workspace-only values, global-only values, both, and
- * neither. readPzStudioHostSettings must surface exactly the same
- * workspaceValue/globalValue snapshot the old push bridge fed
- * setVsCodeSettings (doc 11 §10 — UX-05 preserved bit-for-bit).
- */
 function withLayeredConfig() {
     const table: Record<string, Record<string, unknown>> = {
         pzstudio: {
@@ -59,8 +52,6 @@ function withLayeredConfig() {
 describe('readPzStudioHostSettings', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        // Default: nothing configured anywhere (implementations mocked by
-        // one test must not leak into the next).
         asMock(vscode.workspace.getConfiguration).mockImplementation(
             () =>
                 ({
@@ -110,16 +101,7 @@ describe('readPzStudioHostSettings', () => {
     });
 });
 
-/**
- * UX-05: the settings declared `scope: "resource"` in the manifest must be
- * resolved for the folder that owns the operated project. The provider
- * receives the effective projectDir from the v2 lifecycle; the adapter maps
- * it onto a resource-aware VS Code configuration so
- * folder > workspace > user values compose per project — never borrowed
- * across folders, never flattened into one snapshot.
- */
 describe('readPzStudioHostSettings (UX-05 resource-scoped settings)', () => {
-    /** Two independently configured workspace folders, each owning one project. */
     function withTwoFolders() {
         const folderA = new UriCtor(['ws', 'project-a']);
         const folderB = new UriCtor(['ws', 'project-b']);
@@ -142,8 +124,6 @@ describe('readPzStudioHostSettings (UX-05 resource-scoped settings)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         configurationStore.reset();
-        // Restore the faithful store-backed configuration model (the
-        // describe above stubs getConfiguration with narrower tables).
         asMock(vscode.workspace.getConfiguration).mockImplementation(
             defaultGetConfiguration as never,
         );
@@ -177,7 +157,6 @@ describe('readPzStudioHostSettings (UX-05 resource-scoped settings)', () => {
             outdir: 'out-B',
             useSymlinks: true,
         });
-        // The other folder's value is nowhere in either snapshot.
         expect(JSON.stringify(forA)).not.toContain('out-B');
         expect(JSON.stringify(forB)).not.toContain('out-A');
     });
@@ -195,8 +174,6 @@ describe('readPzStudioHostSettings (UX-05 resource-scoped settings)', () => {
             projectDir: folderA.fsPath,
         });
 
-        // false and '' are folder VALUES, not absence: they must not be
-        // replaced by the workspace-level truthy settings.
         expect(snapshot.workspace.useSymlinks).toBe(false);
         expect(snapshot.workspace.outdir).toBe('');
     });
@@ -208,7 +185,6 @@ describe('readPzStudioHostSettings (UX-05 resource-scoped settings)', () => {
         });
         configurationStore.workspace['pzstudio.outdir'] = 'C:/ws/out';
 
-        // project-b has no folder-level outdir: the workspace value applies.
         const forB = readPzStudioHostSettings({ projectDir: folderB.fsPath });
         expect(forB.workspace.outdir).toBe('C:/ws/out');
     });
@@ -230,8 +206,6 @@ describe('readPzStudioHostSettings (UX-05 resource-scoped settings)', () => {
 
     it('composes template categories per category and per field, not per object', () => {
         const { folderA } = withTwoFolders();
-        // Folder A overrides ONLY the project template url; ref stays
-        // workspace-level. Other categories keep their own layers.
         setFolderSettings(folderA, {
             'pzstudio.templates.project.url': 'https://folder-a/project.git',
         });
@@ -251,7 +225,6 @@ describe('readPzStudioHostSettings (UX-05 resource-scoped settings)', () => {
             },
             mod: { url: 'https://ws/mod.git' },
         });
-        // The untouched category resolves through the user layer as before.
         expect(forA.user.templates).toEqual({
             workshop: { url: 'https://user/workshop.git' },
         });
@@ -282,8 +255,6 @@ describe('readPzStudioHostSettings (UX-05 resource-scoped settings)', () => {
             projectDir: outside.fsPath,
         });
 
-        // The workspace and user layers still apply — no unrelated folder's
-        // value is borrowed (case E, and the project-less update context F).
         expect(snapshot.workspace).toEqual({
             templates: undefined,
             outdir: 'C:/ws/out',
@@ -324,8 +295,6 @@ describe('readPzStudioHostSettings (UX-05 resource-scoped settings)', () => {
                 .outdir,
         ).toBe('out-A-v1');
 
-        // §12 freshness: no cache — the next provider invocation sees the
-        // new value (and the sibling folder never does).
         configurationStore.folders[folderA.fsPath]['pzstudio.outdir'] =
             'out-A-v2';
 

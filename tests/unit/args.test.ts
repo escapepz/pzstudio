@@ -1,6 +1,4 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-// Importing the dispatcher registers every command into the registry
-// (the parser builds its program from registered commands).
 import '../../packages/cli/src/lib/cli';
 import { runCLI } from '../../packages/cli/src/lib/cli';
 import {
@@ -80,8 +78,6 @@ describe('Commander parser adapter', () => {
         expect(result.kind).toBe('invocation');
         if (result.kind !== 'invocation') return;
         expect(result.invocation.options['no-materialize']).toBe(true);
-        // Commander records the positive attribute as false; both readers
-        // (hasFlag/extractFlag) already treat false as "absent".
         expect(result.invocation.options['materialize']).toBe(false);
     });
 
@@ -97,9 +93,6 @@ describe('Commander parser adapter', () => {
     });
 
     it('rejects --materialize + --no-materialize in either order (exit-2 semantics)', async () => {
-        // Commander is last-wins on the shared `materialize` attribute, so the
-        // parsed values alone cannot prove the pair. Presence evidence from
-        // the option:<name> events is what makes both orders detectable.
         for (const argv of [
             ['build', '--no-materialize', '--materialize', 'copy'],
             ['build', '--materialize', 'copy', '--no-materialize'],
@@ -114,8 +107,6 @@ describe('Commander parser adapter', () => {
     });
 
     it('a flag-shaped token consumed as a value is not a flag', async () => {
-        // `--path` takes a value, so Commander hands it the next token
-        // verbatim and never parses it as an option (no negation, no pair).
         const result = await parseArgv(
             ['new', 'T', '--path', '--no-materialize'],
             VERSION_STUB,
@@ -173,8 +164,6 @@ describe('Commander parser adapter', () => {
     });
 
     it('rejects missing required positionals', async () => {
-        // Commander declares positionals optional (the shared validator owns
-        // semantics), so the arity check happens in validateInvocation.
         const parsed = await parseArgv(['new'], VERSION_STUB);
         expect(parsed.kind).toBe('invocation');
         if (parsed.kind !== 'invocation') return;
@@ -379,9 +368,6 @@ describe('Shared semantic validation', () => {
     });
 
     it('rejects the materialize pair on the embedded path too', () => {
-        // The legacy path has no Commander events, so its presence fallback
-        // reads the parsed values — both orders must still exit 2 (one
-        // conflict semantics for both hosts).
         for (const flags of [
             ['--materialize', 'copy', '--no-materialize'],
             ['--no-materialize', '--materialize', 'copy'],

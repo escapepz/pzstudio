@@ -37,7 +37,6 @@ describe('Advanced Build Features (E2E)', () => {
             }),
         );
 
-        // Create mod directory and files
         const modPath = path.join(workspace.dir, 'mod1');
         fs.mkdirSync(modPath, { recursive: true });
 
@@ -51,13 +50,11 @@ describe('Advanced Build Features (E2E)', () => {
             'exclude',
         );
 
-        // Create .pzstudioignore inside mod1
         fs.writeFileSync(
             path.join(modPath, '.pzstudioignore'),
             'excluded_by_ignore.txt\n.git\n',
         );
 
-        // Run build
         const result = await workspace.run('build');
         workspace.assertSuccess(result);
 

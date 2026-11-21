@@ -9,10 +9,6 @@ vi.mock('vscode', async () => {
 });
 
 import * as vscode from 'vscode';
-// The REAL normalization the CLI engine applies (packages/cli/src/lib/
-// commands/new.ts derives the created directory with this exact function
-// re-exported from @pzstudio/core). The mock models the engine's actual
-// created path with it — never a call-count response.
 import { formatTitleToId } from '@pzstudio/core';
 import { registerNewCommands } from '../../packages/vscode-extension/src/commands/new';
 
@@ -26,24 +22,13 @@ const execute = vi.fn(async () => {});
 const fileNotFound = () =>
     Object.assign(new Error('entry not found'), { code: 'FileNotFound' });
 
-/* ------------------------------------------------------------------ */
-/* Path-aware fs model. The engine side of the mock writes the project */
-/* at the path the real CLI produces (packages/cli/src/lib/commands/   */
-/* new.ts: join(--path destination, formatTitleToId(modId || title),   */
-/* 'project.json')), using the real @pzstudio/core normalization; the  */
-/* vscode.workspace.fs stubs read the same model. Success detection is */
-/* therefore exercised against the exact created URI, not call counts. */
-/* ------------------------------------------------------------------ */
-
 interface FsModel {
     dirs: Set<string>;
     files: Set<string>;
 }
 
-/** Every fs URI the probe (or any test flow) touched, in order. */
 let probedPaths: string[];
 
-/** The fs model installed for the current test (refreshed in beforeEach). */
 let model: FsModel;
 
 const keyOf = (fsPath: string) => path.normalize(fsPath);
@@ -61,10 +46,6 @@ function addProjectJson(model: FsModel, projectDir: string) {
     model.files.add(keyOf(path.join(projectDir, 'project.json')));
 }
 
-/**
- * Engine mock: models `pzstudio new <title> [modId] --path <destination>` —
- * returns the implementation to install on the execute runner mock.
- */
 function engineCreatesProject(fsModel: FsModel) {
     return async (_command: string, args: string[], extraFlags?: string[]) => {
         const [projectTitle, modId] = args as [string, string];
@@ -72,9 +53,6 @@ function engineCreatesProject(fsModel: FsModel) {
         const destination =
             flagIndex >= 0 ? extraFlags?.[flagIndex + 1] : undefined;
         if (!destination) throw new Error('engine mock: missing --path');
-        // The exact CLI derivation (packages/cli/src/lib/commands/new.ts
-        // line 81): the real @pzstudio/core formatTitleToId, modId wins
-        // over the title — never a copy inside the extension.
         const id = formatTitleToId(modId || projectTitle);
         const projectDir = path.join(destination, id);
         fsModel.dirs.add(keyOf(projectDir));
@@ -82,13 +60,6 @@ function engineCreatesProject(fsModel: FsModel) {
     };
 }
 
-/**
- * Binds vscode.workspace.fs.stat/readDirectory to the model and records
- * every touched URI in probedPaths (test 9 inspects the exact URIs the
- * probe examined). stat on an unknown path rejects with FileNotFound,
- * exactly like the real host; readDirectory on an absent directory
- * rejects too, so an undeterminable probe can only fail closed.
- */
 function installFsModel(model: FsModel) {
     const stat = asMock(vscode.workspace.fs.stat);
     stat.mockReset();
@@ -172,14 +143,10 @@ function folder(path: string, name: string) {
 describe('New Project commands', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        // Drop unconsumed mockResolvedValueOnce entries from earlier tests.
         asMock(vscode.window.showInputBox).mockReset();
         asMock(vscode.window.showOpenDialog).mockReset();
         asMock(vscode.window.showQuickPick).mockReset();
         probedPaths = [];
-        // Fresh empty fs model per test: the picked destination exists but
-        // holds nothing, the default engine mock writes nothing. Creation
-        // tests install engineCreatesProject on top of it.
         model = createFsModel();
         seedDestination(model, '/picked');
         installFsModel(model);
@@ -230,18 +197,11 @@ describe('New Project commands', () => {
         );
     });
 
-    /* The CLI engine creates the project at
-     * join(destination, formatTitleToId(modId || title), 'project.json') —
-     * the mock models exactly that path with the real @pzstudio/core
-     * normalization, so every assertion below examines the created URI. */
-
     it('records the destination when a confirmed blank Mod ID creates the title-derived directory (A13)', async () => {
         const context = mockContext();
         asMock(vscode.window.showOpenDialog).mockResolvedValue([
             vscode.Uri.file('/picked'),
         ]);
-        // Confirmed blank Mod ID: the engine derives the directory from the
-        // title (formatTitleToId('My Title') → 'my_title').
         asMock(vscode.window.showInputBox)
             .mockResolvedValueOnce('My Title')
             .mockResolvedValueOnce('');
@@ -266,7 +226,6 @@ describe('New Project commands', () => {
         asMock(vscode.window.showOpenDialog).mockResolvedValue([
             vscode.Uri.file('/picked'),
         ]);
-        // Explicit ID that needs normalization: 'My Cool ID' → 'my_cool_id'.
         asMock(vscode.window.showInputBox)
             .mockResolvedValueOnce('My Title')
             .mockResolvedValueOnce('My Cool ID');
@@ -326,9 +285,6 @@ describe('New Project commands', () => {
         registerNewCommands(context, execute);
         await commandHandler('pzstudio.new')();
 
-        // The engine writes <destination>/<modId>/project.json, never
-        // <destination>/project.json: the probe must not have examined the
-        // destination-root project.json at all.
         expect(probedPaths).not.toContain(
             keyOf(path.join('/picked', 'project.json')),
         );
@@ -339,9 +295,6 @@ describe('New Project commands', () => {
     });
 
     it('does not remember the destination when the engine run produced no project (A13)', async () => {
-        // The runner swallows engine failures ("already surfaced by
-        // logger.error"), so "creation failed" is only observable on disk:
-        // no project dir with a project.json appeared under the destination.
         const context = mockContext();
         asMock(vscode.window.showOpenDialog).mockResolvedValue([
             vscode.Uri.file('/picked'),
@@ -349,7 +302,6 @@ describe('New Project commands', () => {
         asMock(vscode.window.showInputBox)
             .mockResolvedValueOnce('My Title')
             .mockResolvedValueOnce('');
-        // Default engine mock resolves without writing anything.
 
         registerNewCommands(context, execute);
         await commandHandler('pzstudio.new')();
@@ -360,10 +312,6 @@ describe('New Project commands', () => {
 
     it('does not remember the destination when a project already exists there (A13)', async () => {
         const context = mockContext();
-        // An existing project with the same normalized id: the CLI's
-        // existence check (packages/cli/src/lib/commands/new.ts) throws
-        // before creating anything, the runner swallows it, and the fs is
-        // unchanged — no new child project.json, no recorded destination.
         addProjectJson(model, path.join('/picked', 'my_id'));
 
         asMock(vscode.window.showOpenDialog).mockResolvedValue([
@@ -372,9 +320,6 @@ describe('New Project commands', () => {
         asMock(vscode.window.showInputBox)
             .mockResolvedValueOnce('My Title')
             .mockResolvedValueOnce('my_id');
-        // Engine: the CLI throws 'dir already exists' and the runner
-        // swallows it ("already surfaced by logger.error") — modeled as a
-        // resolving runner call that writes nothing to the fs.
         execute.mockImplementationOnce(async () => {});
 
         registerNewCommands(context, execute);
@@ -427,8 +372,6 @@ describe('New Project commands', () => {
         });
 
         registerNewCommands(context, execute);
-        // The failure still surfaces to the host; the destination must not
-        // be recorded for the next picker default.
         await expect(commandHandler('pzstudio.new')()).rejects.toThrow(
             'engine failure',
         );
@@ -451,31 +394,26 @@ describe('New Project commands', () => {
         seedDestination(model, '/second');
         seedDestination(model, '/third');
         asMock(vscode.window.showOpenDialog)
-            // Run 1: destination picked, then cancelled at the Mod ID prompt.
             .mockResolvedValueOnce([vscode.Uri.file('/picked')])
-            // Run 2: destination picked, engine fails without creating.
             .mockResolvedValueOnce([vscode.Uri.file('/second')])
-            // Run 3: destination picked, genuine creation.
             .mockResolvedValue([vscode.Uri.file('/third')]);
         asMock(vscode.window.showInputBox)
             .mockResolvedValueOnce('First')
-            .mockResolvedValueOnce(undefined) // cancelled at Mod ID
+            .mockResolvedValueOnce(undefined)
             .mockResolvedValueOnce('Second')
             .mockResolvedValueOnce('second_id')
             .mockResolvedValueOnce('Third')
             .mockResolvedValueOnce('third_id');
-        // Run 2: the engine failure is swallowed by the runner, nothing is
-        // written to the fs. Run 3 uses the real created-path engine mock.
         execute
             .mockImplementationOnce(async () => {})
             .mockImplementation(engineCreatesProject(model));
 
         registerNewCommands(context, execute);
-        await commandHandler('pzstudio.new')(); // cancelled at Mod ID
+        await commandHandler('pzstudio.new')();
         await commandHandler('pzstudio.new')(); // failed engine run
         await commandHandler('pzstudio.new')(); // genuine success
 
-        expect(execute).toHaveBeenCalledTimes(2); // cancels never reach it
+        expect(execute).toHaveBeenCalledTimes(2);
         expect(context.workspaceState.update).toHaveBeenCalledTimes(1);
         expect(context.workspaceState.update).toHaveBeenCalledWith(
             'pzstudio.lastNewProjectDestination',
@@ -494,8 +432,6 @@ describe('New Project commands', () => {
 
         const options = asMock(vscode.window.showOpenDialog).mock.calls[0][0];
         expect(options.defaultUri?.path).toBe('/prefs');
-        // A13/UX-14: cancelling the picker aborts instead of falling back
-        // to the configured default.
         expect(execute).not.toHaveBeenCalled();
     });
 

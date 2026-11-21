@@ -23,14 +23,12 @@ export function applyProjectDefaults(
     const verbose = onVerbose ?? ((_message: string) => {});
     if (!config) return config;
 
-    // Default workshop settings
     if (!config.workshop) config.workshop = {};
     if (config.excludes === undefined) {
         verbose(`Defaulting excludes to empty list`);
         config.excludes = [];
     }
 
-    // Default mods settings
     if (config.mods) {
         for (const modId in config.mods) {
             const mod = config.mods[modId];
@@ -60,6 +58,6 @@ export function applyProjectDefaults(
 export function formatTitleToId(title: string): string {
     return title
         .toLowerCase()
-        .replace(/\s+/g, '_') // Replace spaces with underscores
+        .replace(/\s+/g, '_')
         .replace(/[^a-z0-9_]/g, ''); // Remove any other special characters
 }

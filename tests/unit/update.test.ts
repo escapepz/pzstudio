@@ -22,7 +22,6 @@ vi.mock('../../packages/cli/src/lib/args', async (importOriginal) => ({
 describe('updateCmd — aggregate failure semantics (CLI-6)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        // The output now names the cache roots via getConfigDir (d15-F2).
         vi.mocked(getConfigDir).mockReturnValue('/fake-home/.pzstudio');
     });
 
@@ -51,7 +50,6 @@ describe('updateCmd — aggregate failure semantics (CLI-6)', () => {
         await expect(updateCmd()).rejects.toThrow(
             'Refreshed 3/4 template caches — 1 update(s) failed.',
         );
-        // The failing category is still warned per-category.
         expect(logger.warn).toHaveBeenCalledWith(
             expect.stringContaining('Failed to update workshop template'),
         );
@@ -76,16 +74,10 @@ describe('updateCmd — legacy template cache refresh', () => {
 
     it('U1 - up-to-date: the legacy step runs and its line reaches the output', async () => {
         vi.mocked(resolveTemplateDirForEngine).mockReturnValue('/tpl' as any);
-        // The real refreshLegacyTemplates owns its emission lines through
-        // the io scope (update.ts threads the engine scope); the mock
-        // stands in for that contract — emit the status line, then return
-        // the status.
         vi.mocked(refreshLegacyTemplates).mockImplementation(() => {
             logger.info('Legacy templates up to date.');
             return 'up-to-date';
         });
-        // The logger module is auto-mocked, so engineIo() would return
-        // undefined here; pin the scope the refresh must receive.
         const engineScope = {
             logger: {
                 log: vi.fn(),
@@ -105,9 +97,6 @@ describe('updateCmd — legacy template cache refresh', () => {
         expect(logger.info).toHaveBeenCalledWith(
             expect.stringContaining('Legacy templates up to date.'),
         );
-        // update.ts threads the engine io scope so the refresh emissions
-        // keep their §12 ambient routing (invocation logger under
-        // studio.run, raw legacy for the standalone CLI).
         expect(vi.mocked(refreshLegacyTemplates)).toHaveBeenCalledWith(
             engineScope,
         );
@@ -128,7 +117,6 @@ describe('updateCmd — legacy template cache refresh', () => {
 
         expect(err).toBeInstanceOf(CliError);
         expect(err.message).toContain('legacy template refresh failed');
-        // The failure is warned in place before it flips the exit code.
         expect(logger.warn).toHaveBeenCalledWith(
             expect.stringContaining('Failed to refresh legacy templates: boom'),
         );
@@ -159,8 +147,6 @@ describe('updateCmd — legacy template cache refresh', () => {
 
 describe('updateCmd — output names the cache dirs and end states (d15-F2)', () => {
     const home = '/fake-home/.pzstudio';
-    // Expected fragments are built with the same join() the command uses,
-    // so the separator style matches on every platform.
     const cacheDir = `${home}/templates/escapepz/pzstudio-template-project`;
     const legacyDir = join(home, '.template-legacy', '.template-project');
     const legacyRoot = join(home, '.template-legacy');
@@ -198,7 +184,6 @@ describe('updateCmd — output names the cache dirs and end states (d15-F2)', ()
                 `- 'project' templates fell back to legacy at: ${legacyDir}`,
             ),
         );
-        // The fallback still counts as a refreshed cache for the aggregate.
         expect(logger.info).toHaveBeenCalledWith(
             expect.stringContaining(
                 'All template caches refreshed successfully!',
@@ -251,7 +236,6 @@ describe('updateCmd — json envelope (d11-F1)', () => {
     const cacheDir = `${home}/templates/escapepz/pzstudio-template-project`;
     const legacyRoot = join(home, '.template-legacy');
 
-    /** Parses the v1 envelopes printed through logger.log. */
     const jsonEnvelopes = (): any[] =>
         logger.log.mock.calls
             .map((call) => String(call[0]))
@@ -322,8 +306,6 @@ describe('updateCmd — json envelope (d11-F1)', () => {
             },
         } as any);
 
-        // Exit code follows the result (CLI-8): the envelope prints, then
-        // the aggregate failure throws.
         await expect(updateCmd()).rejects.toThrow(CliError);
 
         const envelope = jsonEnvelopes()[0];

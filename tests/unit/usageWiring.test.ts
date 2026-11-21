@@ -10,16 +10,6 @@ import { setLogger } from '../../packages/cli/src/lib/logger';
 import { setCliIO } from '../../packages/cli/src/lib/parser';
 import { CliError } from '../../packages/cli/src/lib/errors';
 
-// NO module mocks here: the wiring tests spy the real recorder's file writes
-// through the fake HOME (vitest.setup.ts) so the production chokepoint and
-// facade wraps run against the real sink. Output stays pristine because the
-// suite installs a recording logger + capturing CliIO (cliLifecycle idiom) —
-// the one-time disclosure notice routes through the same captured sinks.
-//
-// The usage-recorder singleton memoizes its enabled state, so the disabled
-// case (2) is declared LAST with a fresh module registry — same idiom as
-// usageSpan.test.ts test 6.
-
 type SpanCtx = Pick<
     InvocationContext,
     'interactionMode' | 'invocationOptions' | 'projectDir' | 'anchor'
@@ -56,7 +46,6 @@ const writeJsonConfig = (config: unknown): void => {
     fs.writeFileSync(configPath(), JSON.stringify(config), 'utf-8');
 };
 
-/** Minimal lifecycle-shaped context; per-test overrides on top. */
 const ctx = (overrides: Partial<SpanCtx> = {}): SpanCtx => ({
     interactionMode: 'embedded',
     invocationOptions: {},
@@ -109,20 +98,12 @@ describe('usage wiring (lifecycle chokepoint + facade wraps)', () => {
     });
 
     it('1b. banner path (no command) records nothing — pure invocations stay side-effect-free', async () => {
-        // valid.command is undefined on the banner path (validateInvocation
-        // returns early); the chokepoint records only executed COMMANDS, so
-        // a help lookup never scaffolds ~/.pzstudio (pack-smoke contract:
-        // pure invocation leaves no ~/.pzstudio).
         await runCLI(undefined, undefined, { flags: [] });
 
         expect(parsedEvents()).toHaveLength(0);
     });
 
     it('1c. help command and per-command --help record nothing (pure invocations)', async () => {
-        // Same display-only set executeInvocation() short-circuits: the
-        // `help` command and the --help flag on any command render help and
-        // never run business logic — the chokepoint must not scaffold
-        // ~/.pzstudio for them (real-env contract: clean stderr, no store).
         await runCLI('help', [], { flags: [] });
         await runCLI('list', [], { flags: ['--help'] });
 
@@ -130,15 +111,12 @@ describe('usage wiring (lifecycle chokepoint + facade wraps)', () => {
     });
 
     it('3. facade devsync.create spans the call: api event + outcome propagated', () => {
-        // A directory without project.json: createDevSyncCore resolves the
-        // project lazily (per plan input), so creation RETURNS a session.
         const projectless = join(fakeHome(), 'devsync-no-project');
         fs.mkdirSync(projectless, { recursive: true });
 
         const studio = createPzStudio();
         const session = studio.createDevSync(projectless);
 
-        // The call's outcome propagated unchanged: a real BuildSession.
         expect(session).toBeInstanceOf(BuildSession);
 
         const event = singleEvent();
@@ -148,10 +126,6 @@ describe('usage wiring (lifecycle chokepoint + facade wraps)', () => {
     });
 
     it('4. facade doctor.api error: event status error with err.code CliError, original error rethrown', async () => {
-        // The doctor core reports a missing project as a diagnostic, not a
-        // throw — the facade span's error path needs a body that actually
-        // rejects, so the host settings provider (invoked inside the span
-        // body) throws the structured CliError.
         const boom = new CliError('No pzstudio project found.');
         const studio = createPzStudio({
             settings: () => {
@@ -171,9 +145,6 @@ describe('usage wiring (lifecycle chokepoint + facade wraps)', () => {
     });
 
     it('4b. facade doctor.api on a missing project resolves with the report and records ok', async () => {
-        // Pinned current behavior (deviation note: the brief expected this
-        // input to reject): runProjectDoctorCore turns a missing project
-        // into a DoctorReport finding, so the span settles ok — one event.
         const missing = join(fakeHome(), 'definitely-missing');
 
         const report = await createPzStudio().runProjectDoctor(missing);
@@ -194,8 +165,6 @@ describe('usage wiring (lifecycle chokepoint + facade wraps)', () => {
 
         await studio.run('migrate', [], {});
 
-        // Exactly ONE event for the run: the lifecycle chokepoint records
-        // it; run itself is deliberately not facade-wrapped (no duplicate).
         const all = parsedEvents();
         expect(all).toHaveLength(1);
         expect(all[0].op).toBe('migrate');
@@ -242,10 +211,6 @@ describe('usage wiring (lifecycle chokepoint + facade wraps)', () => {
         expect(event.status).toBe('ok');
     });
 
-    // Declared last on purpose: the disabled case needs a fresh module
-    // registry (resetModules) so a fresh recorder singleton reads the off
-    // config it just wrote — running it earlier would poison the enabled
-    // cases above (the singleton memoizes its enabled state).
     it('2. disabled → runCLI records nothing (usage dir stays absent)', async () => {
         writeJsonConfig({ templates: {}, usageLog: { enabled: false } });
         vi.resetModules();

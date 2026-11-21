@@ -29,11 +29,9 @@ export function outdirCmd(newOutDir: string) {
 
     verbose(`Changing outdir to: ${newOutDir}`);
 
-    // resolve the path
     newOutDir = resolve(newOutDir);
     verbose(`Resolved outdir path: ${newOutDir}`);
 
-    // check if the new path exists and is a directory
     if (!existsSync(newOutDir)) {
         verbose(`Validation failed: Path ${newOutDir} does not exist.`);
         throw new CliError(
@@ -54,13 +52,11 @@ export function outdirCmd(newOutDir: string) {
     const config = readGlobalConfig(true, engineIo());
     verbose(`Current outdir: ${config.outdir}`);
 
-    // check if the new path is the same as the old one
     if (config.outdir && config.outdir === newOutDir) {
         verbose(`Validation failed: New path is the same as current path.`);
         throw new Error('The output directory is already set to this value.');
     }
 
-    // write the new path to config.json
     verbose(`Writing new outdir to global config...`);
     config.outdir = newOutDir;
     writeGlobalConfig(config);

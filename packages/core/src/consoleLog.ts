@@ -86,18 +86,10 @@ export interface BuildFindingsResult {
     gameExited: boolean;
 }
 
-// Session-start body printed at startup: `15-11-2026 13:28:36`.
 const SESSION_START = /^\d{2}-\d{2}-\d{4} \d{2}:\d{2}:\d{2}$/;
 
-// gameExited heuristic (design §Windows / live-file robustness).
 const GAME_EXITED = 'GameThread exited.';
 
-// Single-line classifier table (design §Stage 3); first body-prefix match
-// wins. Severity comes from the table, not the envelope level. Rules are
-// anchored regexes, so a `pattern` is exactly the design's body-prefix match;
-// the parens in the require-shaped headlines stay escaped, which also keeps
-// the browser-safety gate's bare-`require` scan from misreading classifier
-// data as a CommonJS call.
 interface BodyClassifierRule {
     pattern: RegExp;
     category: ConsoleLogCategory;
@@ -105,8 +97,6 @@ interface BodyClassifierRule {
 }
 
 const BODY_CLASSIFIERS: BodyClassifierRule[] = [
-    // require-failure headline: a quoted path between a leading `require` and
-    // a trailing `) failed` — both ends are part of the shape.
     {
         pattern: /^require\("[^"]+"\)\s+failed/,
         category: 'require-failure',
@@ -159,7 +149,6 @@ const BODY_CLASSIFIERS: BodyClassifierRule[] = [
     },
 ];
 
-// Mod-channel table lines (design §Attribution ladder, tier 2).
 const MOD_LOADING = /^loading (\S+)$/;
 const MOD_OVERRIDE = /^mod "([^"]+)" overrides (.+)$/;
 const MOD_REFUSING = /^refusing to list (\S+)$/;
@@ -197,8 +186,6 @@ export function buildFindings(
             byLevel[level] = (byLevel[level] ?? 0) + 1;
         }
 
-        // DEBUG lines are count-and-drop; includeDebug re-enables them for
-        // session handling (the level gate below still keeps them finding-free).
         if (level === 'DEBUG') {
             const channel = entry.channel ?? '';
             debugByChannel[channel] = (debugByChannel[channel] ?? 0) + 1;
@@ -209,7 +196,6 @@ export function buildFindings(
 
         const body = entry.body.trim();
 
-        // Session metadata: startup timestamp and game-exit marker.
         if (sessionStart === undefined && SESSION_START.test(body)) {
             sessionStart = body;
         }
@@ -217,8 +203,6 @@ export function buildFindings(
             gameExited = true;
         }
 
-        // Mod-channel session tables; `refusing to list` is a first-class
-        // finding at any envelope level, the other lines are never findings.
         if (entry.channel === 'Mod') {
             const loading = MOD_LOADING.exec(body);
             if (loading) {
@@ -250,12 +234,10 @@ export function buildFindings(
             }
         }
 
-        // Only WARN/ERROR/SEVERE entries can become findings.
         if (level !== 'WARN' && level !== 'ERROR' && level !== 'SEVERE') {
             continue;
         }
 
-        // Single-line classifier table (body prefix).
         const classified = classifyBody(body);
         if (classified) {
             pushFinding(findings, byKey, {
@@ -269,10 +251,6 @@ export function buildFindings(
             continue;
         }
 
-        // Continuation promotion on ERROR entries: a matched KahluaException
-        // promotes the block to lua-syntax-error; otherwise zombie.* frames
-        // make it an engine-exception. lua-runtime-error stays dormant until a
-        // real log pins the runtime-error shape.
         if (level === 'ERROR') {
             const kahlua = extractKahluaException(entry.continuations);
             if (kahlua) {
@@ -303,7 +281,6 @@ export function buildFindings(
             }
         }
 
-        // Mandatory unclassified bucket — nothing is silently dropped.
         pushFinding(findings, byKey, {
             category: 'unclassified',
             severity: level === 'WARN' ? 'warning' : 'error',
@@ -327,7 +304,6 @@ export function buildFindings(
     };
 }
 
-/** Runs the body-prefix classifier table; first match wins. */
 function classifyBody(body: string): {
     category: ConsoleLogCategory;
     severity: ConsoleLogFinding['severity'];
@@ -340,11 +316,6 @@ function classifyBody(body: string): {
     return null;
 }
 
-/**
- * Appends a finding, collapsing it into the previous occurrence when
- * `(category, message, top frame text)` match: `count` accumulates and the
- * `firstLine`/`lastLine` span widens to cover both occurrences.
- */
 function pushFinding(
     findings: ConsoleLogFinding[],
     byKey: Map<string, ConsoleLogFinding>,
@@ -371,15 +342,9 @@ function pushFinding(
     findings.push(finding);
 }
 
-// Override paths are virtual paths; the game prints Windows separators on
-// some surfaces, so they are normalized to forward slashes.
 function normalizeVirtualPath(path: string): string {
     return path.trim().replace(/\\/g, '/');
 }
-
-// ---------------------------------------------------------------------------
-// Attribution ladder + full-log analysis (consumed by CLI / extension)
-// ---------------------------------------------------------------------------
 
 /** One mod's workspace-side attribution context. */
 export interface ConsoleLogModContext {
@@ -409,9 +374,6 @@ export interface ConsoleLogReport {
     findings: ConsoleLogFinding[];
 }
 
-// Attribution ladder tier 1: the SEVERE `Error found in LUA file:` full path
-// (design §Attribution ladder). Matches anywhere in the body; the version
-// folder is optional for layouts without one.
 const SEVERE_LUA_PATH =
     /Contents\/mods\/(?<modFolder>[^/]+)\/(?:(?<ver>common|42(?:\.\d+)?)\/)?media\/lua\/(?<rel>.+)$/i;
 
@@ -452,9 +414,6 @@ export async function analyzeConsoleLog(
         };
     }
 
-    // A real console.txt ends with \n: the split leaves ONE trailing empty
-    // element that is not a visible line — drop it so totalLines counts
-    // what the file shows. Blank lines anywhere else stay counted.
     const lines = text.split(/\r\n|\r|\n/);
     if (lines.length > 0 && lines[lines.length - 1] === '') {
         lines.pop();
@@ -481,16 +440,6 @@ export async function analyzeConsoleLog(
     };
 }
 
-/**
- * Attribution ladder over the classifier's findings, in order:
- *  1. SEVERE full-path parse → mod id + exact workspace file,
- *  2. override-table match on path-like message tokens,
- *  3. basename → workspace lookup (42-over-common precedence),
- *  4. frame display-name owners (`Lua((MOD:<name>))` / B41 `| MOD: <name>`).
- *
- * The classifier's own attribution (`mod-rejected`) always stands; `line`
- * carried from the KahluaException pass is untouched.
- */
 async function attributeFindings(
     result: BuildFindingsResult,
     entries: ParsedEntry[],
@@ -498,14 +447,10 @@ async function attributeFindings(
     context: ConsoleLogProjectContext | undefined,
 ): Promise<void> {
     const loadedModIds = new Set(result.session.loadedModIds);
-    // Every tier intersects with the session's loaded mods — an inactive mod
-    // is never attributed.
     const contextMods = (context?.mods ?? []).filter((mod) =>
         loadedModIds.has(mod.modId),
     );
 
-    // Tier-1 bookkeeping: a `SEVERE:` body belongs to the SEVERE line itself
-    // and to the entry printed right after it (the paired ERROR block).
     const severeBodyByLine = new Map<number, string>();
     let pendingSevereBody: string | undefined;
     for (const entry of entries) {
@@ -525,11 +470,6 @@ async function attributeFindings(
         entryByLine.set(entry.lineNo, entry);
     }
 
-    // Tier-3 bookkeeping: basename -> workspace URIs per context mod, built
-    // lazily on the first finding that needs it. Airtight fail-soft: the
-    // log-read try/catch covers only fs.read, so a basename-index failure
-    // must degrade to unattributed findings here — never reject
-    // analyzeConsoleLog.
     let basenameIndex:
         | Promise<Map<string, Array<{ modId: string; uri: string }>>>
         | undefined;
@@ -554,7 +494,6 @@ async function attributeFindings(
             continue;
         }
 
-        // Tier 1 — SEVERE full-path parse → mod + exact workspace file.
         const severeBody = severeBodyByLine.get(finding.firstLine);
         if (severeBody !== undefined) {
             const path = SEVERE_LUA_PATH.exec(severeBody);
@@ -571,16 +510,12 @@ async function attributeFindings(
                     continue;
                 }
                 if (loadedModIds.has(modFolder)) {
-                    // Workspace unknown (external mod): attribute the mod id
-                    // only — no click-to-file target.
                     finding.modId = modFolder;
                     continue;
                 }
             }
         }
 
-        // Tier 2 — override table: path-like message tokens normalized to
-        // forward slashes, matched against the virtual-path keys.
         if (finding.modId === undefined) {
             for (const token of pathTokens(finding.message)) {
                 const overrideModId = overrideMapModIdFor(
@@ -597,7 +532,6 @@ async function attributeFindings(
             }
         }
 
-        // Tier 3 — basename → workspace lookup (42-over-common precedence).
         if (finding.sourceFile === undefined && contextMods.length > 0) {
             const frames = attributionFrames(
                 finding,
@@ -620,15 +554,11 @@ async function attributeFindings(
                         } else if (finding.modId === owner.modId) {
                             finding.sourceFile = owner.uri;
                         }
-                        // A basename owned by a different mod than an earlier
-                        // tier attributed would contradict it — leave the
-                        // finding as is (never misattribute).
                     }
                 }
             }
         }
 
-        // Tier 4 — frame display-name owners, unambiguous only.
         if (finding.modId === undefined && contextMods.length > 0) {
             const frames = attributionFrames(
                 finding,
@@ -650,12 +580,6 @@ async function attributeFindings(
     }
 }
 
-/**
- * Frame data for attribution: the finding's own frames where the classifier
- * attached them (lua-syntax-error / engine-exception), otherwise re-derived
- * from the originating entry — `unclassified` findings carry no frames by
- * contract, but their block's frames still name basenames and owners.
- */
 function attributionFrames(
     finding: ConsoleLogFinding,
     entry: ParsedEntry | undefined,
@@ -669,7 +593,6 @@ function attributionFrames(
     return [];
 }
 
-/** Indexes every eligible context mod's Lua basenames → `{ modId, uri }`. */
 async function buildBasenameIndex(
     fs: ProjectFileSystem,
     mods: ConsoleLogModContext[],
@@ -690,12 +613,6 @@ async function buildBasenameIndex(
     return index;
 }
 
-/**
- * Path-like tokens in a finding message: whitespace/quote-delimited runs
- * containing a slash, with surrounding bracket/paren punctuation stripped
- * (quoted-path failure headlines, `C:/Program Files (x86)/...`). Windows
- * separators normalize to forward slashes before the override-table match.
- */
 function pathTokens(message: string): string[] {
     const tokens: string[] = [];
     for (const raw of message.split(/[\s"']+/)) {
@@ -707,11 +624,6 @@ function pathTokens(message: string): string[] {
     return tokens;
 }
 
-/**
- * Longest override key the token equals or ends with at a `/` boundary —
- * the game prints resolved physical paths (`<game-root>/<virtual path>`)
- * while the override table holds the virtual path itself.
- */
 function overrideMapModIdFor(
     token: string,
     overrideMap: Map<string, string>,

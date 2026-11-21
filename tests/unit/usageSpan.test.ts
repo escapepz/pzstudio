@@ -10,9 +10,6 @@ import {
     recordUsageSpan,
 } from '../../packages/cli/src/lib/usage';
 
-// The one-time disclosure notice goes out through emitInfo right after the
-// first successful event write; auto-mocking the logger keeps it out of the
-// test output (same idiom as usageRecorder.test.ts).
 vi.mock('../../packages/cli/src/lib/logger');
 
 type SpanCtx = Pick<
@@ -55,7 +52,6 @@ const writeJsonConfig = (config: unknown): void => {
     fs.writeFileSync(configPath(), JSON.stringify(config), 'utf-8');
 };
 
-/** Minimal lifecycle-shaped context; per-test overrides on top. */
 const ctx = (overrides: Partial<SpanCtx> = {}): SpanCtx => ({
     interactionMode: 'interactive',
     invocationOptions: {},
@@ -120,7 +116,6 @@ describe('usage spans', () => {
         expect(singleEvent().meta).toEqual({
             flags: ['project', 'transport', 'verbose'],
         });
-        // The project VALUE appears nowhere in the raw log file.
         const raw = fs.readFileSync(eventsFile(), 'utf-8');
         expect(raw).not.toContain('D:\\mods\\x');
     });
@@ -134,7 +129,6 @@ describe('usage spans', () => {
         const event = singleEvent();
         expect(event.host).toBe('cli');
         expect('meta' in event).toBe(false);
-        // The api facade spans never carried meta; both hosts now agree.
         await recordApiSpan('api.op', 'D:\\proj', async () => 42);
         expect('meta' in lastEvent()).toBe(false);
     });
@@ -146,12 +140,10 @@ describe('usage spans', () => {
                 throw boom;
             }),
         ).rejects.toBe(boom);
-        // Exactly one event on settle: still only the error event above.
         const event = singleEvent();
         expect(event.status).toBe('error');
         expect(event.err).toEqual({ code: 'CliError', where: 'op4' });
 
-        // A plain Error maps to its own name ('Error')...
         const plain = new Error('x');
         await expect(
             recordUsageSpan('op4plain', ctx(), async () => {
@@ -159,8 +151,6 @@ describe('usage spans', () => {
             }),
         ).rejects.toBe(plain);
         expect(lastEvent().err?.code).toBe('Error');
-        // ...and built-in Error subclasses keep theirs (pinned rule:
-        // err.code = thrown instanceof Error ? thrown.name : 'Unknown').
         const typeErr = new TypeError('x');
         await expect(
             recordUsageSpan('op4type', ctx(), async () => {
@@ -168,7 +158,6 @@ describe('usage spans', () => {
             }),
         ).rejects.toBe(typeErr);
         expect(lastEvent().err?.code).toBe('TypeError');
-        // Non-Error throws degrade to 'Unknown'.
         await expect(
             recordUsageSpan('op4str', ctx(), async () => {
                 throw 'str';
@@ -231,10 +220,6 @@ describe('usage spans', () => {
         expect(tail[1].err).toEqual({ code: 'Error', where: 'api.syncErr' });
     });
 
-    // Declared last on purpose: the singleton memoizes its enabled state, so
-    // the disabled case needs a fresh module registry (resetModules) to read
-    // the off config it just wrote — running it early would poison the
-    // enabled cases above.
     it('6. disabled recorder: body runs directly with identical result/rethrow, nothing written', async () => {
         writeJsonConfig({ templates: {}, usageLog: { enabled: false } });
         vi.resetModules();

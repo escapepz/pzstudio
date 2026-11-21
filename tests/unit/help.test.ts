@@ -6,9 +6,7 @@ import {
 } from '../../packages/cli/src/lib/help';
 
 describe('help helper', () => {
-    beforeEach(() => {
-        // Since help.ts uses a global registry, we might want to check it incrementally
-    });
+    beforeEach(() => {});
 
     it('should register and retrieve help text', () => {
         addHelp('test-cmd', 'Test help text');

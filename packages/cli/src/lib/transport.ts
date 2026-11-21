@@ -28,18 +28,10 @@ function isDirNonEmpty(dir: string): boolean {
     return true;
 }
 
-/* ------------------------------------------------------------------ */
-/* URL / ref validation shared by both transports                      */
-/* ------------------------------------------------------------------ */
-
 const GIT_URL_RE = /^https:\/\/[A-Za-z0-9._~:/?#[\]@!$'()*+,;=%-]+$/;
 const GIT_SHORT_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const GIT_REF_RE = /^[A-Za-z0-9._/-]+$/;
 
-/**
- * Normalizes a template url (https URL or user/repo shorthand) to
- * https://github.com/owner/repo and returns the GitHub owner/repo pair.
- */
 export function parseGitHubTarget(url: string): {
     normalizedUrl: string;
     owner: string;
@@ -88,10 +80,6 @@ export class TemplateCloneError extends TemplateResolutionError {
     }
 }
 
-/* ------------------------------------------------------------------ */
-/* Git transport (default on Node hosts)                               */
-/* ------------------------------------------------------------------ */
-
 const GIT_SPAWN_TIMEOUT_MS = 120_000;
 
 function gitResultError(result: { stderr?: string | Buffer }): string {
@@ -115,15 +103,6 @@ function isGitAvailable(): boolean {
     return !result.error && result.status === 0;
 }
 
-/**
- * Template acquisition transport with an optional constructor io sink (doc
- * 11 §12/§17 commit 6, Appendix C): every emission routes to the supplied
- * scope's logger; the DEFAULT — an omitted sink — is the RAW legacy logger
- * (R1: ambient-blind, legacy bit-identical), never the active invocation
- * context's logger. A v2 instance default transport is constructed by
- * studio.ts with the instance logger; a host-provided transport owns its
- * own routing.
- */
 export class GitTransport implements TemplateTransport {
     readonly name = 'git' as const;
 
@@ -196,11 +175,8 @@ export class GitTransport implements TemplateTransport {
             return true;
         };
 
-        // 1. git fetch --all (include tags so tag-based refs can be refreshed too)
         if (!ok(git(['fetch', '--all', '--tags']), 'fetch')) return false;
 
-        // 2. Reset to the requested ref.
-        // Branch refs live under origin/<ref>, but some templates use tags.
         const resetTargets = ref
             ? ref === 'default'
                 ? ['origin/HEAD']
@@ -225,7 +201,6 @@ export class GitTransport implements TemplateTransport {
             return false;
         }
 
-        // 3. git submodule update --init --recursive --force
         if (
             !ok(
                 git([
@@ -240,7 +215,6 @@ export class GitTransport implements TemplateTransport {
         )
             return false;
 
-        // 4. git clean -fdx
         return ok(git(['clean', '-fdx']), 'clean');
     }
 
@@ -249,15 +223,9 @@ export class GitTransport implements TemplateTransport {
     }
 }
 
-/* ------------------------------------------------------------------ */
-/* Fetch transport (fallback where git is missing, default for web)    */
-/* ------------------------------------------------------------------ */
-
 const FETCH_MANIFEST = '.pzstudio-fetch.json';
 const FETCH_TIMEOUT_MS = 120_000;
 
-// Runs in a child process: the CLI is synchronous and Node has no sync
-// fetch; this bridge performs the HTTPS download and stores the body.
 const FETCH_SCRIPT = `
 const [url, out] = process.argv.slice(1);
 fetch(url, { signal: AbortSignal.timeout(${FETCH_TIMEOUT_MS}) })
@@ -277,15 +245,6 @@ fetch(url, { signal: AbortSignal.timeout(${FETCH_TIMEOUT_MS}) })
     });
 `;
 
-/**
- * Downloads the repository archive through codeload.github.com and extracts
- * it with fflate — no git binary required. The same flow maps cleanly onto
- * a browser host (fetch + JS unzip) for the vscode.dev extension.
- *
- * Like GitTransport, the optional constructor io sink routes every
- * emission (doc 11 §17 commit 6, Appendix C); the default is the raw
- * legacy logger (R1 — ambient-blind).
- */
 export class FetchTransport implements TemplateTransport {
     readonly name = 'fetch' as const;
 
@@ -324,7 +283,6 @@ export class FetchTransport implements TemplateTransport {
     }
 
     refresh(cacheDir: string, ref: string | undefined): boolean {
-        // The fetch cache has no git history; refreshing means re-downloading.
         const manifestPath = join(cacheDir, FETCH_MANIFEST);
         let url: string | undefined;
         try {
@@ -341,10 +299,6 @@ export class FetchTransport implements TemplateTransport {
             );
             return false;
         }
-        // Sweep d15-B5 data-safety: re-download into a staging sibling and
-        // swap only after the replacement is fully on disk. Deleting the
-        // cache BEFORE the download turned a failed re-download (a 404, a
-        // timeout) into a machine with no template cache at all.
         const stagingDir = `${cacheDir}.replacing`;
         rmSync(stagingDir, { recursive: true, force: true });
         try {
@@ -412,14 +366,14 @@ export class FetchTransport implements TemplateTransport {
         const root = resolvePath(destDir);
         for (const [entryPath, data] of Object.entries(entries)) {
             const parts = entryPath.replace(/\\/g, '/').split('/');
-            parts.shift(); // strip top-level archive folder
+            parts.shift();
             const relative = parts.join('/');
             if (!relative || entryPath.endsWith('/')) {
                 continue;
             }
             const outPath = resolvePath(root, relative);
             if (!outPath.startsWith(root)) {
-                continue; // zip-slip guard
+                continue;
             }
             mkdirSync(dirname(outPath), { recursive: true });
             writeFileSync(outPath, data);
@@ -438,42 +392,17 @@ function writeManifest(destDir: string, url: string): void {
             ),
             'utf8',
         );
-    } catch {
-        // Manifest is an optimization for refresh(); ignore write failures.
-    }
+    } catch {}
 }
-
-/* ------------------------------------------------------------------ */
-/* Transport selection                                                 */
-/* ------------------------------------------------------------------ */
 
 let activeTransport: TemplateTransport | undefined;
 
-/**
- * Overrides the active transport (used by embedders, e.g. the web extension
- * injecting FetchTransport).
- */
 export function setTemplateTransport(
     transport: TemplateTransport | undefined,
 ): void {
     activeTransport = transport;
 }
 
-/**
- * The host-default template transport, resolved fresh on EVERY delegated
- * use. The git-availability probe (a spawnSync side effect) belongs to
- * actual template acquisition, not to transport acquisition: before the
- * engine migration getTemplateTransport() probed the host and constructed
- * the default on every request, so runs that never touch templates
- * (--version, --help, usage errors, non-template commands) never probed
- * git. Handing the invocation composition a lazy default preserves that
- * timing — including per-use freshness: the wrapper stores no resolved
- * git/fetch transport, each use re-reads the current host capability —
- * while the installed context stays self-contained (a concrete
- * TemplateTransport, no per-field fallback; R0, doc 11 §8.0/§8.1). Owned
- * by this module (the state owner of the host default, Appendix B);
- * invocation.ts only receives it and never constructs a default.
- */
 class LazyHostDefaultTransport implements TemplateTransport {
     constructor(private readonly io?: IoScope | undefined) {}
 
@@ -494,54 +423,22 @@ class LazyHostDefaultTransport implements TemplateTransport {
     }
 }
 
-/**
- * The pre-migration host-default selection, evaluated per request. The io
- * scope (commit 6) travels into the constructed transport: with a scope
- * the transport's emissions route to that logger; without one they route
- * raw legacy (R1 — ambient-blind, legacy bit-identical).
- */
 function resolveHostDefaultTransport(
     io?: IoScope | undefined,
 ): GitTransport | FetchTransport {
     return isGitAvailable() ? new GitTransport(io) : new FetchTransport(io);
 }
 
-/**
- * The REAL host-default template transport (doc 11 §8.1/§12, Appendix B —
- * owned by this module): git when the git binary is available, else fetch,
- * materialized lazily so the availability probe is paid on actual template
- * use — never on composition, and re-evaluated per use. NO sticky-slot
- * consultation: a v2 instance whose transport was omitted must never
- * consume `activeTransport` (R0); the legacy accessor below composes
- * slot ?? this default. The optional io scope (doc 11 §17 commit 6) is the
- * emission sink handed to the constructed Git/Fetch transport — studio.ts
- * passes the instance logger so v2 template emissions land in the
- * instance's sink; the legacy composition omits it (raw legacy default).
- */
 export function hostDefaultTransport(
     io?: IoScope | undefined,
 ): TemplateTransport {
     return new LazyHostDefaultTransport(io);
 }
 
-/**
- * Rule R1 (doc 11 §8.0): raw, ambient-blind transport resolution — the
- * sticky legacy slot, else the host default (git when the git binary is
- * available, else the HTTPS fetch transport), materialized lazily so the
- * availability probe is paid on actual use — never on acquisition, and
- * re-evaluated per use exactly like the pre-migration getTemplateTransport()
- * requests. Never consults the active invocation context. The runCLI
- * composition and legacy non-engine wrappers (DevSync plan input,
- * template ops) compose their transport dependency from this.
- */
 export function legacyTransport(): TemplateTransport {
     return activeTransport ?? hostDefaultTransport();
 }
 
-/**
- * Returns the active transport, or the default for this host: git when the
- * git binary is available, else the HTTPS fetch transport.
- */
 export function getTemplateTransport(): TemplateTransport {
     const ctx = getActiveInvocationContext();
     if (ctx) {

@@ -1,12 +1,6 @@
 import * as vscode from 'vscode';
 import type { ConsoleLogFinding, ConsoleLogReport } from '@pzstudio/cli/api';
 
-/**
- * The DiagnosticSeverity enum is read lazily, never at module scope: a
- * module-scope map would crash any host whose vscode surface predates the
- * diagnostics API (the bundle activation smoke test registers every command
- * against a minimal stub) before registerCommand could even run.
- */
 function diagnosticSeverity(
     severity: ConsoleLogFinding['severity'],
 ): vscode.DiagnosticSeverity {
@@ -20,22 +14,6 @@ function diagnosticSeverity(
     }
 }
 
-/**
- * "PZ Studio: Analyze Game Log": runs the CLI's console.txt analyzer on the
- * game's default log (the injected analyzer is
- * `(logPath?) => analyzeGameLogFile(logPath)`), reports the session in a
- * dedicated output channel and pins attributed findings as diagnostics on
- * their source files. Findings without a sourceFile stay channel-only —
- * never misattributed as a squiggle. This command only renders: the engine
- * and attribution live in @pzstudio/core behind the CLI API.
- *
- * Both surfaces are singletons per registration — a per-run collection
- * would orphan the previous run's diagnostics — materialized on the first
- * run, so activation only needs registerCommand (the bundle smoke test
- * runs activate() against a vscode stub without the diagnostics APIs). An
- * unexpected failure is routed through the handed host-owned error sink
- * (same UX-16 shape as doctor) instead of rejecting raw from the handler.
- */
 export function registerAnalyzeGameLogCommand(
     analyze: (logPath?: string) => Promise<ConsoleLogReport>,
     onError?: (error: unknown) => void,
@@ -69,7 +47,6 @@ export function registerAnalyzeGameLogCommand(
     );
 }
 
-/** Channel report: severity summary, then one block per finding. */
 function renderReport(
     channel: vscode.OutputChannel,
     report: ConsoleLogReport,
@@ -105,17 +82,6 @@ function renderReport(
     }
 }
 
-/**
- * Pins attributed findings as diagnostics; unattributed ones stay out.
- * Findings are grouped per sourceFile into one set() call per URI, so
- * multiple attributed findings on one file all survive (a per-finding set
- * would replace the previous array and keep only the last). sourceFile
- * arrives in two shapes: `file://` URIs (the extension wiring remaps each
- * context mod root through vscode.Uri.file) and plain filesystem paths (a
- * context built without the remap — the CLI host emits paths). Only the URI
- * shape is parseable; paths must materialize through Uri.file or a real
- * host rejects the string as a malformed URI.
- */
 function publishDiagnostics(
     collection: vscode.DiagnosticCollection,
     report: ConsoleLogReport,
@@ -144,7 +110,6 @@ function publishDiagnostics(
     }
 }
 
-/** `file:` strings parse as URIs; anything else is a filesystem path. */
 function sourceFileUri(sourceFile: string): vscode.Uri {
     return sourceFile.startsWith('file:')
         ? vscode.Uri.parse(sourceFile)

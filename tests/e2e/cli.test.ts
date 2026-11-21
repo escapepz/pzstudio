@@ -13,18 +13,16 @@ describe('CLI Command Flow (E2E)', () => {
     });
 
     it('should exit with code 1 when a command fails', async () => {
-        // We use 'build' in an empty directory which should fail
         const result = await workspace.run('build');
         workspace.assertFailure(result, 1);
         workspace.assertStderr(result, 'No pzstudio project found.');
     });
 
     it('should exit with error on project validation failure', async () => {
-        // Create an invalid project.json
         workspace.write(
             'project.json',
             JSON.stringify({
-                workshop: { title: 123 }, // Title must be string
+                workshop: { title: 123 },
                 mods: {},
                 excludes: [],
             }),
@@ -37,7 +35,6 @@ describe('CLI Command Flow (E2E)', () => {
     });
 
     it('should warn on legacy project shape', async () => {
-        // Create a legacy project.json (missing workshop.excludes but has deprecated id/title)
         workspace.write(
             'project.json',
             JSON.stringify({
@@ -55,8 +52,6 @@ describe('CLI Command Flow (E2E)', () => {
         );
 
         const result = await workspace.run('build');
-        // It should still run (auto-migrating in memory) but log a warning
-        // Wait, build fails if outdir missing. Let's add outdir.
         workspace.write(
             'project.json',
             JSON.stringify({

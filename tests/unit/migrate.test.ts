@@ -36,7 +36,6 @@ vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
 const CONFIG_PATH = '/pz/config.json';
 const PROJECT_PATH = join('/proj', 'project.json');
 
-/** Reads each mocked file by its normalized path suffix. */
 function mockFiles(files: Record<string, string>, existing: string[]) {
     const existingSuffixes = existing.map((suffix) =>
         suffix.replace(/\\/g, '/'),
@@ -144,8 +143,6 @@ describe('migrateCmd', () => {
             expect(upgraded.workshop.title).toBe('T');
             expect(upgraded.id).toBeUndefined();
             expect(upgraded.title).toBeUndefined();
-            // d16-B2: the root value is not deleted — with exactly one mod
-            // it MOVES onto that mod's author field.
             expect(upgraded.authors).toBeUndefined();
             expect(upgraded.mods.m1.author).toBe('a');
             expect(upgraded.excludes).toEqual([]);
@@ -201,11 +198,9 @@ describe('migrateCmd', () => {
             expect(updateProjectConfig).toHaveBeenCalledTimes(1);
             const [, upgraded] = vi.mocked(updateProjectConfig).mock
                 .calls[0] as any[];
-            // The value survives verbatim — never deleted.
             expect(upgraded.authors).toEqual(['OldAuthor', 'SecondAuthor']);
             expect(upgraded.mods.m1.author).toBeUndefined();
             expect(upgraded.mods.m2.author).toBeUndefined();
-            // And the user is told, loudly, that it is deprecated.
             expect(logger.warn).toHaveBeenCalledWith(
                 expect.stringContaining('kept deprecated root "authors"'),
             );
@@ -265,10 +260,6 @@ describe('migrateCmd', () => {
         });
 
         it('warns exactly once naming the id field when the migrated output fails validation (d16-F1)', async () => {
-            // A legacy SLUG root id moves verbatim to workshop.id and then
-            // bricks every later command ("Field \"id\" must be a number").
-            // Everything else in the fixture is validator-clean so the
-            // warning names exactly the id failure.
             mockFiles(
                 {
                     'config.json': upToDateConfig,
@@ -287,13 +278,9 @@ describe('migrateCmd', () => {
                 [CONFIG_PATH, PROJECT_PATH],
             );
 
-            // Exit semantics unchanged: the command still completes (exit
-            // 0) and the migrated file is still written.
             await migrateCmd();
             expect(updateProjectConfig).toHaveBeenCalledTimes(1);
 
-            // Exactly one [WARN], naming the failing field with the
-            // validator's own message plus the fix hint.
             expect(logger.warn).toHaveBeenCalledTimes(1);
             expect(logger.warn).toHaveBeenCalledWith(
                 expect.stringContaining('workshop.id'),
@@ -394,14 +381,11 @@ describe('migrateCmd', () => {
             expect(updateProjectConfig).toHaveBeenCalledTimes(1);
             const [, migrated] = vi.mocked(updateProjectConfig).mock
                 .calls[0] as any[];
-            // The '' placeholder did not swallow the authored content.
             expect(migrated.mods.m1.description).toEqual([
                 'Line one',
                 'Line two',
             ]);
 
-            // Full migrate → generate chain: the built mod.info carries the
-            // legacy description verbatim (d08-B4).
             const text = generateModInfoText('m1', migrated);
             expect(text).toContain('description=Line one');
             expect(text).toContain('description=Line two');
@@ -421,8 +405,6 @@ describe('migrateCmd', () => {
                 [CONFIG_PATH, PROJECT_PATH, '/m1/mod.info'],
             );
 
-            // Import behavior stays identical: what the file carries still
-            // syncs and the command still succeeds (exit 0).
             await migrateCmd();
 
             expect(updateProjectConfig).toHaveBeenCalledTimes(1);
@@ -430,8 +412,6 @@ describe('migrateCmd', () => {
                 .calls[0] as any[];
             expect(migrated.mods.m1.url).toBe('https://example.com');
 
-            // ... and the missing required fields are named on stderr,
-            // with the offending file.
             expect(logger.warn).toHaveBeenCalledTimes(1);
             expect(logger.warn).toHaveBeenCalledWith(
                 expect.stringContaining(
@@ -444,11 +424,9 @@ describe('migrateCmd', () => {
         });
 
         it('should not warn when the legacy mod.info carries every required field (d16-U5)', async () => {
-            // Shared mock: mod.info carries name + description.
             await migrateCmd();
 
             expect(logger.warn).not.toHaveBeenCalled();
-            // The healthy file still syncs its new fields (author).
             expect(updateProjectConfig).toHaveBeenCalledTimes(1);
         });
 
@@ -500,7 +478,6 @@ describe('migrateCmd', () => {
     });
 
     describe('json envelope (d11-F1)', () => {
-        /** Parses the v1 envelopes printed through logger.log. */
         const jsonEnvelopes = (): any[] =>
             logger.log.mock.calls
                 .map((call) => String(call[0]))
@@ -532,16 +509,12 @@ describe('migrateCmd', () => {
 
             await migrateCmd();
 
-            // Exactly one stdout line: the envelope (human report lines
-            // that ride stdout are suppressed in json mode).
             const envelopes = jsonEnvelopes();
             expect(envelopes).toHaveLength(1);
             expect(logger.log).toHaveBeenCalledTimes(1);
             const envelope = envelopes[0];
             expect(envelope.schemaVersion).toBe(1);
             expect(envelope.command).toBe('migrate');
-            // The fixture's config has empty templates → it migrates too;
-            // the legacy project upgrades; one mod.info syncs a field.
             expect(envelope.result).toEqual({
                 configMigrated: true,
                 projectMigrated: true,

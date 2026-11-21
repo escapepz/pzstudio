@@ -59,7 +59,6 @@ export interface PlanBuildInput {
 }
 
 interface VariantOptions {
-    /** Suffix appended to every mod id and its output folder. */
     modIdSuffix: string;
     overrideVisibility?: string;
     excludeId: boolean;
@@ -211,8 +210,6 @@ export function planModOperations(
         ignoreItems: excludes,
     });
 
-    // mod.info handling. The source snapshot is resolved first because
-    // even 'skip' needs the target list for the dev id alignment below.
     const state = modSourceStates[modId] ?? {
         branchFolders: [],
         modInfoExists: {},
@@ -220,18 +217,11 @@ export function planModOperations(
     const modInfoFlag = config.mods[modId].build?.modInfo;
     const effectiveModInfoFlag = modInfoFlag ?? 'auto-if-missing';
 
-    // Build 42 branch folders (with media/); fall back to the mod root
-    // when none survive the excludes filter (Build 41 layout)
     const branchTargets = state.branchFolders.filter(
         (name) => !excludes.includes(name),
     );
     const targets = branchTargets.length > 0 ? branchTargets : [''];
 
-    // Rewrites the id of a source mod.info copied into the development
-    // output: the output folder carries the suffixed id (<modId>_dev) and
-    // the game requires the mod.info id to match the folder name. Content
-    // comes from the source snapshot; without one the planner falls back
-    // to copying the file verbatim.
     const pushDevIdPatch = (target: string): boolean => {
         if (!variantOptions.modIdSuffix) {
             return false;
@@ -254,8 +244,6 @@ export function planModOperations(
     };
 
     if (effectiveModInfoFlag === 'skip') {
-        // 'skip' never generates, but a copied mod.info still gets its id
-        // aligned with the dev_branch output folder.
         if (variantOptions.modIdSuffix) {
             let patchedAny = false;
             for (const target of targets) {
@@ -352,11 +340,9 @@ export function planBuild(input: PlanBuildInput): FileOperation[] {
 
     const outPath = resolveBuildOutputPath(config, variant);
 
-    // Reset the output directory
     operations.push({ type: 'removeDir', path: outPath });
     operations.push({ type: 'makeDir', path: outPath });
 
-    // Copy the workshop template
     operations.push({
         type: 'log',
         level: 'info',
@@ -370,14 +356,11 @@ export function planBuild(input: PlanBuildInput): FileOperation[] {
         ignoreDotFiles: true,
     });
 
-    // Copy the mods. Dev-only mods (build.devOnly) ship in the development
-    // output only; the main (production) build skips them.
     const includedModIds = collectIncludedModIds(config, variant);
     for (const modId of includedModIds) {
         operations.push(...planModOperations(input, variant, modId));
     }
 
-    // Copy the workshop preview.png
     const projectPreviewPath = joinPosix(projectDir, 'workshop', 'preview.png');
     if (previewPngExists) {
         operations.push({
@@ -398,7 +381,6 @@ export function planBuild(input: PlanBuildInput): FileOperation[] {
         });
     }
 
-    // Generate the workshop.txt
     operations.push({
         type: 'log',
         level: 'info',

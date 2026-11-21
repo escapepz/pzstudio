@@ -8,17 +8,6 @@ import { createRequire } from 'node:module';
 import Module from 'node:module';
 import { createVscodeMock } from '../helpers/vscode-mock';
 
-/**
- * ACTIVATION SMOKE TEST — loads the REAL built bundle (dist/extension.js)
- * with a stub 'vscode' module and runs activate() end to end.
- *
- * This is the runtime gate the typecheck/esbuild gates cannot provide:
- * a module that crashes on import or inside activate() (e.g. the
- * @parcel/watcher top-level require fixed in dc15821) shows up here as a
- * thrown error or a missing command registration — the exact symptoms
- * users see as "There is no data provider registered" / "command not
- * found". Requires a prior build of the extension (pnpm build).
- */
 const EXT_ROOT = fileURLToPath(
     new URL('../../packages/vscode-extension', import.meta.url),
 );
@@ -27,8 +16,6 @@ const BUNDLE_PATH = path.join(EXT_ROOT, 'dist', 'extension.js');
 const nodeRequire = createRequire(import.meta.url);
 const vscodeStub = createVscodeMock() as unknown as Record<string, unknown>;
 
-// Route the bundle's require('vscode') to the stub: intercept resolution
-// and serve the stub from the require cache under that fake id.
 const VSCODE_STUB_ID = 'pzstudio-vscode-stub';
 type ResolveFilename = (request: string, ...rest: unknown[]) => string;
 const moduleApi = Module as unknown as {
@@ -77,7 +64,6 @@ beforeAll(async () => {
             'dist/extension.js is missing — build the extension first (pnpm build).',
         );
     }
-    // Fresh module state for this suite.
     delete nodeRequire.cache[BUNDLE_PATH];
     try {
         const extension = nodeRequire(BUNDLE_PATH) as {
@@ -128,11 +114,6 @@ describe('extension bundle activation (real dist/extension.js)', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* Commit 12 (doc 11 §16 bundle/runtime gates): static + runtime       */
-/* packaging assertions over the SAME built bundle.                    */
-/* ------------------------------------------------------------------ */
-
 describe('bundle packaging gates (doc 11 §16)', () => {
     it('keeps the package entrypoint on dist/extension.js', () => {
         const pkg = JSON.parse(
@@ -152,10 +133,6 @@ describe('bundle packaging gates (doc 11 §16)', () => {
 
     it('keeps the legacy facade exports inlined in the bundle (external-consumer compat surface intact)', () => {
         const bundle = fs.readFileSync(BUNDLE_PATH, 'utf8');
-        // The inlined api's export map must still publish the historical
-        // legacy names (runCLI + the four facade setters + createPzStudio):
-        // the facade contract survives inlining even though the extension
-        // runtime no longer calls the setters.
         for (const name of [
             'runCLI',
             'setLogger',
@@ -184,8 +161,6 @@ describe('bundle packaging gates (doc 11 §16)', () => {
             return previousResolve.call(this, request, ...rest);
         };
 
-        // Fresh module state so the bundle's top level re-evaluates under
-        // the guard; a top-level native require would throw here.
         delete nodeRequire.cache[BUNDLE_PATH];
         moduleApi._resolveFilename = guardedResolve;
         let freshError: unknown;

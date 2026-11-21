@@ -4,26 +4,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
-// ── vscode mock ─────────────────────────────────────────────────────────────
-
 type MockUri = {
     path: string;
     joinPath?: unknown;
-    /** Round-trips like a real vscode.Uri: back to the URI's string form. */
     toString(): string;
 };
 
 const vscodeMock = vi.hoisted(() => {
-    // Class, not object literal: toString must live on the prototype, or it
-    // becomes an own enumerable function property and vitest's toEqual
-    // (used on tree elements carrying URIs) compares it by reference.
     class MockUriImpl {
         path: string;
         joinPath: unknown = undefined;
         constructor(parts: string[]) {
             this.path = '/' + parts.join('/');
         }
-        /** Round-trips like a real vscode.Uri: back to the URI's string form. */
         toString(): string {
             return this.path;
         }
@@ -37,8 +30,6 @@ const vscodeMock = vi.hoisted(() => {
             },
             file: (path: string): MockUri =>
                 makeUri(path.split('/').filter(Boolean)),
-            // The ignore-rule fs adapter travels in string URIs and
-            // round-trips them through parse — plain paths here.
             parse: (uri: string): MockUri =>
                 makeUri(uri.split('/').filter(Boolean)),
         },
@@ -58,10 +49,6 @@ const vscodeMock = vi.hoisted(() => {
                 this.id = id;
             }
         },
-        // Functional (the extCommandsWatch.test.ts Task 3 pattern): the
-        // DevSync badge wiring subscribes to the manager's onDidChange, so
-        // the emitter must actually deliver. The provider's tree-data
-        // emitter keeps working — its fire() reaches no listeners here.
         EventEmitter: class {
             listeners: Array<(value: unknown) => unknown> = [];
             event = (listener: (value: unknown) => unknown) => {
@@ -85,7 +72,6 @@ const vscodeMock = vi.hoisted(() => {
             });
         },
         l10n: {
-            // Pass-through: assertions compare against the English keys.
             t: (message: string, ...args: (string | number)[]): string =>
                 args.reduce(
                     (acc, arg, i) => acc.replaceAll(`{${i}}`, String(arg)),
@@ -98,7 +84,6 @@ const vscodeMock = vi.hoisted(() => {
 
 vi.mock('vscode', () => ({ ...vscodeMock, default: vscodeMock }));
 
-// ── import after mock ────────────────────────────────────────────────────────
 import {
     naturalCompare,
     resolveModFolderIcon,
@@ -124,10 +109,6 @@ const FileType = vscodeMock.FileType;
 
 type Entry = [string, number];
 
-/**
- * Builds an in-memory listDir/stat pair from a tree like
- * { '42': { 'mod.info': 'file', 'icon.png': 'file' } }.
- */
 function makeFs(
     tree: Record<string, Record<string, 'file' | 'dir' | undefined>>,
 ) {
@@ -330,7 +311,6 @@ describe('constants and manifest', () => {
         fs.readFileSync(path.join(EXT_ROOT, 'package.nls.vi.json'), 'utf8'),
     );
 
-    /** Resolves a %key% NLS reference against the English table. */
     const nls = (value: string): string =>
         value.startsWith('%') && value.endsWith('%')
             ? (NLS_EN[value.slice(1, -1)] as string)
@@ -352,9 +332,6 @@ describe('constants and manifest', () => {
     });
 
     it('tree-rendered SVGs use explicit colors, not currentColor', () => {
-        // Tree rows and inline buttons render file icons as-is with no CSS
-        // color context, where currentColor resolves to black. Only the
-        // Activity Bar icon (theme-masked) may rely on currentColor.
         for (const svg of [
             PROJECT_FOLDER_ICON_LIGHT,
             PROJECT_FOLDER_ICON_DARK,
@@ -377,8 +354,6 @@ describe('constants and manifest', () => {
 
     it('displayName is PZ Studio 42 in every nls table (resolved through NLS)', () => {
         expect(nls(PKG.displayName)).toBe('PZ Studio 42');
-        // The display name is a brand string, not a translation: the
-        // marketplace listing name must stay identical across locales.
         const nlsFiles = fs
             .readdirSync(EXT_ROOT)
             .filter((f) => /^package\.nls(\..+)?\.json$/.test(f));
@@ -395,8 +370,6 @@ describe('constants and manifest', () => {
             PKG.contributes.configuration.properties['pzstudio.gameBuild'];
         expect(setting).toBeDefined();
         expect(setting.type).toBe('string');
-        // Empty default: the compatibility check stays off until the user
-        // explicitly provides a build.
         expect(setting.default).toBe('');
         expect(setting.scope).toBe('resource');
         expect(setting.description).toBe('%config.gameBuild.description%');
@@ -429,7 +402,6 @@ describe('constants and manifest', () => {
         const bundleFiles = fs
             .readdirSync(bundleDir)
             .filter((f) => /^bundle\.l10n(\..+)?\.json$/.test(f));
-        // 25 PZ game languages: unsuffixed en + 24 locale files.
         expect(bundleFiles.length).toBe(25);
 
         const enKeys = Object.keys(
@@ -531,9 +503,6 @@ describe('constants and manifest', () => {
     });
 
     it('keeps explorer-only commands out of the command palette', () => {
-        // The entries must live under menus.commandPalette: a top-level
-        // contributes.commandPalette key is silently ignored by VS Code
-        // (the f4122cf nesting bug every later edit preserved).
         const palette: Array<{ command: string; when?: string }> =
             PKG.contributes.menus.commandPalette;
         expect(
@@ -542,8 +511,6 @@ describe('constants and manifest', () => {
         ).toBe(true);
         expect(PKG.contributes.commandPalette).toBeUndefined();
 
-        // Tree/title-bar actions stay reachable from the explorer itself;
-        // they must not clutter the palette or keyboard-shortcut search.
         const hidden = [
             'pzstudio.modConfigure',
             'pzstudio.explorer.refresh',
@@ -561,8 +528,6 @@ describe('constants and manifest', () => {
             ).toBe(true);
         }
 
-        // The core workflow commands stay palette-visible (watch = the
-        // sync toggle, doctor = the diagnostics entry point).
         const visible = [
             'pzstudio.new',
             'pzstudio.newHere',
@@ -591,13 +556,6 @@ describe('constants and manifest', () => {
         }
     });
 
-    // UX-13: a mod declared in project.json but absent on disk renders as
-    // 'mod-missing'. The row must be clearly identifiable AND must not offer
-    // normal-mod actions (Configure/Generate/Rename/Delete) — its approved
-    // lean v1 remediation is Open project.json + Refresh, exactly the two
-    // commands the manifest exposes for it. These tests simulate the
-    // manifest's view/item/context when-clauses per contextValue, matching
-    // which menu entries VS Code would actually show.
     describe('missing-mod context menu (UX-13)', () => {
         const MENUS = PKG.contributes.menus['view/item/context'] as Array<{
             command: string;
@@ -605,17 +563,7 @@ describe('constants and manifest', () => {
             group?: string;
         }>;
 
-        /**
-         * Evaluator for the when-clause forms used in view/item/context:
-         * parens-joined OR groups, `&&`, and the atoms
-         * `view == pzstudio.projectExplorer`, `viewItem == <value>` and
-         * `viewItem =~ /regex/`. Unknown atoms (context keys the tree never
-         * publishes here) count as false so a future entry enabled by an
-         * unmatched key fails loudly in tests, not silently.
-         */
         function menuVisible(when: string, viewItem: string): boolean {
-            // Pull out `=~ /regex/` atoms first: their body may contain
-            // `|`, `&&` and other operator characters.
             const regexes: RegExp[] = [];
             const prepared = when.replace(
                 /viewItem\s*=~\s*\/([^/]*)\/[a-z]*/g,
@@ -637,7 +585,7 @@ describe('constants and manifest', () => {
                 }
                 if (tok === '(') {
                     const value = parseOr();
-                    take(); // ')'
+                    take();
                     return value;
                 }
                 if (tok.startsWith('@r')) {
@@ -649,18 +597,15 @@ describe('constants and manifest', () => {
                     const op = take();
                     const value = take() ?? '';
                     if (op !== '==') {
-                        // Unhandled comparison (never used in these menus).
                         return false;
                     }
                     return viewItem === value;
                 }
                 if (tok === 'view') {
-                    take(); // '=='
+                    take();
                     take(); // 'pzstudio.projectExplorer'
                     return true;
                 }
-                // Anything else (context keys, negations) is not part of the
-                // missing-mod surface — treat as not matching.
                 return false;
             };
             const parseAndGroup = (): boolean => {
@@ -705,9 +650,6 @@ describe('constants and manifest', () => {
         });
 
         it('does not leak a destructive or remove action onto missing rows', () => {
-            // The approved v1 remediation has no "Remove from Project": a
-            // delete on a missing folder is today's destructive `mod delete`
-            // flow, not an entry removal (Q4 is still open).
             for (const entry of MENUS) {
                 if (menuVisible(entry.when ?? '', 'mod-missing')) {
                     expect(entry.command).toMatch(
@@ -718,8 +660,6 @@ describe('constants and manifest', () => {
         });
 
         it('keeps the normal-mod actions on concrete-state rows', () => {
-            // State toggles stay per-state (the manifest's existing pairs);
-            // all four rows' edits/actions apply to every concrete state.
             const expected: Record<string, string[]> = {
                 'mod-included': [
                     'pzstudio.modIncluded',
@@ -773,7 +713,6 @@ describe('project diagnostics badge', () => {
         mods: {},
     });
 
-    /** Workspace with one root project discoverable by the scan. */
     function seedProjectNode() {
         vscodeMock.workspace.workspaceFolders = [
             { uri: asUri('ws'), name: 'ws' },
@@ -880,13 +819,6 @@ describe('project diagnostics badge', () => {
     });
 });
 
-// ── UX-07: bounded diagnostics cache ────────────────────────────────────────
-//
-// The explorer badge must not re-run the full doctor engine on every tree
-// render. These tests count actual diagnostics-source executions (never
-// getChildren calls) and use deterministic controllable promises — no
-// wall-clock sleeps prove coalescing or invalidation ordering.
-
 describe('project diagnostics cache (UX-07)', () => {
     interface Summary {
         errors: number;
@@ -940,11 +872,6 @@ describe('project diagnostics cache (UX-07)', () => {
         return { promise, resolve, reject };
     }
 
-    /**
-     * Deterministic microtask pump: runs pending continuations until the
-     * source has been invoked at least `minCalls` times. Proves ordering
-     * without timers or sleeps.
-     */
     async function untilCalled(
         fn: { mock: { calls: unknown[] } },
         minCalls = 1,
@@ -960,10 +887,6 @@ describe('project diagnostics cache (UX-07)', () => {
         }
     }
 
-    /**
-     * Multi-project workspace fixture: depth-1 projects under one root,
-     * with controllable project.json content, mtime stamps and discovery.
-     */
     function seedWorkspace() {
         const listed = new Set<string>();
         const contents = new Map<string, string>();
@@ -1001,19 +924,16 @@ describe('project diagnostics cache (UX-07)', () => {
         );
 
         return {
-            /** Adds a project to discovery with project.json content + mtime. */
             addProject(dir: string, content: string, mtime = 1): void {
                 listed.add(dir);
                 contents.set(pjOf(dir), content);
                 stamps.set(pjOf(dir), { mtime, size: content.length });
             },
-            /** Removes the project from discovery and the filesystem. */
             removeProject(dir: string): void {
                 listed.delete(dir);
                 contents.delete(pjOf(dir));
                 stamps.delete(pjOf(dir));
             },
-            /** A meaningful change: new content under a newer mtime. */
             rewriteProject(dir: string, content: string, mtime: number): void {
                 contents.set(pjOf(dir), content);
                 stamps.set(pjOf(dir), { mtime, size: content.length });
@@ -1048,7 +968,6 @@ describe('project diagnostics cache (UX-07)', () => {
         expect(source).toHaveBeenCalledTimes(1);
         expect(first[0].description).toBe('id 1 · Project A · ✗ 1 ⚠ 2');
 
-        // Presentation refresh: rebuild the rows, reuse the diagnostics.
         provider.refresh();
         const second = await provider.getChildren();
 
@@ -1075,12 +994,9 @@ describe('project diagnostics cache (UX-07)', () => {
         provider.refresh();
         const second = await provider.getChildren();
 
-        // 3 projects × 2 unchanged renders → still exactly 3 doctor runs.
         expect(source).toHaveBeenCalledTimes(3);
         expect(second).toEqual(first);
 
-        // Expanding project children mirrors the filesystem only — the
-        // diagnostics source must stay cold there too.
         await provider.getChildren(second[0]);
         expect(source).toHaveBeenCalledTimes(3);
     });
@@ -1106,14 +1022,12 @@ describe('project diagnostics cache (UX-07)', () => {
         expect(first[0].description).toBe('id 1 · Project A');
         expect(first[1].description).toBe('id 2 · Project B · ⚠ 1');
 
-        // Only project A changes on disk (project.json rewritten).
         summaries.set('/ws/A', withIssues(2, 0, 'a missing mods'));
         seed.rewriteProject('A', PROJECT_A_V2, 2);
 
         provider.refresh();
         const second = await provider.getChildren();
 
-        // Exactly one recompute: A again — never B.
         expect(
             source.mock.calls.map((c) => (c[0] as { path: string }).path),
         ).toEqual(['/ws/A', '/ws/B', '/ws/A']);
@@ -1135,7 +1049,6 @@ describe('project diagnostics cache (UX-07)', () => {
             await provider.getChildren();
             expect(source).toHaveBeenCalledTimes(1);
 
-            // The watcher/runner path: debounced presentation refresh.
             provider.requestRefresh();
             vi.advanceTimersByTime(REFRESH_DEBOUNCE_MS);
 
@@ -1160,7 +1073,6 @@ describe('project diagnostics cache (UX-07)', () => {
         const second = provider.getChildren();
         await untilCalled(source);
 
-        // Both renders are pending on the same project: one execution.
         expect(source).toHaveBeenCalledTimes(1);
 
         gate.resolve(withIssues(1, 0, 'shared finding'));
@@ -1186,13 +1098,11 @@ describe('project diagnostics cache (UX-07)', () => {
         const first = provider.getChildren();
         await untilCalled(source);
 
-        // The project changes while the doctor run is in flight.
         seed.rewriteProject('A', PROJECT_A_V2, 2);
         oldResult.resolve(withIssues(9, 9, 'stale pre-change finding'));
         const nodes1 = await first;
         expect(nodes1[0].description).toBe('id 1 · Project A · ✗ 9 ⚠ 9');
 
-        // The next render must recompute, not resurrect the stale result…
         const second = provider.getChildren();
         await untilCalled(source, 2);
         expect(source).toHaveBeenCalledTimes(2);
@@ -1200,7 +1110,6 @@ describe('project diagnostics cache (UX-07)', () => {
         const nodes2 = await second;
         expect(nodes2[0].description).toBe('id 1 · Project A · ✗ 1');
 
-        // …and the fresh result then holds the cache (no more recomputes).
         provider.refresh();
         await provider.getChildren();
         expect(source).toHaveBeenCalledTimes(2);
@@ -1221,9 +1130,6 @@ describe('project diagnostics cache (UX-07)', () => {
         const first = provider.getChildren();
         await untilCalled(source);
 
-        // The project changes while the first run is still in flight; the
-        // second render observes the newer fingerprint and joins the only
-        // in-flight execution (coalescing) instead of starting a second one.
         seed.rewriteProject('A', PROJECT_A_V2, 2);
         const second = provider.getChildren();
         for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -1233,8 +1139,6 @@ describe('project diagnostics cache (UX-07)', () => {
         expect(source).toHaveBeenCalledTimes(1);
         expect(nodes2[0].description).toBe(nodes1[0].description);
 
-        // The joined (stale) result must not hold the cache for the newer
-        // project state: the next render recomputes fresh.
         const third = provider.getChildren();
         await untilCalled(source, 2);
         expect(source).toHaveBeenCalledTimes(2);
@@ -1255,19 +1159,16 @@ describe('project diagnostics cache (UX-07)', () => {
             source as never,
         );
 
-        // First render: the failure is decoration — the tree still renders.
         const failed = await provider.getChildren();
         expect(failed).toHaveLength(1);
         expect(failed[0].description).toBe('id 1 · Project A');
         expect(failed[0].tooltip).toBeUndefined();
         expect(source).toHaveBeenCalledTimes(1);
 
-        // A later render retries the run and recovers the badge.
         const recovered = await provider.getChildren();
         expect(source).toHaveBeenCalledTimes(2);
         expect(recovered[0].description).toBe('id 1 · Project A · ✗ 1');
 
-        // The recovered result is then cached as usual.
         provider.refresh();
         await provider.getChildren();
         expect(source).toHaveBeenCalledTimes(2);
@@ -1286,7 +1187,6 @@ describe('project diagnostics cache (UX-07)', () => {
         const first = await provider.getChildren();
         expect(first[0].description).toBe('id 1 · Project A');
 
-        // The title-bar Refresh command: explicit diagnostic rescan.
         provider.refresh({ invalidateDiagnostics: true });
         const second = await provider.getChildren();
 
@@ -1311,15 +1211,12 @@ describe('project diagnostics cache (UX-07)', () => {
         expect(source).toHaveBeenCalledTimes(1);
         expect(first[0].description).toBe('id 1 · Project A · ✗ 1');
 
-        // The project disappears (folder deleted / project.json removed).
         seed.removeProject('A');
         const gone = await provider.getChildren();
         expect(gone).toHaveLength(1);
         expect(gone[0].kind).toBe('placeholder');
         expect(source).toHaveBeenCalledTimes(1);
 
-        // Rediscovered with the SAME project.json state as before: the
-        // eviction — not the fingerprint — must force the fresh run.
         seed.addProject('A', PROJECT_A_V1, 1);
         const again = await provider.getChildren();
 
@@ -1351,10 +1248,6 @@ describe('project diagnostics cache (UX-07)', () => {
         expect(after[0].description).toBe('id 1 · Project A · ✗ 2');
     });
 
-    /* UX-11: configuration the doctor consumes (pzstudio.gameBuild) is
-     * invisible to the project.json fingerprint — full invalidation must
-     * force a recompute and sever in-flight runs. */
-
     it('invalidation drops cached findings and recomputes for the fresh configuration', async () => {
         const seed = seedWorkspace();
         seed.addProject('A', PROJECT_A_V1);
@@ -1372,15 +1265,12 @@ describe('project diagnostics cache (UX-07)', () => {
         expect(source).toHaveBeenCalledTimes(1);
         expect(first[0].description).toBe('id 1 · Project A · ✗ 1');
 
-        // The configuration changes without ANY project.json touch — the
-        // fingerprint alone would reuse the cache forever.
         provider.invalidateDiagnostics();
         const second = await provider.getChildren();
 
         expect(source).toHaveBeenCalledTimes(2);
         expect(second[0].description).toBe('id 1 · Project A');
 
-        // The fresh result then holds the cache as usual.
         provider.refresh();
         await provider.getChildren();
         expect(source).toHaveBeenCalledTimes(2);
@@ -1401,16 +1291,11 @@ describe('project diagnostics cache (UX-07)', () => {
         const first = provider.getChildren();
         await untilCalled(source);
 
-        // The configuration changes while run 1 is still in flight.
         provider.invalidateDiagnostics();
         gate.resolve(withIssues(9, 9, 'pre-invalidation finding'));
         const nodes1 = await first;
-        // The already-begun render finishes with the value the run returned
-        // (same lifecycle as a mid-run project.json change)…
         expect(nodes1[0].description).toBe('id 1 · Project A · ✗ 9 ⚠ 9');
 
-        // …but it must not hold the cache: the next render recomputes and
-        // the new state renders instead of the stale findings.
         const second = provider.getChildren();
         await untilCalled(source, 2);
         expect(source).toHaveBeenCalledTimes(2);
@@ -1418,7 +1303,6 @@ describe('project diagnostics cache (UX-07)', () => {
         const nodes2 = await second;
         expect(nodes2[0].description).toBe('id 1 · Project A');
 
-        // The fresh (post-change) result is then the one cached.
         provider.refresh();
         await provider.getChildren();
         expect(source).toHaveBeenCalledTimes(2);
@@ -1440,8 +1324,6 @@ describe('project diagnostics cache (UX-07)', () => {
         await untilCalled(source);
         provider.invalidateDiagnostics();
 
-        // A render after invalidation may not join the severed in-flight
-        // run as its current result — a NEW execution starts.
         const second = provider.getChildren();
         await untilCalled(source, 2);
         expect(source).toHaveBeenCalledTimes(2);
@@ -1450,12 +1332,10 @@ describe('project diagnostics cache (UX-07)', () => {
         const nodes1 = await first;
         expect(nodes1[0].description).toBe('id 1 · Project A · ✗ 9 ⚠ 9');
 
-        // The second render's result comes from the NEW run.
         freshRun.resolve(clean());
         const nodes2 = await second;
         expect(nodes2[0].description).toBe('id 1 · Project A');
 
-        // And its fresh state holds the cache.
         provider.refresh();
         await provider.getChildren();
         expect(source).toHaveBeenCalledTimes(2);
@@ -1476,8 +1356,6 @@ describe('project diagnostics cache (UX-07)', () => {
         const first = provider.getChildren();
         await untilCalled(source);
 
-        // The configuration changes; the render that observed it starts the
-        // fresh run and completes BEFORE the pre-change run resolves.
         provider.invalidateDiagnostics();
         const second = provider.getChildren();
         await untilCalled(source, 2);
@@ -1486,43 +1364,23 @@ describe('project diagnostics cache (UX-07)', () => {
         const freshNodes = await second;
         expect(freshNodes[0].description).toBe('id 1 · Project A');
 
-        // NOW the obsolete out-of-order result arrives — after the fresh
-        // run already populated the cache (the final rendered state).
         oldRun.resolve(withIssues(9, 9, 'obsolete compatibility badge'));
 
-        // Any render after that resolves keeps the fresh (generation-1)
-        // badge: the obsolete result was never written over it, so the
-        // Explorer's final state stays clean and the source stays cold.
         const finalNodes = await provider.getChildren();
         expect(source).toHaveBeenCalledTimes(2);
         expect(finalNodes).toEqual(freshNodes);
         expect(finalNodes[0].description).toBe('id 1 · Project A');
 
-        // The awaited-out first render settles harmlessly (handled tail;
-        // its late resolution decorated only that already-begun render).
         const oldNodes = await first;
         expect(oldNodes[0].description).toBe('id 1 · Project A · ✗ 9 ⚠ 9');
     });
 });
-
-// ── ignore-filtered entries (.gitignore / .pzstudioignore) ──────────────────
-//
-// The explorer hides entries matched by the project's ignore rules with the
-// same visual treatment as dot entries: gone entirely, not dimmed (spec
-// decision — no badges in v1). Rules load per listed directory through the
-// same vscode.workspace.fs the explorer already uses; a failed rule read
-// fails open (every child shown).
 
 describe('ignore-filtered entries', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    /**
-     * Installs workspace.fs over a tree (nested objects are directories,
-     * anything else is a file) with file contents keyed by absolute path
-     * ('/proj/.gitignore').
-     */
     function seedWorkspaceFs(
         tree: Record<string, Record<string, unknown>>,
         files: Record<string, string> = {},
@@ -1612,8 +1470,6 @@ describe('ignore-filtered entries', () => {
             directoryElement('proj/media'),
         );
 
-        // 'media' itself carries no rules, so the matcher's closest-wins
-        // walk falls through to the project root's 'gen*' wildcard.
         expect(children.map((c) => c.label)).toEqual(['keep.txt']);
     });
 
@@ -1639,9 +1495,6 @@ describe('ignore-filtered entries', () => {
             directoryElement('proj/media'),
         );
 
-        // mod.info is a rail: matched by '*' yet still shown. The two rule
-        // files are rails too but never reach the matcher — the dot skip
-        // already governs them (dot behavior unchanged by the filter).
         expect(children.map((c) => c.label)).toEqual(['mod.info']);
     });
 
@@ -1668,8 +1521,6 @@ describe('ignore-filtered entries', () => {
 
         const children = await provider.getChildren(projectElement());
 
-        // 'secret-mod' is on disk but rule-hidden: the row disappears and
-        // no missing-on-disk phantom may replace it.
         expect(children.map((c) => c.label)).toEqual([
             'good-mod',
             'project.json',
@@ -1681,8 +1532,6 @@ describe('ignore-filtered entries', () => {
         seedWorkspaceFs({
             proj: { media: { 'a.txt': 'x', 'b.txt': 'x' } },
         });
-        // The first readDirectory is the listing itself; every later one is
-        // a rule load and fails.
         const listing = vscodeMock.workspace.fs.readDirectory;
         let calls = 0;
         vscodeMock.workspace.fs.readDirectory = vi.fn(
@@ -1725,26 +1574,11 @@ describe('ignore-filtered entries', () => {
     });
 });
 
-// ── UX-15 Task 4: DevSync explorer badge ────────────────────────────────────
-//
-// extension.ts drives treeView.badge from the shared DevSyncManager through
-// the same onDidChange subscription pattern the status bar (Task 3) uses —
-// the tree mock below is judged by what the wiring actually paints. The
-// manager publishes no pending count, so the badge is a state indicator, not
-// a precision meter: constant 1 while a run is mid-flight (starting /
-// syncing / stopping — the same rule the status bar paints by) and cleared
-// on idle, including the idle-with-lastError state a failed run lands in.
-
 describe('DevSync explorer badge (UX-15)', () => {
     interface BadgeTreeView {
         badge: { value: number; tooltip: string } | undefined;
     }
 
-    /**
-     * A real DevSyncManager over a minimal controller double: only the
-     * lifecycle phases matter here — the badge reads the manager's
-     * published state, never the controller's internals.
-     */
     function makeManager(
         startImpl: () => Promise<void> = async () => {},
         stopImpl: () => Promise<void> = async () => {},
@@ -1788,8 +1622,6 @@ describe('DevSync explorer badge (UX-15)', () => {
         const treeView = makeTreeView();
         const badge = registerDevSyncTreeBadge(manager, treeView);
 
-        // starting: the run is anchored before the initial build settles —
-        // the badge is already up (mid-flight visual, like the status bar).
         const starting = manager.start('/ws/proj');
         expect(manager.state.phase).toBe('starting');
         expect(treeView.badge).toBeDefined();
@@ -1804,7 +1636,6 @@ describe('DevSync explorer badge (UX-15)', () => {
             "PZStudio: development sync running for 'proj'.",
         );
 
-        // stopping keeps the badge until the teardown settles.
         const stopping = manager.stop();
         expect(manager.state.phase).toBe('stopping');
         expect(treeView.badge).toBeDefined();

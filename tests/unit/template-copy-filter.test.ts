@@ -4,8 +4,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-// resolve the CJS build scripts via relative path (same pattern as
-// template-pin.test.ts)
 const nodeRequire = createRequire(import.meta.url);
 const { copyDirRecursive } = nodeRequire(
     '../../packages/cli/scripts/template-copy.js',
@@ -23,7 +21,6 @@ afterEach(() => {
     cleanupDirs.length = 0;
 });
 
-/** Build a template-like tree: .github/, .git gitfile, .gitignore, content. */
 function makeTemplateFixture(): string {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pz-template-copy-'));
     cleanupDirs.push(root);
@@ -35,7 +32,6 @@ function makeTemplateFixture(): string {
         'on: push\n',
     );
     fs.writeFileSync(path.join(src, '.gitignore'), 'node_modules\n');
-    // submodule checkouts carry .git as a gitfile (plain file), not a dir
     fs.writeFileSync(path.join(src, '.git'), '');
     fs.writeFileSync(path.join(src, 'workshop', 'x.txt'), 'x\n');
     return src;

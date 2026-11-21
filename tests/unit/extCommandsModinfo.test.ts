@@ -1,16 +1,5 @@
 'use strict';
 
-/**
- * pzstudio.modinfoGenerate (doc 11 §17 commit 10): the overwrite targets
- * resolve through the host PzStudio instance —
- * studio.resolveModInfoTargets(modId, projectDir) with the explicit
- * project — and the flow never writes the legacy project anchor
- * (`setProjectDir`). The Node `existsSync` probe, the modal wording, the
- * cancel semantics and the `--force` behavior are the frozen baseline and
- * are pinned unchanged. The generation itself goes through the injected
- * command runner exactly as before.
- */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
@@ -30,7 +19,6 @@ import { createTempDir, deleteDir } from '../helpers/test-fixtures';
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 const UriCtor = vscode.Uri as unknown as new (parts: string[]) => vscode.Uri;
 
-/** Minimal instance stub: the command only calls resolveModInfoTargets. */
 function studioStub(targets: string[]): PzStudio & {
     resolveModInfoTargets: import('vitest').Mock;
 } {
@@ -47,7 +35,6 @@ function executeStub(): {
     return { execute: mock as unknown as ExecutePZCommand, mock };
 }
 
-/** A real directory the existsSync probe sees (with or without mod.info). */
 function realTarget(withModInfo: boolean): string {
     const dir = createTempDir();
     if (withModInfo) {
@@ -73,7 +60,6 @@ describe('pzstudio.modinfoGenerate', () => {
         temps = [];
     });
 
-    /** Registers the command and returns its handler. */
     async function setupHandler(studio: PzStudio, execute: ExecutePZCommand) {
         registerModinfoCommand(execute, studio);
         const calls = asMock(vscode.commands.registerCommand).mock
@@ -90,17 +76,13 @@ describe('pzstudio.modinfoGenerate', () => {
 
         await handler({ modId: 'my_mod', projectDir: projectUri() });
 
-        // The instance door: explicit modId + project fsPath.
         expect(studio.resolveModInfoTargets).toHaveBeenCalledTimes(1);
         expect(studio.resolveModInfoTargets).toHaveBeenCalledWith(
             'my_mod',
             projectUri().fsPath,
         );
-        // The published legacy doors stay cold — no anchor mutation, no
-        // implicit-baseDir resolution.
         expect(api.setProjectDir).not.toHaveBeenCalled();
         expect(api.resolveModInfoTargets).not.toHaveBeenCalled();
-        // No existing mod.info → no modal, no --force.
         expect(asMock(vscode.window.showWarningMessage)).not.toHaveBeenCalled();
         expect(mock).toHaveBeenCalledWith(
             'modinfo',
@@ -122,7 +104,6 @@ describe('pzstudio.modinfoGenerate', () => {
 
         await handler({ modId: 'my_mod', projectDir: projectUri() });
 
-        // Frozen modal wording and options.
         expect(asMock(vscode.window.showWarningMessage)).toHaveBeenCalledWith(
             "mod.info already exists in 1 branch folder(s) of 'my_mod'. Overwrite?",
             { modal: true },
@@ -153,8 +134,6 @@ describe('pzstudio.modinfoGenerate', () => {
     });
 
     it('keeps the picker path on the selected project (no tree node)', async () => {
-        // One workspace project with one mod: pickModId auto-selects both,
-        // so the handler reaches the instance with that exact project.
         (
             vscode.workspace as unknown as { workspaceFolders: unknown }
         ).workspaceFolders = [{ uri: projectUri(), name: 'proj' }];

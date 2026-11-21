@@ -15,7 +15,6 @@ describe('delete command e2e', () => {
     });
 
     it('should delete an existing mod', async () => {
-        // 1. Setup existing project with a mod
         const modId = 'target_mod';
         workspace.write(
             'project.json',
@@ -37,7 +36,6 @@ describe('delete command e2e', () => {
         workspace.write(`${modId}/mod.info`, `id=${modId}`);
         workspace.write(`other_mod/mod.info`, `id=other_mod`);
 
-        // 2. Run delete command (embedded API: --yes IS the confirmation)
         const result = await workspace.run('delete', [modId, '--yes']);
 
         try {
@@ -48,11 +46,9 @@ describe('delete command e2e', () => {
                 `Deleting mod '${modId}' from project.json`,
             );
 
-            // 3. Verify filesystem
             expect(workspace.exists(modId)).toBe(false);
             expect(workspace.exists('other_mod')).toBe(true);
 
-            // 4. Verify project.json update
             const config = workspace.readJson('project.json');
             expect(config.mods[modId]).toBeUndefined();
             expect(config.mods['other_mod']).toBeDefined();
@@ -128,7 +124,6 @@ describe('delete command e2e', () => {
 
         const result = await workspace.run('delete', [modId, '--yes']);
 
-        // As found in implementation, it logs error but doesn't exit(1) unless it throws
         workspace.assertSuccess(result);
         workspace.assertStderr(result, `Mod '${modId}' directory not found`);
 
@@ -156,7 +151,6 @@ describe('delete command e2e', () => {
             `Mod '${modId}' not found in project.json`,
         );
 
-        // Fail-fast: nothing on disk is touched
         expect(workspace.exists(modId)).toBe(true);
     });
 
@@ -170,7 +164,6 @@ describe('delete command e2e', () => {
             }),
         );
 
-        // delete called with zero positional args → usage error (exit 2)
         const result = await workspace.run('delete', []);
         workspace.assertFailure(result, 2);
         workspace.assertStderr(
@@ -200,7 +193,6 @@ describe('delete command e2e', () => {
         ]);
         workspace.assertSuccess(result);
 
-        // Verify verbose output
         const hasVerbose = result.stderr.some(
             (line) =>
                 line.includes('Executing command [delete]') ||
@@ -208,16 +200,12 @@ describe('delete command e2e', () => {
         );
         expect(hasVerbose).toBe(true);
 
-        // Verify deletion still occurred
         expect(workspace.exists(modId)).toBe(false);
         const config = workspace.readJson('project.json');
         expect(config.mods[modId]).toBeUndefined();
     });
 
     it('should refuse embedded deletion without --yes and keep the mod', async () => {
-        // CLI-9: embedded never prompts, but "host owns confirmation UI"
-        // does not mean "the library assumes confirmation happened" — an
-        // embedded call without --yes is a refusal (usage error, exit 2).
         const modId = 'protected_mod';
         workspace.write(
             'project.json',
@@ -239,7 +227,6 @@ describe('delete command e2e', () => {
             `Refusing 'delete' without explicit confirmation (embedded API)`,
         );
 
-        // Nothing was mutated
         expect(workspace.exists(modId)).toBe(true);
         const config = workspace.readJson('project.json');
         expect(config.mods[modId]).toBeDefined();

@@ -28,7 +28,6 @@ describe('CLI CWD Sensitivity (E2E)', () => {
     });
 
     it('should find project.json from a subdirectory', async () => {
-        // 1. Setup project in root
         workspace.write(
             'project.json',
             JSON.stringify({
@@ -39,26 +38,21 @@ describe('CLI CWD Sensitivity (E2E)', () => {
             }),
         );
 
-        // Create the mod directory so build doesn't fail
         fs.mkdirSync(path.join(workspace.dir, 'main'), { recursive: true });
 
-        // 2. Create a subdirectory and change into it
         const subDir = path.join(workspace.dir, 'lua', 'client');
         fs.mkdirSync(subDir, { recursive: true });
 
-        // 3. Run build from subdirectory
         const result = await workspace.run('build', [], subDir);
 
         workspace.assertSuccess(result);
         workspace.assertStderr(result, 'Build complete');
 
-        // Verify output exists relative to project root (which is parent of subDir)
         const outPath = path.join(workspace.dir, 'out', 'CWD Test');
         expect(fs.existsSync(outPath)).toBe(true);
     }, 60000);
 
     it('should fail if project.json is not in parent hierarchy', async () => {
-        // Create a directory that is NOT part of a project
         const outsideDir = path.join(workspace.dir, 'outside');
         fs.mkdirSync(outsideDir, { recursive: true });
 

@@ -91,13 +91,11 @@ export function parseModInfoText(
                 );
                 break;
             default:
-                // Preserve unknown fields for forward compatibility
                 result[key] = value;
                 break;
         }
     }
 
-    // Clean up empty arrays
     if (result.description.length === 0) delete result.description;
     else if (result.description.length === 1)
         result.description = result.description[0];

@@ -28,8 +28,6 @@ import {
 
 import type { ProjectFileSystem } from '@pzstudio/platform';
 
-// A minimal but valid project config: the marker assembly reads
-// workshop.title + mods (devOnly flags) and the planner reads outdir.
 function makeConfig(distDir: string, title = 'Item'): IProjectConfig {
     return {
         workshop: { title },
@@ -55,7 +53,6 @@ afterEach(() => {
     rmSync(root, { recursive: true, force: true });
 });
 
-/** Real junction-happy fixture: one built item with content + marker. */
 async function seedBuiltItem(
     config: IProjectConfig,
     variant: 'main' | 'development',
@@ -80,8 +77,6 @@ async function seedBuiltItem(
     return itemDir;
 }
 
-/** The production marker-write adapter rides node:fs/promises; the fixture
- * uses the real NodeFileSystem — same ProjectFileSystem contract. */
 function realNodeFs(): ProjectFileSystem {
     return new NodeFileSystem();
 }
@@ -112,8 +107,6 @@ describe('resolveDistModel', () => {
 
     it('prefix-sibling trap: project\\dist2 is NOT inside project\\dist', () => {
         const dm = resolveDistModel(root, { outdir: dist + '2' });
-        // dist+'2' is a SIBLING of dist, still inside root — dist mode, but
-        // the boundary check must not confuse the shared prefix.
         expect(dm.mode).toBe('dist');
         const outside = resolveDistModel(root, {
             outdir: join(root + '-sibling', 'dist'),
@@ -122,8 +115,6 @@ describe('resolveDistModel', () => {
     });
 
     it('workshopRoot: env wins over explicit config, config wins over factory default', () => {
-        // Env-first is the documented precedence (docs/cli/07 + the
-        // GlobalConfig field comment): the env override must beat config.
         process.env.PZSTUDIO_WORKSHOP_ROOT = join(root, 'ws-env');
         const both = resolveDistModel(root, {
             workshopRoot: join(root, 'ws'),
@@ -144,8 +135,6 @@ describe('resolveDistModel', () => {
 });
 
 describe('writeBuiltItemMarker (standalone build path)', () => {
-    /** Production precondition: the build created the item dir before the
-     * marker write (the marker is written after the variant succeeded). */
     function seedItemDir(
         config: IProjectConfig,
         variant: 'main' | 'development',
@@ -219,7 +208,6 @@ describe('writeBuiltItemMarker (standalone build path)', () => {
             { projectRoot: root, usage: { recordOp: vi.fn() } },
         );
         expect(outcomes).toEqual([]);
-        // Not a single entry was created in the workshop root.
         expect(await fsp.readdir(workshop)).toEqual([]);
     });
 
@@ -274,7 +262,6 @@ describe('attachBuiltItems', () => {
         const st = await fsp.lstat(mainLink);
         expect(st.isSymbolicLink()).toBe(true);
         expect(await fsp.realpath(mainLink)).toBe(await fsp.realpath(mainDir));
-        // Content is reachable through the junction (the game consumer).
         expect(readFileSync(join(mainLink, 'workshop.txt'), 'utf-8')).toContain(
             'title=Item',
         );
@@ -300,7 +287,6 @@ describe('attachBuiltItems', () => {
     it('refusal is non-fatal: surfaces the error code + CLI flag suggestion, next item still attaches', async () => {
         const config = makeConfig(dist);
         const mainDir = await seedBuiltItem(config, 'main');
-        // A real non-empty directory occupies the dev slot.
         const devName = basename(resolveBuildOutputPath(config, 'development'));
         const devSlot = join(workshop, devName);
         await fsp.mkdir(devSlot, { recursive: true });
@@ -328,7 +314,6 @@ describe('attachBuiltItems', () => {
         expect(warnLine).toBeDefined();
         expect(warnLine!.line).toContain('ERR_WORKSHOP_DIR_EXISTS_REAL');
         expect(warnLine!.line).toContain('--backup-existing-workshop');
-        // The refused slot was never touched.
         expect(existsSync(devSlot)).toBe(true);
     });
 
@@ -371,8 +356,6 @@ describe('attachBuiltItems', () => {
         const config = makeConfig(dist);
         await seedBuiltItem(config, 'main');
         const itemName = basename(resolveBuildOutputPath(config, 'main'));
-        // A real folder holding a published id that the generated source
-        // workshop.txt does not carry — the duplicate-publish hazard.
         const slot = join(workshop, itemName);
         await fsp.mkdir(slot, { recursive: true });
         writeFileSync(
@@ -401,13 +384,10 @@ describe('attachBuiltItems', () => {
             onSurface: (line, level) => surfaces.push({ line, level }),
         });
         expect(withSource[0].hasUnsyncedWorkshopId).toBe(true);
-        // The withSource warn is the LAST 'Item' line: both calls surface.
         const warnLine = surfaces
             .filter((s) => s.level === 'warn' && s.line.includes(itemName))
             .pop();
         expect(warnLine).toBeDefined();
-        // The duplicate-publish hazard is named on the surface (spec §4:
-        // whether W's workshop.txt carries an id missing from source).
         expect(warnLine!.line).toContain('duplicate-publish');
     });
 
@@ -434,8 +414,6 @@ describe('attachBuiltItems', () => {
     it('thrown fs errors never propagate (Review Focus 4: outcome untouched by construction)', async () => {
         const config = makeConfig(dist);
         await seedBuiltItem(config, 'main');
-        // W is a FILE — the cascade refuses NOT_DIRECTORY without mutation,
-        // and even a throwing realFs must not reject the promise.
         const itemName = basename(resolveBuildOutputPath(config, 'main'));
         await fsp.writeFile(join(workshop, itemName), 'not a dir');
         const results = await attachBuiltItems({

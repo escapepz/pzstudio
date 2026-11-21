@@ -1,11 +1,5 @@
 import * as vscode from 'vscode';
 
-/**
- * The filesystem contract readIgnoreRulesForDir consumes, restated
- * structurally: the extension consumes the CLI bundle (`@pzstudio/cli/api`)
- * and cannot import @pzstudio/platform to name the interface, so the types
- * below satisfy it by structure.
- */
 export interface RuleFsEntry {
     name: string;
     uri: string;
@@ -34,16 +28,6 @@ function toRuleFsObjectType(type: number): RuleFsEntry['type'] {
     return 'unknown';
 }
 
-/**
- * A filesystem view over vscode.workspace.fs for reading the ignore rule
- * files (readIgnoreRulesForDir only lists and reads). URIs travel in this
- * adapter's own space — `vscode.Uri.file(dir).toString()` with plain
- * '/'-joined children — which vscode.Uri.parse round-trips on every scheme
- * the editor exposes, exactly like the rest of the workspace.fs consumers.
- * Shared by the extension's ignore-rule consumers: the dev-sync watcher
- * filter (root-level rules) and the project explorer (rules of every
- * listed directory).
- */
 export const ruleFileFs: RuleFs = {
     async read(uri: string): Promise<Uint8Array> {
         return vscode.workspace.fs.readFile(vscode.Uri.parse(uri));

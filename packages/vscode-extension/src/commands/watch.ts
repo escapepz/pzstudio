@@ -3,28 +3,10 @@ import { t } from '../util/l10n';
 import { resolveProjectDirResult, warnNoProject } from '../util/project';
 import { DevSyncManager, type DevSyncState } from '../util/devSyncState';
 
-/**
- * Palette toggle + status-bar surface for the Development Sync Engine
- * (UX-06 + UX-15). Both consume the ONE DevSyncManager extension.ts created
- * — the command never touches DevSyncController directly anymore. The
- * command is a thin GATED dispatch (start only from idle, stop while
- * syncing, queued stop while starting, no-op while stopping) whose startup
- * UI is still the native withProgress window, and the status-bar item is
- * the run's source of truth: the success popups the handler used to show
- * are gone (UX-15 behavior change), only the start-fail toast remains.
- */
 export function registerWatchCommand(
     manager: DevSyncManager,
 ): vscode.Disposable {
     return vscode.commands.registerCommand('pzstudio.watch', async () => {
-        // The command owns the UX gating (amended hand-off ruling — the
-        // manager now holds the authoritative atomic start gate, this
-        // toggle the wording): a start while syncing/stopping would
-        // re-anchor the indicator over a live run, so start happens only
-        // from idle (including the idle-with-lastError state a failed run
-        // lands in), a stop while syncing tears down, while starting it
-        // queues through the manager's queued-stop protocol and while
-        // stopping it is a no-op.
         const phase = manager.state.phase;
         if (phase !== 'idle') {
             if (phase === 'stopping') {
@@ -35,9 +17,6 @@ export function registerWatchCommand(
         }
 
         const action = 'start the development sync in';
-        // A dismissed picker aborts silently while a project-less workspace
-        // gets the no-project warning — resolveProjectDir's undefined
-        // conflates the two (spec §9, UX-02).
         const resolution = await resolveProjectDirResult(action);
         if (resolution.status === 'cancelled') {
             return;
@@ -47,22 +26,11 @@ export function registerWatchCommand(
             return;
         }
         const dir = resolution.dir;
-        // Re-check after the await: the picker (or a second invocation
-        // resolving over the same tick — status-bar click vs palette with a
-        // single project) yields the event loop, and a stop or a sibling
-        // start can land in that window. The stale idle snapshot above must
-        // not start over it; the manager's atomic gate is the backstop for
-        // whatever remains.
         if (manager.state.phase !== 'idle') {
             return;
         }
         const projectName = dir.path.split('/').pop() ?? dir.fsPath;
         try {
-            // The initial full build of both outputs runs in here (UX-06):
-            // the window stays up until manager.start settles and closes
-            // on its own — no invented percentage, no cancellation (startup
-            // interruption has no safe protocol; a stop request during the
-            // build queues through the manager instead).
             await vscode.window.withProgress(
                 {
                     location: vscode.ProgressLocation.Notification,
@@ -75,12 +43,6 @@ export function registerWatchCommand(
                 () => manager.start(dir.fsPath),
             );
         } catch (e) {
-            // The controller already logged the reason into the output
-            // channel and the manager reset the state to idle with it; one
-            // deliberate notification here replaces the generic host error
-            // the raw rethrow used to surface. This is the only toast the
-            // toggle has left — the status bar carries the started/stopped
-            // feedback (UX-15).
             vscode.window.showErrorMessage(
                 t(
                     "PZStudio: development sync failed to start for '{0}': {1} — see the PZ Studio output for details.",
@@ -90,22 +52,9 @@ export function registerWatchCommand(
             );
             return;
         }
-        // No success signal here: the status bar flipping to its spinner is
-        // the started feedback (UX-15 behavior change).
     });
 }
 
-/**
- * UX-15: the status-bar indicator — with the success popups gone, this item
- * is the run's user surface. It renders the manager's state on every
- * onDidChange (plus once at registration): spinner + project folder while a
- * run is in flight (starting notes itself in the tooltip; stopping keeps
- * the syncing visual — both are mid-flight) and a muted circle-slash while
- * off, lastError included on the idle tooltip when a run just failed. The
- * item executes the existing `pzstudio.watch` palette command, so a click
- * runs the identical gated toggle — no manifest entry, no second
- * registration.
- */
 export function registerDevSyncStatusBar(
     manager: DevSyncManager,
 ): vscode.Disposable {
@@ -114,9 +63,6 @@ export function registerDevSyncStatusBar(
     );
     item.command = 'pzstudio.watch';
 
-    // The folder-name convention the manager titles runs with: the
-    // projectTitle once beginSyncing published it, the projectDir's last
-    // segment while starting/stopping (both separators fold).
     const runTitle = (state: DevSyncState): string =>
         state.projectTitle ??
         state.projectDir?.split(/[\\/]/).filter(Boolean).pop() ??

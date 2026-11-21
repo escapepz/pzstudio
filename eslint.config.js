@@ -141,4 +141,11 @@ module.exports = tseslint.config(
             '@typescript-eslint/no-require-imports': 'off',
         },
     },
+    {
+        // Deliberately empty catch blocks are a house pattern (fail-open
+        // probes and best-effort cleanup); the swallow itself is the code.
+        rules: {
+            'no-empty': ['error', { allowEmptyCatch: true }],
+        },
+    },
 );

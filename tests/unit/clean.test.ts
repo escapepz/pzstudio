@@ -19,9 +19,6 @@ vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
 }));
 
 describe('cleanCmd', () => {
-    // Dist-always: clean removes the canonical dist output items; the
-    // project's outdir (if any) is a deployment target, untouched here.
-    // joinPosix folds separators, so normalize the anchor for assertions.
     const distRoot = distRootOf('/proj').replace(/\\/g, '/');
     const mainOut = `${distRoot}/Test Project`;
     const devOut = `${distRoot}/Test Project - dev_branch`;
@@ -66,7 +63,6 @@ describe('cleanCmd', () => {
 
         expect(fs.rmSync).toHaveBeenCalledWith(mainOut, rmOpts);
         expect(fs.rmSync).toHaveBeenCalledWith(devOut, rmOpts);
-        // The configured deployment outdir is never a clean target.
         expect(fs.rmSync).not.toHaveBeenCalledWith(
             expect.stringContaining('/out/'),
             expect.anything(),
@@ -83,14 +79,10 @@ describe('cleanCmd', () => {
         const removedLines = infoMessages.filter((message) =>
             message.includes('- Removed: '),
         );
-        // One enumeration line per removed directory (the 2-target fixture:
-        // main + development dist outputs).
         expect(removedLines).toHaveLength(2);
         expect(removedLines[0]).toContain(mainOut);
         expect(removedLines[1]).toContain(devOut);
 
-        // Ordering: each enumeration line lands AFTER its 'Cleaning ...'
-        // intent line, and the completion line comes last.
         const infoOrder = (fragment: string): number => {
             const idx = infoMessages.findIndex((message) =>
                 message.includes(fragment),
@@ -138,8 +130,6 @@ describe('cleanCmd', () => {
             `Cannot delete '${mainOut}' — the folder is in use by another program`,
         );
         expect(fs.rmSync).toHaveBeenCalledWith(devOut, rmOpts);
-        // Enumeration only counts what was actually removed: the failed
-        // main output gets no '- Removed:' line, the dev one does.
         const removedLines = vi
             .mocked(logger.info)
             .mock.calls.map((call) => String(call[0]))
@@ -167,10 +157,8 @@ describe('cleanCmd', () => {
     });
 
     it('should succeed with Already clean when there is no build output (CLI-6)', () => {
-        // Nothing to clean is a clean result: exit 0, no throw.
         cleanCmd();
         expect(logger.log).toHaveBeenCalledWith('Already clean.');
-        // And nothing was enumerated (d13-U1).
         expect(
             vi
                 .mocked(logger.info)

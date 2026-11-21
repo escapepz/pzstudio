@@ -14,20 +14,6 @@ import {
 } from '../../packages/core/src/consoleLog';
 import type { ConsoleLogProjectContext } from '../../packages/core/src/consoleLog';
 
-/**
- * Stage-3 classifiers, dedup, session tables and stats, plus the Task-4
- * attribution ladder and the full `analyzeConsoleLog` contract. Fixture lines
- * are verbatim captures from real game logs (paths sanitized to `<user>`) —
- * do not adjust their spacing, casing or paths. Where the brief marks a `…`
- * the caller/body tail is reconstructed in the real evidence style (caller
- * padded to the 36-column `at <caller> > ` layout).
- */
-
-/**
- * Real captured error block (deliberate Lua syntax-error session), identical
- * to the consoleLogParse fixture: leading tabs, double-tab frame indentation
- * and the `require` backticks are significant.
- */
 const ERROR_BLOCK = [
     'ERROR: General      f:0> LuaManager.RunLuaInternal> Exception thrown',
     "\tse.krka.kahlua.vm.KahluaException: zul_test_client.lua:43: '}' expected (to close '{' at line 40) near `require` at Lua.zul_test_client.lua(zul_test_client.lua:43).",
@@ -113,8 +99,6 @@ describe('consoleLog buildFindings single-line classifiers', () => {
             'script-warning',
             'translation',
         ]);
-        // Table severity is warning even when the envelope level is ERROR
-        // (the Sanitizing container name line).
         expect(
             res.findings.every((finding) => finding.severity === 'warning'),
         ).toBe(true);
@@ -297,15 +281,6 @@ describe('consoleLog buildFindings stats passthrough', () => {
     });
 });
 
-// ---------------------------------------------------------------------------
-// Task 4: attribution ladder + full analyzeConsoleLog contract
-// ---------------------------------------------------------------------------
-
-/**
- * In-memory ProjectFileSystem fake (brief): a `Map<string, Uint8Array>` of
- * file contents; `list` derives direct children from the map keys. Defined
- * once here for every analyzeConsoleLog suite below.
- */
 class FakeProjectFileSystem implements ProjectFileSystem {
     files = new Map<string, Uint8Array>();
 
@@ -357,13 +332,11 @@ class FakeProjectFileSystem implements ProjectFileSystem {
         }));
     }
 
-    /** Test convenience: writes a UTF-8 text file. */
     async writeText(uri: string, content: string): Promise<void> {
         await this.write(uri, new TextEncoder().encode(content));
     }
 }
 
-/** Writes the given lines as the log file under analysis; returns its URI. */
 async function writeLog(
     fs: FakeProjectFileSystem,
     lines: string[],
@@ -373,8 +346,6 @@ async function writeLog(
     return logUri;
 }
 
-// Real session-2 shapes (verbatim, sanitized) plus the `GameThread exited.`
-// tail, assembled per the brief.
 const SESSION_START_LINE = 'LOG  : General      f:0> 15-11-2026 13:28:36';
 const LOADING_ZUL_TEST = 'LOG  : Mod          f:0> loading zul_test_dev';
 const LOADING_ZUL = 'LOG  : Mod          f:0> loading zul_dev';
@@ -416,8 +387,6 @@ describe('consoleLog analyzeConsoleLog full attribution', () => {
             GAME_EXITED_LINE,
         ];
         const logUri = await writeLog(fs, logLines);
-        // The game-install copy at the SEVERE path exists too — click-to-file
-        // must still resolve to the workspace URI, never the game path.
         await fs.writeText(
             'file:///game/Contents/mods/zul_test_dev/42/media/lua/client/zul_test_client.lua',
             '-- game copy\n',
@@ -440,7 +409,6 @@ describe('consoleLog analyzeConsoleLog full attribution', () => {
         );
         expect(rejected).toMatchObject({ modId: 'examplemod' });
         expect(rejected?.sourceFile).toBeUndefined();
-        // The SEVERE line itself (unclassified) carries the same attribution.
         const severeLine = report.findings.find(
             (finding) => finding.category === 'unclassified',
         );
@@ -643,8 +611,6 @@ describe('consoleLog analyzeConsoleLog trailing newline', () => {
     it('pins totalLines to the visible line count when the log ends with a newline', async () => {
         const fs = new FakeProjectFileSystem();
         const lines = [SESSION_START_LINE, LOADING_ZUL_TEST, GAME_EXITED_LINE];
-        // A real console.txt ends with \n — the split's trailing empty
-        // element is not a visible line and must not inflate totalLines.
         const logUri = 'mem://logs/console.txt';
         await fs.writeText(logUri, lines.join('\n') + '\n');
 
@@ -680,7 +646,6 @@ describe('consoleLog analyzeConsoleLog basename-index fail-soft', () => {
             (finding) => finding.category === 'lua-syntax-error',
         );
         expect(syntax).toBeDefined();
-        // The tier-3 lookup degraded: unattributed, never a throw.
         expect(syntax?.modId).toBeUndefined();
         expect(syntax?.sourceFile).toBeUndefined();
     });

@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import { join } from 'path';
-// Importing the command module runs registerCommand + addHelp at import time.
 import '../../packages/cli/src/lib/commands/logs';
 import { runCLI } from '../../packages/cli/src/lib/cli';
 import { setLogger } from '../../packages/cli/src/lib/logger';
@@ -13,18 +12,9 @@ import {
     buildProjectContext,
 } from '../../packages/cli/src/lib/consoleLogHost';
 
-// NO module mocks: every case asserts real files and real output through the
-// fake HOME (vitest.setup.ts). Output stays pristine via the recording
-// logger + capturing CliIO (usageCommand idiom).
-
 const fakeHome = (): string =>
     (globalThis as any).__PZSTUDIO_FAKE_HOME as string;
 const defaultLogPath = (): string => join(fakeHome(), 'Zomboid', 'console.txt');
-
-// ---------------------------------------------------------------------------
-// Log fixtures — verbatim session-2 shapes from real game logs (sanitized),
-// identical to the consoleLog.test.ts captures. Do not adjust spacing.
-// ---------------------------------------------------------------------------
 
 const SESSION_START_LINE = 'LOG  : General      f:0> 15-11-2026 13:28:36';
 const LOADING_ZUL_TEST = 'LOG  : Mod          f:0> loading zul_test_dev';
@@ -45,7 +35,6 @@ const ERROR_BLOCK = [
 ];
 const GAME_EXITED_LINE = 'LOG  : General      f:3979> GameThread exited.';
 
-/** The error session: syntax error + mod rejection + clean exit. */
 const ERROR_SESSION = [
     SESSION_START_LINE,
     LOADING_ZUL_TEST,
@@ -56,7 +45,6 @@ const ERROR_SESSION = [
     GAME_EXITED_LINE,
 ];
 
-/** DEBUG volume + one script warning + clean exit. */
 const DEBUG_SESSION = [
     'DEBUG: Animation    f:0 at AnimationSet.Load                   > Loading AnimSet: Base',
     'DEBUG: Animation    f:0 at AnimationSet.Load                   > Loading AnimSet: Base',
@@ -64,10 +52,6 @@ const DEBUG_SESSION = [
     'WARN : General      f:0 at LoadComponentInfo                   > Could not find icon: Build_AnvilStone, script = Stone Anvil',
     GAME_EXITED_LINE,
 ];
-
-// ---------------------------------------------------------------------------
-// Fixture seeding + capture helpers
-// ---------------------------------------------------------------------------
 
 function seedLog(lines: string[]): string {
     const dir = join(fakeHome(), 'logs');
@@ -77,10 +61,6 @@ function seedLog(lines: string[]): string {
     return logPath;
 }
 
-/**
- * A project fixture with `zul_test_dev`, laid out per the CLI's mod source
- * layout (`<project>/<modId>/`, add.ts) under the fake HOME.
- */
 function seedProject(): string {
     const projectPath = join(fakeHome(), 'project');
     fs.mkdirSync(
@@ -149,14 +129,12 @@ afterEach(() => {
     ioStderr = [];
 });
 
-/** All stdout data lines the command printed (method 'log' only). */
 const loggedData = (): string =>
     logCalls
         .filter((c) => c.method === 'log')
         .map((c) => String(c.message))
         .join('\n');
 
-/** All stderr diagnostics (methods 'info'/'warn'/'error'). */
 const errorData = (): string =>
     logCalls
         .filter((c) => c.method !== 'log' && c.method !== 'verbose')
@@ -166,7 +144,6 @@ const errorData = (): string =>
         })
         .join('\n');
 
-/** The parsed v1 envelopes on stdout (pretty-printed, one log call each). */
 const jsonEnvelopes = (): any[] =>
     logCalls
         .filter((c) => c.method === 'log')
@@ -174,7 +151,6 @@ const jsonEnvelopes = (): any[] =>
         .filter((t) => t.trim().startsWith('{'))
         .map((t) => JSON.parse(t));
 
-/** Runs `pzstudio logs` through the dispatcher, capturing the CliError. */
 async function runLogs(args: string[]): Promise<unknown> {
     try {
         await runCLI('logs', args, { flags: [] });
@@ -251,7 +227,6 @@ describe('pzstudio logs command', () => {
             ),
         ).toBe(true);
 
-        // stderr carries diagnostics only — never the report lines.
         const stderrText = ioStderr.join('') + errorData();
         expect(stderrText).not.toContain('refusing to list examplemod');
         expect(stderrText).not.toContain('[lua-syntax-error]');
@@ -305,11 +280,8 @@ describe('pzstudio logs command', () => {
         );
         expect(out).not.toContain('[unclassified]');
         expect(out).toContain('Summary: 0 error(s), 1 warning(s), 0 info(s).');
-        // The game exited — no still-running advisory.
         expect(out).not.toContain("The log shows no 'GameThread exited.'");
 
-        // Same fixture without the flag: identical findings — DEBUG lines
-        // stay finding-free in either mode, the count is reported either way.
         logCalls = [];
         const caught2 = await runLogs(['--log', logPath]);
         expect(caught2).toBeUndefined();
@@ -334,15 +306,12 @@ describe('pzstudio logs command', () => {
     });
 
     it('7. consoleLogHost: default path + project context mapping', async () => {
-        // No config at the target → undefined context.
         expect(buildProjectContext(join(fakeHome(), 'empty'))).toBeUndefined();
 
-        // Default path lands in the fake HOME (homedir() resolved at call time).
         const report = await analyzeGameLogFile(undefined);
         expect(report.log.path).toBe(defaultLogPath());
         expect(report.log.readError).toBeTruthy();
 
-        // A real project maps each mod id -> { modId, displayName, sourceRootUri }.
         const projectPath = seedProject();
         const context = buildProjectContext(projectPath);
         expect(context?.mods).toEqual([
@@ -355,12 +324,6 @@ describe('pzstudio logs command', () => {
     });
 
     it('8. importing the CLI entry alone registers logs in a fresh registry', async () => {
-        // cli.ts self-registers every command through import side effects;
-        // the logs feature's file list missed ./commands/logs there, so the
-        // production binary printed `Unknown command [logs]` and exited 2
-        // while this suite stayed green — the direct command-module import
-        // at the top masked the gap. A fresh module graph importing ONLY
-        // the entry pins the registration.
         vi.resetModules();
         await import('../../packages/cli/src/lib/cli');
         const registry = await import('../../packages/cli/src/lib/registry');

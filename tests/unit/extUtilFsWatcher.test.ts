@@ -1,13 +1,3 @@
-/**
- * Sweep d09-B2: the self-owned recursive fs.watch delivery leg
- * (packages/vscode-extension/src/util/fsWatcher.ts). The
- * vscode.FileSystemWatcher service silently stops delivering when the
- * watched tree's shape changes after the window's watcher established
- * itself (VM probe evidence 2026-11-16) — this walker subscribes what
- * exists at start and follows new directories, so delivery never depends
- * on the host watcher service. The pins below drive REAL fs events over
- * REAL temp trees (no vscode mock — the module is Node-only by design).
- */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
@@ -87,8 +77,6 @@ describe('watchTreeRecursive (d09-B2 guaranteed delivery leg)', () => {
             ),
         );
 
-        // The whole mod tree appears mid-session — exactly the journey flow
-        // `pzstudio new` → add → build → watch reproduces.
         const modDir = path.join(root, 'my_mod', '42', 'media', 'lua');
         fs.mkdirSync(modDir, { recursive: true });
         fs.writeFileSync(path.join(modDir, 'late.lua'), 'late content');
@@ -112,7 +100,6 @@ describe('watchTreeRecursive (d09-B2 guaranteed delivery leg)', () => {
             ),
         );
 
-        // A directory created WITH content before any event could fire.
         const newDir = path.join(root, 'brand_new_mod');
         fs.mkdirSync(path.join(newDir, 'media'), { recursive: true });
         fs.writeFileSync(path.join(newDir, 'media', 'readme.txt'), 'here');
@@ -177,7 +164,6 @@ describe('watchTreeRecursive (d09-B2 guaranteed delivery leg)', () => {
     });
 });
 
-/** Small waitFor helper over the vitest one, keeping the pins readable. */
 async function vi_waitFor(cond: () => boolean): Promise<void> {
     await vi.waitFor(cond, { timeout: 5000, interval: 20 });
 }

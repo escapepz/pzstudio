@@ -35,7 +35,6 @@ const PROJECT_JSON = JSON.stringify({
     excludes: ['mod_b'],
 });
 
-/** stat succeeds only for ".../project.json" under `projectRoots`. */
 function statProjects(projectRoots: string[]) {
     asMock(vscode.workspace.fs.stat).mockImplementation(
         async (uri: { path: string }) => {
@@ -57,8 +56,6 @@ describe('getModSummaries / pickModId', () => {
         (
             vscode.window as unknown as { activeTextEditor: unknown }
         ).activeTextEditor = undefined;
-        // clearAllMocks keeps stale implementations, so every mock the
-        // discovery path touches is set explicitly here.
         statProjects(['/proj']);
         asMock(vscode.workspace.fs.readDirectory).mockResolvedValue([]);
     });
@@ -83,9 +80,6 @@ describe('getModSummaries / pickModId', () => {
     });
 
     it('pickModId quick-picks the mods of a resolved subfolder project', async () => {
-        // The project lives in a depth-1 subfolder: the old picker only
-        // read the workspace root's project.json and fell back to typed
-        // input here instead of offering the mod list.
         (
             vscode.workspace as unknown as { workspaceFolders: unknown }
         ).workspaceFolders = [folder(['root'])];
@@ -360,7 +354,6 @@ describe('readModConfig', () => {
         asMock(vscode.workspace.fs.readFile).mockResolvedValue(
             new TextEncoder().encode(PROJECT_JSON),
         );
-        // mod_b is excluded → excluded wins over dev-only.
         const snapshot = await readModConfig(new UriCtor(['proj']), 'mod_b');
         expect(snapshot).toEqual({
             fields: { name: 'B' },

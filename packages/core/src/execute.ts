@@ -69,14 +69,12 @@ export function encodeUtf8(text: string): Uint8Array {
     return TEXT_ENCODER.encode(text);
 }
 
-/** Basenames that are always kept, whatever the ignore rules say. */
 const IGNORE_RAIL_BASENAMES = new Set([
     'mod.info',
     '.pzstudioignore',
     '.gitignore',
 ]);
 
-/** Characters that make an entry a gitignore glob instead of a plain name. */
 const WILDCARD_PATTERN = /[*?[]/;
 
 /**
@@ -93,7 +91,6 @@ export interface IgnoreRuleSet {
     git: string[] | null;
 }
 
-/** Parses one ignore file's content into entries, or null when empty. */
 function parseIgnoreEntries(content: string): string[] | null {
     const lines = content
         .split(/\r?\n/)
@@ -102,7 +99,6 @@ function parseIgnoreEntries(content: string): string[] | null {
     return lines.length > 0 ? lines : null;
 }
 
-/** Reads one named ignore file from an already-listed directory. */
 async function readNamedIgnoreEntries(
     fs: ProjectFileSystem,
     entries: DirectoryEntry[],
@@ -140,18 +136,10 @@ export async function readIgnoreRulesForDir(
     };
 }
 
-/** Whether a rule set carries at least one usable entries list. */
 function hasIgnoreRules(ruleSet: IgnoreRuleSet): boolean {
     return ruleSet.pzstudio !== null || ruleSet.git !== null;
 }
 
-/**
- * Converts one parsed entry into an `ignore`-package pattern. Plain names
- * (no wildcard, no negation, not already anchored) gain a leading '/': the
- * old prefix matcher only ever matched the entry at the rules directory's
- * own level, never as a basename at depth — a pinned behavior the raw
- * gitignore semantics would change.
- */
 function toIgnorePattern(entry: string): string {
     if (
         !entry.startsWith('!') &&
@@ -183,7 +171,7 @@ export function createIgnoreMatcher(
                 .split('/')
                 .filter((segment) => segment !== '');
             if (segments.length === 0) {
-                return false; // The root itself
+                return false;
             }
             if (IGNORE_RAIL_BASENAMES.has(segments[segments.length - 1])) {
                 return false;
@@ -194,8 +182,6 @@ export function createIgnoreMatcher(
                     continue;
                 }
                 const relToDir = segments.slice(end).join('/');
-                // Paths come from fs listings and caller path spaces and
-                // need not be git-canonical, so relative paths stay allowed.
                 const ig = ignore({ allowRelativePaths: true });
                 if (ruleSet.git) {
                     ig.add(ruleSet.git.map(toIgnorePattern));
@@ -231,12 +217,11 @@ export async function isSourcePathIncluded(
 ): Promise<boolean> {
     const rel = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
     if (rel === '') {
-        return true; // The root itself
+        return true;
     }
     const segments = rel.split('/');
     const name = segments[segments.length - 1];
 
-    // Rule 0: built-in defaults (mirrors createIgnoreFilter)
     if (name === '.gitkeep') {
         return false;
     }
@@ -250,19 +235,16 @@ export async function isSourcePathIncluded(
         return false;
     }
 
-    // Rule 0.5: optional dotfile ignore
     if (options.ignoreDotFiles && name.startsWith('.')) {
         if (name !== '.pzstudioignore') {
             return false;
         }
     }
 
-    // Rule 1: .pzstudioignore files themselves
     if (name === '.pzstudioignore') {
         return !options.excludeIgnoreFile;
     }
 
-    // Rule 1.5: ignoreItems apply to direct children of the copy root only
     if (
         segments.length === 1 &&
         options.ignoreItems &&
@@ -271,13 +253,6 @@ export async function isSourcePathIncluded(
         return false;
     }
 
-    // Rule 2: the closest directory with ignore rules between the entry's
-    // parent and the copy root wins. A directory entry is governed by its
-    // parent's rules, never by its own (a file in dir D is evaluated
-    // against D's rules). Each level loads .gitignore and .pzstudioignore
-    // (readIgnoreRulesForDir); the first level carrying rules decides, and
-    // the matcher adds .gitignore entries before .pzstudioignore entries so
-    // the latter outranks the former at the same level.
     const parentSegments = segments.slice(0, -1);
     let current = parentSegments;
     const rulesByDir: Record<string, IgnoreRuleSet> = {};
@@ -298,11 +273,6 @@ export async function isSourcePathIncluded(
     return !createIgnoreMatcher(rulesByDir).isIgnored(rel);
 }
 
-/**
- * Splits a plan-space path into '/'-separated segments. Backslashes fold to
- * '/' (the build plan's common denominator, matching joinPath) and empty
- * segments drop, so leading, trailing and duplicated separators are ignored.
- */
 function pathSegments(path: string): string[] {
     return path
         .replace(/\\/g, '/')
@@ -310,14 +280,6 @@ function pathSegments(path: string): string[] {
         .filter((segment) => segment !== '');
 }
 
-/**
- * Locates `candidate` strictly inside `root`, segment-wise. Returns the
- * segments of candidate below root, or null when candidate is not inside
- * root (the common case: the destination lies outside the copied source).
- * Only a Windows drive prefix compares case-insensitively ('C:' vs 'c:');
- * everything else is compared case-sensitively here — case-variant
- * resolution is the destination chain probe's job (resolveDestinationChain).
- */
 function segmentsBelow(root: string, candidate: string): string[] | null {
     const rootSegments = pathSegments(root);
     const candidateSegments = pathSegments(candidate);
@@ -338,47 +300,11 @@ function segmentsBelow(root: string, candidate: string): string[] | null {
     return candidateSegments.slice(rootSegments.length);
 }
 
-/** How a destination-chain level matches walk-relative path segments. */
 type ChainSegment = {
-    /** The spelling the walk compares against. */
     segment: string;
-    /**
-     * 'ci' when the filesystem resolves the plan's spelling onto a
-     * differently-cased stored directory, so walk-relative names in ANY
-     * case at this level may be the destination and must compare
-     * case-insensitively; 'exact' otherwise.
-     */
     mode: 'exact' | 'ci';
 };
 
-/**
- * Resolves how each destination-chain level is spelled on disk (F23-E1a):
- * the walk consumes on-disk names from fs.list, while the plan spells the
- * destination in config spelling. On a case-insensitive, case-preserving
- * filesystem (NTFS/macOS default) a surviving case-variant ancestor — the
- * outdir root spelled 'GEN' on disk while the config says 'gen', kept
- * through removeDir because only variant folders are removed — made every
- * comparison miss and the walk re-enter its own destination.
- *
- * Per level: an exact on-disk match wins (both filesystem classes;
- * writes into an existing exact spelling resolve to it). Without one, a
- * UNIQUE case-insensitive match counts as the destination only when a
- * stat of the plan-spelled path SUCCEEDS — the witness that this
- * filesystem resolves case-variant spellings onto that stored directory.
- * On a case-sensitive filesystem the same shape fails the stat (the plan
- * path does not exist), so a case-variant twin of the destination stays
- * ordinary source and the fresh destination is matched exactly once the
- * walk creates it — distinct-path semantics are preserved. Levels with no
- * on-disk directory (fresh creation) compare exactly against the plan
- * spelling: everything the copy writes there is plan-spelled.
- *
- * Uses only the ProjectFileSystem contract (list + stat) — no new
- * capability. Bounded: one list + at most one stat per chain level, once
- * per copyTree operation. It does NOT see symlink or short-name (8.3)
- * aliases: containment remains lexical by name (recorded open risk —
- * closing it needs resolved-path identity, which the contract does not
- * expose).
- */
 async function resolveDestinationChain(
     fs: ProjectFileSystem,
     sourceRoot: string,
@@ -410,10 +336,6 @@ async function resolveDestinationChain(
         const variantMatches = entries.filter(
             (entry) => entry.name.toLowerCase() === lowerPlan,
         );
-        // The stat witness: only a filesystem that resolves the plan
-        // spelling onto the stored directory may widen this level's
-        // comparison to case-insensitive — otherwise a case-variant twin
-        // on a case-sensitive filesystem would be wrongly excluded.
         let resolvesVariant = false;
         if (variantMatches.length === 1) {
             try {
@@ -434,12 +356,6 @@ async function resolveDestinationChain(
     return chain;
 }
 
-/**
- * Whether a source-relative path steps into the destination's chain.
- * Levels probed as case-variant-resolved compare case-insensitively (the
- * walk's on-disk name may carry either spelling); every other level is
- * segment-exact, so string-prefix siblings never match.
- */
 function isInsideDestination(
     relativeSegments: string[],
     destinationChain: ChainSegment[],
@@ -460,36 +376,6 @@ function isInsideDestination(
     return true;
 }
 
-/**
- * Recursively copies a source tree into destRoot through the injected
- * filesystem, applying the copyTree ignore options at every depth. Source
- * URIs come from fs.list() (adapter-native); destination URIs are built in
- * the plan's path space. Symbolic links are dereferenced (their targets are
- * copied as regular files), unlike the synchronous executor which copies the
- * link itself.
- *
- * The walk never enters the operation's own destination subtree (F23): when
- * the destination lies inside the source — case-6 layouts, outdir inside a
- * configured mod folder — the live listing would otherwise surface output
- * written moments ago as source, each level re-reading what the previous
- * level wrote with no fixed point. The exclusion compares against the
- * probed on-disk spelling of the destination chain (resolveDestinationChain),
- * so a case-insensitive filesystem's stored case-variant ancestor cannot
- * hide the destination from the walk (F23-E1a). Excluding exactly that
- * subtree keeps every other source path on the existing inclusion policy:
- * stale former output roots, case-variant twins on case-sensitive
- * filesystems, and files under the adopted output root outside this
- * operation's destination are still copied.
- *
- * When `outputRoot` is declared, every write below destRoot is guarded
- * against alias routes (F23-WRITE P0): the destRoot chain is authorized once
- * before the walk, and each source-directory descent lists the corresponding
- * destination directory (when it exists) and refuses any name the walk is
- * about to write onto or descend through that is a symbolicLink entry there
- * — a planted junction at a destination entry redirects every write under it
- * outside the generated territory. Unrelated links in an adopted destination
- * that the walk never touches cause no refusal.
- */
 async function copyTree(
     fs: ProjectFileSystem,
     sourceRoot: string,
@@ -557,13 +443,11 @@ async function copyTree(
                     await fs.read(entry.uri),
                 );
             }
-            // 'unknown' and unreadable entries are skipped silently
         }
     };
     await walk(sourceRoot, '');
 }
 
-/** Resolves an entry's effective type, following symbolic links. */
 async function resolveEntryType(
     fs: ProjectFileSystem,
     entry: { type: FileObjectType; uri: string },
@@ -574,7 +458,6 @@ async function resolveEntryType(
     try {
         return (await fs.stat(entry.uri)).type;
     } catch {
-        // A dangling link cannot be copied as content — skip it.
         return 'unknown';
     }
 }
@@ -636,12 +519,6 @@ export async function executeFileOperations(
                 }
                 break;
             case 'makeDir': {
-                // ProjectFileSystem has no mkdir: materialize the directory
-                // through a write (adapters create missing parents) and drop
-                // the sentinel afterwards so the directory stays empty. The
-                // sentinel delete targets a plain file this very operation
-                // just created (leaf-local, non-recursive) — only the write
-                // needs the route guard.
                 const sentinelPath = joinPath(
                     operation.path,
                     '.pzstudio-mkdir',

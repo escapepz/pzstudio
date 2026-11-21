@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MemoryFileSystem } from '../helpers/memory-file-system';
 import { NODE_CAPABILITIES } from '../../packages/platform-node/src/index';
-// Import the capabilities module directly: the platform-web barrel pulls in
-// the 'vscode' module, which only resolves inside an editor host.
 import { WEB_CAPABILITIES } from '../../packages/platform-web/src/web-capabilities';
 import {
     DoctorInput,
@@ -40,7 +38,6 @@ function projectJson(overrides: Record<string, unknown> = {}): string {
     });
 }
 
-/** A fully healthy project: every doctor check passes on it. */
 async function seedHealthy(fs: MemoryFileSystem): Promise<void> {
     await seed(fs, {
         [`${ROOT}/project.json`]: projectJson(),
@@ -372,7 +369,6 @@ describe('runDoctor', () => {
         const match = await doctor(fs, { gameBuild: '42.20.1' });
         expect(codes(match)).not.toContain('buildTarget.compatibility');
 
-        // No game build passed: nothing to compare against.
         const silent = await doctor(fs);
         expect(codes(silent)).not.toContain('buildTarget.compatibility');
     });
@@ -392,8 +388,6 @@ describe('runDoctor', () => {
 
     it('groups diagnostics in the fixed module order', async () => {
         const fs = new MemoryFileSystem();
-        // Invalid project + web capabilities + missing template: three
-        // modules report, and the report must still be deterministic.
         await seed(fs, { [`${ROOT}/project.json`]: '{ broken' });
         const report = await doctor(fs, {
             capabilities: WEB_CAPABILITIES,

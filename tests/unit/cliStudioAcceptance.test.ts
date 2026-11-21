@@ -4,22 +4,6 @@ import path from 'path';
 import { createTempDir, deleteDir } from '../helpers/test-fixtures';
 import type { TemplateTransport } from '@pzstudio/platform';
 
-/**
- * Commit 12 acceptance (doc 11 §16, §17 commit 12) — the remaining CLI
- * rows not pinned by the earlier suites:
- *
- *   - the embedded destructive contract is unchanged on the v2 door
- *     (delete/rename refuse without --yes, proceed with --yes);
- *   - no process.exit and no process.argv mutation on any v2 lifecycle
- *     path (success, help, usage error, throwing command);
- *   - a v2 DevSync apply beside an active v2 command run on ANOTHER
- *     instance: lock-free, each side's project/logger/settings its own;
- *   - the v2 doctor: explicit context only — no global anchor touch (module
- *     spy) — and its report equals the legacy call's on the same fixture.
- */
-
-// Importing the legacy dispatcher registers every command into the registry
-// (studio.run dispatches through the same registry).
 import { runCLI } from '../../packages/cli/src/lib/cli';
 import { createPzStudio } from '../../packages/cli/src/lib/studio';
 import { createDevSync } from '../../packages/cli/src/lib/devsync';
@@ -43,10 +27,6 @@ import { setInteractionMode } from '../../packages/cli/src/lib/interaction';
 import { getCommand } from '../../packages/cli/src/lib/registry';
 import { getActiveInvocationContext } from '../../packages/cli/src/lib/invocation';
 import * as helperModule from '../../packages/cli/src/lib/helper';
-
-/* ------------------------------------------------------------------ */
-/* Fixtures and capture helpers                                        */
-/* ------------------------------------------------------------------ */
 
 interface LogCall {
     method: string;
@@ -100,7 +80,6 @@ function makeProjectDir(title: string): string {
     return dir;
 }
 
-/** A project with one mod laid out for DevSync/delete scenarios. */
 function makeModProject(title: string, modId: string): string {
     const dir = makeProjectDir(title);
     const config = JSON.parse(
@@ -126,7 +105,6 @@ function sentinelTransport(name: 'git' | 'fetch' = 'git'): TemplateTransport {
     };
 }
 
-/** Temporarily replaces a registered command's run (test-only swap). */
 function withCommandRun(
     name: string,
     swapped: () => Promise<void>,
@@ -155,10 +133,6 @@ afterEach(() => {
     tempDirs = [];
 });
 
-/* ------------------------------------------------------------------ */
-/* 1. Destructive consent unchanged on the v2 door                     */
-/* ------------------------------------------------------------------ */
-
 describe('v2 destructive consent (embedded contract unchanged)', () => {
     it('delete without --yes refuses with the embedded usage error; with --yes it proceeds', async () => {
         captureIO();
@@ -168,7 +142,6 @@ describe('v2 destructive consent (embedded contract unchanged)', () => {
         await expect(
             studio.run('delete', ['scratch_mod']),
         ).rejects.toBeInstanceOf(CliUsageError);
-        // Nothing was deleted by the refused run.
         expect(fs.existsSync(path.join(proj, 'scratch_mod'))).toBe(true);
 
         await studio.run('delete', ['scratch_mod'], { flags: ['--yes'] });
@@ -199,10 +172,6 @@ describe('v2 destructive consent (embedded contract unchanged)', () => {
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 1b. add refuses the no-op --yes flag (d14-F1)                       */
-/* ------------------------------------------------------------------ */
-
 describe('add refuses the no-op --yes flag (d14-F1)', () => {
     it('v2 door: add with --yes is a usage error (exit 2 class), never a silent no-op', async () => {
         captureIO();
@@ -216,10 +185,6 @@ describe('add refuses the no-op --yes flag (d14-F1)', () => {
         ).rejects.toThrow(/--yes flag is not applicable to command \[add\]/);
     });
 });
-
-/* ------------------------------------------------------------------ */
-/* 2. No process.exit, no process.argv mutation on any v2 path         */
-/* ------------------------------------------------------------------ */
 
 describe('v2 lifecycle hygiene: no process.exit, no argv mutation', () => {
     it('success, help, usage-error and throwing-command paths never exit and never touch process.argv', async () => {
@@ -248,21 +213,13 @@ describe('v2 lifecycle hygiene: no process.exit, no argv mutation', () => {
         } finally {
             exitSpy.mockRestore();
         }
-        // The golden actually exercised the command (not silent no-ops).
         expect(captured.stderr.join('')).toContain('Command [list] completed.');
     });
 });
 
-/* ------------------------------------------------------------------ */
-/* 3. v2 DevSync apply beside an active v2 command run on ANOTHER      */
-/*    instance (command-vs-sync overlap, both instance-owned)          */
-/* ------------------------------------------------------------------ */
-
 describe('two instances: a v2 DevSync apply overlaps a parked v2 command run', () => {
     it("the sync runs lock-free beside the command, lands in ITS OWN outdir and logger, and never touches the command instance's", async () => {
         captureIO();
-        // No project.json outdir: the workspace layer (each instance's own
-        // provider) is the tier that decides — the isolation is observable.
         const makeSyncSide = (title: string, modId: string) => {
             const dir = makeProjectDir(title);
             const config = JSON.parse(
@@ -309,7 +266,6 @@ describe('two instances: a v2 DevSync apply overlaps a parked v2 command run', (
         let parked = Promise.resolve() as Promise<void>;
         let restore: () => void = () => {};
         try {
-            // Instance A holds the engine lock inside its command body.
             parked = studioA.run('list', [], { flags: ['--project', projA] });
             restore = withCommandRun('list', async () => {
                 await gate;
@@ -318,8 +274,6 @@ describe('two instances: a v2 DevSync apply overlaps a parked v2 command run', (
                 expect(getActiveInvocationContext()).toBeDefined(),
             );
 
-            // Instance B's DevSync apply completes while A holds the lock —
-            // sessions never queue on the engine lock.
             const templateDir = path.join(makeTempDir(), 'tpl-workshop');
             fs.mkdirSync(templateDir, { recursive: true });
             const session = studioB.createDevSync(projB, {
@@ -331,17 +285,12 @@ describe('two instances: a v2 DevSync apply overlaps a parked v2 command run', (
                 await session.stop();
             }
 
-            // Project identity: the sync landed under B's project title in
-            // B's canonical dist root (dist-always); B's outdir slot is a
-            // deployment target, never a write target — nothing landed in
-            // A's either.
             expect(fs.existsSync(path.join(projB, 'dist', 'SyncSide'))).toBe(
                 true,
             );
             expect(fs.readdirSync(outB)).toEqual([]);
             expect(fs.readdirSync(outA)).toEqual([]);
 
-            // Logger isolation in both directions.
             expect(loggerText(loggerB)).toContain('SyncSide');
             expect(loggerB.calls.length).toBeGreaterThan(0);
             expect(loggerText(loggerA)).not.toContain('SyncSide');
@@ -353,10 +302,6 @@ describe('two instances: a v2 DevSync apply overlaps a parked v2 command run', (
         expect(getActiveInvocationContext()).toBeUndefined();
     });
 });
-
-/* ------------------------------------------------------------------ */
-/* 4. v2 doctor: explicit context only; report equals the legacy call  */
-/* ------------------------------------------------------------------ */
 
 describe('v2 doctor: no anchor touch, golden equality with the legacy door', () => {
     it('never reads or writes the global anchor and leaves discovery untouched', async () => {
@@ -371,14 +316,9 @@ describe('v2 doctor: no anchor touch, golden equality with the legacy door', () 
 
         await studio.runProjectDoctor(proj, { gameBuild: '42.20.1' });
 
-        // The v2 path never consulted the legacy anchor slot (explicit
-        // project context by construction).
         expect(externalDirSpy).not.toHaveBeenCalled();
-        // ...and the slots are exactly as before the run: no leak of the
-        // doctor's project into subsequent legacy discovery.
         expect(getExternalProjectDir()).toBe(anchored);
         expect(legacyDiscoveryStart()).toBe(anchored);
-        // The settings slots were not written by the v2 doctor run.
         expect(getVsCodeSettings()).toEqual({
             templates: undefined,
             outdir: 'C:/legacy-doctor-out',
@@ -389,8 +329,6 @@ describe('v2 doctor: no anchor touch, golden equality with the legacy door', () 
     it('the v2 report equals the legacy call report on the same fixture', async () => {
         captureIO();
         const proj = makeProjectDir('Doctor Golden V2');
-        // Same layers for both doors: the slots (legacy reads them raw) and
-        // the instance provider (v2 resolves them per call).
         const layers = { workspace: { outdir: 'C:/golden-doctor-out' } };
         setVsCodeSettings(layers.workspace);
 
@@ -405,7 +343,6 @@ describe('v2 doctor: no anchor touch, golden equality with the legacy door', () 
         });
 
         expect(v2).toEqual(legacy);
-        // Sanity: the golden actually ran against the fixture.
         expect(v2.projectDir).toBe(proj);
         expect(v2.diagnostics.length).toBeGreaterThan(0);
     });
@@ -419,15 +356,9 @@ describe('v2 doctor: no anchor touch, golden equality with the legacy door', () 
         await runProjectDoctor(proj, { gameBuild: '42.20.1' });
 
         expect(getExternalProjectDir()).toBe(previous);
-        // The implicit-default modinfo resolution still walks from the
-        // restored slot (observable §13 contract).
         expect(legacyDiscoveryStart()).toBe(previous);
     });
 });
-
-/* ------------------------------------------------------------------ */
-/* 5. Legacy facade writes remain observable end-to-end (§13.1 spot)   */
-/* ------------------------------------------------------------------ */
 
 describe('legacy write-through remains observable end-to-end', () => {
     it('a legacy --project run persists the anchor; a subsequent v2 DevSync on the LEGACY door discovers from it; a v2 run never does', async () => {
@@ -437,13 +368,9 @@ describe('legacy write-through remains observable end-to-end', () => {
         const legacyTemplate = path.join(makeTempDir(), 'tpl-workshop');
         fs.mkdirSync(legacyTemplate, { recursive: true });
 
-        // Legacy --project persists the discovery anchor (§13.1).
         await runCLI('help', [], { flags: ['--project', legacyAnchor] });
         expect(legacyDiscoveryStart()).toBe(path.resolve(legacyAnchor));
 
-        // The legacy createDevSync door composes from raw legacy state: with
-        // no explicit path it would discover from the anchor. Here the
-        // explicit-path session still leaves the anchor WRITE side effect.
         const legacySession = createDevSync(legacyAnchor, {
             workshopTemplateDir: legacyTemplate,
         });
@@ -454,8 +381,6 @@ describe('legacy write-through remains observable end-to-end', () => {
         }
         expect(getExternalProjectDir()).toBe(legacyAnchor);
 
-        // A v2 run for a different project ignores the legacy anchor: its
-        // own factory project decides (R0 — the presence-branched reader).
         const studio = createPzStudio({ projectDir: v2Proj });
         let sawStart: string | undefined;
         const restore = withCommandRun('list', async () => {
@@ -467,7 +392,6 @@ describe('legacy write-through remains observable end-to-end', () => {
             restore();
         }
         expect(sawStart).toBe(v2Proj);
-        // The legacy slots were not consumed or cleared by the v2 run.
         expect(getExternalProjectDir()).toBe(legacyAnchor);
     });
 

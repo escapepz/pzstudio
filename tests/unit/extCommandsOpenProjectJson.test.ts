@@ -13,7 +13,6 @@ import { registerOpenProjectJsonCommand } from '../../packages/vscode-extension/
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 const UriCtor = vscode.Uri as unknown as new (parts: string[]) => vscode.Uri;
 
-/** Extracts the handler registered under the given command id. */
 function handlerFor(id: string): (node?: unknown) => Promise<void> {
     const calls = asMock(vscode.commands.registerCommand).mock.calls as Array<
         [string, (node?: unknown) => Promise<void>]
@@ -23,9 +22,6 @@ function handlerFor(id: string): (node?: unknown) => Promise<void> {
     return entry![1];
 }
 
-// UX-13: the missing-mod remediation opens the declaring project.json —
-// and does nothing else. No entry removal (Q4 remains open), no CLI run,
-// no prompt: the only side effect is a plain `vscode.open` of the file.
 describe('pzstudio.openProjectJson command (UX-13)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -46,7 +42,6 @@ describe('pzstudio.openProjectJson command (UX-13)', () => {
         expect((calls[0][1] as { path: string }).path).toBe(
             '/proj/project.json',
         );
-        // The open path targets exactly the project configuration file.
         expect(calls[0][1]).toBeInstanceOf(vscode.Uri);
     });
 
@@ -58,8 +53,6 @@ describe('pzstudio.openProjectJson command (UX-13)', () => {
             projectDir: new UriCtor(['proj']),
         });
 
-        // Only `vscode.open` was executed — no CLI invocation path, no
-        // message boxes that could imply a write-back flow.
         expect(
             asMock(vscode.commands.executeCommand).mock.calls.map(([id]) => id),
         ).toEqual(['vscode.open']);

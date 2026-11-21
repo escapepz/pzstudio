@@ -23,7 +23,6 @@ addHelp(
 export function listCmd() {
     const projectConfig = readProjectConfig(undefined, true, engineIo());
 
-    // Check if we are in a project directory
     if (!projectConfig) {
         throw new CliError('No pzstudio project found.');
     }
@@ -31,8 +30,6 @@ export function listCmd() {
     const projectPath = projectDir();
     const modIds = Object.keys(projectConfig.mods);
 
-    // Machine output (CLI-8): the envelope is the ONLY stdout content of
-    // the command; fields are semantic booleans, no prose status.
     if (hasFlag('json')) {
         printJsonEnvelope('list', {
             title: projectConfig.workshop.title,

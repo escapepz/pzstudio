@@ -16,7 +16,6 @@ import { resolveFlags } from '../../packages/vscode-extension/src/util/flags';
 
 const asMock = <T>(fn: unknown) => fn as unknown as import('vitest').Mock<T>;
 
-/** Pins the pzstudio.* settings resolveFlags reads. */
 function withConfig(values: Record<string, unknown>) {
     asMock(vscode.workspace.getConfiguration).mockImplementation(
         () =>
@@ -51,10 +50,6 @@ describe('resolveFlags', () => {
         },
     );
 
-    // UX-01: an explicit build target (VS Code task) REPLACES the
-    // pzstudio.build.target setting instead of being appended after it —
-    // the CLI rejects conflicting target flags, so the override must leave
-    // exactly one target flag for every configured value.
     describe.each(['default', 'production', 'development', 'both'] as const)(
         'with pzstudio.build.target=%s',
         (configured) => {
@@ -76,8 +71,6 @@ describe('resolveFlags', () => {
 
     it('sends no target flag for clean, with or without an override', () => {
         withConfig({ 'build.target': 'production' });
-        // clean is not a build target: the clean command never carries one,
-        // whatever the setting says and whatever the caller passes.
         expect(resolveFlags('clean', 'clean')).toEqual([]);
         expect(resolveFlags('clean')).toEqual([]);
     });
@@ -91,15 +84,6 @@ describe('resolveFlags', () => {
     });
 });
 
-/**
- * UX-05: the flag settings (`verbose`, `offline`, `forceUpdate`,
- * `useSymlinks`, `build.target`) are `scope: "resource"` — `resolveFlags`
- * must read them for the operated project's folder, so two projects in a
- * multi-root workspace resolve different flags instead of sharing the
- * resource-less snapshot. The explicit task target keeps beating the
- * folder-level configured target (UX-01), and a project-less call stays
- * resource-less (global update, UX-03).
- */
 describe('resolveFlags (UX-05 resource-scoped flags)', () => {
     const UriCtor = vscode.Uri as unknown as new (
         parts: string[],
@@ -156,8 +140,6 @@ describe('resolveFlags (UX-05 resource-scoped flags)', () => {
         setFolder(folderA, { 'pzstudio.build.target': 'production' });
         setFolder(folderB, { 'pzstudio.build.target': 'development' });
 
-        // UX-01 precedence: task target > folder target — exactly one
-        // flag, never both.
         expect(resolveFlags('build', 'development', folderA.fsPath)).toEqual([
             '--development',
         ]);
@@ -205,8 +187,6 @@ describe('resolveFlags (UX-05 resource-scoped flags)', () => {
     it('stays resource-less without a projectDir (global update, UX-03)', () => {
         setFolder(folderA, { 'pzstudio.verbose': true });
 
-        // No project context → no resource: the folder values of opened
-        // folders must not be borrowed.
         expect(resolveFlags('update')).toEqual([]);
         expect(resolveFlags('update', undefined, undefined)).toEqual([]);
     });

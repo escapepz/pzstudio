@@ -13,12 +13,6 @@ vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
     resolveProjectConfig: vi.fn(),
 }));
 
-/**
- * d14-F1: --yes is a global flag (the consent gate of delete/rename) but
- * add never consumed it — `pzstudio add ... --yes` was a silent no-op. The
- * command now refuses the flag with a usage error and its help text states
- * the exclusion plainly.
- */
 describe('add and the global --yes flag (d14-F1)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -29,16 +23,12 @@ describe('add and the global --yes flag (d14-F1)', () => {
     });
 
     it('refuses --yes with a usage error instead of silently ignoring it', () => {
-        // Unit tests invoke the command directly in embedded mode — publish
-        // --yes exactly as the dispatcher does before run() on both doors.
         setInvocationOptions({ yes: true });
 
         expect(() => addCmd('Some Mod', 'some_mod')).toThrow(CliUsageError);
         expect(() => addCmd('Some Mod', 'some_mod')).toThrow(
             'The --yes flag is not applicable to command [add]: add is not destructive, so there is nothing to confirm (only delete and rename use it).',
         );
-        // The refusal is an input problem: it fires before any discovery or
-        // scaffolding work.
         expect(resolveProjectConfig).not.toHaveBeenCalled();
     });
 
@@ -46,8 +36,6 @@ describe('add and the global --yes flag (d14-F1)', () => {
         vi.mocked(resolveProjectConfig).mockReturnValue(undefined as any);
         setInvocationOptions({ offline: true, 'force-update': true });
 
-        // Outside a project the command fails with its normal project error
-        // — proving the --yes guard did not intercept other flag shapes.
         expect(() => addCmd('Some Mod', 'some_mod')).toThrow(CliError);
         expect(() => addCmd('Some Mod', 'some_mod')).toThrow(
             'No pzstudio project found.',
@@ -57,7 +45,6 @@ describe('add and the global --yes flag (d14-F1)', () => {
     it('states plainly in the help text that --yes does not apply', () => {
         const help = getHelp('add') ?? '';
         expect(help).toContain('--yes is not applicable to add');
-        // The note names the commands that actually consume the flag.
         expect(help).toContain('delete and rename');
     });
 });

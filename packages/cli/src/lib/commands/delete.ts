@@ -29,15 +29,12 @@ addHelp(
 export function deleteCmd(modId: string) {
     const projectConfig = resolveProjectConfig();
 
-    // Check if we are in a project directory
     if (!projectConfig) {
         throw new CliError('No pzstudio project found.');
     }
 
-    // Validate params
     expect('param [modId]', modId, 'string');
 
-    // Fail fast: refuse to touch anything if the mod is unknown to the project
     if (!projectConfig.mods[modId]) {
         throw new CliError(`Mod '${modId}' not found in project.json!`, {
             cause: 'project.json only lists mods registered with pzstudio add.',
@@ -49,15 +46,8 @@ export function deleteCmd(modId: string) {
     const projectConfigPath = join(projectPath, 'project.json');
     const modPath = join(projectPath, modId);
 
-    // D3-a fail-closed: snapshot the RAW configured outdir BEFORE any
-    // filesystem mutation. If the config became unreadable since
-    // resolveProjectConfig(), this throws here — with the mod directory
-    // and project.json still intact — instead of after rmSync, where a
-    // swallowed failure would authorize a write-back that discards the
-    // configured outdir.
     const rawOutdir = readRawProjectOutdir(projectPath);
 
-    // Dry run (CLI-9): compute the plan, show it, change nothing.
     if (hasFlag('dry-run')) {
         log(`Would: delete mod '${modId}' directory (${modPath})`);
         log(`Would: remove mod '${modId}' from ${projectConfigPath}`);
@@ -65,16 +55,12 @@ export function deleteCmd(modId: string) {
         return;
     }
 
-    // Destructive consent (CLI-9): prompts on a TTY unless --yes; refused
-    // with a usage error in non-interactive sessions without --yes; the
-    // embedded API never prompts (the host owns confirmation).
     confirmDestructive(
         'delete',
         [modId],
         `Delete mod '${modId}' (directory + project.json entry)?`,
     );
 
-    // Delete mod directory
     info(`Deleting mod '${modId}' directory...`);
     if (existsSync(modPath)) {
         verbose(`Removing mod directory: ${modPath}`);
@@ -85,22 +71,15 @@ export function deleteCmd(modId: string) {
         warn(`Mod '${modId}' directory not found, skipping...`);
     }
 
-    // Delete mod from project.json
     info(`Deleting mod '${modId}' from project.json...`);
     delete projectConfig.mods[modId];
     projectConfig.excludes = projectConfig.excludes.filter(
         (e: string) => e !== modId,
     );
-    // D3-a: write back the RAW configured outdir captured above (before
-    // the directory removal), never the runtime-resolved one
-    // resolveProjectConfig merged in — a project without `outdir` stays
-    // without one, an explicit one survives exactly (undefined is dropped
-    // by JSON.stringify).
     projectConfig.outdir = rawOutdir;
     updateProjectConfig(projectConfigPath, projectConfig);
     info(`Mod '${modId}' deleted from project.json!`);
 
-    // Run experimental scripts
     updateExperimentalScripts('removeMod', projectPath, modId);
 }
 

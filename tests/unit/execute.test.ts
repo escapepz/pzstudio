@@ -46,7 +46,6 @@ describe('executeFileOperations (fs-driven executor)', () => {
 
     it('maps lock errors to an actionable message', async () => {
         const fs = new MemoryFileSystem();
-        // Simulate the game holding a handle: delete reports EBUSY.
         fs.delete = async () => {
             const e = new Error('EBUSY') as Error & { code: string };
             e.code = 'EBUSY';
@@ -63,18 +62,6 @@ describe('executeFileOperations (fs-driven executor)', () => {
 
     it('copies trees recursively applying the copyTree filter options', async () => {
         const fs = new MemoryFileSystem();
-        // Source tree:
-        //   a.lua                     kept
-        //   .gitkeep                  never copied
-        //   .dotfile                  skipped (ignoreDotFiles)
-        //   .pzstudioignore           skipped (excludeIgnoreFile)
-        //   .git/config               skipped (git rules)
-        //   dev/scratch.lua           excluded by .pzstudioignore
-        //   media/.pzstudioignore     closest rules file (skipped as a file)
-        //   media/old.lua             excluded by the closest rules file
-        //   media/other.lua           KEPT despite the root rules listing it
-        //                               (closest file wins with no match)
-        //   nested/                   only holds .gitkeep — not materialized
         await fs.writeText('/tpl/.pzstudioignore', 'dev/\nmedia/other.lua\n');
         await fs.writeText('/tpl/media/.pzstudioignore', 'old.lua\n');
         await fs.writeText('/tpl/a.lua', 'print("a")');
@@ -99,7 +86,6 @@ describe('executeFileOperations (fs-driven executor)', () => {
 
         expect(await fs.readText('/out/a.lua')).toBe('print("a")');
         expect(await fs.readText('/out/media/other.lua')).toBe('other');
-        // Everything filtered is absent:
         expect(fs.files.has('/out/.gitkeep')).toBe(false);
         expect(fs.files.has('/out/.dotfile')).toBe(false);
         expect(fs.files.has('/out/.pzstudioignore')).toBe(false);
@@ -139,9 +125,6 @@ describe('executeFileOperations (fs-driven executor)', () => {
             ['dev', false],
             ['media/old.lua', false],
             ['media/new.lua', true],
-            // Entries only match their exact relative path or a prefix of
-            // it — 'old.lua' has no verdict for 'sub/old.lua', and the
-            // closest file wins, so the nested file is kept.
             ['media/sub/old.lua', true],
             ['.gitkeep', false],
             ['.hidden', false],
@@ -178,18 +161,14 @@ describe('unified ignore engine (.gitignore + .pzstudioignore)', () => {
 
         expect(await readIgnoreRulesForDir(fs, '/mod')).toEqual({
             pzstudio: ['*.tmp', '!special.tmp'],
-            // 'build/' parses to 'build' — the trailing slash is stripped
-            // and dir behavior comes from the matcher's anchored matching.
             git: ['build'],
         });
 
-        // A directory without either file carries no rules.
         expect(await readIgnoreRulesForDir(fs, '/mod/plain')).toEqual({
             pzstudio: null,
             git: null,
         });
 
-        // An unreadable directory carries no rules either.
         const sealed = new MemoryFileSystem();
         sealed.list = async () => {
             throw new Error('EACCES');
@@ -206,8 +185,6 @@ describe('unified ignore engine (.gitignore + .pzstudioignore)', () => {
             media: { pzstudio: null, git: ['!keep.log'] },
         });
         expect(matcher.isIgnored('a.log')).toBe(true);
-        // The deepest directory with rules decides entirely: the root
-        // '*.log' is never consulted for media paths.
         expect(matcher.isIgnored('media/keep.log')).toBe(false);
         expect(matcher.isIgnored('media/other.log')).toBe(false);
         expect(matcher.isIgnored('media/sub/keep.log')).toBe(false);
@@ -229,8 +206,6 @@ describe('unified ignore engine (.gitignore + .pzstudioignore)', () => {
         });
         expect(matcher.isIgnored('old.lua')).toBe(true);
         expect(matcher.isIgnored('old.lua/inner.lua')).toBe(true);
-        // Plain entries never match their basename at depth — the prefix
-        // semantics the existing fixtures pin.
         expect(matcher.isIgnored('sub/old.lua')).toBe(false);
     });
 
@@ -268,10 +243,6 @@ describe('unified ignore engine (.gitignore + .pzstudioignore)', () => {
     });
 
     it('isSourcePathIncluded pins the trailing-slash realization: build/ excludes the directory and a same-level file named build', async () => {
-        // The parse strips the trailing slash ('build/' -> 'build'), so the
-        // matcher's verdict is type-blind: the DIRECTORY `build` is excluded,
-        // and so is a same-level FILE named `build` — the documented
-        // divergence from git's dir-only semantics, pinned as shipped.
         const dirFs = new MemoryFileSystem();
         await dirFs.writeText('/mod/.gitignore', 'build/\n');
         await dirFs.writeText('/mod/build/inner.lua', 'inner');
@@ -287,8 +258,6 @@ describe('unified ignore engine (.gitignore + .pzstudioignore)', () => {
             );
         }
 
-        // The file case on disk: the path `build` gets the same verdict when
-        // it names a file — git would keep it (its pattern is dir-only).
         const fileFs = new MemoryFileSystem();
         await fileFs.writeText('/mod/.gitignore', 'build/\n');
         await fileFs.writeText('/mod/build', 'content');

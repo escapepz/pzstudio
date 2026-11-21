@@ -58,7 +58,6 @@ function usageLogDir(): string {
     return join(getConfigDir(), USAGE_DIR_NAME);
 }
 
-/** The events files only — dotfiles (.salt / .notice-shown) never match. */
 function eventFiles(dir: string): string[] {
     if (!existsSync(dir)) return [];
     return readdirSync(dir)
@@ -67,12 +66,6 @@ function eventFiles(dir: string): string[] {
         .map((name) => join(dir, name));
 }
 
-/**
- * Shared store summary for status + export: file count, byte total, valid
- * event count, distinct sessions, unparseable lines skipped and the event
- * timestamp range. Empty/whitespace lines are ignored silently; only
- * non-empty lines that fail to parse count as skipped.
- */
 function summarizeStore(dir: string): UsageSummary {
     const sessions = new Set<string>();
     const stamps: string[] = [];
@@ -133,8 +126,6 @@ function usageOn(): void {
     const config = readGlobalConfig(true, engineIo());
     config.usageLog = { ...config.usageLog, enabled: true };
     writeGlobalConfig(config);
-    // R1: a long-running host (extension) holds the memoized recorder; the
-    // reset makes the very next span re-read the config in this process.
     resetUsageRecorder();
     log('Usage logging is enabled.');
 }
@@ -144,8 +135,6 @@ function usageOff(purge: boolean): void {
     config.usageLog = { ...config.usageLog, enabled: false };
     writeGlobalConfig(config);
     resetUsageRecorder();
-    // --purge is honored only with 'off': this is the one action allowed to
-    // delete the store; everywhere else the flag is silently ignored.
     if (purge) {
         rmSync(usageLogDir(), { recursive: true, force: true });
         log(
@@ -195,10 +184,6 @@ function usageExport(options: CommandContext['options']): void {
         eventCount: summary.eventCount,
         skippedLines: summary.skippedLines,
     };
-    // The bundle carries the manifest plus the events files verbatim —
-    // ONLY events-*.ndjson: the salt and notice dotfiles never leave the
-    // machine. fflate's zipSync takes Uint8Array entries (strToU8 encodes
-    // the manifest as UTF-8; the NDJSON files go in as raw bytes).
     const bundle: Record<string, Uint8Array> = {
         'manifest.json': strToU8(JSON.stringify(manifest, null, 4) + '\n'),
     };
@@ -214,13 +199,6 @@ function usageExport(options: CommandContext['options']): void {
                 'Check that the directory exists and that the path is writable.',
         });
     }
-    // Machine output (CLI-8, d17-F1): the envelope is the ONLY stdout
-    // content — no human header, no counts prose. The bundle is still
-    // written exactly as the human path writes it (--out honored); the
-    // envelope reports where it went and the store facts the manifest
-    // carries, mirroring how logs --json reports its log path. A failed
-    // export never reaches this point: stdout stays empty and the error
-    // goes to stderr (CLI-8 failure semantics).
     if (options.json === true) {
         printJsonEnvelope('usage', {
             action: 'export',
@@ -256,9 +234,6 @@ export function usageCmd(
 
     verbose(`Managing usage logs: ${action}`);
 
-    // --purge is honored only by 'off' (usageOff); everywhere else the flag
-    // is silently dropped — acknowledge it instead of leaving a
-    // normal-looking output that implies the store was purged (d17-U1).
     if (options.purge === true && action !== 'off') {
         info(
             `- --purge is ignored unless the action is 'off' (this ${action} does not purge).`,
@@ -279,9 +254,6 @@ export function usageCmd(
             usageExport(options);
             return;
         default:
-            // Invalid enum value on the handler path: same usage-error
-            // semantics (exit 2) and message style as the parse-stage enum
-            // check on --transport (d11-F8).
             throw new CliUsageError(
                 `Unknown usage action '${action}' (expected one of: on, off, status, export).`,
             );
