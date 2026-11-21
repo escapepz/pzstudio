@@ -1,6 +1,8 @@
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { info, log, verbose, warn } from '../logger';
+import { hasFlag } from '../args';
+import { printJsonEnvelope } from '../json';
 import {
     updateProjectConfig,
     findProjectDir,
@@ -16,8 +18,9 @@ addHelp(
     'migrate',
     `Upgrade legacy project.json and config.json files to the current shape without losing unknown fields.
 
-    Usage:
-        pzstudio migrate`,
+    Usages:
+        pzstudio migrate          - Upgrade legacy file shapes.
+        pzstudio migrate --json   - Print a machine-readable envelope instead.`,
 );
 
 /**
@@ -34,7 +37,18 @@ const REQUIRED_MOD_INFO_FIELDS = ['name', 'description'] as const;
  * Handles the migrate command.
  */
 export async function migrateCmd() {
-    log('\nChecking for legacy file shapes...\n');
+    // Machine output (CLI-8, d11-F1): with --json the envelope is the ONLY
+    // stdout content — the human report lines that ride stdout (log()) are
+    // suppressed; every stderr line (info/warn) still runs. The envelope
+    // carries the migration counts (config.json, project.json and the
+    // mod.info files synced into project.json).
+    const json = hasFlag('json');
+    if (!json) {
+        log('\nChecking for legacy file shapes...\n');
+    }
+    let configMigrated = false;
+    let projectMigrated = false;
+    let syncedModInfoFiles = 0;
 
     const readConfigJsonOrEmpty = (filePath: string) => {
         const content = readFileSync(filePath, 'utf8');
@@ -75,8 +89,9 @@ export async function migrateCmd() {
             migrationHostOptions(),
         );
         writeGlobalConfig(upgradedConfig);
+        configMigrated = true;
         info('  → config.json upgraded successfully.');
-    } else {
+    } else if (!json) {
         log('- config.json is already up to date.');
     }
 
@@ -179,6 +194,7 @@ export async function migrateCmd() {
                     info(
                         `- Synced data from ${modId}/${modInfoFiles.length > 1 ? path.basename(path.dirname(modInfoPath)) + '/' : ''}mod.info into project.json`,
                     );
+                    syncedModInfoFiles += 1;
                     projectModified = true;
                 }
 
@@ -191,9 +207,10 @@ export async function migrateCmd() {
         if (projectModified) {
             updateProjectConfig(projectPath, project, true);
             info('  → project.json upgraded and synced successfully.');
-        } else {
+        } else if (!json) {
             log('- project.json is already up to date.');
         }
+        projectMigrated = projectModified;
 
         // d16-F1: migrate must not certify output it would itself reject.
         // A legacy slug root id, for example, moves verbatim to
@@ -219,15 +236,27 @@ export async function migrateCmd() {
                 );
             }
         }
-    } else {
+    } else if (!json) {
         log('- No project.json found.');
     }
 
     info('\nMigration complete.');
+
+    // Machine output (CLI-8, d11-F1): the migration counts are the
+    // machine-relevant result — which files the run upgraded and how many
+    // mod.info files synced into project.json.
+    if (json) {
+        printJsonEnvelope('migrate', {
+            configMigrated,
+            projectMigrated,
+            syncedModInfoFiles,
+        });
+    }
 }
 
 registerCommand({
     name: 'migrate',
     summary: 'Upgrade legacy config.json and project.json files.',
+    flags: [{ name: 'json' }],
     run: () => migrateCmd(),
 });

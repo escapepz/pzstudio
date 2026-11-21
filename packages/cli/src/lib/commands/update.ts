@@ -2,6 +2,8 @@ import { join } from 'path';
 import { addHelp } from '../help';
 import { registerCommand } from '../registry';
 import { CliError } from '../errors';
+import { hasFlag } from '../args';
+import { printJsonEnvelope } from '../json';
 import {
     OUTCOME_FAILURE,
     OUTCOME_SUCCESS,
@@ -25,9 +27,11 @@ addHelp(
 
     Usages:
         pzstudio update - Refresh all global template caches from their remote sources.
+        pzstudio update --json - Print a machine-readable envelope instead.
 
     Flags:
         --verbose        - Enable diagnostic output.
+        --json           - Print the v1 JSON envelope (schemaVersion/command/result) with the per-category end states.
         --transport <git|fetch> - Template download method (default: git when available, else fetch).`,
 );
 
@@ -44,6 +48,14 @@ export async function updateCmd() {
     // Per-category isolation: every category is attempted even when earlier
     // ones failed; the aggregate severity decides the exit code (CLI-6).
     const outcomes: OperationOutcome[] = [];
+    // The end state per category is also the machine result (d11-F1): the
+    // cache dir the update answered with, the bundled legacy copy it fell
+    // back to, or a failure.
+    const categoryResults: Array<{
+        category: TemplateCategory;
+        state: 'updated' | 'legacy-fallback' | 'failed';
+        path?: string;
+    }> = [];
     for (const category of categories) {
         try {
             info(`- Updating '${category}' templates...`);
@@ -57,15 +69,20 @@ export async function updateCmd() {
                 '.template-legacy',
                 `.template-${category}`,
             );
+            const state = path === legacyDir ? 'legacy-fallback' : 'updated';
             info(
                 `- '${category}' templates ${
-                    path === legacyDir ? 'fell back to legacy' : 'updated'
+                    state === 'legacy-fallback'
+                        ? 'fell back to legacy'
+                        : 'updated'
                 } at: ${path}`,
             );
             verbose(`Templates for '${category}' updated at: ${path}`);
+            categoryResults.push({ category, state, path });
             outcomes.push(OUTCOME_SUCCESS);
         } catch (e: any) {
             warn(`Failed to update ${category} template: ${e.message}`);
+            categoryResults.push({ category, state: 'failed' });
             outcomes.push(OUTCOME_FAILURE);
         }
     }
@@ -78,12 +95,14 @@ export async function updateCmd() {
     // the invocation logger under studio.run, raw legacy (byte-identical)
     // for the standalone CLI.
     let legacyFailed = false;
+    let legacyState: 'refreshed' | 'up-to-date' | 'skipped' | 'failed';
+    const legacyRoot = join(getConfigDir(), '.template-legacy');
     info('- Updating legacy fallback templates...');
     try {
         // The refresh owns its own status line; this one names the global
         // dir and the END state the returned status describes (d15-F2).
         const status = refreshLegacyTemplates(engineIo());
-        const legacyRoot = join(getConfigDir(), '.template-legacy');
+        legacyState = status;
         if (status === 'refreshed') {
             info(`- Legacy fallback templates refreshed at: ${legacyRoot}`);
         } else if (status === 'up-to-date') {
@@ -98,6 +117,19 @@ export async function updateCmd() {
     } catch (e: any) {
         warn(`Failed to refresh legacy templates: ${e.message}`);
         legacyFailed = true;
+        legacyState = 'failed';
+    }
+
+    // Machine output (CLI-8, d11-F1): the envelope is the ONLY stdout
+    // content (every human line here is stderr). The per-category end
+    // states are the machine-relevant result; a partially failed run
+    // still prints the envelope before the aggregate error — exit code
+    // follows the result, exactly like doctor/logs --json.
+    if (hasFlag('json')) {
+        printJsonEnvelope('update', {
+            categories: categoryResults,
+            legacy: { state: legacyState, path: legacyRoot },
+        });
     }
 
     const refreshed = outcomes.filter((o) => o.severity === 'success').length;
@@ -119,5 +151,6 @@ export async function updateCmd() {
 registerCommand({
     name: 'update',
     summary: 'Refresh the cached template repositories.',
+    flags: [{ name: 'json' }],
     run: () => updateCmd(),
 });

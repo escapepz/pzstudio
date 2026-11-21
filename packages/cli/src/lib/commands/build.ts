@@ -18,6 +18,7 @@ import {
     resolveBuildOutputPath,
     workshopTextForVariant,
 } from '@pzstudio/core';
+import { printJsonEnvelope } from '../json';
 import {
     distRootOf,
     gatherPlanInput,
@@ -64,6 +65,7 @@ addHelp(
         pzstudio build --both        - Builds both the main and dev_branch workshop outputs.
         pzstudio build --no-materialize        - Build dist/ only; skip deployment this run.
         pzstudio build --materialize=copy      - Force copy-mode deployment this run.
+        pzstudio build --json        - Print a machine-readable envelope instead of the human report.
         pzstudio build --verbose     - Enable diagnostic output.`,
 );
 
@@ -499,6 +501,18 @@ export async function buildCmd() {
     const endTime = performance.now();
     info(`Build complete in ${((endTime - startTime) / 1000).toFixed(2)}s!`);
 
+    // Machine output (CLI-8, d11-F1): the envelope is the ONLY stdout
+    // content (every human line here is stderr). The items built plus the
+    // timing the completion line reports are the machine-relevant result.
+    // A failed build never reaches this point: stdout stays empty and the
+    // error goes to stderr (CLI-8 failure semantics).
+    if (hasFlag('json')) {
+        printJsonEnvelope('build', {
+            items: builtItems,
+            durationMs: Math.round(endTime - startTime),
+        });
+    }
+
     // First-success URL print (one-time per machine, marker-file pinned):
     // only a standalone bin run prints or consumes the marker — an
     // extension-hosted in-process build must never print nor pin it, so
@@ -527,6 +541,7 @@ registerCommand({
             conflicts: ['no-materialize'],
         },
         { name: 'no-materialize', conflicts: ['materialize'] },
+        { name: 'json' },
     ],
     run: () => buildCmd(),
 });

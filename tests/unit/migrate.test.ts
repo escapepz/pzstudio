@@ -3,6 +3,7 @@ import { join } from 'path';
 import fs from 'fs';
 import { migrateCmd } from '../../packages/cli/src/lib/commands/migrate';
 import * as logger from '../../packages/cli/src/lib/logger';
+import { hasFlag } from '../../packages/cli/src/lib/args';
 import {
     findProjectDir,
     generateModInfoText,
@@ -17,6 +18,12 @@ import {
 vi.mock('fs');
 vi.mock('../../packages/cli/src/lib/logger');
 vi.mock('../../packages/cli/src/lib/templateManager');
+vi.mock('../../packages/cli/src/lib/args', async (importOriginal) => ({
+    ...(await importOriginal<
+        typeof import('../../packages/cli/src/lib/args')
+    >()),
+    hasFlag: vi.fn(),
+}));
 vi.mock('../../packages/cli/src/lib/helper', async (importOriginal) => ({
     ...(await importOriginal<
         typeof import('../../packages/cli/src/lib/helper')
@@ -51,6 +58,7 @@ function mockFiles(files: Record<string, string>, existing: string[]) {
 describe('migrateCmd', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(hasFlag).mockReturnValue(false as any);
         vi.mocked(findProjectDir).mockReturnValue('/proj' as any);
         vi.mocked(getConfigPath).mockReturnValue(CONFIG_PATH as any);
         vi.mocked(writeGlobalConfig).mockReturnValue(undefined as any);
@@ -488,6 +496,75 @@ describe('migrateCmd', () => {
             expect(String(branchReads[0][0]).replace(/\\/g, '/')).toContain(
                 'branch_a',
             );
+        });
+    });
+
+    describe('json envelope (d11-F1)', () => {
+        /** Parses the v1 envelopes printed through logger.log. */
+        const jsonEnvelopes = (): any[] =>
+            logger.log.mock.calls
+                .map((call) => String(call[0]))
+                .filter((t) => t.trim().startsWith('{'))
+                .map((t) => JSON.parse(t));
+
+        it('migrate --json: one envelope with the migration counts, no human stdout (d11-F1)', async () => {
+            vi.mocked(hasFlag).mockImplementation(
+                (name: string) => name === 'json',
+            );
+            mockFiles(
+                {
+                    'config.json': JSON.stringify({
+                        useSymlinks: true,
+                        templates: {},
+                        outdir: '/games',
+                    }),
+                    'project.json': JSON.stringify({
+                        id: 12345,
+                        title: 'T',
+                        workshop: { visibility: 'public', tags: ['Map'] },
+                        mods: { m1: { name: 'M' } },
+                        excludes: [],
+                    }),
+                    'mod.info': 'id=m1\nname=M\ndescription=D\nauthor=A',
+                },
+                [CONFIG_PATH, PROJECT_PATH, '/m1/mod.info'],
+            );
+
+            await migrateCmd();
+
+            // Exactly one stdout line: the envelope (human report lines
+            // that ride stdout are suppressed in json mode).
+            const envelopes = jsonEnvelopes();
+            expect(envelopes).toHaveLength(1);
+            expect(logger.log).toHaveBeenCalledTimes(1);
+            const envelope = envelopes[0];
+            expect(envelope.schemaVersion).toBe(1);
+            expect(envelope.command).toBe('migrate');
+            // The fixture's config has empty templates → it migrates too;
+            // the legacy project upgrades; one mod.info syncs a field.
+            expect(envelope.result).toEqual({
+                configMigrated: true,
+                projectMigrated: true,
+                syncedModInfoFiles: 1,
+            });
+        });
+
+        it('non-json migrate keeps its human stdout lines (d11-F1 pin)', async () => {
+            mockFiles(
+                {
+                    'config.json': JSON.stringify({
+                        useSymlinks: true,
+                        templates: {},
+                        outdir: '/games',
+                    }),
+                },
+                [CONFIG_PATH],
+            );
+
+            await migrateCmd();
+
+            expect(logger.log).toHaveBeenCalledWith('- No project.json found.');
+            expect(jsonEnvelopes()).toHaveLength(0);
         });
     });
 });

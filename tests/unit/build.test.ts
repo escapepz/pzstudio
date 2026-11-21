@@ -534,6 +534,39 @@ describe('buildCmd', () => {
         ).toBe(false);
     });
 
+    describe('json envelope (d11-F1)', () => {
+        /** Parses the v1 envelopes printed through logger.log. */
+        const jsonEnvelopes = (): any[] =>
+            logger.log.mock.calls
+                .map((call) => String(call[0]))
+                .filter((t) => t.trim().startsWith('{'))
+                .map((t) => JSON.parse(t));
+
+        it('build --json: one envelope with the items built + timing (d11-F1)', async () => {
+            vi.mocked(hasFlag).mockImplementation(
+                (name: string) => name === 'json',
+            );
+
+            await buildCmd();
+
+            const envelopes = jsonEnvelopes();
+            expect(envelopes).toHaveLength(1);
+            const envelope = envelopes[0];
+            expect(envelope.schemaVersion).toBe(1);
+            expect(envelope.command).toBe('build');
+            expect(envelope.result.items).toEqual([
+                { name: 'Test Project', variant: 'main' },
+            ]);
+            expect(typeof envelope.result.durationMs).toBe('number');
+        });
+
+        it('non-json build keeps stdout empty (human lines are stderr) (d11-F1 pin)', async () => {
+            await buildCmd();
+
+            expect(logger.log).not.toHaveBeenCalled();
+        });
+    });
+
     describe('missing mod folder pre-check (d13-U3)', () => {
         /** A 3-mod project whose middle mod's folder is broken (absent). */
         const threeModProject = {

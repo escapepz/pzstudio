@@ -3,6 +3,7 @@ import { join } from 'path';
 import { updateCmd } from '../../packages/cli/src/lib/commands/update';
 import * as logger from '../../packages/cli/src/lib/logger';
 import { CliError } from '../../packages/cli/src/lib/errors';
+import { hasFlag } from '../../packages/cli/src/lib/args';
 import {
     getConfigDir,
     refreshLegacyTemplates,
@@ -11,6 +12,12 @@ import {
 
 vi.mock('../../packages/cli/src/lib/logger');
 vi.mock('../../packages/cli/src/lib/templateManager');
+vi.mock('../../packages/cli/src/lib/args', async (importOriginal) => ({
+    ...(await importOriginal<
+        typeof import('../../packages/cli/src/lib/args')
+    >()),
+    hasFlag: vi.fn(),
+}));
 
 describe('updateCmd — aggregate failure semantics (CLI-6)', () => {
     beforeEach(() => {
@@ -236,5 +243,113 @@ describe('updateCmd — output names the cache dirs and end states (d15-F2)', ()
             );
         expect(successLine).toContain(templatesRoot);
         expect(successLine).toContain(legacyRoot);
+    });
+});
+
+describe('updateCmd — json envelope (d11-F1)', () => {
+    const home = '/fake-home/.pzstudio';
+    const cacheDir = `${home}/templates/escapepz/pzstudio-template-project`;
+    const legacyRoot = join(home, '.template-legacy');
+
+    /** Parses the v1 envelopes printed through logger.log. */
+    const jsonEnvelopes = (): any[] =>
+        logger.log.mock.calls
+            .map((call) => String(call[0]))
+            .filter((t) => t.trim().startsWith('{'))
+            .map((t) => JSON.parse(t));
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(getConfigDir).mockReturnValue(home);
+        vi.mocked(hasFlag).mockReturnValue(false as any);
+    });
+
+    it('update --json: one envelope with the per-category end states + legacy end state (d11-F1)', async () => {
+        vi.mocked(hasFlag).mockImplementation(
+            (name: string) => name === 'json',
+        );
+        vi.mocked(resolveTemplateDirForEngine).mockReturnValue(cacheDir);
+        vi.mocked(refreshLegacyTemplates).mockReturnValue('up-to-date' as any);
+        vi.mocked(logger.engineIo).mockReturnValue({
+            logger: {
+                log: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+                verbose: vi.fn(),
+            },
+        } as any);
+
+        await updateCmd();
+
+        const envelopes = jsonEnvelopes();
+        expect(envelopes).toHaveLength(1);
+        const envelope = envelopes[0];
+        expect(envelope.schemaVersion).toBe(1);
+        expect(envelope.command).toBe('update');
+        expect(envelope.result.categories).toEqual([
+            { category: 'project', state: 'updated', path: cacheDir },
+            { category: 'mod', state: 'updated', path: cacheDir },
+            { category: 'workshop', state: 'updated', path: cacheDir },
+            { category: 'language', state: 'updated', path: cacheDir },
+        ]);
+        expect(envelope.result.legacy).toEqual({
+            state: 'up-to-date',
+            path: legacyRoot,
+        });
+    });
+
+    it('a partially failed update still prints the envelope before the aggregate error (d11-F1)', async () => {
+        vi.mocked(hasFlag).mockImplementation(
+            (name: string) => name === 'json',
+        );
+        vi.mocked(resolveTemplateDirForEngine).mockImplementation(
+            (category: any) => {
+                if (category === 'workshop') {
+                    throw new Error('git died');
+                }
+                return cacheDir;
+            },
+        );
+        vi.mocked(refreshLegacyTemplates).mockReturnValue('up-to-date' as any);
+        vi.mocked(logger.engineIo).mockReturnValue({
+            logger: {
+                log: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+                verbose: vi.fn(),
+            },
+        } as any);
+
+        // Exit code follows the result (CLI-8): the envelope prints, then
+        // the aggregate failure throws.
+        await expect(updateCmd()).rejects.toThrow(CliError);
+
+        const envelope = jsonEnvelopes()[0];
+        expect(envelope.command).toBe('update');
+        const workshop = envelope.result.categories.find(
+            (entry: any) => entry.category === 'workshop',
+        );
+        expect(workshop).toEqual({ category: 'workshop', state: 'failed' });
+        expect(envelope.result.legacy.state).toBe('up-to-date');
+    });
+
+    it('non-json update keeps stdout empty (human lines are stderr) (d11-F1 pin)', async () => {
+        vi.mocked(resolveTemplateDirForEngine).mockReturnValue(cacheDir);
+        vi.mocked(refreshLegacyTemplates).mockReturnValue('up-to-date' as any);
+        vi.mocked(logger.engineIo).mockReturnValue({
+            logger: {
+                log: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+                verbose: vi.fn(),
+            },
+        } as any);
+
+        await updateCmd();
+
+        expect(logger.log).not.toHaveBeenCalled();
     });
 });
