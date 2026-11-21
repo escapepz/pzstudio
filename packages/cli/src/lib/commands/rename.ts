@@ -3,7 +3,6 @@ import {
     existsSync,
     readdirSync,
     readFileSync,
-    renameSync,
     rmSync,
     writeFileSync,
 } from 'fs';
@@ -19,7 +18,7 @@ import {
     updateExperimentalScripts,
     updateProjectConfig,
 } from '../helper';
-import { engineIo, info, log, verbose } from '../logger';
+import { engineIo, info, log, verbose, warn } from '../logger';
 import { scaffoldProject } from '../templateManager';
 import { confirmDestructive } from '../interaction';
 import { hasFlag } from '../args';
@@ -83,30 +82,15 @@ function planSubdirectoryRenames(
     return plan;
 }
 
-/**
- * Fail-closed plan validation (d14-B5 edge): a destination that already
- * exists means two trees would silently merge under one name. The whole
- * rename refuses BEFORE any directory moves.
- */
-function assertSubdirectoryTargetsFree(plan: SubdirectoryRenamePlan[]): void {
+/** Warns (never moves) for each directory still carrying the old mod id. */
+function warnSubdirectoriesCarryingOldId(
+    plan: SubdirectoryRenamePlan[],
+    oldModId: string,
+): void {
     for (const step of plan) {
-        if (existsSync(step.to)) {
-            throw new CliError(
-                `Cannot rename mod id: directory '${step.to}' already exists. ` +
-                    `Renaming would silently merge the two directories.`,
-                {
-                    tryHint: `Rename or remove '${step.to}' by hand, then run the rename again.`,
-                },
-            );
-        }
-    }
-}
-
-/** Executes one validated subdirectory rename plan, logging each move. */
-function applySubdirectoryRenames(plan: SubdirectoryRenamePlan[]): void {
-    for (const step of plan) {
-        renameSync(step.from, step.to);
-        info(`- Renamed subdirectory '${step.from}' to '${step.to}'`);
+        warn(
+            `subdirectory '${step.from}' still carries the old mod id '${oldModId}'`,
+        );
     }
 }
 
@@ -162,7 +146,7 @@ export function renameCmd(oldModId: string, newModId: string) {
                 newModId,
             )) {
                 log(
-                    `Would: rename subdirectory '${step.from}' to '${step.to}'`,
+                    `Would warn: subdirectory '${step.from}' still carries the old mod id '${oldModId}'`,
                 );
             }
         }
@@ -207,18 +191,17 @@ export function renameCmd(oldModId: string, newModId: string) {
         }
     });
 
-    // Sweep d14-B5: directory NAMES carry the mod id too (the PZ lua
-    // convention names media/lua/{server,client,shared}/<modId>/ after the
-    // mod). The content rewrite above cannot move a directory, so walk the
-    // renamed tree and move every directory still carrying the old id —
-    // planned first, validated fail-closed (no silent merges), then applied.
+    // Sweep d14-B5 (owner re-decision): directory NAMES carry the mod id too
+    // (the PZ lua convention names media/lua/{server,client,shared}/<modId>/
+    // after the mod), but user-designed skeleton directories must NEVER be
+    // moved — one stderr warn per directory still carrying the old id, and
+    // the core rename behaves exactly as before.
     const subdirectoryPlan = planSubdirectoryRenames(
         newPath,
         oldModId,
         newModId,
     );
-    assertSubdirectoryTargetsFree(subdirectoryPlan);
-    applySubdirectoryRenames(subdirectoryPlan);
+    warnSubdirectoriesCarryingOldId(subdirectoryPlan, oldModId);
 
     // Update config
     projectConfig.mods[newModId] = projectConfig.mods[oldModId];
