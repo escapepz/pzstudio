@@ -20,111 +20,17 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    test:
-        name: Lint, build & test (${{ matrix.os }})
-        runs-on: ${{ matrix.os }}
+    linux:
+        # The gate: one runner that exercises every suite, and only a green
+        # gate starts the cross-platform jobs below. 6 of the last 7 CI
+        # failures had linux red, so the gate skips the redundant
+        # windows/macos runners on a broken commit and reports it in ~3
+        # minutes instead of ~7. The known cost: a windows-only regression
+        # (rare — the 8.3 short-path pins are the one so far) surfaces one
+        # push later than it would ungated.
+        name: CI (ubuntu-latest)
+        runs-on: ubuntu-latest
         timeout-minutes: 15
-        strategy:
-            fail-fast: false
-            matrix:
-                os: [windows-latest, ubuntu-latest, macos-latest]
-
-        steps:
-            - uses: actions/checkout@v4
-              with:
-                  submodules: recursive
-
-            - uses: pnpm/action-setup@v4
-              with:
-                  version: 12
-
-            - uses: actions/setup-node@v4
-              with:
-                  node-version: 22
-                  cache: pnpm
-
-            - name: Install dependencies
-              run: pnpm install --frozen-lockfile
-
-            - name: Exclude the test working set from Windows Defender
-              if: runner.os == 'Windows'
-              continue-on-error: true
-              shell: pwsh
-              # The suite does thousands of small temp-file writes; real-time
-              # scanning multiplies that cost several-fold on the runners.
-              run: |
-                  Set-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE"
-                  Set-MpPreference -ExclusionPath "$env:TEMP"
-                  Set-MpPreference -ExclusionProcess "node.exe"
-
-            - name: Lint
-              run: pnpm lint
-
-            - name: Build CLI
-              run: pnpm build
-
-            - name: Test (Windows - sequential files)
-              if: runner.os == 'Windows'
-              run: pnpm exec vitest run --no-file-parallelism
-
-            - name: Test
-              if: runner.os != 'Windows'
-              run: pnpm test
-
-            - name: Build VS Code extension
-              run: |
-                  cd packages/vscode-extension
-                  pnpm build
-
-    cli-real-env:
-        name: CLI real-env e2e (${{ matrix.os }})
-        runs-on: ${{ matrix.os }}
-        timeout-minutes: 15
-        strategy:
-            fail-fast: false
-            matrix:
-                os: [windows-latest, ubuntu-latest, macos-latest]
-
-        steps:
-            - uses: actions/checkout@v4
-              with:
-                  submodules: recursive
-
-            - uses: pnpm/action-setup@v4
-              with:
-                  version: 12
-
-            - uses: actions/setup-node@v4
-              with:
-                  node-version: 22
-                  cache: pnpm
-
-            - name: Install dependencies
-              run: pnpm install --frozen-lockfile
-
-            - name: Exclude the test working set from Windows Defender
-              if: runner.os == 'Windows'
-              continue-on-error: true
-              shell: pwsh
-              run: |
-                  Set-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE"
-                  Set-MpPreference -ExclusionPath "$env:TEMP"
-                  Set-MpPreference -ExclusionProcess "node.exe"
-
-            - name: Build CLI and its workspace dependencies
-              run: pnpm --filter @pzstudio/cli... build
-
-            - name: Real-environment e2e
-              run: pnpm test:real-env
-
-    ext-real-env:
-        name: Extension real-env tests (${{ matrix.os }})
-        runs-on: ${{ matrix.os }}
-        timeout-minutes: 15
-        strategy:
-            fail-fast: false
-            matrix:
-                os: [windows-latest, ubuntu-latest, macos-latest]
 
         steps:
             - uses: actions/checkout@v4
@@ -144,31 +50,92 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: packages/vscode-extension/.vscode-test
-                  key: vscode-test-${{ matrix.os }}-${{ hashFiles('packages/vscode-extension/.vscode-test.js') }}
+                  key: vscode-test-ubuntu-latest-${{ hashFiles('packages/vscode-extension/.vscode-test.js') }}
 
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
+
+            - name: Lint
+              run: pnpm lint
+
+            - name: Build
+              # Root build fans out to every package in dependency order
+              # (CLI, platform adapters, the extension), so all three suites
+              # below can pin against the built dist.
+              run: pnpm build
+
+            - name: Test
+              run: pnpm test
+
+            - name: Real-environment e2e
+              run: pnpm test:real-env
+
+            - name: Desktop integration tests
+              # VS Code needs an X server on Linux; Xvfb is preinstalled there.
+              run: xvfb-run -a pnpm --filter pzstudio42 test:integration
+
+    cross-platform:
+        needs: linux
+        name: CI (${{ matrix.os }})
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 20
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [windows-latest, macos-latest]
+
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  submodules: recursive
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 12
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
 
             - name: Exclude the test working set from Windows Defender
               if: runner.os == 'Windows'
               continue-on-error: true
               shell: pwsh
+              # The suite does thousands of small temp-file writes; real-time
+              # scanning multiplies that cost several-fold on the runners.
               run: |
                   Set-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE"
                   Set-MpPreference -ExclusionPath "$env:TEMP"
                   Set-MpPreference -ExclusionProcess "node.exe"
 
-            - name: Build extension and its workspace dependencies
-              run: pnpm --filter pzstudio42... build
+            - name: Cache the downloaded VS Code test installation
+              uses: actions/cache@v4
+              with:
+                  path: packages/vscode-extension/.vscode-test
+                  key: vscode-test-${{ matrix.os }}-${{ hashFiles('packages/vscode-extension/.vscode-test.js') }}
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Lint
+              run: pnpm lint
+
+            - name: Build
+              run: pnpm build
+
+            - name: Test (Windows - sequential files)
+              if: runner.os == 'Windows'
+              run: pnpm exec vitest run --no-file-parallelism
+
+            - name: Test
+              if: runner.os != 'Windows'
+              run: pnpm test
+
+            - name: Real-environment e2e
+              run: pnpm test:real-env
 
             - name: Desktop integration tests
-              shell: bash
-              # VS Code needs an X server on Linux; Xvfb is preinstalled there.
-              # Bash is explicit because the Windows default shell (pwsh)
-              # cannot parse the RUNNER_OS conditional below.
-              run: |
-                  if [ "$RUNNER_OS" = "Linux" ]; then
-                    xvfb-run -a pnpm --filter pzstudio42 test:integration
-                  else
-                    pnpm --filter pzstudio42 test:integration
-                  fi
+              # Windows and macOS run VS Code without an X server; xvfb is
+              # only needed on the linux gate above.
+              run: pnpm --filter pzstudio42 test:integration
